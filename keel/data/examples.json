@@ -1,0 +1,59 @@
+{
+  "examples": [
+    {
+      "name": "dual_signal_blend",
+      "title": "Dual Signal Blend (Momentum + Mean Reversion)",
+      "description": "Combines a ROC momentum signal with an RSI mean reversion signal using equal-weight forecast combining. Loads daily data, branches into two parallel signal pipelines, and merges with ForecastCombiner. Demonstrates parallel branches and signal composition.",
+      "complexity": "simple",
+      "tags": [
+        "momentum",
+        "mean_reversion",
+        "ensemble",
+        "blend"
+      ],
+      "pattern": "forecast_combine",
+      "teaches": [
+        "signal_blending",
+        "forecast_combiner"
+      ]
+    },
+    {
+      "name": "entry_exit_rsi",
+      "title": "RSI Entry/Exit with Threshold Crossing",
+      "description": "A mean-reversion strategy using RSI with threshold-based entry and exit signals. Normalizes RSI cross-sectionally, then uses ThresholdCross on the z-scored signal for binary entry/exit decisions. EqualWeightSizer converts to portfolio weights, and SelectionToSignalConverter manages 5-day hold periods. Demonstrates the discrete entry/exit pattern \u2014 no forecast scaling needed.",
+      "complexity": "simple",
+      "tags": [
+        "mean_reversion",
+        "rsi",
+        "entry_exit",
+        "threshold",
+        "binary"
+      ],
+      "pattern": "entry_exit",
+      "teaches": [
+        "threshold_signals",
+        "position_state",
+        "binary_decisions"
+      ]
+    },
+    {
+      "name": "ewmac_position_sizing",
+      "title": "EWMAC with Position Sizing",
+      "description": "An EWMA crossover signal with a complete position sizing pipeline. After generating the forecast, computes return volatility, converts to vol-targeted weights, aggregates with IDM, and caps leverage. Demonstrates factories and the unitless position sizing chain.",
+      "complexity": "medium",
+      "tags": [
+        "momentum",
+        "trend",
+        "position_sizing",
+        "volatility_targeting"
+      ],
+      "pattern": "forecast_size",
+      "teaches": [
+        "volatility_sizing",
+        "position_pipeline"
+      ]
+    }
+  ],
+  "count": 14,
+  "showing": 3
+}

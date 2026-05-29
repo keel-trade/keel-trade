@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 💬 Discussions — questions, ideas, show & tell
+    url: https://github.com/keel-trade/keel-trade/discussions
+    about: For "how do I do X?", strategy patterns, prompt techniques, and bigger directional questions, please use Discussions instead of opening an issue.
+  - name: 📖 Documentation
+    url: https://usekeel.io/docs
+    about: CLI reference, MCP tool reference, API reference, getting-started guides.
+  - name: 🔐 Security issue
+    url: mailto:team@usekeel.io
+    about: Please report security issues privately by email — do NOT open a public issue.

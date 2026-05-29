@@ -1,0 +1,483 @@
+"""Tests for the backtest outcome tools.
+
+Covers `keel_backtest_run` (submit + optional polling) and
+`keel_backtest_summarize` (read-only summary).
+"""
+
+from __future__ import annotations
+
+from unittest.mock import patch
+
+import pytest
+
+from keel.errors import KeelError, NotFoundError
+from keel.tools.outcomes._base import ToolContext
+
+# Import the modules directly — they self-register on import. We do NOT
+# rely on `_bootstrap()` here because the bootstrap whitelist is owned
+# by a different agent in the same fan-out.
+from keel.tools.outcomes import backtest_run as _bt_run_mod  # noqa: F401
+from keel.tools.outcomes import backtest_summarize as _bt_sum_mod  # noqa: F401
+from keel.tools.outcomes import backtest_watch as _bt_watch_mod  # noqa: F401
+from keel.tools.outcomes import OUTCOMES
+
+
+# ─── shared fixtures ─────────────────────────────────────────────────────
+
+
+@pytest.fixture
+def ctx():
+    return ToolContext(is_tty=False, app_url="https://app.usekeel.io")
+
+
+@pytest.fixture(autouse=True)
+def _fast_poll(monkeypatch):
+    """Make polling instantaneous so tests don't sleep."""
+    monkeypatch.setattr(
+        "keel.tools.outcomes.backtest_run._POLL_INTERVAL_S", 0.0
+    )
+    monkeypatch.setattr(
+        "keel.tools.outcomes.backtest_run._POLL_MAX_S", 0.05
+    )
+    monkeypatch.setattr("keel.tools.outcomes.backtest_watch.time.sleep", lambda _s: None)
+
+
+# ─── keel_backtest_run ───────────────────────────────────────────────────
+
+
+def test_backtest_run_returns_envelope_with_hero_url(ctx):
+    """Submitting with wait=false returns immediately with status_url."""
+    submitted = {
+        "id": "bt_abc123",
+        "status": "queued",
+        "strategy_id": "strat_xyz",
+    }
+
+    with patch("keel.client.KeelClient.post", return_value=submitted) as mock_post:
+        tool = OUTCOMES["keel_backtest_run"]
+        result = tool.handler(
+            {
+                "strategy_id": "strat_xyz",
+                "start_date": "2025-01-01",
+                "end_date": "2025-06-30",
+                "wait": False,
+            },
+            ctx,
+        )
+
+    mock_post.assert_called_once()
+    call_args = mock_post.call_args
+    assert call_args.args[0] == "/v1/backtests"
+    body = call_args.kwargs["json"]
+    assert body["strategy_id"] == "strat_xyz"
+    assert body["start_date"] == "2025-01-01"
+    assert body["end_date"] == "2025-06-30"
+
+    env = result.to_envelope()
+    assert env["run_id"] == "bt_abc123"
+    assert env["hero_url"] == "https://app.usekeel.io/backtests/bt_abc123?tab=tearsheet"
+    assert env["share_url"] is None
+    assert env["status_url"] == env["hero_url"]
+    assert env["resource_uri"] == "keel://backtest/bt_abc123/results"
+    assert env["status"] == "queued"
+
+
+def test_backtest_run_defaults_end_date_to_today(ctx):
+    """Omitting end_date defaults to today's UTC date before POSTing."""
+    submitted = {
+        "id": "bt_today",
+        "status": "queued",
+        "strategy_id": "strat_xyz",
+    }
+
+    with (
+        patch(
+            "keel.tools.outcomes.backtest_run._default_end_date",
+            return_value="2026-05-25",
+        ),
+        patch("keel.client.KeelClient.post", return_value=submitted) as mock_post,
+    ):
+        tool = OUTCOMES["keel_backtest_run"]
+        result = tool.handler(
+            {
+                "strategy_id": "strat_xyz",
+                "start_date": "2025-01-01",
+                "wait": False,
+            },
+            ctx,
+        )
+
+    body = mock_post.call_args.kwargs["json"]
+    assert body["end_date"] == "2026-05-25"
+    assert result.to_envelope()["run_id"] == "bt_today"
+
+
+def test_backtest_run_polls_when_wait_true(ctx):
+    """wait=true polls until terminal, returns summary_metrics + tearsheet."""
+    submitted = {"id": "bt_done", "status": "queued", "strategy_id": "s1"}
+    running = {"id": "bt_done", "status": "RUNNING"}
+    completed = {
+        "id": "bt_done",
+        "status": "COMPLETED",
+        "completed_at": "2026-05-18T00:00:00Z",
+        "execution_time": 12.5,
+        "metrics": {
+            "sharpe": 2.3,
+            "total_return_pct": 145.2,
+            "max_drawdown_pct": -18.4,
+            "win_rate_pct": 56.0,
+            "unrecognized_key": "drop_to_extra",
+        },
+    }
+
+    with (
+        patch("keel.client.KeelClient.post", return_value=submitted),
+        patch(
+            "keel.client.KeelClient.get",
+            side_effect=[running, completed],
+        ),
+    ):
+        tool = OUTCOMES["keel_backtest_run"]
+        result = tool.handler(
+            {
+                "strategy_id": "s1",
+                "start_date": "2025-01-01",
+                "end_date": "2025-06-30",
+                "wait": True,
+            },
+            ctx,
+        )
+
+    env = result.to_envelope()
+    assert env["run_id"] == "bt_done"
+    assert env["status"] == "completed"
+    assert env["hero_url"].endswith("?tab=tearsheet")
+    assert env["tearsheet_url"] == env["hero_url"]
+    assert env["summary_metrics"]["sharpe"] == 2.3
+    assert env["summary_metrics"]["total_return_pct"] == 145.2
+    assert env["summary_metrics"]["max_drawdown_pct"] == -18.4
+    assert "unrecognized_key" not in env["summary_metrics"]
+    assert env["execution_time_s"] == 12.5
+
+
+# ─── divergence guard ────────────────────────────────────────────────────
+
+
+def test_backtest_run_skips_divergence_check_when_no_workspace(ctx):
+    """Strategy not checked out → no warning, proceeds silently."""
+    submitted = {"id": "bt_skip", "status": "queued", "strategy_id": "s_no_ws"}
+
+    with (
+        patch("keel.workspace.get_workspace", return_value=None) as gw,
+        patch("keel.client.KeelClient.post", return_value=submitted),
+    ):
+        env = OUTCOMES["keel_backtest_run"].handler(
+            {"strategy_id": "s_no_ws", "start_date": "2025-01-01",
+             "end_date": "2025-06-30", "wait": False},
+            ctx,
+        ).to_envelope()
+
+    gw.assert_called_once_with("s_no_ws")
+    assert env["status"] == "queued"
+    # No divergence warning leaked into info
+    assert "ahead" not in env.get("info", "").lower()
+
+
+def test_backtest_run_clean_workspace_proceeds(ctx):
+    """Checked out + local hash == meta hash → no warning."""
+    from keel.workspace import WorkspaceMeta
+
+    submitted = {"id": "bt_clean", "status": "queued", "strategy_id": "s_clean"}
+    meta = WorkspaceMeta(
+        strategy_id="s_clean", name="C", source_hash="hash_x" * 10,
+        checked_out_at="2026-05-21T00:00:00Z", current_sequence=1,
+    )
+
+    with (
+        patch("keel.workspace.get_workspace", return_value=meta),
+        patch("keel.workspace.read_local_source", return_value="src"),
+        patch("keel.workspace._compute_hash", return_value=meta.source_hash),
+        patch("keel.client.KeelClient.post", return_value=submitted),
+    ):
+        env = OUTCOMES["keel_backtest_run"].handler(
+            {"strategy_id": "s_clean", "start_date": "2025-01-01",
+             "end_date": "2025-06-30", "wait": False},
+            ctx,
+        ).to_envelope()
+
+    assert env["status"] == "queued"
+    assert "ahead" not in env.get("info", "").lower()
+
+
+def test_backtest_run_local_ahead_raises_unless_auto_push(ctx):
+    """Local edits unpushed → raise `local_ahead` to prevent silent old-code backtest."""
+    from keel.workspace import WorkspaceMeta
+
+    meta = WorkspaceMeta(
+        strategy_id="s_ahead", name="A", source_hash="OLD_HASH",
+        checked_out_at="2026-05-21T00:00:00Z", current_sequence=1,
+    )
+
+    with (
+        patch("keel.workspace.get_workspace", return_value=meta),
+        patch("keel.workspace.read_local_source", return_value="edited_src"),
+        patch("keel.workspace._compute_hash", return_value="NEW_HASH"),
+        patch("keel.client.KeelClient.post") as mock_post,
+    ):
+        with pytest.raises(KeelError) as exc:
+            OUTCOMES["keel_backtest_run"].handler(
+                {"strategy_id": "s_ahead", "start_date": "2025-01-01",
+                 "end_date": "2025-06-30", "wait": False},
+                ctx,
+            )
+
+    # Did NOT actually call the backtest endpoint
+    mock_post.assert_not_called()
+    assert exc.value.error_code == "local_ahead"
+    sug = exc.value.suggestion or ""
+    assert "keel_strategy_push" in sug
+    assert "auto_push=True" in sug
+    assert "commit_id" in sug
+
+
+def test_backtest_run_local_ahead_auto_push_pushes_first(ctx):
+    """auto_push=True → call workspace.push, then backtest the new commit."""
+    from keel.workspace import WorkspaceMeta
+
+    meta = WorkspaceMeta(
+        strategy_id="s_ahead", name="A", source_hash="OLD_HASH",
+        checked_out_at="2026-05-21T00:00:00Z", current_sequence=1,
+    )
+    pushed = {
+        "strategy_id": "s_ahead", "status": "pushed",
+        "source_hash": "NEW_HASH", "sequence": 2, "commit_id": "cmt_new",
+    }
+    submitted = {"id": "bt_auto", "status": "queued", "strategy_id": "s_ahead"}
+
+    with (
+        patch("keel.workspace.get_workspace", return_value=meta),
+        patch("keel.workspace.read_local_source", return_value="edited_src"),
+        patch("keel.workspace._compute_hash", return_value="NEW_HASH"),
+        patch("keel.workspace.push", return_value=pushed) as push_mock,
+        patch("keel.client.KeelClient.post", return_value=submitted) as bt_mock,
+    ):
+        env = OUTCOMES["keel_backtest_run"].handler(
+            {"strategy_id": "s_ahead", "start_date": "2025-01-01",
+             "end_date": "2025-06-30", "wait": False, "auto_push": True},
+            ctx,
+        ).to_envelope()
+
+    push_mock.assert_called_once()
+    # Backtest body included the new commit_id
+    assert bt_mock.call_args.kwargs["json"]["commit_id"] == "cmt_new"
+    # Warning surfaced in info + auto_pushed_commit_id recorded
+    assert env["auto_pushed_commit_id"] == "cmt_new"
+    assert "auto-pushed" in env["info"].lower()
+
+
+def test_backtest_run_explicit_commit_id_skips_divergence_check(ctx):
+    """When user pins commit_id, skip workspace check entirely — they
+    explicitly want a historical backtest."""
+    submitted = {"id": "bt_pin", "status": "queued", "strategy_id": "s_pin"}
+
+    with (
+        patch("keel.workspace.get_workspace") as gw,
+        patch("keel.client.KeelClient.post", return_value=submitted),
+    ):
+        env = OUTCOMES["keel_backtest_run"].handler(
+            {"strategy_id": "s_pin", "commit_id": "cmt_old",
+             "start_date": "2025-01-01", "end_date": "2025-06-30", "wait": False},
+            ctx,
+        ).to_envelope()
+
+    gw.assert_not_called()
+    assert env["status"] == "queued"
+
+
+def test_backtest_run_workspace_lib_failure_does_not_block(ctx):
+    """If workspace lib raises a non-KeelError (corrupt meta, missing file,
+    etc.), proceed with backtest rather than blocking — the divergence
+    check is advisory."""
+    submitted = {"id": "bt_recover", "status": "queued", "strategy_id": "s_x"}
+
+    with (
+        patch("keel.workspace.get_workspace", side_effect=OSError("permission denied")),
+        patch("keel.client.KeelClient.post", return_value=submitted) as mock_post,
+    ):
+        env = OUTCOMES["keel_backtest_run"].handler(
+            {"strategy_id": "s_x", "start_date": "2025-01-01",
+             "end_date": "2025-06-30", "wait": False},
+            ctx,
+        ).to_envelope()
+
+    mock_post.assert_called_once()
+    assert env["status"] == "queued"
+
+
+def test_backtest_run_returns_status_url_on_timeout(ctx):
+    """Perpetual RUNNING → envelope with status_url, no exception."""
+    submitted = {"id": "bt_slow", "status": "queued", "strategy_id": "s2"}
+    running = {"id": "bt_slow", "status": "RUNNING"}
+
+    with (
+        patch("keel.client.KeelClient.post", return_value=submitted),
+        patch("keel.client.KeelClient.get", return_value=running) as mock_get,
+    ):
+        tool = OUTCOMES["keel_backtest_run"]
+        result = tool.handler(
+            {
+                "strategy_id": "s2",
+                "start_date": "2025-01-01",
+                "end_date": "2025-06-30",
+                "wait": True,
+            },
+            ctx,
+        )
+
+    # We polled at least once.
+    assert mock_get.called
+    env = result.to_envelope()
+    assert env["run_id"] == "bt_slow"
+    assert env["status"] == "running"
+    assert env["status_url"] == "https://app.usekeel.io/backtests/bt_slow?tab=tearsheet"
+    assert env["share_url"] is None
+    # No summary_metrics yet — still running.
+    assert "summary_metrics" not in env or env.get("summary_metrics") is None
+    assert "info" in env and "still running" in env["info"].lower()
+
+
+# ─── keel_backtest_summarize ─────────────────────────────────────────────
+
+
+def test_backtest_summarize_returns_metrics(ctx):
+    """Summarize a completed backtest: metrics + period + presigned URL."""
+    detail = {
+        "id": "bt_sum",
+        "status": "COMPLETED",
+        "strategy_id": "strat_q",
+        "strategy_name": "Momentum XS",
+        "commit_id": "c_001",
+        "sequence_number": 3,
+        "engine": "native",
+        "start_date": "2024-08-15",
+        "end_date": "2026-02-27",
+        "queued_at": "2026-05-18T00:00:00Z",
+        "started_at": "2026-05-18T00:00:05Z",
+        "completed_at": "2026-05-18T00:01:30Z",
+        "execution_time": 85.0,
+        "metrics": {
+            "sharpe": 3.13,
+            "total_return_pct": 717.5,
+            "max_drawdown_pct": -22.1,
+        },
+    }
+    results = {
+        "job_id": "bt_sum",
+        "presigned_url": "https://s3.example/results.json?sig=abc",
+        "expires_in": 3600,
+    }
+
+    def fake_get(path, **_kw):
+        if path == "/v1/backtests/bt_sum":
+            return detail
+        if path == "/v1/backtests/bt_sum/results":
+            return results
+        raise AssertionError(f"unexpected GET {path}")
+
+    with patch("keel.client.KeelClient.get", side_effect=fake_get):
+        tool = OUTCOMES["keel_backtest_summarize"]
+        result = tool.handler({"backtest_id": "bt_sum"}, ctx)
+
+    env = result.to_envelope()
+    assert env["run_id"] == "bt_sum"
+    assert env["hero_url"] == "https://app.usekeel.io/backtests/bt_sum?tab=tearsheet"
+    assert env["share_url"] is None
+    assert env["summary_metrics"]["sharpe"] == 3.13
+    assert env["summary_metrics"]["total_return_pct"] == 717.5
+    assert env["status"] == "completed"
+    assert env["period"]["start_date"] == "2024-08-15"
+    assert env["period"]["end_date"] == "2026-02-27"
+    assert env["strategy_id"] == "strat_q"
+    assert env["strategy_name"] == "Momentum XS"
+    assert env["results_url"] == "https://s3.example/results.json?sig=abc"
+    assert env["resource_uri"] == "keel://backtest/bt_sum/results"
+
+
+def test_backtest_summarize_404_raises_NotFoundError(ctx):
+    """Missing backtest_id surfaces NotFoundError (exit_code=3)."""
+    with patch(
+        "keel.client.KeelClient.get",
+        side_effect=NotFoundError("backtest bt_nope not found"),
+    ):
+        tool = OUTCOMES["keel_backtest_summarize"]
+        with pytest.raises(NotFoundError):
+            tool.handler({"backtest_id": "bt_nope"}, ctx)
+
+
+# ─── keel_backtest_watch ─────────────────────────────────────────────────
+
+
+def test_backtest_watch_polls_until_complete(ctx):
+    running = {"id": "bt_watch", "status": "RUNNING", "strategy_id": "strat_q"}
+    completed = {
+        "id": "bt_watch",
+        "status": "COMPLETED",
+        "strategy_id": "strat_q",
+        "strategy_name": "Momentum XS",
+        "completed_at": "2026-05-18T00:01:30Z",
+        "execution_time": 85.0,
+        "metrics": {"sharpe": 2.1, "max_drawdown_pct": -9.7},
+    }
+    results = {"presigned_url": "https://s3.example/results.json?sig=abc"}
+
+    def fake_get(path, **_kw):
+        if path == "/v1/backtests/bt_watch":
+            calls = fake_get.calls
+            fake_get.calls += 1
+            return running if calls == 0 else completed
+        if path == "/v1/backtests/bt_watch/results":
+            return results
+        raise AssertionError(f"unexpected GET {path}")
+
+    fake_get.calls = 0
+
+    with patch("keel.client.KeelClient.get", side_effect=fake_get):
+        env = OUTCOMES["keel_backtest_watch"].handler(
+            {"backtest_id": "bt_watch", "interval_s": 1, "timeout_s": 5},
+            ctx,
+        ).to_envelope()
+
+    assert env["run_id"] == "bt_watch"
+    assert env["status"] == "completed"
+    assert env["terminal"] is True
+    assert env["timed_out"] is False
+    assert env["polls"] == 2
+    assert env["summary_metrics"]["sharpe"] == 2.1
+    assert env["results_url"] == "https://s3.example/results.json?sig=abc"
+    assert env["hero_url"].endswith("/backtests/bt_watch?tab=tearsheet")
+
+
+def test_backtest_watch_returns_running_snapshot_on_timeout(ctx):
+    running = {"id": "bt_slow", "status": "RUNNING", "strategy_id": "strat_q"}
+
+    with patch("keel.client.KeelClient.get", return_value=running):
+        env = OUTCOMES["keel_backtest_watch"].handler(
+            {"backtest_id": "bt_slow", "timeout_s": 0},
+            ctx,
+        ).to_envelope()
+
+    assert env["run_id"] == "bt_slow"
+    assert env["status"] == "running"
+    assert env["terminal"] is False
+    assert env["timed_out"] is True
+    assert env["next_action"]["tool"] == "keel_backtest_watch"
+    assert env["status_url"] == env["hero_url"]
+
+
+def test_backtest_watch_404_raises_not_found(ctx):
+    with patch(
+        "keel.client.KeelClient.get",
+        side_effect=NotFoundError("backtest bt_nope not found"),
+    ):
+        with pytest.raises(NotFoundError):
+            OUTCOMES["keel_backtest_watch"].handler({"backtest_id": "bt_nope"}, ctx)

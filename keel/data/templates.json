@@ -1,0 +1,22 @@
+{
+  "basic": {
+    "name": "basic",
+    "description": "Single indicator -> forecast -> size",
+    "content": "Globals(target_timeframe=\"1d\")\n\nUniverse(mode=\"top_volume\", top_n=30, market=\"perp\", resolved=[], resolved_at=\"\")\n\nExecution(rebalance='every_bar')\n\nPipeline([\n    PriceDataLoader(timeframe=\"15min\"),\n    TargetTimeframeResampler(),\n    ROC(period=8),\n    ForecastScaler(avg_abs_target=10.0),\n    ForecastCapper(limit=20.0),\n    ForecastWeightNormalizer(target_leverage=1.0),\n], name=\"{name}\")\n"
+  },
+  "momentum": {
+    "name": "momentum",
+    "description": "EWMA with cross-sectional processing",
+    "content": "Globals(target_timeframe=\"1d\")\n\nUniverse(mode=\"top_volume\", top_n=30, market=\"perp\", resolved=[], resolved_at=\"\")\n\nExecution(rebalance='every_bar')\n\nxs_post = Pipeline([\n    CrossSectionalZScore(),\n    ForecastScaler(avg_abs_target=10.0),\n    ForecastCapper(limit=20.0),\n], name=\"xs_post_process\")\n\nPipeline([\n    PriceDataLoader(timeframe=\"15min\"),\n    TargetTimeframeResampler(),\n    EWMA(window=8),\n    xs_post,\n    ForecastWeightNormalizer(target_leverage=1.0),\n], name=\"{name}\")\n"
+  },
+  "multi_factor": {
+    "name": "multi_factor",
+    "description": "Parallel branches with ensemble",
+    "content": "Globals(target_timeframe=\"1d\")\n\nUniverse(mode=\"top_volume\", top_n=30, market=\"perp\", resolved=[], resolved_at=\"\")\n\nExecution(rebalance='every_bar')\n\nPipeline([\n    PriceDataLoader(timeframe=\"15min\"),\n    TargetTimeframeResampler(),\n    {{\n        \"momentum\": [\n            ROC(period=8),\n            ForecastScaler(avg_abs_target=10.0),\n        ],\n        \"mean_reversion\": [\n            RSI(period=14),\n            ForecastScaler(avg_abs_target=10.0),\n        ],\n    }},\n    ForecastCombiner(weights=\"equal\"),\n    ForecastCapper(limit=20.0),\n    ForecastWeightNormalizer(target_leverage=1.0),\n], name=\"{name}\")\n"
+  },
+  "carry": {
+    "name": "carry",
+    "description": "Funding-carry \u2014 short positive funding, long negative funding",
+    "content": "Globals(target_timeframe=\"1d\")\n\nUniverse(mode=\"top_volume\", top_n=30, market=\"perp\", resolved=[], resolved_at=\"\")\n\nExecution(rebalance='every_bar')\n\n# Funding carry: short instruments with positive funding (collect from longs),\n# long instruments with negative funding (collect from shorts). VolatilityStandardizer\n# reads OHLCV from the \"ohlcv_1d\" slot to scale the signal by realised volatility.\nPipeline([\n    PriceDataLoader(timeframe=\"15min\"),\n    TargetTimeframeResampler(),\n    Store(\"ohlcv_1d\"),\n    FundingDataLoader(),\n    SignalResampler(method=\"mean\"),\n    NegateTransform(),\n    CrossSectionalZScore(),\n    VolatilityStandardizer(signal_type=\"percentage\", ohlcv_slot=\"ohlcv_1d\"),\n    ForecastScaler(avg_abs_target=10.0),\n    ForecastCapper(limit=20.0),\n    ForecastWeightNormalizer(target_leverage=1.0),\n], name=\"{name}\")\n"
+  }
+}

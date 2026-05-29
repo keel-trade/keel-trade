@@ -1,0 +1,485 @@
+[
+  {
+    "name": "strategy_components_search",
+    "description": "Search components by input type, output type, category, sub-category, keyword, or natural language query. Supports semantic search.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "keyword": {
+          "type": "string",
+          "description": "Case-insensitive keyword search"
+        },
+        "category": {
+          "type": "string",
+          "description": "Filter by step category"
+        },
+        "sub_category": {
+          "type": "string",
+          "description": "Filter by sub-category tag"
+        },
+        "input_type": {
+          "type": "string",
+          "description": "Filter by input type name"
+        },
+        "output_type": {
+          "type": "string",
+          "description": "Filter by output type name"
+        },
+        "query": {
+          "type": "string",
+          "description": "Natural language query for semantic ranking"
+        },
+        "top_k": {
+          "type": "integer",
+          "description": "Maximum results to return",
+          "default": 10
+        }
+      }
+    }
+  },
+  {
+    "name": "strategy_component_detail",
+    "description": "Get the full specification for a single component including all parameters, constraints, suggestions, types, and slot info.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Component name to get details for"
+        }
+      },
+      "required": [
+        "name"
+      ]
+    }
+  },
+  {
+    "name": "strategy_component_detail_batch",
+    "description": "Get full specifications for multiple components in one call. Returns a dict keyed by component name with full params, types, and usage hints. Use before building new pipelines.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "names": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "List of component names to get details for"
+        }
+      },
+      "required": [
+        "names"
+      ]
+    }
+  },
+  {
+    "name": "strategy_components_after",
+    "description": "Find components that can follow a given component (type-compatible successors).",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Component name"
+        }
+      },
+      "required": [
+        "name"
+      ]
+    }
+  },
+  {
+    "name": "strategy_components_before",
+    "description": "Find components that can precede a given component (type-compatible predecessors).",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Component name"
+        }
+      },
+      "required": [
+        "name"
+      ]
+    }
+  },
+  {
+    "name": "strategy_validate",
+    "description": "Parse and validate a strategy DSL file. Returns structured validation result with issues, type flow, and pipeline summary.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "source": {
+          "type": "string",
+          "description": "Strategy DSL source code"
+        },
+        "path": {
+          "type": "string",
+          "description": "Path to .strategy file"
+        },
+        "component_lock": {
+          "type": "object",
+          "description": "Component version lock mapping component names to pinned version numbers. Required for source-based calls. Use strategy_lock_get or strategy_lock_generate to obtain one.",
+          "additionalProperties": {
+            "type": "integer"
+          }
+        }
+      }
+    }
+  },
+  {
+    "name": "strategy_compile",
+    "description": "Parse, validate, resolve, and compile a strategy to a versioned artifact.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "source": {
+          "type": "string",
+          "description": "Strategy DSL source code"
+        },
+        "path": {
+          "type": "string",
+          "description": "Path to .strategy file"
+        },
+        "component_lock": {
+          "type": "object",
+          "description": "Component version lock mapping component names to pinned version numbers. Required for source-based calls. Use strategy_lock_get or strategy_lock_generate to obtain one.",
+          "additionalProperties": {
+            "type": "integer"
+          }
+        }
+      }
+    }
+  },
+  {
+    "name": "strategy_explain",
+    "description": "Explain the structure of a strategy. Returns a detailed walkthrough of each step, its types, params, slots, and validation status.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "source": {
+          "type": "string",
+          "description": "Strategy DSL source code to explain"
+        },
+        "component_lock": {
+          "type": "object",
+          "description": "Component version lock mapping component names to pinned version numbers. Required for source-based calls. Use strategy_lock_get or strategy_lock_generate to obtain one.",
+          "additionalProperties": {
+            "type": "integer"
+          }
+        }
+      },
+      "required": [
+        "source"
+      ]
+    }
+  },
+  {
+    "name": "strategy_diff",
+    "description": "Compute structural diff between two strategies. Shows added, removed, and changed steps with parameter-level details.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "source_a": {
+          "type": "string",
+          "description": "First strategy source (before)"
+        },
+        "source_b": {
+          "type": "string",
+          "description": "Second strategy source (after)"
+        }
+      },
+      "required": [
+        "source_a",
+        "source_b"
+      ]
+    }
+  },
+  {
+    "name": "strategy_examples",
+    "description": "Browse or search curated example strategies. Returns metadata by default, or full source for a specific example.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string",
+          "description": "Search query to filter examples"
+        },
+        "complexity": {
+          "type": "string",
+          "description": "Filter by complexity level",
+          "enum": [
+            "simple",
+            "medium",
+            "complex"
+          ]
+        },
+        "pattern": {
+          "type": "string",
+          "description": "Filter by composition pattern"
+        },
+        "name": {
+          "type": "string",
+          "description": "Get a specific example by name (includes source)"
+        }
+      }
+    }
+  },
+  {
+    "name": "dsl_reference",
+    "description": "Load DSL reference documentation on phases, types, slots, or composition patterns.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "topic": {
+          "type": "string",
+          "description": "Reference topic",
+          "enum": [
+            "phases",
+            "types",
+            "slots",
+            "composition"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "name": "strategy_new",
+    "description": "Scaffold a new strategy file from a template.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Strategy name"
+        },
+        "template": {
+          "type": "string",
+          "description": "Template name",
+          "enum": [
+            "basic",
+            "momentum",
+            "multi_factor",
+            "carry"
+          ],
+          "default": "basic"
+        },
+        "strategy_dir": {
+          "type": "string",
+          "description": "Override default strategy directory path"
+        }
+      },
+      "required": [
+        "name"
+      ]
+    }
+  },
+  {
+    "name": "pipeline_stage",
+    "description": "Assess pipeline completeness \u2014 determines how far along a strategy is toward being backtest-ready. Returns stage, missing steps, and suggestions.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "source": {
+          "type": "string",
+          "description": "Strategy DSL source code to assess"
+        }
+      },
+      "required": [
+        "source"
+      ]
+    }
+  },
+  {
+    "name": "composition_patterns",
+    "description": "Query composition patterns by user intent. Returns architecture guidance, component sequences, and common mistakes for a described strategy goal.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string",
+          "description": "Natural language description of the strategy goal (e.g., 'momentum with proper sizing', 'top 5 assets by performance')"
+        }
+      },
+      "required": [
+        "query"
+      ]
+    }
+  },
+  {
+    "name": "strategy_lock_generate",
+    "description": "Generate a fresh component lock from strategy source. Pins all components to their latest active versions.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "source": {
+          "type": "string",
+          "description": "Strategy DSL source code"
+        }
+      },
+      "required": [
+        "source"
+      ]
+    }
+  },
+  {
+    "name": "strategy_lock_status",
+    "description": "Check component version drift \u2014 which components have newer versions available. Returns changelogs and parameter diffs for available updates.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "source": {
+          "type": "string",
+          "description": "Strategy DSL source code"
+        },
+        "path": {
+          "type": "string",
+          "description": "Path to .strategy file"
+        },
+        "component_lock": {
+          "type": "object",
+          "description": "Component version lock mapping component names to pinned version numbers. Required for source-based calls. Use strategy_lock_get or strategy_lock_generate to obtain one.",
+          "additionalProperties": {
+            "type": "integer"
+          }
+        }
+      }
+    }
+  },
+  {
+    "name": "strategy_lock_upgrade",
+    "description": "Upgrade component versions in a strategy's lock. Upgrades specified components (or all outdated) to latest versions and re-validates.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "source": {
+          "type": "string",
+          "description": "Strategy DSL source code"
+        },
+        "components": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Specific components to upgrade (omit for all outdated)"
+        },
+        "path": {
+          "type": "string",
+          "description": "Path to .strategy file"
+        },
+        "component_lock": {
+          "type": "object",
+          "description": "Component version lock mapping component names to pinned version numbers. Required for source-based calls. Use strategy_lock_get or strategy_lock_generate to obtain one.",
+          "additionalProperties": {
+            "type": "integer"
+          }
+        }
+      }
+    }
+  },
+  {
+    "name": "strategy_lock_get",
+    "description": "Read a component lock from a workspace directory. Returns the lock from component.lock.json.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "Path to workspace directory or lock file"
+        }
+      },
+      "required": [
+        "path"
+      ]
+    }
+  },
+  {
+    "name": "strategy_lock_get_by_id",
+    "description": "Get the component lock for a saved strategy by ID.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "strategy_id": {
+          "type": "string",
+          "description": "Strategy ID to get lock for"
+        }
+      },
+      "required": [
+        "strategy_id"
+      ]
+    }
+  },
+  {
+    "name": "strategy_validate_by_id",
+    "description": "Validate a saved strategy using its stored source and component lock.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "strategy_id": {
+          "type": "string",
+          "description": "Strategy ID to validate"
+        }
+      },
+      "required": [
+        "strategy_id"
+      ]
+    }
+  },
+  {
+    "name": "strategy_compile_by_id",
+    "description": "Compile a saved strategy using its stored source and component lock.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "strategy_id": {
+          "type": "string",
+          "description": "Strategy ID to compile"
+        }
+      },
+      "required": [
+        "strategy_id"
+      ]
+    }
+  },
+  {
+    "name": "strategy_lock_status_by_id",
+    "description": "Check component version drift for a saved strategy.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "strategy_id": {
+          "type": "string",
+          "description": "Strategy ID to check drift for"
+        }
+      },
+      "required": [
+        "strategy_id"
+      ]
+    }
+  },
+  {
+    "name": "strategy_lock_upgrade_by_id",
+    "description": "Upgrade component versions for a saved strategy and persist the new lock.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "strategy_id": {
+          "type": "string",
+          "description": "Strategy ID to upgrade"
+        },
+        "components": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Specific components to upgrade (omit for all outdated)"
+        }
+      },
+      "required": [
+        "strategy_id"
+      ]
+    }
+  }
+]
