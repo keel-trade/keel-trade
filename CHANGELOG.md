@@ -4,6 +4,29 @@ All notable changes to `keel-trade` are documented here. Versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html), and the format
 loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.2] — 2026-05-31
+
+**MCPB bundle distribution.** A platform-specific `.mcpb` bundle of
+keel-trade ships alongside the PyPI wheel for one-click install in
+Claude Desktop and distribution via the Anthropic Connectors Directory
+and Smithery. Same MCP server, same outcome tools, same browser-OAuth
+flow — no SDK code changes, no terminal required.
+
+### Added
+
+- `.mcpb` bundles for darwin, win32, and linux attached as release
+  assets at
+  https://github.com/keel-trade/keel-trade/releases/tag/v0.5.2. Drag
+  onto Claude Desktop for a one-click install. User still needs system
+  Python 3.11+ (same prerequisite as `pipx install keel-trade`).
+- `scripts/build_mcpb.py` — reproducible build script in the SDK.
+  Reads runtime deps from `pyproject.toml`, copies `keel/` +
+  `pipeline_engine/` + vendored deps into a staging dir, and runs
+  `@anthropic-ai/mcpb pack`. Produces
+  `dist/keel-trade-<version>-<platform>.mcpb`.
+- `scripts/manifest.template.json` — MCPB v0.3 manifest template with
+  `{{VERSION}}` and `{{PLATFORMS_JSON}}` substitution.
+
 ## [0.5.1] — 2026-05-29
 
 **Public mirror at github.com/keel-trade/keel-trade + housekeeping.**

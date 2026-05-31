@@ -1,0 +1,54 @@
+{
+  "manifest_version": "0.3",
+  "name": "keel-trade",
+  "display_name": "Keel — Hyperliquid trading agent",
+  "version": "{{VERSION}}",
+  "description": "MCP server for AI-driven Hyperliquid strategy development: typed strategy composition, deterministic backtests on real HL funding + price, live execution with bit-for-bit parity.",
+  "long_description": "Keel is an MCP server that gives agents the ability to compose, backtest, and deploy crypto trading strategies on Hyperliquid. Strategies are graphs of typed, versioned components; the backtester and live executor share one engine with bit-for-bit parity, so what an agent backtests is exactly what runs in production. Sign in once with one tool call (`keel_auth_login` opens a browser, captures the OAuth callback, persists tokens for 30 days). Then compose, backtest, and (if you opt in) deploy from the same MCP surface across Claude Code, Cursor, Codex, Windsurf, or any MCP-capable agent host. Live-write tools require explicit toolset opt-in plus a local arming step — agents cannot deploy without you authorizing it twice.",
+  "author": {
+    "name": "Keel",
+    "email": "team@usekeel.io",
+    "url": "https://usekeel.io"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/keel-trade/keel-trade.git"
+  },
+  "homepage": "https://usekeel.io/keel-mcp",
+  "documentation": "https://usekeel.io/docs",
+  "support": "https://github.com/keel-trade/keel-trade/issues",
+  "icon": "icon.png",
+  "license": "MIT",
+  "privacy_policies": ["https://usekeel.io/privacy"],
+  "keywords": ["mcp", "hyperliquid", "trading", "backtesting", "crypto", "claude", "ai-agents"],
+  "compatibility": {
+    "claude_desktop": ">=1.0.0",
+    "platforms": {{PLATFORMS_JSON}},
+    "runtimes": {
+      "python": ">=3.11"
+    }
+  },
+  "server": {
+    "type": "python",
+    "entry_point": "server/keel/__main__.py",
+    "mcp_config": {
+      "command": "python3",
+      "args": ["-m", "keel", "mcp", "serve"],
+      "env": {
+        "PYTHONPATH": "${__dirname}/server",
+        "KEEL_API_URL": "${user_config.api_url}"
+      }
+    }
+  },
+  "user_config": {
+    "api_url": {
+      "type": "string",
+      "title": "Keel API URL",
+      "description": "Override only for staging or self-hosted deployments. Leave default for production.",
+      "default": "https://api.usekeel.io",
+      "required": false,
+      "sensitive": false
+    }
+  },
+  "tools_generated": true
+}
