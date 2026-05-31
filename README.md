@@ -65,6 +65,18 @@ Three properties drive the design:
 
 ## Install
 
+### Claude Desktop — one-click (MCPB)
+
+Download the bundle for your OS from the [latest release](https://github.com/keel-trade/keel-trade/releases/latest) and drag onto Claude Desktop:
+
+- macOS: `keel-trade-<version>-darwin.mcpb`
+- Windows: `keel-trade-<version>-win32.mcpb`
+- Linux: `keel-trade-<version>-linux.mcpb`
+
+The MCPB bundle requires system Python 3.11+ (same prerequisite as the terminal install path below). Claude Desktop launches `python -m keel mcp serve` from the unpacked bundle.
+
+### Terminal — pipx / uv (Claude Code, Codex, Cursor, Windsurf, etc.)
+
 ```bash
 pipx install keel-trade
 ```
