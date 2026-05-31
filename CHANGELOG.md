@@ -4,6 +4,39 @@ All notable changes to `keel-trade` are documented here. Versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html), and the format
 loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.3] — 2026-05-31
+
+**MCPB Python ABI fix — single cross-platform bundle.** v0.5.2's
+platform-specific bundles shipped Python-3.11-compiled `.so` files
+(pydantic_core, cryptography, cffi, …), which broke under Claude
+Desktop's default launcher when it picked up Python 3.12 from
+homebrew (`ModuleNotFoundError: pydantic_core._pydantic_core`).
+0.5.3 ships a single ~430 KB cross-platform `.mcpb` containing only
+pure-Python keel + pipeline_engine; runtime deps are pip-installed
+on first launch into `~/.keel/mcpb-lib/py3.X/`. Works under any
+Python 3.11+ on macOS, Windows, and Linux.
+
+### Changed
+
+- MCPB bundle is now a single cross-platform asset
+  `keel-trade-0.5.3.mcpb`, replacing the per-platform
+  `keel-trade-0.5.2-darwin.mcpb` / `-win32.mcpb` / `-linux.mcpb` set.
+- First launch installs runtime deps for the current Python version
+  (~10-30 sec); subsequent launches are instant (cache reused).
+- `scripts/mcpb_bootstrap.py` — new entry point shipped inside the
+  bundle. Handles dep install, sys.path setup, and
+  `importlib.invalidate_caches()` after install (Python caches
+  negative path lookups, so a fresh install isn't visible to
+  subsequent imports without the explicit invalidation).
+- `.github/workflows/build-mcpb.yml` — dropped the macOS / Windows /
+  Linux matrix; the bundle is now built once on ubuntu-latest.
+
+### Fixed
+
+- `ModuleNotFoundError: No module named 'pydantic_core._pydantic_core'`
+  when Claude Desktop launched the bundle with a different Python
+  minor version than the one it was built against.
+
 ## [0.5.2] — 2026-05-31
 
 **MCPB bundle distribution.** A platform-specific `.mcpb` bundle of

@@ -67,13 +67,9 @@ Three properties drive the design:
 
 ### Claude Desktop — one-click (MCPB)
 
-Download the bundle for your OS from the [latest release](https://github.com/keel-trade/keel-trade/releases/latest) and drag onto Claude Desktop:
+Download `keel-trade-<version>.mcpb` from the [latest release](https://github.com/keel-trade/keel-trade/releases/latest) and drag onto Claude Desktop. Cross-platform single bundle — works on macOS, Windows, and Linux.
 
-- macOS: `keel-trade-<version>-darwin.mcpb`
-- Windows: `keel-trade-<version>-win32.mcpb`
-- Linux: `keel-trade-<version>-linux.mcpb`
-
-The MCPB bundle requires system Python 3.11+ (same prerequisite as the terminal install path below). Claude Desktop launches `python -m keel mcp serve` from the unpacked bundle.
+The MCPB bundle requires system Python 3.11+ (same prerequisite as the terminal install path below). First launch takes ~10-30 seconds while the bundle pip-installs runtime deps to `~/.keel/mcpb-lib/py3.X/`; subsequent launches are instant.
 
 ### Terminal — pipx / uv (Claude Code, Codex, Cursor, Windsurf, etc.)
 

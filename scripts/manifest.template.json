@@ -4,7 +4,7 @@
   "display_name": "Keel — Hyperliquid trading agent",
   "version": "{{VERSION}}",
   "description": "MCP server for AI-driven Hyperliquid strategy development: typed strategy composition, deterministic backtests on real HL funding + price, live execution with bit-for-bit parity.",
-  "long_description": "Keel is an MCP server that gives agents the ability to compose, backtest, and deploy crypto trading strategies on Hyperliquid. Strategies are graphs of typed, versioned components; the backtester and live executor share one engine with bit-for-bit parity, so what an agent backtests is exactly what runs in production. Sign in once with one tool call (`keel_auth_login` opens a browser, captures the OAuth callback, persists tokens for 30 days). Then compose, backtest, and (if you opt in) deploy from the same MCP surface across Claude Code, Cursor, Codex, Windsurf, or any MCP-capable agent host. Live-write tools require explicit toolset opt-in plus a local arming step — agents cannot deploy without you authorizing it twice.",
+  "long_description": "Keel is an MCP server that gives agents the ability to compose, backtest, and deploy crypto trading strategies on Hyperliquid. Strategies are graphs of typed, versioned components; the backtester and live executor share one engine with bit-for-bit parity, so what an agent backtests is exactly what runs in production. Sign in once with one tool call (`keel_auth_login` opens a browser, captures the OAuth callback, persists tokens for 30 days). Then compose, backtest, and (if you opt in) deploy from the same MCP surface across Claude Code, Cursor, Codex, Windsurf, or any MCP-capable agent host. Live-write tools require explicit toolset opt-in plus a local arming step — agents cannot deploy without you authorizing it twice.\n\nFirst launch takes ~10-30 seconds while the bootstrap pip-installs runtime deps to ~/.keel/mcpb-lib/py3.X/; subsequent launches reuse the cache and start instantly. Requires system Python 3.11+ with pip and internet access on first run.",
   "author": {
     "name": "Keel",
     "email": "team@usekeel.io",
@@ -23,17 +23,17 @@
   "keywords": ["mcp", "hyperliquid", "trading", "backtesting", "crypto", "claude", "ai-agents"],
   "compatibility": {
     "claude_desktop": ">=1.0.0",
-    "platforms": {{PLATFORMS_JSON}},
+    "platforms": ["darwin", "win32", "linux"],
     "runtimes": {
       "python": ">=3.11"
     }
   },
   "server": {
     "type": "python",
-    "entry_point": "server/keel/__main__.py",
+    "entry_point": "server/_bootstrap.py",
     "mcp_config": {
       "command": "python3",
-      "args": ["-m", "keel", "mcp", "serve"],
+      "args": ["${__dirname}/server/_bootstrap.py"],
       "env": {
         "PYTHONPATH": "${__dirname}/server",
         "KEEL_API_URL": "${user_config.api_url}"

@@ -1,28 +1,26 @@
 #!/usr/bin/env python3
 """Build a .mcpb bundle for keel-trade.
 
-Reads version from pyproject.toml, copies keel/ + pipeline_engine/ into a
-staging directory alongside vendored runtime deps (auto-detected current
-platform), renders the manifest from a template, and runs `mcpb pack` to
-produce ``dist/keel-trade-<version>-<platform>.mcpb``.
+Bundle is a SINGLE cross-platform .mcpb. We ship only pure-Python
+keel + pipeline_engine + a bootstrap entry point; runtime deps
+(pydantic_core, cryptography, fastmcp, etc.) are pip-installed on
+first launch into ~/.keel/mcpb-lib/py3.X/. This sidesteps the
+Python-version ABI mismatch that bit v0.5.2 — its bundled
+pydantic_core.cpython-311-darwin.so couldn't load under the
+Python 3.12 that Claude Desktop launched.
 
-Cross-platform model: one .mcpb per OS, built natively on its target
-runner. Runtime deps include Rust/C extensions (pydantic_core, cryptography,
-cffi, rpds, watchfiles, caio) that have no pure-Python fallback, so each
-platform needs its own wheels. CI matrix builds all three; macOS is the
-primary submission target since most Claude Desktop users are on macOS.
+First-launch cost: ~10-30 sec to pip install on the user's machine.
+Subsequent launches reuse the cache and start instantly.
 
-Layout produced (single PYTHONPATH dir avoids cross-platform pathsep issues):
+Layout produced:
 
     staging/
     ├── manifest.json
     ├── icon.png
     └── server/
-        ├── keel/               # copied from ../keel
-        ├── pipeline_engine/    # copied from ../pipeline_engine
-        ├── click/              # vendored
-        ├── pydantic/           # vendored
-        └── ...
+        ├── _bootstrap.py       # entry point — installs deps, runs keel
+        ├── keel/               # pure-Python copy of ../keel
+        └── pipeline_engine/    # pure-Python copy of ../pipeline_engine
 
 Usage (from the keel-sdk directory):
 
@@ -54,6 +52,7 @@ SERVER_DIR = STAGING_DIR / "server"
 
 MANIFEST_TEMPLATE = SCRIPTS_DIR / "manifest.template.json"
 ICON_SRC = SCRIPTS_DIR / "icon.png"
+BOOTSTRAP_SRC = SCRIPTS_DIR / "mcpb_bootstrap.py"
 
 PYPROJECT = SDK_ROOT / "pyproject.toml"
 
@@ -65,10 +64,6 @@ def get_pyproject() -> dict:
 
 def get_version(pyproject: dict) -> str:
     return pyproject["project"]["version"]
-
-
-def get_runtime_deps(pyproject: dict) -> list[str]:
-    return list(pyproject["project"]["dependencies"])
 
 
 def clean_staging() -> None:
@@ -93,22 +88,10 @@ def copy_sources() -> None:
         )
 
 
-def install_runtime_deps(deps: list[str]) -> None:
-    if not deps:
-        raise RuntimeError("No runtime deps found in pyproject.toml")
-    cmd = [
-        sys.executable, "-m", "pip", "install",
-        "--target", str(SERVER_DIR),
-        "--quiet",
-        "--no-compile",
-        "--disable-pip-version-check",
-        *deps,
-    ]
-    print(f"Installing runtime deps to {SERVER_DIR.relative_to(SDK_ROOT)}: {' '.join(deps)}")
-    subprocess.run(cmd, check=True)
-    # Strip __pycache__ that occasionally appear despite --no-compile
-    for pyc_dir in SERVER_DIR.rglob("__pycache__"):
-        shutil.rmtree(pyc_dir, ignore_errors=True)
+def copy_bootstrap() -> None:
+    if not BOOTSTRAP_SRC.exists():
+        raise RuntimeError(f"Bootstrap script missing at {BOOTSTRAP_SRC}")
+    shutil.copy2(BOOTSTRAP_SRC, SERVER_DIR / "_bootstrap.py")
 
 
 def copy_icon() -> None:
@@ -122,37 +105,14 @@ def copy_icon() -> None:
     shutil.copy2(ICON_SRC, STAGING_DIR / "icon.png")
 
 
-PLATFORM_MAP = {
-    "darwin": "darwin",
-    "win32": "win32",
-    "linux": "linux",
-}
-
-
-def current_platform() -> str:
-    plat = PLATFORM_MAP.get(sys.platform)
-    if plat is None:
-        raise RuntimeError(
-            f"Unsupported sys.platform={sys.platform!r}. "
-            f"Run on darwin / win32 / linux."
-        )
-    return plat
-
-
-def render_manifest(version: str, platform: str) -> None:
+def render_manifest(version: str) -> None:
     template = MANIFEST_TEMPLATE.read_text()
-    rendered = (
-        template
-        .replace("{{VERSION}}", version)
-        .replace("{{PLATFORMS_JSON}}", json.dumps([platform]))
-    )
+    rendered = template.replace("{{VERSION}}", version)
     parsed = json.loads(rendered)
     if parsed["version"] != version:
         raise RuntimeError("Version substitution failed")
     if not re.match(r"^\d+\.\d+\.\d+", version):
         raise RuntimeError(f"Refusing non-semver version: {version!r}")
-    if parsed["compatibility"]["platforms"] != [platform]:
-        raise RuntimeError("Platform substitution failed")
     (STAGING_DIR / "manifest.json").write_text(json.dumps(parsed, indent=2) + "\n")
 
 
@@ -173,9 +133,9 @@ def validate_manifest() -> None:
     run_mcpb(["validate", str(STAGING_DIR / "manifest.json")])
 
 
-def run_mcpb_pack(version: str, platform: str) -> Path:
+def run_mcpb_pack(version: str) -> Path:
     DIST_DIR.mkdir(exist_ok=True)
-    out_path = DIST_DIR / f"keel-trade-{version}-{platform}.mcpb"
+    out_path = DIST_DIR / f"keel-trade-{version}.mcpb"
     if out_path.exists():
         out_path.unlink()
     run_mcpb(["pack", str(STAGING_DIR), str(out_path)])
@@ -189,19 +149,17 @@ def verify_bundle(bundle: Path) -> None:
 def main() -> None:
     pyproject = get_pyproject()
     version = get_version(pyproject)
-    deps = get_runtime_deps(pyproject)
-    platform = current_platform()
 
-    print(f"Building keel-trade {version} .mcpb for {platform}")
+    print(f"Building keel-trade {version} .mcpb (cross-platform)")
     print(f"  SDK root: {SDK_ROOT}")
 
     clean_staging()
     copy_sources()
-    install_runtime_deps(deps)
+    copy_bootstrap()
     copy_icon()
-    render_manifest(version, platform)
+    render_manifest(version)
     validate_manifest()
-    bundle = run_mcpb_pack(version, platform)
+    bundle = run_mcpb_pack(version)
 
     size_mb = bundle.stat().st_size / (1024 * 1024)
     print(f"\nBuilt {bundle.name} ({size_mb:.1f} MB)")
