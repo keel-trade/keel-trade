@@ -313,6 +313,29 @@ def test_live_monitor_portfolio_ignores_deployment_id():
     assert "lag" in env["freshness"]["note"]
 
 
+def test_live_monitor_bare_call_returns_portfolio():
+    """Called with no args, the tool returns the portfolio summary —
+    matches the agent's intuition for 'how are my live deployments
+    doing?'. v0.5.4-fix: schema previously required `deployment_id`,
+    forcing the agent to ask 'which one?' even though the handler
+    already supported the bare case."""
+    client = MagicMock()
+    client.get.return_value = {"deployments": []}
+    tool = get("keel_live_monitor")
+
+    result = tool.handler({}, _ctx(client))
+
+    client.get.assert_called_once_with("/v1/live/portfolio/summary")
+    env = result.to_envelope()
+    assert env["view"] == "portfolio"
+
+
+def test_live_monitor_schema_does_not_require_deployment_id():
+    """Schema mirrors the handler's bare-call support."""
+    tool = get("keel_live_monitor")
+    assert "deployment_id" not in tool.input_schema["required"]
+
+
 # ─── keel_live_control ──────────────────────────────────────────────────
 
 

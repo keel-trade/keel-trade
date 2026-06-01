@@ -82,6 +82,41 @@ def test_backtest_run_returns_envelope_with_hero_url(ctx):
     assert env["status"] == "queued"
 
 
+def test_backtest_run_defaults_start_date_when_omitted(ctx):
+    """Omitting start_date defaults to 2024-08-15 (earliest cached HL data).
+
+    Regression — v0.5.3 had start_date in required[] which forced agents
+    to interrogate the user for dates before running anything. New
+    behavior: agent calls keel_backtest_run with just strategy_id, gets
+    a real backtest back, and reports the dates used in its reply.
+    """
+    submitted = {"id": "bt_def", "status": "queued", "strategy_id": "s_def"}
+
+    with patch("keel.client.KeelClient.post", return_value=submitted) as mock_post:
+        tool = OUTCOMES["keel_backtest_run"]
+        tool.handler({"strategy_id": "s_def", "wait": False}, ctx)
+
+    body = mock_post.call_args.kwargs["json"]
+    assert body["start_date"] == "2024-08-15"
+    # end_date also defaults — anything that looks like a date is fine
+    assert body["end_date"]
+
+
+def test_backtest_run_schema_does_not_require_start_date():
+    """The MCP-published schema must reflect the optional default — if
+    start_date stays in required[], hosts that pre-validate against the
+    schema will reject calls that omit it, defeating the default."""
+    from keel.tools.outcomes import OUTCOMES
+
+    schema = OUTCOMES["keel_backtest_run"].input_schema
+    assert "start_date" not in schema["required"], (
+        "start_date must not be required; it defaults to 2024-08-15. "
+        "If required[] reverts, agents will ask the user for dates "
+        "instead of running."
+    )
+    assert "strategy_id" in schema["required"]
+
+
 def test_backtest_run_defaults_end_date_to_today(ctx):
     """Omitting end_date defaults to today's UTC date before POSTing."""
     submitted = {

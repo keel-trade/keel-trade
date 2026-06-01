@@ -35,6 +35,18 @@ def _default_end_date() -> str:
     return datetime.now(UTC).date().isoformat()
 
 
+# Earliest HL data in Keel's cache: BTC/ETH/SOL from 2024-08-15. Newer
+# assets (HYPE etc.) join their own series later; the backtester only
+# evaluates assets that have data in the requested window, so this is a
+# safe blanket default — older requests are accepted but truncated to
+# the first available bar per asset.
+_DEFAULT_START_DATE = "2024-08-15"
+
+
+def _default_start_date() -> str:
+    return _DEFAULT_START_DATE
+
+
 def _extract_summary_metrics(metrics: dict | None) -> dict | None:
     """Pull canonical metric keys out of the freeform `metrics` blob.
 
@@ -83,7 +95,7 @@ def _poll_until_terminal(client, backtest_id: str) -> dict:
 
 def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
     strategy_id = args.get("strategy_id")
-    start_date = args.get("start_date")
+    start_date = args.get("start_date") or _default_start_date()
     end_date = args.get("end_date") or _default_end_date()
 
     if not strategy_id:
@@ -92,16 +104,6 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
             error_code="missing_strategy_id",
             exit_code=2,
             suggestion="Pass a strategy_id (run `keel strategy search` to list).",
-        )
-    if not start_date:
-        raise KeelError(
-            "`start_date` (YYYY-MM-DD) is required.",
-            error_code="missing_date_range",
-            exit_code=2,
-            suggestion=(
-                "Pass --start-date in ISO format. `end_date` is optional and "
-                "defaults to today's UTC date."
-            ),
         )
 
     # ── Local-divergence guard ────────────────────────────────────────
@@ -294,7 +296,11 @@ BACKTEST_RUN = register(
             "max drawdown, …). On polling timeout the envelope still "
             "returns cleanly with `status` and `status_url` set. "
             "Each call queues a NEW run — this tool is non-idempotent. "
-            "`end_date` is optional and defaults to today's UTC date. "
+            "DEFAULTS: when the user says \"backtest X\" without dates, just "
+            "run it — `start_date` defaults to 2024-08-15 (earliest cached "
+            "HL data) and `end_date` to today's UTC date. Mention the dates "
+            "used in your reply so the user can narrow them if they want. "
+            "Do NOT ask the user to pick a date range first. "
             "Pass `commit_id` to backtest a historical commit (find via "
             "`keel_strategy_log`); otherwise runs server HEAD. "
             "Local-divergence guard: if the strategy is checked out AND "
@@ -308,7 +314,7 @@ BACKTEST_RUN = register(
         ),
         input_schema={
             "type": "object",
-            "required": ["strategy_id", "start_date"],
+            "required": ["strategy_id"],
             "properties": {
                 "strategy_id": {
                     "type": "string",
@@ -318,7 +324,10 @@ BACKTEST_RUN = register(
                 "start_date": {
                     "type": "string",
                     "format": "date",
-                    "description": "Inclusive start date, YYYY-MM-DD.",
+                    "description": (
+                        "Inclusive start date, YYYY-MM-DD. Optional; defaults "
+                        "to 2024-08-15 (earliest cached HL data) when omitted."
+                    ),
                 },
                 "end_date": {
                     "type": "string",

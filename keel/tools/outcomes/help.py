@@ -45,10 +45,24 @@ def _bundled_resource_uri(topic: str, subdir: str) -> str | None:
 def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
     topic = args.get("topic", "").strip()
     if not topic:
-        raise KeelError(
-            "Missing required `topic` argument.",
-            error_code="missing_topic",
-            suggestion="Pass --topic <name>, e.g. --topic phases.",
+        # Return the list of bundled topics so the agent can pick the
+        # next call without a round-trip. Previously raised
+        # missing_topic, which forced agents to interrogate the user
+        # for a topic name instead of just surfacing what's available.
+        topics = sorted(_list_bundled_topics())
+        return OutcomeResult(
+            run_id=None,
+            hero_url=None,
+            share_url=None,
+            extra={
+                "topics": topics,
+                "info": (
+                    "No topic specified — listing available knowledge docs. "
+                    "Call again with `topic=<name>` to fetch one. The "
+                    f"{len(topics)} bundled topics cover the DSL reference, "
+                    "agent skills, and composition patterns."
+                ),
+            },
         )
 
     # 1. Bundled fallback (works without auth).
@@ -112,20 +126,26 @@ HELP = register(
             "doesn't browse MCP resources well. Reference topics mirror "
             "`keel://dsl/reference/<topic>`; knowledge topics mirror "
             "`keel://knowledge/<section>`. "
+            "Call with no `topic` to list every bundled topic — handy when the "
+            "user asks a general 'how does X work?' question and you want to "
+            "pick the right doc instead of guessing. "
             "Do NOT use to search components — call `keel_components_search`. "
             "Do NOT use to look up a specific component's params — call "
             "`keel_components_compose_help`."
         ),
         input_schema={
             "type": "object",
-            "required": ["topic"],
+            "required": [],
             "properties": {
                 "topic": {
                     "type": "string",
                     "description": (
-                        "Topic slug. Examples: `phases`, `types`, `slots`, "
-                        "`composition`, `normalization`, `best_practices`."
+                        "Topic slug. Optional; when omitted, the tool returns "
+                        "the list of available topics. Examples: `phases`, "
+                        "`types`, `slots`, `composition`, `normalization`, "
+                        "`best_practices`."
                     ),
+                    "x-cli-positional": True,
                 },
             },
         },

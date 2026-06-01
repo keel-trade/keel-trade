@@ -29,13 +29,14 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
             result = pull(strategy_id=strategy_id)
     except ValueError as e:
         raise KeelError(
-            str(e),
+            f"Couldn't pull strategy{f' {strategy_id}' if strategy_id else ''}: {e}",
             error_code="pull_failed",
             exit_code=2,
             suggestion=(
                 "If local has uncommitted changes (status `diverged` or `ahead`): "
                 "run `keel_strategy_push -m 'msg'` first OR `keel_strategy_pull "
-                "force=True` to overwrite local (LOSES local edits)."
+                "force=True` to overwrite local (LOSES local edits). "
+                "Use `keel_strategy_status` to see which case you're in."
             ),
         ) from e
 

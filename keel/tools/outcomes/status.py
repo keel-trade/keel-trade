@@ -181,10 +181,19 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
                 "tier": "live" if "runner.*" in scopes else "base",
             }
         except Exception as e:  # noqa: BLE001
+            # Only suggest re-auth on an actual 401. Network blips, 5xx,
+            # parse failures etc. should NOT contradict `authenticated:
+            # true` with a misleading "session likely expired" hint —
+            # users would re-login unnecessarily and the agent reads the
+            # contradiction back as uncertainty.
+            from keel.errors import AuthError
+
             body["identity_error"] = str(e)
-            body["next"] = [
-                "keel_auth_login   # session likely expired; re-authenticate",
-            ]
+            if isinstance(e, AuthError):
+                body["authenticated"] = False
+                body["next"] = [
+                    "keel_auth_login   # tokens rejected by /v1/me — re-authenticate",
+                ]
 
         # Best-effort entitlements probe — gives agents a window into
         # plan-limit usage BEFORE they run a big sweep. If a unit is

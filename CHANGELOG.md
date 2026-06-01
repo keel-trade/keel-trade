@@ -4,6 +4,54 @@ All notable changes to `keel-trade` are documented here. Versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html), and the format
 loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.4] — 2026-06-01
+
+**Proactivity + friendlier defaults across the outcome surface.**
+Agents were asking the user too many questions before doing anything —
+this release closes the schema/handler gaps that forced those
+questions, adds a logout tool so users can switch accounts without a
+terminal, and fixes a `keel_status` bug where a transient identity
+probe failure contradicted `authenticated: true` with a misleading
+"session likely expired" hint.
+
+### Added
+
+- `keel_auth_logout` — MCP outcome tool wrapping
+  `keel.auth.clear_credentials()`. Same shape as `keel_auth_login`,
+  toolset `always`, returns `next: [keel_auth_login]` so the agent
+  knows the round-trip for switching accounts.
+
+### Changed
+
+- `keel_backtest_run`: `start_date` is now optional and defaults to
+  `2024-08-15` (earliest cached Hyperliquid data). Description now
+  reads "when the user says 'backtest X' without dates, just run
+  it — mention the dates used in your reply." Agents stop asking for
+  a date range first.
+- `keel_live_monitor`: `deployment_id` is now optional and defaults
+  to the portfolio summary across every deployment. Handler already
+  supported this; the required-flag in the schema was forcing agents
+  to ask "which deployment?".
+- `keel_help`: `topic` is now optional. Bare `keel_help` returns the
+  list of bundled topics plus a one-line orientation, so an agent
+  trying to find the right doc doesn't have to guess a slug.
+- `keel_backtest_summarize`: description now explicitly says "BE
+  PROACTIVE — after `keel_backtest_run` returns, call this
+  automatically; don't ask 'do you want the full metrics?' first."
+- `keel_strategy_pull` / `_push` / `_discard` / `_status`: raw
+  `str(e)` from the workspace lib is now wrapped with a
+  "Couldn't <verb> {strategy_id}: <e>" framing plus a concrete
+  next-step suggestion.
+
+### Fixed
+
+- `keel_status`: only an actual `AuthError` (401 from `/v1/me`) flips
+  `authenticated` to `false` and adds the `keel_auth_login` next-hint.
+  Network blips, 5xx, and parse errors now surface `identity_error`
+  for visibility but no longer contradict `authenticated: true` with
+  a misleading "may need to re-auth" message. Reproduced and pinned
+  with two new tests.
+
 ## [0.5.3] — 2026-05-31
 
 **MCPB Python ABI fix — single cross-platform bundle.** v0.5.2's

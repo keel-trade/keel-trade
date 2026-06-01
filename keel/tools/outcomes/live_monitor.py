@@ -158,24 +158,29 @@ LIVE_MONITOR = register(
             "Read live deployment state: overview, positions, equity, P&L, stats, "
             "weights, weights-history, executions, orders, trades, funding events, "
             "or portfolio summary. Selects the slice via the `view` enum so one tool "
-            "replaces ~13 separate live_* read endpoints. Pass deployment_id='all' "
-            "(or view='portfolio') for the portfolio-level summary across all "
-            "deployments. Returns `freshness` metadata so agents can distinguish "
-            "on-demand exchange snapshots from recorded backend state; this tool "
-            "is not a real-time live-service stream. "
+            "replaces ~13 separate live_* read endpoints. "
+            "DEFAULTS: when the user asks 'how are my live deployments doing' or "
+            "similar without naming one, just call with no args — returns the "
+            "portfolio summary across all deployments. Pass `deployment_id` to "
+            "drill into a single deployment. "
+            "Returns `freshness` metadata so agents can distinguish on-demand "
+            "exchange snapshots from recorded backend state; this tool is not a "
+            "real-time live-service stream. "
             "Do NOT use to mutate state — call `keel_live_control` instead. "
             "Do NOT use to deploy a new strategy — call `keel_live_deploy`."
         ),
         input_schema={
             "type": "object",
-            "required": ["deployment_id"],
+            "required": [],
             "properties": {
                 "deployment_id": {
                     "type": "string",
                     "description": (
-                        "Deployment to inspect. Pass empty string or 'all' (or set "
-                        "view='portfolio') to fetch the portfolio summary."
+                        "Deployment to inspect. Optional; omit (or pass 'all') "
+                        "with view='portfolio' (the default in this case) to fetch "
+                        "the portfolio summary across every deployment."
                     ),
+                    "x-cli-positional": True,
                 },
                 "view": {
                     "type": "string",

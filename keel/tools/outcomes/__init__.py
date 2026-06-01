@@ -64,6 +64,7 @@ def _bootstrap() -> None:
         accounts,
         audit,
         auth_login,
+        auth_logout,
         backtest_run,
         backtest_summarize,
         backtest_watch,

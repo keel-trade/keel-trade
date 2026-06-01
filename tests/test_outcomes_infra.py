@@ -259,6 +259,27 @@ def test_cli_help_unknown_topic_surfaces_known_topics():
     assert "not_found" in err_text or "Known topics" in err_text
 
 
+def test_cli_help_bare_lists_topics():
+    """`keel help` with no topic returns the list of bundled topics
+    instead of raising missing_topic. v0.5.4-fix: agents reach for help
+    to orient themselves; the bare call should be useful, not an error."""
+    result = runner.invoke(cli, ["--format", "json", "help"])
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.output)
+    assert "topics" in data
+    assert isinstance(data["topics"], list) and len(data["topics"]) > 0
+    assert "info" in data
+
+
+def test_keel_help_schema_topic_is_optional():
+    from keel.tools.outcomes import OUTCOMES
+
+    schema = OUTCOMES["keel_help"].input_schema
+    assert "topic" not in schema["required"], (
+        "topic must be optional — bare `keel_help` returns the topic list"
+    )
+
+
 def test_cli_accepts_format_at_subcommand_position():
     """`keel status --format json` must work (v0.4.2). Users reach for the
     subcommand-level flag first; the top-level form keeps working too."""
@@ -759,6 +780,75 @@ def test_keel_status_marks_unlimited_for_int_max_grants(monkeypatch, tmp_path):
     summary = env["entitlements"]["summary"]
     by_unit = {b["unit"]: b for b in summary}
     assert by_unit["backtest_runs"]["unlimited"] is True
+
+
+def test_keel_status_identity_network_error_does_not_suggest_reauth(monkeypatch, tmp_path):
+    """A non-auth identity probe failure (network blip, 5xx, parse error)
+    must NOT add a `keel_auth_login` `next` hint or flip `authenticated`
+    to false. v0.5.3-fix: the old except-Exception block told the agent
+    `session likely expired; re-authenticate` for ANY exception, so a
+    transient API outage produced a contradictory `authenticated: true`
+    response that simultaneously suggested re-auth.
+    """
+    import keel.config as _config
+    from keel.tools.outcomes._base import ToolContext
+    from keel.tools.outcomes import OUTCOMES
+
+    cfg_file = tmp_path / "config.yaml"
+    cfg_file.write_text("api_key: dummy\napi_url: https://api.usekeel.io\n")
+    monkeypatch.setattr(_config, "CONFIG_FILE", cfg_file)
+    monkeypatch.delenv("KEEL_API_KEY", raising=False)
+
+    def _network_fail():
+        raise ConnectionError("simulated network blip")
+
+    monkeypatch.setattr("keel.auth.get_identity", _network_fail)
+    monkeypatch.setattr(
+        "keel.client.KeelClient.get",
+        lambda self, path, **kw: {"balances": []},
+    )
+
+    tool = OUTCOMES["keel_status"]
+    env = tool.handler({}, ToolContext(is_tty=False)).to_envelope()
+
+    assert env["authenticated"] is True, "non-auth errors must not flip authenticated"
+    assert "identity_error" in env, "error must still surface for visibility"
+    assert "next" not in env, (
+        "non-auth identity errors must not add a re-auth next hint — "
+        "doing so contradicts `authenticated: true` and confuses agents"
+    )
+
+
+def test_keel_status_identity_auth_error_suggests_reauth(monkeypatch, tmp_path):
+    """An actual AuthError (401 from /v1/me) DOES suggest re-auth and
+    flips `authenticated` to false — the stored tokens are real but the
+    server rejected them, which is the legitimate re-login path."""
+    import keel.config as _config
+    from keel.errors import AuthError
+    from keel.tools.outcomes._base import ToolContext
+    from keel.tools.outcomes import OUTCOMES
+
+    cfg_file = tmp_path / "config.yaml"
+    cfg_file.write_text("api_key: dummy\napi_url: https://api.usekeel.io\n")
+    monkeypatch.setattr(_config, "CONFIG_FILE", cfg_file)
+    monkeypatch.delenv("KEEL_API_KEY", raising=False)
+
+    def _auth_fail():
+        raise AuthError("tokens rejected")
+
+    monkeypatch.setattr("keel.auth.get_identity", _auth_fail)
+    monkeypatch.setattr(
+        "keel.client.KeelClient.get",
+        lambda self, path, **kw: {"balances": []},
+    )
+
+    tool = OUTCOMES["keel_status"]
+    env = tool.handler({}, ToolContext(is_tty=False)).to_envelope()
+
+    assert env["authenticated"] is False, "AuthError must flip authenticated to false"
+    assert "identity_error" in env
+    assert "next" in env
+    assert any("keel_auth_login" in line for line in env["next"])
 
 
 def test_keel_status_entitlements_probe_fails_soft(monkeypatch, tmp_path):

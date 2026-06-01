@@ -28,12 +28,12 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
         result = discard(strategy_id=strategy_id)
     except ValueError as e:
         raise KeelError(
-            str(e),
+            f"Couldn't discard workspace{f' for {strategy_id}' if strategy_id else ''}: {e}",
             error_code="discard_failed",
             exit_code=2,
             suggestion=(
-                "If no workspace exists, nothing to discard. List checked-out "
-                "workspaces via `keel_strategy_workspaces`."
+                "If no workspace exists, there's nothing to discard. List "
+                "checked-out workspaces via `keel_strategy_workspaces`."
             ),
         ) from e
 

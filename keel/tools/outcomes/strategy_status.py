@@ -44,7 +44,7 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
         result = status(strategy_id=strategy_id, recent_commits=recent_n)
     except ValueError as e:
         raise KeelError(
-            str(e),
+            f"Couldn't read workspace status{f' for {strategy_id}' if strategy_id else ''}: {e}",
             error_code="status_failed",
             exit_code=2,
             suggestion=(

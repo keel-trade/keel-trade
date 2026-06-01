@@ -35,7 +35,7 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
     except ValueError as e:
         # Common case: strategy not checked out, or no strategy_id and not in workspace
         raise KeelError(
-            str(e),
+            f"Can't push — no local workspace found{f' for {strategy_id}' if strategy_id else ''}: {e}",
             error_code="not_in_workspace",
             exit_code=2,
             suggestion=(
