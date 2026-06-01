@@ -4,6 +4,20 @@ All notable changes to `keel-trade` are documented here. Versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html), and the format
 loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.6] — 2026-06-01
+
+**Metadata-only refresh** for the Official MCP Registry listing. No
+behavioral change to the SDK or MCP surface.
+
+### Changed
+
+- Tighter Registry description aligned to the landing page positioning:
+  `Build, backtest, and automate Hyperliquid trading strategies — typed,
+  deterministic, live parity.` Replaces the previous product-style
+  framing on registry.modelcontextprotocol.io so the canonical entry
+  cascades the right copy to downstream directories (PulseMCP auto-
+  ingests from the Registry).
+
 ## [0.5.5] — 2026-06-01
 
 **Adds Official MCP Registry verification marker.** No behavioral change
