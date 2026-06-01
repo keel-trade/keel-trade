@@ -1,3 +1,5 @@
+<!-- mcp-name: io.github.keel-trade/keel-trade -->
+
 # Keel Agent SDK
 
 Keel is an agent-native research environment for Hyperliquid systematic

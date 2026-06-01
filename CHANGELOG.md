@@ -4,6 +4,22 @@ All notable changes to `keel-trade` are documented here. Versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html), and the format
 loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.5] — 2026-06-01
+
+**Adds Official MCP Registry verification marker.** No behavioral change
+to the SDK or MCP surface. AGENTS.md (the PyPI package readme) now
+contains an HTML-comment `mcp-name` marker that the Official MCP
+Registry uses to verify ownership of the PyPI package
+`keel-trade` and link it to the registry server name
+`io.github.keel-trade/keel-trade`. Comment is invisible in rendered
+markdown but visible to the registry's verification scraper.
+
+### Added
+
+- `<!-- mcp-name: io.github.keel-trade/keel-trade -->` at the top of
+  AGENTS.md, enabling PyPI-package verification for the Official MCP
+  Registry submission (registry.modelcontextprotocol.io).
+
 ## [0.5.4] — 2026-06-01
 
 **Proactivity + friendlier defaults across the outcome surface.**
