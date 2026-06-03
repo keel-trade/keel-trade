@@ -18,9 +18,9 @@ config — use `keel_live_control`.
 
 from __future__ import annotations
 
+import secrets
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-import secrets
 from typing import Any
 
 import yaml
@@ -74,9 +74,7 @@ def _write_preview_store(data: dict[str, Any]) -> None:
     path.write_text(yaml.safe_dump(data, sort_keys=True), encoding="utf-8")
 
 
-def _cleanup_expired_previews(
-    data: dict[str, Any], *, now: datetime | None = None
-) -> None:
+def _cleanup_expired_previews(data: dict[str, Any], *, now: datetime | None = None) -> None:
     now = now or _utcnow()
     previews = data.setdefault("previews", {})
     if not isinstance(previews, dict):
@@ -283,9 +281,7 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
                     "raw": preview_data,
                 },
                 "confirmation_token": token,
-                "confirmation_expires_at": expires_at.isoformat().replace(
-                    "+00:00", "Z"
-                ),
+                "confirmation_expires_at": expires_at.isoformat().replace("+00:00", "Z"),
                 "next_action": {
                     "tool": "keel_live_deploy",
                     "args": {
@@ -313,9 +309,7 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
     if isinstance(result, dict):
         deployment_id = result.get("deployment_id") or result.get("id")
 
-    hero_url = (
-        f"{ctx.app_url}/live/{deployment_id}" if deployment_id else f"{ctx.app_url}/live"
-    )
+    hero_url = f"{ctx.app_url}/live/{deployment_id}" if deployment_id else f"{ctx.app_url}/live"
     return OutcomeResult(
         run_id=deployment_id,
         hero_url=hero_url,
@@ -370,9 +364,7 @@ LIVE_DEPLOY = register(
                 },
                 "schedule": {
                     "type": "string",
-                    "description": (
-                        "Optional cron expression overriding the strategy's schedule."
-                    ),
+                    "description": ("Optional cron expression overriding the strategy's schedule."),
                 },
             },
         },

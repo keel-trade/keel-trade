@@ -228,44 +228,117 @@ def _client():
 
 
 @universe.command()
-@click.option("--mode", required=True, type=click.Choice(["manual", "category", "top_volume"]))
-@click.option("--market", default="perp")
-@click.option("--symbols", multiple=True)
-@click.option("--categories", multiple=True)
-@click.option("--top-n", type=int)
-@click.option("--exclusions", multiple=True)
-@click.option("--inclusions", multiple=True)
+@click.argument("file", required=False, default=None)
+@click.option(
+    "--mode",
+    type=click.Choice(["manual", "category", "top_volume"]),
+    help="DEPRECATED: pass criteria via a strategy file instead.",
+)
+@click.option("--market", default=None, help="DEPRECATED with --mode.")
+@click.option("--symbols", multiple=True, help="DEPRECATED with --mode.")
+@click.option("--categories", multiple=True, help="DEPRECATED with --mode.")
+@click.option("--top-n", type=int, default=None, help="DEPRECATED with --mode.")
+@click.option("--exclusions", multiple=True, help="DEPRECATED with --mode.")
+@click.option("--inclusions", multiple=True, help="DEPRECATED with --mode.")
 @click.pass_context
 def resolve(
     ctx: click.Context,
-    mode: str,
-    market: str,
+    file: str | None,
+    mode: str | None,
+    market: str | None,
     symbols: tuple[str, ...],
     categories: tuple[str, ...],
     top_n: int | None,
     exclusions: tuple[str, ...],
     inclusions: tuple[str, ...],
 ) -> None:
-    """Resolve universe criteria into a concrete symbol list (remote)."""
+    """Resolve a strategy's universe and bake the asset list back into source.
+
+    Reads criteria from the strategy file (or stdin / workspace), calls the
+    API to resolve into a concrete symbol list, and writes the source back
+    with `resolved=[...]` and `resolved_at=...` populated.
+
+    The DSL source is the source of truth — no need to repeat `--mode`,
+    `--top-n` etc., they're already in the Universe(...) declaration.
+
+    Examples:
+        keel universe resolve my_strategy.strategy   # read + write back
+        cat my.strategy | keel universe resolve -    # stdin → stdout
+        keel universe resolve                        # auto-detect from workspace
+
+    DEPRECATED form (still works, emits a warning):
+        keel universe resolve --mode top_volume --top-n 50
+    """
     from keel.errors import KeelError
 
+    # ─── Deprecated flag form ─────────────────────────────────────────
+    # Detect old usage: --mode without a file. Keep working through 0.6.x.
+    using_deprecated_flags = mode is not None or any(
+        (symbols, categories, exclusions, inclusions, top_n is not None)
+    )
+    if using_deprecated_flags and file is None:
+        click.echo(
+            "warning: `keel universe resolve --mode ...` is deprecated. "
+            "Pass a strategy file instead; the criteria live in the DSL.",
+            err=True,
+        )
+        try:
+            body: dict = {"mode": mode, "market": market or "perp"}
+            if symbols:
+                body["symbols"] = list(symbols)
+            if categories:
+                body["categories"] = list(categories)
+            if top_n is not None:
+                body["top_n"] = top_n
+            if exclusions:
+                body["exclusions"] = list(exclusions)
+            if inclusions:
+                body["inclusions"] = list(inclusions)
+            result = _client().post("/v1/universe/resolve", json=body)
+            emit(result, _get_format(ctx))
+        except KeelError as e:
+            emit_error(e, _get_format(ctx))
+            ctx.exit(e.exit_code)
+        return
+
+    # ─── DSL-as-truth path ────────────────────────────────────────────
+    # New form: read source, resolve from in-source criteria, write back.
     try:
-        body: dict = {"mode": mode, "market": market}
-        if symbols:
-            body["symbols"] = list(symbols)
-        if categories:
-            body["categories"] = list(categories)
-        if top_n is not None:
-            body["top_n"] = top_n
-        if exclusions:
-            body["exclusions"] = list(exclusions)
-        if inclusions:
-            body["inclusions"] = list(inclusions)
-        result = _client().post("/v1/universe/resolve", json=body)
-        emit(result, _get_format(ctx))
-    except KeelError as e:
+        source = _read_source(file or "-")
+    except click.ClickException:
+        # If both file and flags were missing, give a clean usage error.
+        if not using_deprecated_flags:
+            raise click.UsageError(
+                "Provide a strategy file path, pipe DSL via stdin, or run inside "
+                "a Keel workspace. See `keel universe resolve --help`."
+            )
+        raise
+
+    try:
+        from keel.tools.local import universe_resolve as _resolve_tool
+
+        result = _resolve_tool(source=source)
+    except (ValueError, KeelError) as e:
         emit_error(e, _get_format(ctx))
-        ctx.exit(e.exit_code)
+        ctx.exit(getattr(e, "exit_code", 1))
+        return
+
+    # Write the resolved source back where it came from (file or workspace).
+    new_source = result["source"]
+    wrote_back = _write_back_if_workspace(file or "-", new_source)
+
+    if wrote_back:
+        emit(
+            {
+                "resolved_count": result["count"],
+                "resolved_at": result["resolved_at"],
+                "wrote_back": True,
+            },
+            _get_format(ctx),
+        )
+    else:
+        # Piped input → print updated source to stdout
+        click.echo(new_source)
 
 
 @universe.command()

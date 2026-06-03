@@ -159,9 +159,7 @@ AUDIT_LIST_LAST = register(
                 "n": {
                     "type": "integer",
                     "default": 20,
-                    "description": (
-                        "Max events to return. Server clamps to 1..100."
-                    ),
+                    "description": ("Max events to return. Server clamps to 1..100."),
                 },
             },
         },

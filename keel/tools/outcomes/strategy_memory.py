@@ -154,8 +154,8 @@ def _write_handler(args: dict, ctx: ToolContext) -> OutcomeResult:
             exit_code=2,
             suggestion=(
                 "Pass `note='<text>'` — typically a single paragraph of "
-                "context (e.g. \"baseline Sharpe 3.13 over 2024-08 → "
-                "2026-02; main risk is concentration in HYPE\"). Markdown is "
+                'context (e.g. "baseline Sharpe 3.13 over 2024-08 → '
+                '2026-02; main risk is concentration in HYPE"). Markdown is '
                 "allowed."
             ),
         )

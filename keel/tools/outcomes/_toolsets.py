@@ -14,9 +14,7 @@ import os
 from ._base import ALL_TOOLSETS
 
 
-_DEFAULT_TOOLSETS = frozenset(
-    {"always", "read-only", "backtest", "share", "live-read"}
-)
+_DEFAULT_TOOLSETS = frozenset({"always", "read-only", "backtest", "share", "live-read"})
 _ALIASES: dict[str, frozenset[str]] = {
     # Backward compatibility for existing MCP host configs. New docs should use
     # `live-write` when they mean deploy/control.

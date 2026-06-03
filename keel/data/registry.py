@@ -158,9 +158,7 @@ def search_components(
     return output
 
 
-def get_component_detail(
-    name: str, component_lock: dict[str, int] | None = None
-) -> dict[str, Any]:
+def get_component_detail(name: str, component_lock: dict[str, int] | None = None) -> dict[str, Any]:
     """Get full specification for a single component."""
     data = _ensure_loaded()
 
@@ -205,20 +203,23 @@ def get_components_after(name: str) -> list[dict[str, Any]]:
     if output_type in transitions:
         for _cat, out_types in transitions[output_type].items():
             for ot in out_types:
-                accepting_names.update(
-                    type_graph.get("input_type_to_names", {}).get(ot, [])
-                )
+                accepting_names.update(type_graph.get("input_type_to_names", {}).get(ot, []))
 
     results = []
     for c in data["components"]:
         if c["name"] in accepting_names and c["name"] != name:
-            results.append({
-                "name": c["name"],
-                "category": c["category"],
-                "description": (c.get("description") or "").strip().split("\n\n")[0].strip()[:200],
-                "input_type": c.get("input_type", "Any"),
-                "output_type": c.get("output_type", "Any"),
-            })
+            results.append(
+                {
+                    "name": c["name"],
+                    "category": c["category"],
+                    "description": (c.get("description") or "")
+                    .strip()
+                    .split("\n\n")[0]
+                    .strip()[:200],
+                    "input_type": c.get("input_type", "Any"),
+                    "output_type": c.get("output_type", "Any"),
+                }
+            )
     return results
 
 
@@ -242,13 +243,18 @@ def get_components_before(name: str) -> list[dict[str, Any]]:
     results = []
     for c in data["components"]:
         if c["name"] in outputting_names and c["name"] != name:
-            results.append({
-                "name": c["name"],
-                "category": c["category"],
-                "description": (c.get("description") or "").strip().split("\n\n")[0].strip()[:200],
-                "input_type": c.get("input_type", "Any"),
-                "output_type": c.get("output_type", "Any"),
-            })
+            results.append(
+                {
+                    "name": c["name"],
+                    "category": c["category"],
+                    "description": (c.get("description") or "")
+                    .strip()
+                    .split("\n\n")[0]
+                    .strip()[:200],
+                    "input_type": c.get("input_type", "Any"),
+                    "output_type": c.get("output_type", "Any"),
+                }
+            )
     return results
 
 

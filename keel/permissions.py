@@ -110,18 +110,25 @@ def read_arm_status(cwd: Path | None = None) -> ArmStatus:
 
     if not armed_flag:
         return ArmStatus(
-            armed=False, expires_at=expires_at, accounts=[],
-            source=source, reason="`armed: false` in permissions file.",
+            armed=False,
+            expires_at=expires_at,
+            accounts=[],
+            source=source,
+            reason="`armed: false` in permissions file.",
         )
     if expires_at is None:
         return ArmStatus(
-            armed=False, expires_at=None, accounts=[],
+            armed=False,
+            expires_at=None,
+            accounts=[],
             source=source,
             reason="Permissions file missing required `expires` timestamp.",
         )
     if expires_at <= _utcnow():
         return ArmStatus(
-            armed=False, expires_at=expires_at, accounts=[],
+            armed=False,
+            expires_at=expires_at,
+            accounts=[],
             source=source,
             reason=(
                 f"Arming expired at {expires_at.isoformat()}. Renew with "

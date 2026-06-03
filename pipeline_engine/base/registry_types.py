@@ -196,7 +196,7 @@ def _resolve_type_name(name: str) -> type:
         f"the registry was built with a newer pipeline_engine.types than "
         f"this install, or the component that uses this type was added "
         f"without updating types.py. Add the NewType declaration to "
-        f"the upstream `pipeline_engine.types` module and regenerate the SDK bundle."
+        f"libs/pipeline_engine/types.py and regenerate the SDK bundle."
     )
 
 

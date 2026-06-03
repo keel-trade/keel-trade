@@ -47,8 +47,7 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
             error_code="missing_target_id",
             exit_code=2,
             suggestion=(
-                "Pass a strategy id (str_*) or a backtest id (btr_*) as "
-                "the first argument."
+                "Pass a strategy id (str_*) or a backtest id (btr_*) as the first argument."
             ),
         )
 
@@ -95,9 +94,7 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
         # metrics. Callers can override later by recreating the link.
         body["pin_latest_backtest"] = True
         try:
-            result = client.post(
-                f"/v1/strategies/{target_id}/share-links", json=body
-            )
+            result = client.post(f"/v1/strategies/{target_id}/share-links", json=body)
         except KeelError:
             raise
         except Exception as e:  # noqa: BLE001
@@ -111,9 +108,7 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
     else:  # backtest
         body = {"include_source": include_source}
         try:
-            result = client.post(
-                f"/v1/backtests/{target_id}/share-link", json=body
-            )
+            result = client.post(f"/v1/backtests/{target_id}/share-link", json=body)
         except KeelError:
             raise
         except Exception as e:  # noqa: BLE001
@@ -125,11 +120,7 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
                 ),
             )
 
-    share_id = (
-        result.get("share_id")
-        or result.get("id")
-        or ""
-    )
+    share_id = result.get("share_id") or result.get("id") or ""
     if not share_id:
         raise KeelError(
             "Share creation succeeded but no share_id was returned.",
@@ -142,11 +133,7 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
     ref_code = ""
     try:
         identity = client.get("/v1/me")
-        ref_code = (
-            (identity or {}).get("referral_code")
-            or (identity or {}).get("ref")
-            or ""
-        )
+        ref_code = (identity or {}).get("referral_code") or (identity or {}).get("ref") or ""
     except Exception:  # noqa: BLE001
         # Identity probe is purely cosmetic for the share URL.
         ref_code = ""
@@ -202,9 +189,7 @@ SHARE_CREATE = register(
                 "target_type": {
                     "type": "string",
                     "enum": ["strategy", "backtest"],
-                    "description": (
-                        "Explicit override when the id prefix is ambiguous."
-                    ),
+                    "description": ("Explicit override when the id prefix is ambiguous."),
                 },
                 "include_source": {
                     "type": "boolean",

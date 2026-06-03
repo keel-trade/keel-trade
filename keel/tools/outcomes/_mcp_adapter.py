@@ -58,9 +58,7 @@ def _make_handler(tool: OutcomeTool, toolsets: frozenset[str]):
         if missing_required or unexpected:
             problems: list[str] = []
             if missing_required:
-                problems.append(
-                    f"missing required argument(s): {', '.join(missing_required)}"
-                )
+                problems.append(f"missing required argument(s): {', '.join(missing_required)}")
             if unexpected:
                 problems.append(
                     f"unexpected argument(s) {', '.join(unexpected)} "
@@ -75,7 +73,9 @@ def _make_handler(tool: OutcomeTool, toolsets: frozenset[str]):
                         f"(required={sorted(schema_required)}, "
                         f"known={sorted(known_props)})."
                     ),
-                    example={k: schema_props[k].get("description", "") for k in sorted(known_props)},
+                    example={
+                        k: schema_props[k].get("description", "") for k in sorted(known_props)
+                    },
                     suggested_next_action={
                         "tool": tool.name,
                         "args": {k: None for k in missing_required},
@@ -89,6 +89,7 @@ def _make_handler(tool: OutcomeTool, toolsets: frozenset[str]):
             )
 
         import os as _os
+
         _app_url = _os.environ.get("KEEL_APP_URL")
         ctx = ToolContext(
             is_tty=False,
@@ -172,14 +173,9 @@ def _make_param_synthesized_handler(tool: OutcomeTool, toolsets: frozenset[str])
         params.append(f"{prop}: {py_type} = {default_repr}")
 
     params_str = ", ".join(params)
-    args_dict_str = (
-        ", ".join(f"'{p}': {p}" for p in properties) if properties else ""
-    )
+    args_dict_str = ", ".join(f"'{p}': {p}" for p in properties) if properties else ""
 
-    func_src = (
-        f"def {tool.name}({params_str}) -> str:\n"
-        f"    return _impl(**{{{args_dict_str}}})\n"
-    )
+    func_src = f"def {tool.name}({params_str}) -> str:\n    return _impl(**{{{args_dict_str}}})\n"
     local_ns: dict[str, Any] = {"_impl": impl}
     exec(func_src, local_ns)  # noqa: S102 — controlled code-generation, no user input
     fn = local_ns[tool.name]
@@ -346,6 +342,4 @@ def loaded_tool_names(outcomes: dict[str, OutcomeTool]) -> list[str]:
     """Return the names of tools that would be registered under the
     current `KEEL_TOOLSETS`. Used by `keel_status`."""
     toolsets = load_toolsets()
-    return sorted(
-        t.name for t in outcomes.values() if is_tool_loaded(t.toolset, toolsets)
-    )
+    return sorted(t.name for t in outcomes.values() if is_tool_loaded(t.toolset, toolsets))

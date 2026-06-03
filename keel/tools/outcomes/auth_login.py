@@ -27,8 +27,6 @@ adapter from registering a duplicate command.
 
 from __future__ import annotations
 
-from typing import Any
-
 from . import register
 from ._base import OutcomeResult, OutcomeTool, ToolContext
 

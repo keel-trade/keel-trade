@@ -4,6 +4,48 @@ All notable changes to `keel-trade` are documented here. Versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html), and the format
 loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.7] — 2026-06-03
+
+Universe resolution lifecycle fixes. Closes the silent-failure mode that hit
+the first external paying user: strategies pushed via CLI/MCP without
+resolving the universe deployed cleanly but failed at every eval-worker tick
+with no visibility to the agent. The web editor's auto-resolve-on-change
+behavior now has a CLI/MCP analog.
+
+### Added
+
+- `universe_resolve(source)` MCP tool: reads criteria from the strategy
+  source, calls `/v1/universe/resolve`, and returns the source with
+  `resolved=[...]` and `resolved_at=...` baked in. No criteria args — the DSL
+  is the source of truth. Pairs with `universe_set(source, ...)`: agents call
+  `set` then `resolve` to produce a deploy-ready source.
+- `keel universe resolve <file>` CLI command: same flow, reads from a file or
+  stdin/workspace and writes the resolved source back in place.
+- New validator codes `UNRESOLVED_UNIVERSE` (when `resolved` is missing/empty)
+  and `STALE_UNIVERSE` (when `top_n` or `symbols` changed without
+  re-resolving). Warnings in editor mode, errors when validating for
+  production paths.
+
+### Changed
+
+- Knowledge bundle (`dsl_syntax.md`, `universe_selection.md`) updated to
+  describe the `universe_set → universe_resolve` chain so agents pick the
+  right tool sequence.
+- Deprecated form `keel universe resolve --mode --top-n ...` still works and
+  emits a one-line deprecation warning. Will be removed in 0.6.x.
+
+### Compatibility
+
+- Backend release v1.85 (shipped 2026-06-03) refuses `deploy` /
+  `backtest_submit` when the strategy's compiled universe is unresolved or
+  stale, with a clear 422 pointing at the unblock action. Strategies whose
+  compiled blob predates v1.85 (no `universe` key in the spec) are
+  grandfathered through as a back-compat — re-pushing the strategy after
+  upgrading the SDK is what activates the new validation for them.
+- All existing CLI commands, MCP tools, and DSL surfaces unchanged. Strategies
+  with `resolved=[...]` already baked in (web-editor-created, HRP-shape) are
+  unaffected.
+
 ## [0.5.6] — 2026-06-01
 
 **Metadata-only refresh** for the Official MCP Registry listing. No

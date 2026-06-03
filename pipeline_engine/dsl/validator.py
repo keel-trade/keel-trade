@@ -15,7 +15,7 @@ import copy
 import difflib
 import math
 import sys
-from typing import Any, Iterator
+from typing import Any, Iterator, Literal
 
 from pipeline_engine.base.registry import ParamTier
 from pipeline_engine.base.step import PHASE_GROUP_NAMES
@@ -97,6 +97,7 @@ def _group_by_severity(
 def validate_strategy(
     strategy: StrategyFile,
     lock: dict[str, int] | None = None,
+    production_mode: bool = False,
 ) -> ValidationResult:
     """Validate a parsed StrategyFile against the component registry.
 
@@ -125,6 +126,11 @@ def validate_strategy(
               with no version pinning. Useful for tests that don't care
               about lock semantics. Explicit opt-in — distinct from
               `None` (which still tries auto-generation).
+        production_mode: When True, promotes `UNRESOLVED_UNIVERSE` and
+            `STALE_UNIVERSE` from warnings to errors. Used by deploy and
+            backtest submit endpoints to refuse strategies that can't run.
+            Editor / WIP paths leave this False so users can save unfinished
+            strategies. Default False keeps existing callers' behavior intact.
     """
     from pipeline_engine.base.lock import generate_lock
     from pipeline_engine.base.registry import (
@@ -233,7 +239,7 @@ def validate_strategy(
     _validate_slots(expanded, registry, issues, slot_types)
 
     # Pass 9: Globals, Universe, and declaration reference validation
-    _validate_declarations(strategy, expanded, registry, issues)
+    _validate_declarations(strategy, expanded, registry, issues, production_mode=production_mode)
 
     errors, warnings, info = _group_by_severity(issues)
 
@@ -1399,6 +1405,7 @@ def _validate_declarations(
     expanded: StrategyFile,
     registry: dict[str, Any],
     issues: list[ValidationIssue],
+    production_mode: bool = False,
 ) -> None:
     """Pass 9: Validate Globals, Universe, and declaration references."""
     # A) Globals validation
@@ -1407,7 +1414,7 @@ def _validate_declarations(
 
     # B) Universe validation
     if strategy.universe is not None:
-        _validate_universe(strategy.universe, issues)
+        _validate_universe(strategy.universe, issues, production_mode=production_mode)
 
     # C) Execution validation
     if strategy.execution is not None:
@@ -1451,8 +1458,20 @@ def _validate_globals(globals_: GlobalsSpec, issues: list[ValidationIssue]) -> N
             )
 
 
-def _validate_universe(universe: UniverseSpec, issues: list[ValidationIssue]) -> None:
-    """Validate Universe declaration values."""
+def _validate_universe(
+    universe: UniverseSpec,
+    issues: list[ValidationIssue],
+    production_mode: bool = False,
+) -> None:
+    """Validate Universe declaration values.
+
+    Args:
+        universe: The parsed Universe spec.
+        issues: Issue list to append to.
+        production_mode: When True, UNRESOLVED_UNIVERSE and STALE_UNIVERSE are
+            errors (block submit). When False (editor / WIP), they're warnings
+            so users can save in-progress strategies.
+    """
     loc = "universe"
     if universe.location:
         loc = _format_location(universe.location)
@@ -1499,28 +1518,124 @@ def _validate_universe(universe: UniverseSpec, issues: list[ValidationIssue]) ->
             )
         )
 
-    # resolved must be non-empty for execution
-    # Empty resolved with no resolved_at = placeholder (warning), not a resolved empty list
-    if universe.resolved is not None and len(universe.resolved) == 0:
-        if universe.resolved_at:
+    # ── Resolved-list checks ────────────────────────────────────────────────
+    # The DSL invariant we want to enforce: every strategy promoted to a
+    # production path (deploy / backtest submit) has a resolved asset list
+    # baked into its source. The web editor maintains this automatically;
+    # CLI / MCP paths must too. This block is the single gate.
+    unresolved_severity: Literal["error", "warning"] = (
+        "error" if production_mode else "warning"
+    )
+
+    has_resolved = bool(universe.resolved)  # non-None and non-empty
+    resolved_is_explicit_empty = (
+        universe.resolved is not None and len(universe.resolved) == 0
+    )
+
+    if not has_resolved:
+        # Two sub-cases:
+        #   1. resolved is None — never set (typical for new strategies that
+        #      were pushed without resolving). For 'manual' mode this is OK
+        #      if `symbols` is set, because the resolver derives resolved
+        #      from symbols at eval time. For non-manual modes, the resolver
+        #      needs the actual list baked in.
+        #   2. resolved is [] — explicitly empty. If resolved_at is set, the
+        #      resolve call returned zero assets (broken criteria → error).
+        #      Otherwise it's a placeholder (treat same as case 1).
+        if resolved_is_explicit_empty and universe.resolved_at:
             issues.append(
                 ValidationIssue(
                     severity="error",
                     code="EMPTY_UNIVERSE",
-                    message="Universe 'resolved' list is empty. At least one asset is required.",
+                    message="Universe 'resolved' list is empty after resolution. "
+                    "At least one asset is required — check your criteria "
+                    "(mode / categories / exclusions).",
                     location=loc,
                 )
             )
         else:
-            issues.append(
-                ValidationIssue(
-                    severity="warning",
-                    code="UNRESOLVED_UNIVERSE",
-                    message="Universe has not been resolved yet. "
-                    "Resolve before backtesting or deploying.",
-                    location=loc,
-                )
+            # Manual mode with explicit `symbols` is self-sufficient; the
+            # resolver derives `resolved` from `symbols`. Skip the warning.
+            manual_self_sufficient = (
+                universe.mode == "manual" and bool(universe.symbols)
             )
+            if not manual_self_sufficient:
+                issues.append(
+                    ValidationIssue(
+                        severity=unresolved_severity,
+                        code="UNRESOLVED_UNIVERSE",
+                        message="Universe has not been resolved. Call universe_resolve "
+                        "(MCP tool or `keel universe resolve <file>`) or, in the web "
+                        "editor, open the Universe block and change any field — the "
+                        "editor auto-resolves and bakes the asset list into the source.",
+                        location=loc,
+                    )
+                )
+
+    # ── Stale-list structural check ────────────────────────────────────────
+    # If resolved is populated, sanity-check that it lines up with the
+    # criteria in the same DSL. This catches direct hand-edits to the source
+    # that change criteria without re-resolving (e.g., bumping top_n from
+    # 30 to 50 but leaving the 30-symbol resolved list in place). Without
+    # this, the deploy guard accepts a non-empty `resolved` that no longer
+    # matches what the strategy declares.
+    if has_resolved:
+        stale_severity: Literal["error", "warning"] = (
+            "error" if production_mode else "warning"
+        )
+        assert universe.resolved is not None  # for type narrowing
+        resolved_count = len(universe.resolved)
+
+        # NOTE: structural checks here are approximate. They catch obvious
+        # drift (top_n changed, manual symbols changed) but not every case.
+        # Phase 3 (criteria_hash on UniverseSpec) is the rigorous version.
+        if universe.mode == "manual" and universe.symbols:
+            symbols_set = set(universe.symbols)
+            resolved_set = set(universe.resolved)
+            # For manual mode, resolved should equal symbols modulo
+            # inclusions/exclusions. Compute the expected set.
+            expected = symbols_set.copy()
+            if universe.exclusions:
+                expected -= set(universe.exclusions)
+            if universe.inclusions:
+                expected |= set(universe.inclusions)
+            if expected != resolved_set:
+                issues.append(
+                    ValidationIssue(
+                        severity=stale_severity,
+                        code="STALE_UNIVERSE",
+                        message="Universe 'resolved' list does not match declared 'symbols' "
+                        f"(after exclusions/inclusions). Resolved has {resolved_count} "
+                        f"items; criteria imply {len(expected)}. Re-resolve via "
+                        "universe_resolve / `keel universe resolve` / web editor.",
+                        location=loc,
+                    )
+                )
+        elif universe.mode == "top_volume" and universe.top_n is not None:
+            # Approximate expected count for top_volume:
+            #   top_n - len(exclusions intersecting resolved) + len(inclusions)
+            # We can't know which symbols the resolver pulled before applying
+            # exclusions, so we use top_n as a coarse upper bound. Most drift
+            # cases (top_n changed) show up as a flat count mismatch.
+            inc_count = len(universe.inclusions or [])
+            exc_count = len(universe.exclusions or [])
+            expected_lower = max(0, universe.top_n - exc_count)
+            expected_upper = universe.top_n + inc_count
+            if not (expected_lower <= resolved_count <= expected_upper):
+                issues.append(
+                    ValidationIssue(
+                        severity=stale_severity,
+                        code="STALE_UNIVERSE",
+                        message=f"Universe 'resolved' has {resolved_count} items but "
+                        f"top_n={universe.top_n} implies "
+                        f"{expected_lower}–{expected_upper} (after exclusions/inclusions). "
+                        "Criteria likely changed since last resolve — re-resolve via "
+                        "universe_resolve / `keel universe resolve` / web editor.",
+                        location=loc,
+                    )
+                )
+        # For mode='category' we can't structurally verify staleness without
+        # querying the registry. Leave it to eval-worker / runtime checks.
 
     # exclusions and inclusions must not overlap
     if universe.exclusions and universe.inclusions:

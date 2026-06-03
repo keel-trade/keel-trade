@@ -43,21 +43,22 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
             if candidate.exists():
                 ws_dir = candidate
                 mode = "home"
-        items.append({
-            "strategy_id": ws.strategy_id,
-            "name": ws.name,
-            "source_hash": (ws.source_hash or "")[:12],
-            "checked_out_at": ws.checked_out_at,
-            "current_sequence": ws.current_sequence,
-            "workspace": str(ws_dir) if ws_dir else None,
-            "mode": mode,
-        })
+        items.append(
+            {
+                "strategy_id": ws.strategy_id,
+                "name": ws.name,
+                "source_hash": (ws.source_hash or "")[:12],
+                "checked_out_at": ws.checked_out_at,
+                "current_sequence": ws.current_sequence,
+                "workspace": str(ws_dir) if ws_dir else None,
+                "mode": mode,
+            }
+        )
 
     next_steps: list[str]
     if not items:
         next_steps = [
-            "No local workspaces yet. Create one via "
-            "`keel_strategy_checkout <strategy_id>`.",
+            "No local workspaces yet. Create one via `keel_strategy_checkout <strategy_id>`.",
         ]
         # When cwd isn't a project, project-mode workspaces from OTHER
         # projects are invisible — this is by design (per-project

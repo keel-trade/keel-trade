@@ -36,16 +36,18 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
             # surface the real values now.
             org = me.get("org") or {}
             principal = me.get("principal") or {}
-            checks.append({
-                "name": "auth",
-                "ok": True,
-                "detail": {
-                    "principal_id": principal.get("id"),
-                    "org_id": org.get("id"),
-                    "org_name": org.get("name"),
-                    "plan": org.get("plan"),
-                },
-            })
+            checks.append(
+                {
+                    "name": "auth",
+                    "ok": True,
+                    "detail": {
+                        "principal_id": principal.get("id"),
+                        "org_id": org.get("id"),
+                        "org_name": org.get("name"),
+                        "plan": org.get("plan"),
+                    },
+                }
+            )
         except Exception as e:  # noqa: BLE001
             checks.append(
                 {
@@ -102,9 +104,7 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
             "detail": {
                 "active": sorted(active),
                 "tool_count": sum(
-                    1
-                    for t in all_tools()
-                    if t.toolset == "always" or t.toolset in active
+                    1 for t in all_tools() if t.toolset == "always" or t.toolset in active
                 ),
             },
         }

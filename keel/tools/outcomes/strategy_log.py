@@ -96,10 +96,12 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
             "count": len(entries),
             "head_sequence": entries[0]["sequence_number"] if entries else None,
             "next": (
-                ["No commits yet — strategy may have been just created.",
-                 "Push your first version via `keel_strategy_push -m 'msg'`."]
-                if not entries else
                 [
+                    "No commits yet — strategy may have been just created.",
+                    "Push your first version via `keel_strategy_push -m 'msg'`.",
+                ]
+                if not entries
+                else [
                     "To see the source at a specific commit: read `keel://strategy/{id}/source` or use `keel_strategy_diff`.",
                     "To restore a historical commit as new HEAD: `keel_strategy_restore strategy_id=<id> ref=<sequence_or_commit_id>`.",
                     "To checkout a historical version locally: `keel_strategy_checkout <id>@<sequence_or_commit_id>` (NOT YET IMPLEMENTED — use restore + checkout for now).",

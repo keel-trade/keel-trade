@@ -105,7 +105,9 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
         body["recent_commits"] = result["recent_commits"]
     return OutcomeResult(
         run_id=resolved_id,
-        hero_url=f"{ctx.app_url}/strategies/{resolved_id}" if resolved_id else f"{ctx.app_url}/strategies",
+        hero_url=f"{ctx.app_url}/strategies/{resolved_id}"
+        if resolved_id
+        else f"{ctx.app_url}/strategies",
         share_url=None,
         extra=body,
     )

@@ -396,9 +396,7 @@ def _translate_403(body: str) -> "EntitlementError":
         # Compose an agent-facing message that's actionable.
         if kind in ("cap_exceeded", "insufficient"):
             usage_blurb = (
-                f" (used {current}/{limit})"
-                if current is not None and limit is not None
-                else ""
+                f" (used {current}/{limit})" if current is not None and limit is not None else ""
             )
             msg = (
                 f"Plan limit hit: {unit_label}{usage_blurb}. "
@@ -447,7 +445,8 @@ def _translate_403(body: str) -> "EntitlementError":
 
     # No entitlement reasons → falls back to scope-missing default shape.
     return EntitlementError(
-        detail_text or (
+        detail_text
+        or (
             "403 Forbidden. If this is a live-trading tool "
             "(deploy/pause/resume/stop), your session likely lacks the "
             "`runner.*` scope tier — re-login with the live consent: "

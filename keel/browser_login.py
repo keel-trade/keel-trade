@@ -71,9 +71,7 @@ def _generate_pkce_pair() -> tuple[str, str]:
     """
     verifier = base64.urlsafe_b64encode(secrets.token_bytes(48)).decode().rstrip("=")
     challenge = (
-        base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest())
-        .decode()
-        .rstrip("=")
+        base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).decode().rstrip("=")
     )
     return verifier, challenge
 
@@ -385,13 +383,15 @@ def run(
             "live": "1" if include_live else "0",
         }
         if auth_surface == "mcp":
-            authorize_params.update({
-                "entry": "mcp_auth",
-                "auth_surface": "mcp",
-                "utm_source": "keel_mcp",
-                "utm_medium": "auth",
-                "utm_campaign": "mcp_auth_signup",
-            })
+            authorize_params.update(
+                {
+                    "entry": "mcp_auth",
+                    "auth_surface": "mcp",
+                    "utm_source": "keel_mcp",
+                    "utm_medium": "auth",
+                    "utm_campaign": "mcp_auth_signup",
+                }
+            )
 
         authorize_url = auth_endpoint + "?" + urlencode(authorize_params)
 

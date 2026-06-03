@@ -385,3 +385,101 @@ def test_remove_group_no_universe_exits_7():
             ["--format", "json", "universe", "remove-group", "strat.py", "any_group"],
         )
         assert result.exit_code == 7
+
+
+# ── resolve ──────────────────────────────────────────────────────────────────
+
+
+# Unresolved-universe strategy fixture: matches Alain's bug shape (no resolved=
+# argument; criteria-only Universe declaration).
+UNRESOLVED_STRATEGY = '''Globals(target_timeframe="1d")
+
+Universe(mode="top_volume", top_n=5, market="perp")
+
+Pipeline([
+    PriceDataLoader(timeframe="15min"),
+    TargetTimeframeResampler(),
+    ROC(period=8),
+    ForecastScaler(avg_abs_target=10.0),
+    ForecastCapper(limit=20.0),
+    ForecastWeightNormalizer(target_leverage=1.0),
+], name="test")'''
+
+
+class _StubClient:
+    """Mock KeelClient that returns a canned resolve response."""
+
+    last_body: dict = {}
+
+    def __init__(self):
+        pass
+
+    def post(self, path: str, json: dict):
+        type(self).last_body = json
+        return {
+            "resolved": ["BTC", "ETH", "SOL", "AVAX", "ARB"],
+            "resolved_at": "2026-06-03T12:00:00+00:00",
+            "count": 5,
+        }
+
+
+def test_resolve_writes_back_to_file(monkeypatch):
+    """`keel universe resolve <file>` reads criteria from source, calls API,
+    writes back. No criteria flags needed — DSL is the source of truth."""
+    monkeypatch.setattr("keel.client.KeelClient", _StubClient)
+    with runner.isolated_filesystem():
+        with open("strat.py", "w") as f:
+            f.write(UNRESOLVED_STRATEGY)
+        result = runner.invoke(
+            cli, ["--format", "json", "universe", "resolve", "strat.py"]
+        )
+        assert result.exit_code == 0, result.output
+        # Resolved list and timestamp baked into source on disk
+        with open("strat.py") as f:
+            updated = f.read()
+        assert "BTC" in updated
+        assert "ETH" in updated
+        assert "resolved_at" in updated
+        # API called with criteria derived from source
+        assert _StubClient.last_body["mode"] == "top_volume"
+        assert _StubClient.last_body["top_n"] == 5
+
+
+def test_resolve_stdin_to_stdout(monkeypatch):
+    """Piped DSL → stdout, no file written."""
+    monkeypatch.setattr("keel.client.KeelClient", _StubClient)
+    result = runner.invoke(
+        cli,
+        ["universe", "resolve", "-"],
+        input=UNRESOLVED_STRATEGY,
+    )
+    assert result.exit_code == 0, result.output
+    assert "BTC" in result.output
+    assert "resolved_at" in result.output
+
+
+def test_resolve_no_universe_fails(monkeypatch):
+    """Source without Universe declaration → ValueError surfaced as nonzero exit."""
+    monkeypatch.setattr("keel.client.KeelClient", _StubClient)
+    with runner.isolated_filesystem():
+        with open("strat.py", "w") as f:
+            f.write(NO_UNIVERSE_STRATEGY)
+        result = runner.invoke(
+            cli, ["--format", "json", "universe", "resolve", "strat.py"]
+        )
+        assert result.exit_code != 0
+
+
+def test_resolve_deprecated_flag_form_still_works():
+    """Old `keel universe resolve --mode top_volume --top-n 50` form keeps working,
+    with a deprecation warning on stderr. Back-compat for users on older docs."""
+    # No file argument → falls through to legacy path → uses real client.
+    # We can't fully test the API call here without a network, but we can
+    # confirm the deprecation warning fires and the path is taken.
+    result = runner.invoke(
+        cli,
+        ["universe", "resolve", "--mode", "top_volume", "--top-n", "50"],
+    )
+    # Don't assert exit_code (it'll fail due to no auth in test env) — assert
+    # the deprecation warning is emitted before the network attempt.
+    assert "deprecated" in result.output.lower() or "deprecated" in (result.stderr or "").lower()

@@ -162,14 +162,18 @@ class KeelClient:
                         pass
                 if response.status_code == 429:
                     # Rate limited — retry after backoff
-                    retry_after = float(response.headers.get("Retry-After", _BACKOFF_BASE * (2**attempt)))
+                    retry_after = float(
+                        response.headers.get("Retry-After", _BACKOFF_BASE * (2**attempt))
+                    )
                     logger.warning("Rate limited, retrying after %.1fs", retry_after)
                     time.sleep(retry_after)
                     continue
                 if response.status_code >= 500 and attempt < _MAX_RETRIES - 1:
                     # Server error — retry with backoff
                     delay = _BACKOFF_BASE * (2**attempt)
-                    logger.warning("Server error %d, retrying in %.1fs", response.status_code, delay)
+                    logger.warning(
+                        "Server error %d, retrying in %.1fs", response.status_code, delay
+                    )
                     time.sleep(delay)
                     continue
                 if response.status_code >= 400:

@@ -11,8 +11,8 @@ live polling), and parts of `backtest_list`. Each call queues a NEW run
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 import time
+from datetime import UTC, datetime
 from typing import Any
 
 from keel.errors import KeelError
@@ -128,8 +128,10 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
             from keel.workspace import (
                 _compute_hash,
                 get_workspace,
-                push as _ws_push,
                 read_local_source,
+            )
+            from keel.workspace import (
+                push as _ws_push,
             )
 
             meta = get_workspace(strategy_id)
@@ -152,9 +154,7 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
                         pushed_commit = push_result.get("commit_id")
                         if pushed_commit:
                             args["commit_id"] = pushed_commit
-                        commit_str = (
-                            f"commit_id={pushed_commit}, " if pushed_commit else ""
-                        )
+                        commit_str = f"commit_id={pushed_commit}, " if pushed_commit else ""
                         divergence_warning = (
                             f"Local was ahead — auto-pushed (sequence={pushed_seq}, "
                             f"{commit_str}hash={pushed_hash}). Backtest pinned to the "
@@ -296,7 +296,7 @@ BACKTEST_RUN = register(
             "max drawdown, …). On polling timeout the envelope still "
             "returns cleanly with `status` and `status_url` set. "
             "Each call queues a NEW run — this tool is non-idempotent. "
-            "DEFAULTS: when the user says \"backtest X\" without dates, just "
+            'DEFAULTS: when the user says "backtest X" without dates, just '
             "run it — `start_date` defaults to 2024-08-15 (earliest cached "
             "HL data) and `end_date` to today's UTC date. Mention the dates "
             "used in your reply so the user can narrow them if they want. "

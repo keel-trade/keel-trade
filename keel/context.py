@@ -60,7 +60,9 @@ def read_user_context() -> ContextEntry:
     path = home_context_path()
     if not path.exists():
         return ContextEntry(layer="user", source=path, body="", exists=False)
-    return ContextEntry(layer="user", source=path, body=path.read_text(encoding="utf-8"), exists=True)
+    return ContextEntry(
+        layer="user", source=path, body=path.read_text(encoding="utf-8"), exists=True
+    )
 
 
 def read_project_context(cwd: Path | None = None) -> ContextEntry:

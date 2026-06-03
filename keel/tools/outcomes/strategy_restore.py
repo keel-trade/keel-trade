@@ -17,8 +17,6 @@ After restoring, the local workspace (if checked out) will be
 
 from __future__ import annotations
 
-from typing import Any
-
 from keel.errors import KeelError, NotFoundError
 
 from . import register
@@ -143,8 +141,7 @@ STRATEGY_RESTORE = register(
                 "message": {
                     "type": "string",
                     "description": (
-                        "Commit message for the new HEAD. Defaults to "
-                        "'Restore version <ref>'."
+                        "Commit message for the new HEAD. Defaults to 'Restore version <ref>'."
                     ),
                 },
             },

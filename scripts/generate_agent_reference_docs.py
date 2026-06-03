@@ -34,9 +34,7 @@ SITE_REFERENCE = (
     REPO_ROOT / "services" / "keel-site" / "content" / "docs" / "sdk" / "tool-reference.mdx"
 )
 
-DEFAULT_TOOLSETS = frozenset(
-    {"always", "read-only", "backtest", "share", "live-read"}
-)
+DEFAULT_TOOLSETS = frozenset({"always", "read-only", "backtest", "share", "live-read"})
 
 
 def _command_for_path(path: tuple[str, ...]) -> click.Command | None:
@@ -50,7 +48,9 @@ def _command_for_path(path: tuple[str, ...]) -> click.Command | None:
     return current
 
 
-def _all_leaf_commands(command: click.Command, path: tuple[str, ...] = ()) -> dict[tuple[str, ...], click.Command]:
+def _all_leaf_commands(
+    command: click.Command, path: tuple[str, ...] = ()
+) -> dict[tuple[str, ...], click.Command]:
     if not isinstance(command, click.Group):
         return {path: command}
 
@@ -263,9 +263,7 @@ def render_reference(*, mdx: bool) -> str:
     default_tools = sum(
         1 for tool in OUTCOMES.values() if is_tool_loaded(tool.toolset, DEFAULT_TOOLSETS)
     )
-    live_write_tools = sum(
-        1 for tool in OUTCOMES.values() if tool.toolset == "live-write"
-    )
+    live_write_tools = sum(1 for tool in OUTCOMES.values() if tool.toolset == "live-write")
 
     parts: list[str] = []
     if mdx:

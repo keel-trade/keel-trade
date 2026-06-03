@@ -64,15 +64,20 @@ def clear_cached_imports() -> None:
 def install_deps(target: Path) -> None:
     target.mkdir(parents=True, exist_ok=True)
     print(
-        f"keel-trade: installing runtime deps to {target} "
-        f"(first launch only, takes ~10-30 sec)...",
+        f"keel-trade: installing runtime deps to {target} (first launch only, takes ~10-30 sec)...",
         file=sys.stderr,
         flush=True,
     )
     cmd = [
-        sys.executable, "-m", "pip", "install",
-        "--target", str(target),
-        "--quiet", "--no-compile", "--disable-pip-version-check",
+        sys.executable,
+        "-m",
+        "pip",
+        "install",
+        "--target",
+        str(target),
+        "--quiet",
+        "--no-compile",
+        "--disable-pip-version-check",
         *REQUIRED_DEPS,
     ]
     try:
@@ -115,6 +120,7 @@ def main() -> None:
             sys.exit(1)
 
     from keel.cli.main import cli
+
     sys.argv = [sys.argv[0], "mcp", "serve"]
     cli(standalone_mode=False)
 

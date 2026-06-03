@@ -92,12 +92,16 @@ def create_server() -> FastMCP:
             "`keel://strategy/{strategy_id}/backtest/latest`) provide a compact "
             "last-run pointer without making agents build ad-hoc list loops. "
             "See `resources/list` for the full set."
-            + ("" if live_write_loaded else "\n\n"
-               "Live write tools (deploy/control) are NOT loaded under the default "
-               "toolset. Set "
-               "`KEEL_TOOLSETS=read-only,backtest,share,live-read,live-write` "
-               "to opt in. `live` remains a deprecated alias for both live-read "
-               "and live-write.")
+            + (
+                ""
+                if live_write_loaded
+                else "\n\n"
+                "Live write tools (deploy/control) are NOT loaded under the default "
+                "toolset. Set "
+                "`KEEL_TOOLSETS=read-only,backtest,share,live-read,live-write` "
+                "to opt in. `live` remains a deprecated alias for both live-read "
+                "and live-write."
+            )
         ),
     )
 
@@ -220,9 +224,7 @@ def create_server() -> FastMCP:
             latest = items[0]
             backtest_id = latest.get("id") or latest.get("backtest_id")
             status = str(latest.get("status") or "").lower()
-            result_resource_uri = (
-                f"keel://backtest/{backtest_id}/results" if backtest_id else None
-            )
+            result_resource_uri = f"keel://backtest/{backtest_id}/results" if backtest_id else None
             out = {
                 "found": True,
                 "strategy_id": strategy_id or latest.get("strategy_id"),

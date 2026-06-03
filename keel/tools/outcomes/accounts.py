@@ -122,9 +122,7 @@ ACCOUNTS_LIST = register(
                 },
                 "cursor": {
                     "type": "string",
-                    "description": (
-                        "Pagination cursor returned by a previous list call."
-                    ),
+                    "description": ("Pagination cursor returned by a previous list call."),
                 },
             },
         },

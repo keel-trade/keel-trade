@@ -99,7 +99,10 @@ _CLAUDE_HOOKS_CONFIG = """\
 """
 
 
-def render_template(project_name: str, strategy_pointer: str = "(none yet — create one with `keel strategy compose`)") -> str:
+def render_template(
+    project_name: str,
+    strategy_pointer: str = "(none yet — create one with `keel strategy compose`)",
+) -> str:
     return _TEMPLATE.format(project_name=project_name, strategy_pointer=strategy_pointer)
 
 

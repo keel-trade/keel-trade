@@ -81,8 +81,7 @@ def _snapshot_envelope(
             "args": {"backtest_id": backtest_id},
         }
         extra["info"] = (
-            "Backtest is still running. Call `keel_backtest_watch` again or open "
-            "`status_url`."
+            "Backtest is still running. Call `keel_backtest_watch` again or open `status_url`."
         )
 
     return OutcomeResult(

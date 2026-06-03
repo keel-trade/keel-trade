@@ -119,9 +119,7 @@ def _delegate_or_fallback(fn_name: str, fallback: Callable[..., Any], /, **kwarg
     except (TypeError, ValueError):
         # Builtins/C functions — pass kwargs through unfiltered.
         return target(**kwargs)
-    has_var_keyword = any(
-        p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()
-    )
+    has_var_keyword = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values())
     if has_var_keyword:
         return target(**kwargs)
     accepted = {k: v for k, v in kwargs.items() if k in sig.parameters}
@@ -139,11 +137,16 @@ def strategy_components_search(**kwargs) -> list[dict[str, Any]]:
     return _delegate_or_fallback("strategy_components_search", _search, **kwargs)
 
 
-def strategy_component_detail(name: str, component_lock: dict[str, int] | None = None) -> dict[str, Any]:
+def strategy_component_detail(
+    name: str, component_lock: dict[str, int] | None = None
+) -> dict[str, Any]:
     """Get full specification for a component."""
     _ensure_registry()
     return _delegate_or_fallback(
-        "strategy_component_detail", _get_detail, name=name, component_lock=component_lock,
+        "strategy_component_detail",
+        _get_detail,
+        name=name,
+        component_lock=component_lock,
     )
 
 
@@ -216,9 +219,7 @@ def strategy_validate(
     globals_dict: dict[str, Any] | None = None
     if parsed.globals_:
         globals_dict = {
-            k: v
-            for k, v in vars(parsed.globals_).items()
-            if k != "location" and v is not None
+            k: v for k, v in vars(parsed.globals_).items() if k != "location" and v is not None
         }
 
     # Build universe dict
@@ -322,8 +323,7 @@ def strategy_explain(
                 "type": "parallel",
                 "branch_count": len(step.branches),
                 "branches": {
-                    n: [_explain_step(s) for s in steps]
-                    for n, steps in step.branches.items()
+                    n: [_explain_step(s) for s in steps] for n, steps in step.branches.items()
                 },
             }
         elif isinstance(step, PipelineSpec):
@@ -387,8 +387,7 @@ def strategy_explain(
     ]
 
     variables = [
-        {"name": v.name, "is_pipeline": isinstance(v.value, PipelineSpec)}
-        for v in parsed.variables
+        {"name": v.name, "is_pipeline": isinstance(v.value, PipelineSpec)} for v in parsed.variables
     ]
 
     summary_parts = [f"Strategy '{strategy_name or 'unnamed'}': {step_count} steps"]
@@ -519,7 +518,13 @@ def universe_set(
     exclusions: list[str] | None = None,
     inclusions: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Set or replace universe criteria on a strategy."""
+    """Set or replace universe criteria on a strategy.
+
+    NOTE: this only writes the criteria. To bake the concrete asset list into
+    the source (which `deploy` and `backtest_submit` require), call
+    `universe_resolve(source)` on the returned source. The web editor does
+    both in one step; CLI / agent flows chain the two calls.
+    """
     _ensure_registry()
 
     from pipeline_engine.dsl import parse_strategy
@@ -540,6 +545,80 @@ def universe_set(
 
     new_source = spec_to_dsl(parsed)
     return {"source": new_source, "universe": _universe_to_dict(parsed.universe)}
+
+
+def universe_resolve(source: str) -> dict[str, Any]:
+    """Resolve a strategy's universe and bake the resolved list back into source.
+
+    Reads the `Universe(...)` declaration from `source`, calls the Keel API to
+    resolve the criteria into a concrete symbol list, and returns the same
+    source with `resolved=[...]` and `resolved_at=...` baked in. No criteria
+    arguments — the DSL is the source of truth.
+
+    Use this whenever the universe is unresolved or its criteria changed (the
+    `deploy` and `backtest_submit` endpoints will refuse strategies that have
+    no resolved list, so call this between `universe_set` and submit).
+
+    Args:
+        source: The strategy DSL source string.
+
+    Returns:
+        dict with keys:
+          - source: updated DSL source with resolved/resolved_at baked in
+          - resolved: list[str] of asset symbols
+          - resolved_at: ISO-8601 UTC timestamp
+          - count: len(resolved)
+
+    Raises:
+        ValueError: source has no Universe declaration.
+        KeelError: API call failed (unauthenticated, network, criteria invalid, etc.).
+    """
+    _ensure_registry()
+
+    from pipeline_engine.dsl import parse_strategy
+    from pipeline_engine.dsl.emitter import spec_to_dsl
+
+    parsed = parse_strategy(source)
+    if parsed.universe is None:
+        raise ValueError(
+            "Strategy has no Universe declaration. Add one with universe_set first."
+        )
+
+    u = parsed.universe
+    body: dict[str, Any] = {
+        "mode": u.mode,
+        "market": u.market or "perp",
+    }
+    # Only include criteria fields that are populated. The API accepts them
+    # as optional and validates by mode.
+    if u.symbols:
+        body["symbols"] = list(u.symbols)
+    if u.categories:
+        body["categories"] = list(u.categories)
+    if u.top_n is not None:
+        body["top_n"] = u.top_n
+    if u.exclusions:
+        body["exclusions"] = list(u.exclusions)
+    if u.inclusions:
+        body["inclusions"] = list(u.inclusions)
+
+    # Lazy import — only this tool actually needs the HTTP client. Keeps the
+    # rest of the offline tools surface zero-network at import time.
+    from keel.client import KeelClient
+
+    client = KeelClient()
+    result = client.post("/v1/universe/resolve", json=body)
+
+    parsed.universe.resolved = list(result["resolved"])
+    parsed.universe.resolved_at = result["resolved_at"]
+    new_source = spec_to_dsl(parsed)
+
+    return {
+        "source": new_source,
+        "resolved": parsed.universe.resolved,
+        "resolved_at": parsed.universe.resolved_at,
+        "count": len(parsed.universe.resolved),
+    }
 
 
 def universe_get(source: str) -> dict[str, Any]:
@@ -703,14 +782,18 @@ def strategy_lock_status(
     for name, locked_version in component_lock.items():
         sig = get_latest(name)
         if sig is None:
-            drift.append({"name": name, "locked": locked_version, "latest": None, "status": "unknown"})
+            drift.append(
+                {"name": name, "locked": locked_version, "latest": None, "status": "unknown"}
+            )
         elif sig.version != locked_version:
-            drift.append({
-                "name": name,
-                "locked": locked_version,
-                "latest": sig.version,
-                "status": "drift",
-            })
+            drift.append(
+                {
+                    "name": name,
+                    "locked": locked_version,
+                    "latest": sig.version,
+                    "status": "drift",
+                }
+            )
 
     status = "current" if not drift else "drift"
     return {"status": status, "drift": drift, "component_lock": component_lock}
@@ -851,12 +934,14 @@ def strategy_find_local(directory: str | None = None) -> dict[str, Any]:
                 try:
                     content = f.read_text(errors="ignore")
                     if "Pipeline(" in content or "pipeline" in content.lower():
-                        local_files.append({
-                            "path": str(f),
-                            "name": f.stem,
-                            "size": f.stat().st_size,
-                            "location": str(search_dir),
-                        })
+                        local_files.append(
+                            {
+                                "path": str(f),
+                                "name": f.stem,
+                                "size": f.stat().st_size,
+                                "location": str(search_dir),
+                            }
+                        )
                 except OSError:
                     continue
 
@@ -866,11 +951,13 @@ def strategy_find_local(directory: str | None = None) -> dict[str, Any]:
         from keel.workspace import list_workspaces
 
         for ws in list_workspaces():
-            workspaces.append({
-                "strategy_id": ws.strategy_id,
-                "name": ws.name,
-                "source_hash": ws.source_hash[:12],
-            })
+            workspaces.append(
+                {
+                    "strategy_id": ws.strategy_id,
+                    "name": ws.name,
+                    "source_hash": ws.source_hash[:12],
+                }
+            )
     except Exception:
         pass
 

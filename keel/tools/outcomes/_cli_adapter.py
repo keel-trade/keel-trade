@@ -100,6 +100,7 @@ def _build_click_command(tool: OutcomeTool) -> click.Command:
         # Toolsets only filter the MCP surface, not the CLI — every
         # outcome is reachable on the command line.
         import os as _os
+
         _app_url = _os.environ.get("KEEL_APP_URL")
         tool_ctx = ToolContext(
             is_tty=_is_human_format(fmt),

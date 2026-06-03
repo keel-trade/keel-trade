@@ -39,7 +39,6 @@ import json
 import re
 import shutil
 import subprocess
-import sys
 import tomllib
 from pathlib import Path
 
@@ -82,9 +81,7 @@ def copy_sources() -> None:
         shutil.copytree(
             src,
             dst,
-            ignore=shutil.ignore_patterns(
-                "__pycache__", "*.pyc", ".pytest_cache", "*.pyo"
-            ),
+            ignore=shutil.ignore_patterns("__pycache__", "*.pyc", ".pytest_cache", "*.pyo"),
         )
 
 

@@ -98,7 +98,7 @@ COMPONENTS_DETAIL_BATCH = register(
             "re-draft' loop. "
             "\n\n"
             "Returns `components` as a dict keyed by name. Unknown names "
-            "become `{\"error\": \"...\"}` entries rather than failing the "
+            'become `{"error": "..."}` entries rather than failing the '
             "whole call — partial result is the norm. `found` and "
             "`missing` counts surface in the envelope for quick triage. "
             "\n\n"

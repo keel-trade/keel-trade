@@ -79,7 +79,11 @@ def _try_local_validate(source: str) -> dict[str, Any]:
             lock = strategy_lock_generate(source=source).get("component_lock")
         except Exception:
             pass
-        result = strategy_validate(source=source, component_lock=lock) if lock else strategy_validate(source=source)
+        result = (
+            strategy_validate(source=source, component_lock=lock)
+            if lock
+            else strategy_validate(source=source)
+        )
         ok = bool(result.get("valid", False))
         return {
             "ok": ok,
@@ -140,7 +144,9 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
         }
         return OutcomeResult(
             run_id=strategy_id,
-            hero_url=f"{ctx.app_url}/strategies/{strategy_id}" if strategy_id else f"{ctx.app_url}/strategies",
+            hero_url=f"{ctx.app_url}/strategies/{strategy_id}"
+            if strategy_id
+            else f"{ctx.app_url}/strategies",
             share_url=None,
             extra=body,
         )

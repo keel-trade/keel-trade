@@ -134,8 +134,7 @@ def _search_bundled(args: dict) -> list[dict]:
             results = [
                 c
                 for c in results
-                if kw in (c.get("name") or "").lower()
-                or kw in (c.get("description") or "").lower()
+                if kw in (c.get("name") or "").lower() or kw in (c.get("description") or "").lower()
             ]
         if query:
             import re

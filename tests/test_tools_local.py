@@ -181,3 +181,89 @@ Pipeline([
         )
         assert "source" in result
         assert result["universe"]["mode"] == "top_volume"
+
+    def test_universe_resolve_bakes_resolved_into_source(self, monkeypatch):
+        """universe_resolve reads criteria from source, calls API, bakes the
+        returned `resolved`/`resolved_at` back into the source. No criteria
+        args — the source is the source of truth."""
+        from keel.tools.local import universe_resolve
+
+        # Stub KeelClient.post so the test is offline + deterministic.
+        captured: dict = {}
+
+        class _StubClient:
+            def __init__(self):
+                pass
+
+            def post(self, path: str, json: dict):
+                captured["path"] = path
+                captured["body"] = json
+                return {
+                    "resolved": ["BTC", "ETH", "SOL", "AVAX", "ARB"],
+                    "resolved_at": "2026-06-03T12:00:00+00:00",
+                    "count": 5,
+                }
+
+        monkeypatch.setattr("keel.client.KeelClient", _StubClient)
+
+        # Source with top_volume criteria but NO resolved list (Alain's case).
+        unresolved = """Universe(mode="top_volume", market="perp", top_n=5)
+Pipeline([ROC(period=8)], name='s')
+"""
+        result = universe_resolve(source=unresolved)
+
+        # Output shape contract
+        assert set(result.keys()) >= {"source", "resolved", "resolved_at", "count"}
+        assert result["count"] == 5
+        assert result["resolved"] == ["BTC", "ETH", "SOL", "AVAX", "ARB"]
+
+        # Resolved baked back into the source DSL string
+        assert "BTC" in result["source"]
+        assert "resolved_at" in result["source"]
+
+        # API was called with criteria read from source — not from kwargs
+        assert captured["path"] == "/v1/universe/resolve"
+        assert captured["body"]["mode"] == "top_volume"
+        assert captured["body"]["top_n"] == 5
+        assert captured["body"]["market"] == "perp"
+        # Empty criteria fields not included
+        assert "symbols" not in captured["body"]
+        assert "categories" not in captured["body"]
+
+    def test_universe_resolve_raises_when_no_universe(self):
+        """A strategy without Universe(...) declaration → ValueError, not silent failure."""
+        from keel.tools.local import universe_resolve
+
+        # Need a parseable strategy with NO Universe declaration. Keep it minimal.
+        source_without_universe = """Pipeline([ROC(period=8)], name='s')
+"""
+        try:
+            universe_resolve(source=source_without_universe)
+        except ValueError as e:
+            assert "Universe" in str(e)
+        else:
+            raise AssertionError("expected ValueError for source without Universe")
+
+    def test_universe_resolve_manual_mode_passes_symbols(self, monkeypatch):
+        """Manual-mode universe with `symbols` set → API receives symbols list."""
+        from keel.tools.local import universe_resolve
+
+        captured: dict = {}
+
+        class _StubClient:
+            def post(self, path: str, json: dict):
+                captured["body"] = json
+                return {
+                    "resolved": json["symbols"],
+                    "resolved_at": "2026-06-03T12:00:00+00:00",
+                    "count": len(json["symbols"]),
+                }
+
+        monkeypatch.setattr("keel.client.KeelClient", _StubClient)
+        manual_source = """Universe(mode="manual", market="perp", symbols=["BTC", "ETH"])
+Pipeline([ROC(period=8)], name='s')
+"""
+        result = universe_resolve(source=manual_source)
+        assert captured["body"]["mode"] == "manual"
+        assert captured["body"]["symbols"] == ["BTC", "ETH"]
+        assert result["resolved"] == ["BTC", "ETH"]

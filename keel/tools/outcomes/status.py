@@ -82,8 +82,7 @@ def _workflow_routes(*, live_read_loaded: bool, live_write_loaded: bool) -> list
         {
             "name": "live_monitoring",
             "when": (
-                "user asks about existing live deployments, portfolio state, "
-                "or live positions"
+                "user asks about existing live deployments, portfolio state, or live positions"
             ),
             "prompt": "portfolio-review",
             "tools": ["keel_accounts_list", "keel_live_monitor"],
@@ -105,9 +104,7 @@ def _workflow_routes(*, live_read_loaded: bool, live_write_loaded: bool) -> list
 
     live_route = {
         "name": "live_trading",
-        "when": (
-            "user explicitly asks to deploy, pause, resume, stop, or trigger live capital"
-        ),
+        "when": ("user explicitly asks to deploy, pause, resume, stop, or trigger live capital"),
         "prompt": "deploy-and-monitor",
         "tools": ["keel_accounts_list", "keel_live_deploy", "keel_live_monitor"],
         "available": live_write_loaded,
@@ -225,10 +222,22 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
             # The agent reads `consumed_by` inline instead of guessing
             # from unit names.
             CONSUMED_BY: dict[str, list[str]] = {
-                "backtest_runs": ["MCP tool calls (keel_backtest_run)", "CLI (keel backtest run)", "web app backtest UI"],
-                "backtest_compute_seconds": ["MCP tool calls (keel_backtest_run)", "CLI (keel backtest run)", "web app backtest UI"],
+                "backtest_runs": [
+                    "MCP tool calls (keel_backtest_run)",
+                    "CLI (keel backtest run)",
+                    "web app backtest UI",
+                ],
+                "backtest_compute_seconds": [
+                    "MCP tool calls (keel_backtest_run)",
+                    "CLI (keel backtest run)",
+                    "web app backtest UI",
+                ],
                 "ai_messages": ["in-app chat at app.usekeel.io/chat ONLY"],
-                "live_strategies_max": ["MCP tool calls (keel_live_deploy)", "CLI (keel live deploy)", "web app live deploys"],
+                "live_strategies_max": [
+                    "MCP tool calls (keel_live_deploy)",
+                    "CLI (keel live deploy)",
+                    "web app live deploys",
+                ],
                 "eval_runs": ["agent evaluation runs (internal/admin)"],
             }
             UNIT_NOTES: dict[str, str] = {
