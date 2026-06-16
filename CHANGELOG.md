@@ -4,6 +4,24 @@ All notable changes to `keel-trade` are documented here. Versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html), and the format
 loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.6.1] — 2026-06-16
+
+**Hotfix for 0.6.0.** The validator parity work in 0.6.0 introduced a
+top-level `import pandas as pd` in `pipeline_engine/validation_shared.py`
+for a single duration-string parse. `pandas` is not declared as a wheel
+runtime dependency, so any environment that didn't already have it
+installed (`pipx install keel-trade` and the `.mcpb` bundle on first
+launch) hit `ModuleNotFoundError: No module named 'pandas'` as soon as
+the validator loaded. 0.6.1 replaces the parse with a stdlib regex; no
+behavioral change to `bar_offset` validation.
+
+### Fixed
+
+- `parse_bar_offset_minutes` in `pipeline_engine/validation_shared.py`
+  no longer requires `pandas`. Stdlib regex parses `'15min'`, `'30min'`,
+  `'1h'`, `'12h'`, `'1d'`, `'90min'` etc. with the same rules and the
+  same error messages. Same return values, same validation surface.
+
 ## [0.6.0] — 2026-06-16
 
 **Validator parity with the browser editor + agent knowledge refresh.**

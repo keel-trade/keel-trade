@@ -14,10 +14,9 @@ Quick Start:
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass, field
 from typing import Annotated, Any, Literal, Union, get_args, get_origin
-
-import pandas as pd
 
 from pipeline_engine.base.registry import is_compatible  # noqa: F401 — re-export
 from pipeline_engine.base.step import PHASE_GROUPS, StepCategory
@@ -62,28 +61,39 @@ def timeframe_to_minutes(tf: str) -> int:
     return TIMEFRAME_MINUTES[tf]
 
 
+_BAR_OFFSET_UNIT_MINUTES: dict[str, int] = {
+    "min": 1,
+    "h": 60,
+    "d": 24 * 60,
+    "w": 7 * 24 * 60,
+}
+
+_BAR_OFFSET_RE = re.compile(r"^\s*(\d+)\s*(min|h|d|w)\s*$", re.IGNORECASE)
+
+
 def parse_bar_offset_minutes(bar_offset: str) -> int:
-    """Parse bar_offset to whole minutes via pandas. Raises ValueError on invalid.
+    """Parse bar_offset to whole minutes. Raises ValueError on invalid.
 
     Permissive about format ('15min', '12h', '1d', '90min' all OK) but strict
     about value (positive, whole minutes only — sub-minute offsets are nonsense
     on a 15min-source platform).
     """
-    try:
-        td = pd.Timedelta(bar_offset)
-    except (ValueError, TypeError) as e:
+    if not isinstance(bar_offset, str):
         raise ValueError(
             f"bar_offset ({bar_offset!r}) is not a valid duration. "
             f"Use a value like '15min', '30min', '1h', '12h'."
-        ) from e
-    secs = td.total_seconds()
-    if secs <= 0:
-        raise ValueError(f"bar_offset ({bar_offset!r}) must be positive.")
-    if secs % 60 != 0:
-        raise ValueError(
-            f"bar_offset ({bar_offset!r}) must be a whole number of minutes."
         )
-    return int(secs // 60)
+    match = _BAR_OFFSET_RE.match(bar_offset)
+    if not match:
+        raise ValueError(
+            f"bar_offset ({bar_offset!r}) is not a valid duration. "
+            f"Use a value like '15min', '30min', '1h', '12h'."
+        )
+    n = int(match.group(1))
+    unit = match.group(2).lower()
+    if n <= 0:
+        raise ValueError(f"bar_offset ({bar_offset!r}) must be positive.")
+    return n * _BAR_OFFSET_UNIT_MINUTES[unit]
 
 
 def validate_resample_config(
