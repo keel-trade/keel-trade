@@ -4,6 +4,61 @@ All notable changes to `keel-trade` are documented here. Versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html), and the format
 loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.6.0] — 2026-06-16
+
+**Validator parity with the browser editor + agent knowledge refresh.**
+
+The SDK's strategy validator now agrees bit-for-bit with the Keel web
+editor. A strategy that passes `keel strategy validate` (or the matching
+MCP tool) will pass in the browser canvas, and vice versa — same error
+codes, same messages, same verdict. Several agent skills and the bundled
+knowledge surface picked up new content alongside.
+
+This is an SDK release — what's in this changelog is everything that
+ships in `pipx install keel-trade` (and the `.mcpb` bundle, and the
+public `keel-trade/keel-trade` GitHub repo). The Keel platform backend
+that the SDK talks to (backtest worker, live execution, eval worker,
+signing service) has its own release cadence and is not changed by this
+version.
+
+### Added
+
+- New agent knowledge doc `costs_and_fees.md` — Hyperliquid maker/taker,
+  Keel builder fees by plan, backtest cost defaults. Agents answer "how
+  much does this cost" from facts, not guesses.
+- Skill updates in `strategy-creation`, `strategy-fork-and-iterate`, and
+  `backtest-and-analyze` — clearer guidance on the compose → validate →
+  backtest loop and when to call which tool.
+- Glama directory metadata (`glama.json`) and Glama score badge on the
+  public mirror README (for the awesome-mcp-servers listing).
+
+### Changed
+
+- **Full TS↔Python validator parity** (Option C type policy). The SDK's
+  DSL validator and the browser editor's validator now emit the same
+  error codes for the same compositions. Affects `keel strategy
+  validate`, every MCP composition tool, and the in-browser canvas.
+
+### Fixed
+
+- `DICT_*` validation codes are now errors, not warnings. They
+  represented composition shapes that crashed at runtime; promoting them
+  to errors blocks the strategy before it reaches a backtest, with a
+  clear message instead of a silent failure.
+- `RegimeScale` component accepts a Series index and broadcasts cleanly
+  across the universe.
+
+### Compatibility
+
+- `DICT_*` warning→error promotion: any strategy that compiled but
+  emitted a `DICT_*` warning may now fail validation. The conditions are
+  the same that previously crashed at runtime — the failure is earlier
+  and louder.
+- Validator parity tightens edge cases that were previously inconsistent
+  between the SDK and browser. A small number of compositions that
+  passed in one but failed in the other will now consistently pass or
+  fail in both.
+
 ## [0.5.7] — 2026-06-03
 
 Universe resolution lifecycle fixes. Closes the silent-failure mode that hit

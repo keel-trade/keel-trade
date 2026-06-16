@@ -14,6 +14,7 @@ from __future__ import annotations
 import copy
 import difflib
 import math
+import re
 import sys
 from typing import Any, Iterator, Literal
 
@@ -28,6 +29,7 @@ from pipeline_engine.dsl.spec import (
     GlobalsSpec,
     ParallelSpec,
     PipelineSpec,
+    SlotExtractSpec,
     SlotLoadSpec,
     SlotStoreSpec,
     SlotStoreValueSpec,
@@ -39,13 +41,94 @@ from pipeline_engine.dsl.spec import (
 )
 from pipeline_engine.validation_shared import (
     PHASE_INDEX,
+    TIMEFRAME_MINUTES,
     TYPE_TRANSITIONS,
     TypeFlowEntry,
     ValidationIssue,
     ValidationResult,
     is_compatible,
+    param_accepts_numeric,
+    param_display_type,
+    parse_bar_offset_minutes,
     type_name,
+    type_to_transition_key,
+    validate_resample_config,
 )
+
+
+_GENERIC_TOKEN_NAMES = {"transform", "series", "signal", "data", "value"}
+_CAMEL_TOKEN_RE = re.compile(r"[A-Z][a-z]+|[A-Z]+(?=[A-Z][a-z]|$)|[a-z]+|\d+")
+
+
+def _camel_tokens(name: str) -> list[str]:
+    """Split a camelCase component name into lowercase tokens.
+
+    `FillNaN` → ['fill', 'nan']; `RollingZScoreTransform` → ['rolling', 'z', 'score', 'transform'].
+    """
+    return [m.lower() for m in _CAMEL_TOKEN_RE.findall(name)]
+
+
+def _suggest_component_matches(name: str, registry_names: list[str]) -> list[str]:
+    """Suggest up to 3 registry names for an unknown component name.
+
+    Hybrid scoring designed to surface semantically-close matches even when
+    a difflib character-sequence ratio is dominated by a shared generic
+    suffix (e.g. 'FillNATransform' → 'FillNaN' should beat unrelated
+    '*Transform' names that only match on the suffix).
+
+      score = meaningful_token_overlap * 0.5 + difflib_ratio + substring_boost
+
+    - meaningful_token_overlap: count of shared camelCase tokens excluding
+      generic suffixes (Transform/Series/Signal/Data/Value). Each shared
+      meaningful token outweighs ~0.5 ratio points.
+    - difflib_ratio: standard character-sequence similarity (handles typos).
+    - substring_boost: +0.3 if either name (lowercased) contains the other.
+
+    Returns names with score >= 0.6 AND within 0.3 of the top score, capped
+    at 3 total. Empty list when no candidate clears the bar — callers should
+    surface a "no close match" hint rather than a misleading guess.
+    """
+    if not registry_names:
+        return []
+    user_meaningful = {
+        t for t in _camel_tokens(name) if t not in _GENERIC_TOKEN_NAMES
+    }
+    name_lower = name.lower()
+    scored: list[tuple[float, str, int, float]] = []  # score, name, overlap, sub
+    for reg_name in registry_names:
+        reg_tokens = set(_camel_tokens(reg_name))
+        overlap = len(user_meaningful & reg_tokens)
+        ratio = difflib.SequenceMatcher(None, name_lower, reg_name.lower()).ratio()
+        reg_lower = reg_name.lower()
+        # Substring boost only when the shorter string is substantial — short
+        # accidental substrings ('ATR' inside 'DropNATransform') are noise.
+        shorter_len = min(len(name_lower), len(reg_lower))
+        substr = (
+            0.3
+            if shorter_len >= 5
+            and (name_lower in reg_lower or reg_lower in name_lower)
+            else 0.0
+        )
+        # Filter: when there's no semantic signal (no shared token, no substring),
+        # require a typo-level ratio (>=0.85). Otherwise generic-suffix matches
+        # ('*Transform') flood the suggestions with bad guesses.
+        if overlap == 0 and substr == 0.0 and ratio < 0.85:
+            continue
+        scored.append((overlap * 0.5 + ratio + substr, reg_name, overlap, substr))
+    if not scored:
+        return []
+    scored.sort(reverse=True)
+    out: list[str] = []
+    top_score = scored[0][0]
+    for score, rn, _ov, _sub in scored:
+        if score < 0.6:
+            break
+        if out and score < top_score - 0.3:
+            break
+        out.append(rn)
+        if len(out) >= 3:
+            break
+    return out
 
 
 def _is_slot_compatible(stored_type: type, expected_type: type) -> bool:
@@ -166,20 +249,60 @@ def validate_strategy(
         except LockError as e:
             # Surface as structured issue; validation continues with the
             # full latest registry so passes 2 + 4 can also catch the
-            # unknown component(s) with line locations.
+            # unknown component(s) with line locations. Attach a suggestion
+            # at this site too — pass 4 will emit a parallel issue with a
+            # line location, but downstream consumers that only read the
+            # first UNKNOWN_COMPONENT should still get useful guidance.
+            full_registry_names = list(full_registry.keys())
+            # Extract a name from the LockError text — best-effort, falls
+            # back to a generic suggestion if we can't parse it.
+            err_text = str(e)
+            match = re.search(r"'([A-Za-z_][A-Za-z0-9_]*)'", err_text)
+            suggestion: str | None = None
+            if match:
+                bad_name = match.group(1)
+                matches = _suggest_component_matches(bad_name, full_registry_names)
+                if matches:
+                    suggestion = f"Did you mean: {', '.join(matches)}?"
+                else:
+                    suggestion = (
+                        f"No close match for '{bad_name}'. "
+                        f"Use `strategy_components_search` (chat) or "
+                        f"`keel components list` to find the right component."
+                    )
             lock_gen_issues.append(
                 ValidationIssue(
                     severity="error",
                     code="UNKNOWN_COMPONENT",
-                    message=str(e),
+                    message=err_text,
                     location=None,
+                    suggestion=suggestion,
                 )
             )
             lock = None
 
-    # Build effective registry from lock for passes 5-9
+    # Build effective registry from lock for passes 5-9. A lock pointing
+    # at a non-existent version surfaces as INVALID_VERSION_LOCK (emitted
+    # by _validate_names below) rather than an uncaught LockError —
+    # parity with TS pass4-names so the AI sees a structured issue, not
+    # a crash.
+    invalid_lock_keys: set[str] = set()
     if lock is not None:
-        registry = _build_effective_registry(lock)
+        # Lazy import to break the dsl ↔ base.lock circular import.
+        from pipeline_engine.base.lock import LockError
+
+        try:
+            registry = _build_effective_registry(lock)
+        except LockError:
+            from pipeline_engine.base.registry import get_all_versions
+
+            invalid_lock_keys = {
+                name
+                for name, ver in lock.items()
+                if ver not in (get_all_versions(name) or {})
+            }
+            safe_lock = {k: v for k, v in lock.items() if k not in invalid_lock_keys}
+            registry = _build_effective_registry(safe_lock) if safe_lock else full_registry
     else:
         registry = full_registry
 
@@ -212,7 +335,7 @@ def validate_strategy(
         )
 
     # Pass 4: Name resolution (uses full registry — all known components)
-    _validate_names(expanded, full_registry, issues)
+    _validate_names(expanded, full_registry, issues, component_lock=lock)
 
     # Short-circuit if name resolution found unknown components
     name_errors = [i for i in issues if i.code == "UNKNOWN_COMPONENT"]
@@ -598,17 +721,28 @@ def _validate_names(
     strategy: StrategyFile,
     registry: dict[str, Any],
     issues: list[ValidationIssue],
+    component_lock: dict[str, int] | None = None,
 ) -> None:
-    """Pass 4: Check all ComponentRef.name exist in COMPONENT_REGISTRY."""
+    """Pass 4: Check all ComponentRef.name exist in COMPONENT_REGISTRY.
+
+    Also validates ``component_lock`` entries: each locked version must
+    correspond to a real registered version of the component. Otherwise
+    emits INVALID_VERSION_LOCK (mirrors TS pass4-names so the editor and
+    server agree).
+    """
+    from pipeline_engine.base.registry import get_all_versions
+
+    registry_names = list(registry.keys())
     for ref in _walk_component_refs(strategy):
         if ref.name not in registry:
-            suggestions = difflib.get_close_matches(ref.name, registry.keys(), n=3, cutoff=0.6)
+            suggestions = _suggest_component_matches(ref.name, registry_names)
             if suggestions:
                 suggestion_text = f"Did you mean: {', '.join(suggestions)}?"
             else:
                 suggestion_text = (
-                    f"Component '{ref.name}' is not registered. "
-                    f"Use 'keel components list' to see available components."
+                    f"No close match for '{ref.name}'. "
+                    f"Use `strategy_components_search` (chat) or "
+                    f"`keel components list` to find the right component."
                 )
             issues.append(
                 ValidationIssue(
@@ -632,6 +766,33 @@ def _validate_names(
                         suggestion=f"Consider replacing '{ref.name}' with a supported alternative.",
                     )
                 )
+
+            # INVALID_VERSION_LOCK — verify the locked version exists.
+            if component_lock and ref.name in component_lock:
+                locked_version = component_lock[ref.name]
+                try:
+                    versions = get_all_versions(ref.name) or {}
+                except Exception:
+                    versions = {}
+                if locked_version not in versions:
+                    latest = getattr(sig, "version", None)
+                    if latest is not None:
+                        hint = (
+                            f"Available versions: latest is {latest}. "
+                            f"Update the lock or remove version pin."
+                        )
+                    else:
+                        hint = f"Remove the version lock for '{ref.name}'."
+                    issues.append(
+                        ValidationIssue(
+                            severity="error",
+                            code="INVALID_VERSION_LOCK",
+                            message=f"Component '{ref.name}' is locked to version "
+                            f"{locked_version}, which does not exist.",
+                            location=_format_location(ref.location),
+                            suggestion=hint,
+                        )
+                    )
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -702,20 +863,28 @@ def _validate_params(
             if isinstance(pval, VariableRef):
                 continue
 
-            # Type checking
+            # Type checking — uses param_display_type for user-visible labels
+            # and isinstance against the unwrapped non-None members of the
+            # declared type. Numeric interop (int satisfies any float-typed
+            # param, incl. Optional[float]) matches Python runtime laxness.
             if pinfo.type_ is not None and pval is not None:
                 try:
                     from typing import Any as TypingAny
 
-                    if pinfo.type_ is not TypingAny and not isinstance(pval, pinfo.type_):
-                        # Special case: int/float interop
-                        if isinstance(pval, (int, float)) and pinfo.type_ in (int, float):
-                            pass  # Allow int/float interop
-                        # Special case: string for slot params — resolver converts to Slot
+                    from pipeline_engine.validation_shared import _param_target_types
+
+                    if pinfo.type_ is TypingAny:
+                        pass  # untyped — accept anything
+                    else:
+                        target_types = _param_target_types(pinfo)
+                        if isinstance(pval, target_types):
+                            pass  # direct match against any non-None member
+                        elif param_accepts_numeric(pinfo, pval):
+                            pass  # int↔float interop, unwrap-Union aware
                         elif isinstance(pval, str) and pname.endswith("_slot"):
-                            pass  # Resolver handles str → Slot conversion
+                            pass  # resolver converts str → Slot at runtime
                         else:
-                            type_label = getattr(pinfo.type_, "__name__", str(pinfo.type_))
+                            type_label = param_display_type(pinfo)
                             issues.append(
                                 ValidationIssue(
                                     severity="error",
@@ -727,8 +896,8 @@ def _validate_params(
                                 )
                             )
                 except TypeError:
-                    # Complex types (Union, Optional, generic aliases) can't be
-                    # isinstance-checked. Record as info-level issue.
+                    # Generic aliases (e.g. list[int], dict[str, float]) aren't
+                    # isinstance-checkable. Record as info-level issue.
                     issues.append(
                         ValidationIssue(
                             severity="info",
@@ -928,6 +1097,12 @@ def _validate_pipeline_type_flow(
     from pipeline_engine.base.step import StepCategory
 
     current_type = prev_output_type
+    # Track the most recent Parallel for EXTRACT_MISSING_KEY checking.
+    prev_parallel: ParallelSpec | None = None
+    # G1-followup-2: per-branch terminal output type for the most recent
+    # Parallel. Read by ``_check_composer_input_types`` when the next step
+    # is a Composer that declared a per-key contract.
+    prev_parallel_branch_types: dict[str, type] = {}
 
     for i, step in enumerate(pipeline.steps):
         step_context = f"{context}.step[{i}]"
@@ -960,6 +1135,99 @@ def _validate_pipeline_type_flow(
             is_dict_input = current_type is dict
             _dict_allowed = TYPE_TRANSITIONS.get("dict", {})
 
+            # DICT_INPUT_EXPECTED — composer categories expect dict (the
+            # output of a preceding Parallel). Empirically verified
+            # (2026-06-11) that a composer with non-dict input crashes at
+            # runtime (`ValueError: The truth value of a DataFrame is
+            # ambiguous` or similar in step.run()). Severity = error so the
+            # save-time validator blocks the strategy — runtime
+            # PipelineValidator's lenient warning is the safety net, not
+            # the gate.
+            composer_categories = {
+                StepCategory.SIGNAL_COMPOSER,
+                StepCategory.FORECAST_COMPOSER,
+            }
+            if (
+                sig.category in composer_categories
+                and not is_dict_input
+                and not is_data_loader
+                and current_type is not TypingAny
+            ):
+                issues.append(
+                    ValidationIssue(
+                        severity="error",
+                        code="DICT_INPUT_EXPECTED",
+                        message=f"Composer '{step.name}' expects dict input "
+                        f"from Parallel, but got {type_name(current_type)}.",
+                        location=_format_location(step.location),
+                        suggestion=f"Place a Parallel block before '{step.name}'.",
+                    )
+                )
+                # Skip downstream TYPE_MISMATCH — DICT_INPUT_EXPECTED already
+                # describes the same authoring mistake; emitting both
+                # would double-warn the user / agent. Mirrors TS pass6.
+                type_flow.append(
+                    TypeFlowEntry(
+                        step=f"{step.name}({_format_params_brief(step.params)})",
+                        input_type=type_name(current_type),
+                        output_type=type_name(sig.output_type),
+                        category=sig.category.value,
+                    )
+                )
+                current_type = sig.output_type
+                prev_parallel = None
+                continue
+
+            # DICT_NOT_CONSUMED — non-composer step after Parallel discards
+            # the dict. Categories listed in TYPE_TRANSITIONS["dict"]
+            # (composers + position_sizer + position_manager) and slot ops
+            # are the legitimate consumers. Slot-readers
+            # (e.g. MaxDrawdownStopLoss) are also exempt — their `run()`
+            # treats ``current`` as a passthrough and pulls data from
+            # declared slots instead, so they survive a dict input fine.
+            # Without this exemption Python would false-positive on
+            # strategies the TS canvas validator (which already exempts
+            # slot-readers, pass6-types.ts:217) and the runtime both
+            # accept.
+            #
+            # Empirically verified (2026-06-11) that any other category
+            # crashes at runtime with `AttributeError: 'dict' object has
+            # no attribute 'index'` or similar — the runtime executor
+            # doesn't auto-unpack. Severity = error so the validator
+            # blocks the strategy at save-time. Short-circuits the
+            # downstream TYPE_MISMATCH check (would double-report the
+            # same authoring mistake).
+            is_slot_reader = bool(getattr(sig, "slot_reads", None))
+            if (
+                is_dict_input
+                and sig.category not in _dict_allowed
+                and sig.category != StepCategory.SLOT_OP
+                and not is_data_loader
+                and not is_slot_reader
+            ):
+                issues.append(
+                    ValidationIssue(
+                        severity="error",
+                        code="DICT_NOT_CONSUMED",
+                        message=f"Step '{step.name}' follows Parallel but is "
+                        f"not a Composer, Extract, or Load — dict input would "
+                        f"crash this step at runtime.",
+                        location=_format_location(step.location),
+                        suggestion="Use a Composer to join branch results, or Extract to select one.",
+                    )
+                )
+                type_flow.append(
+                    TypeFlowEntry(
+                        step=f"{step.name}({_format_params_brief(step.params)})",
+                        input_type=type_name(current_type),
+                        output_type=type_name(sig.output_type),
+                        category=sig.category.value,
+                    )
+                )
+                current_type = sig.output_type
+                prev_parallel = None
+                continue
+
             # Check compatibility
             if current_type is not TypingAny and sig.input_type is not TypingAny:
                 skip_check = is_data_loader or (is_dict_input and sig.category in _dict_allowed)
@@ -975,6 +1243,35 @@ def _validate_pipeline_type_flow(
                                 f"but receives {type_name(current_type)}.",
                                 location=_format_location(step.location),
                                 suggestion=suggestion,
+                            )
+                        )
+
+            # TRANSITION_OUTPUT_MISMATCH — author-facing warning when a
+            # component's declared output_type disagrees with what the
+            # category-level TYPE_TRANSITIONS table says the category
+            # produces for this input. Mirrors runtime PipelineValidator
+            # and TS pass6 (it's a hint about component metadata, not the
+            # user's wiring — the strict per-component TYPE_MISMATCH above
+            # is authoritative for user-facing correctness).
+            prev_out_name = type_to_transition_key(current_type)
+            if prev_out_name is not None and not is_data_loader:
+                category_map = TYPE_TRANSITIONS.get(prev_out_name)
+                if category_map is not None and sig.category in category_map:
+                    expected_outputs = category_map[sig.category]
+                    step_out_name = type_to_transition_key(sig.output_type)
+                    if (
+                        step_out_name is not None
+                        and step_out_name not in expected_outputs
+                    ):
+                        issues.append(
+                            ValidationIssue(
+                                severity="warning",
+                                code="TRANSITION_OUTPUT_MISMATCH",
+                                message=f"Step '{step.name}' ({sig.category.value}) outputs "
+                                f"'{step_out_name}' but transition from "
+                                f"'{prev_out_name}' expects one of {expected_outputs}.",
+                                location=_format_location(step.location),
+                                suggestion=f"Check that '{step.name}' produces one of: {expected_outputs}.",
                             )
                         )
 
@@ -1027,8 +1324,45 @@ def _validate_pipeline_type_flow(
                 )
             )
 
+        elif isinstance(step, SlotExtractSpec):
+            # EXTRACT_MISSING_KEY — Extract(key=…) following a Parallel must
+            # reference one of the branches by name. Mirrors runtime
+            # PipelineValidator so the AI sees this at validate-time, not
+            # at backtest. Without a preceding Parallel, emit
+            # DICT_INPUT_EXPECTED for the same reason composers do.
+            if prev_parallel is None or current_type is not dict:
+                issues.append(
+                    ValidationIssue(
+                        severity="warning",
+                        code="DICT_INPUT_EXPECTED",
+                        message=f"'Extract' expects dict input from Parallel, "
+                        f"but got {type_name(current_type)}.",
+                        location=_format_location(step.location),
+                        suggestion="Place a Parallel block before 'Extract'.",
+                    )
+                )
+                current_type = TypingAny
+            elif step.key not in prev_parallel.branches:
+                issues.append(
+                    ValidationIssue(
+                        severity="error",
+                        code="EXTRACT_MISSING_KEY",
+                        message=f"Extract key '{step.key}' not found in Parallel "
+                        f"branches: {sorted(prev_parallel.branches.keys())}.",
+                        location=_format_location(step.location),
+                        suggestion=f"Use one of: {sorted(prev_parallel.branches.keys())}.",
+                    )
+                )
+                current_type = TypingAny
+            else:
+                # Resolve to the matching branch's final step output type.
+                # The branch's type-flow was already recorded — we don't
+                # re-walk; we just unblock downstream type checks.
+                current_type = TypingAny
+
         elif isinstance(step, ParallelSpec):
             # Validate each branch independently with isolated slot_types snapshots
+            branch_types: dict[str, type] = {}
             for branch_name, branch_steps in step.branches.items():
                 branch_slot_types = dict(slot_types)
                 branch_pipeline = PipelineSpec(
@@ -1036,7 +1370,7 @@ def _validate_pipeline_type_flow(
                     name=branch_name,
                     location=step.location,
                 )
-                _validate_pipeline_type_flow(
+                branch_terminal_type = _validate_pipeline_type_flow(
                     branch_pipeline,
                     registry,
                     issues,
@@ -1046,17 +1380,27 @@ def _validate_pipeline_type_flow(
                     variable_pipelines=variable_pipelines,
                     context=f"{context}.branch[{branch_name}]",
                 )
+                branch_types[branch_name] = branch_terminal_type
                 # Merge branch stores into parent scope
                 slot_types.update(branch_slot_types)
 
             # After parallel: output is dict
             current_type = dict
+            prev_parallel = step
+            prev_parallel_branch_types = branch_types
 
             # D23: Composer key validation on next step
             if i + 1 < len(pipeline.steps):
                 next_step = pipeline.steps[i + 1]
                 if isinstance(next_step, ComponentRef):
                     _check_composer_keys(step, next_step, registry, issues)
+                    # G1-followup-2: also check the composer's per-key
+                    # input types against the actual branch terminal types.
+                    _check_composer_input_types(next_step, registry, branch_types, issues)
+            # prev_parallel stays set; subsequent EXTRACT_MISSING_KEY /
+            # DICT_INPUT_EXPECTED checks gate on current_type still being
+            # dict, so once a Composer consumes the dict, the stale
+            # prev_parallel becomes inert.
 
         elif isinstance(step, PipelineSpec):
             # Nested sub-pipeline: recurse
@@ -1124,6 +1468,114 @@ def _check_composer_keys(
                         f"not in parallel branches: {sorted(extra)}.",
                         location=_format_location(next_step.location),
                         suggestion=f"Valid branch names: {sorted(branch_names)}.",
+                    )
+                )
+
+
+def _composer_accepts(actual: type, expected) -> bool:
+    """Compatibility check used by ``_check_composer_input_types``.
+
+    ``expected`` is either a single type or a tuple of accepted types.
+    A tuple means "any of these" — we accept the first compat hit.
+    Delegates to ``is_compatible`` which already understands NewType
+    siblings (e.g. ForecastSeries → SignalSeries) and Annotated subtypes.
+    """
+    if isinstance(expected, tuple):
+        return any(is_compatible(actual, t) for t in expected)
+    return is_compatible(actual, expected)
+
+
+def _format_expected(expected) -> str:
+    """Pretty-print ``expected`` (single type or tuple) for error messages."""
+    if isinstance(expected, tuple):
+        return " or ".join(type_name(t) for t in expected)
+    return type_name(expected)
+
+
+def _check_composer_input_types(
+    next_step: ComponentRef,
+    registry: dict[str, Any],
+    branch_types: dict[str, type],
+    issues: list[ValidationIssue],
+) -> None:
+    """G1-followup-2: per-key dict-shape mismatch check.
+
+    When the step after a Parallel is a Composer that declared a
+    ``composer_inputs`` contract, each branch's terminal output type must
+    satisfy the role's expected type. Two shapes:
+
+    - ``dict[str, type | tuple[type, ...]]`` — heterogeneous. Each entry
+      maps an init-param NAME (e.g. ``signal_key``) to the expected type
+      at the branch that the user pointed that param at.
+    - ``type | tuple[type, ...]`` — homogeneous. Every branch in the
+      Parallel must satisfy this single type.
+
+    Skipped cleanly when:
+    - the composer didn't declare ``composer_inputs`` (still being audited)
+    - the role param is ``None`` (auto-detect mode in e.g. ``ApplyMask``)
+    - the role param is a ``VariableRef`` (resolved at runtime)
+    - the role param's branch name isn't in ``branch_types``
+      (``COMPOSER_KEY_MISMATCH`` already fires on that)
+    """
+    sig = registry.get(next_step.name)
+    if sig is None:
+        return
+    composer_inputs = getattr(sig, "composer_inputs", None)
+    if composer_inputs is None or not branch_types:
+        return
+
+    if isinstance(composer_inputs, dict):
+        if not composer_inputs:
+            return  # explicit opt-out (e.g. SelectiveCombinator passthrough)
+        for role_param, expected in composer_inputs.items():
+            branch_name = next_step.params.get(role_param)
+            if branch_name is None:
+                continue  # auto-detect / param omitted — skip
+            if isinstance(branch_name, VariableRef):
+                continue
+            if not isinstance(branch_name, str):
+                continue
+            actual = branch_types.get(branch_name)
+            if actual is None:
+                continue  # COMPOSER_KEY_MISMATCH handles this
+            if not _composer_accepts(actual, expected):
+                issues.append(
+                    ValidationIssue(
+                        severity="error",
+                        code="COMPOSER_INPUT_TYPE_MISMATCH",
+                        message=(
+                            f"Composer '{next_step.name}' role '{role_param}' "
+                            f"references branch '{branch_name}' which outputs "
+                            f"'{type_name(actual)}', but expects "
+                            f"{_format_expected(expected)}."
+                        ),
+                        location=_format_location(next_step.location),
+                        suggestion=(
+                            f"Change branch '{branch_name}' to end with a step "
+                            f"that outputs {_format_expected(expected)}, or point "
+                            f"'{role_param}' at a different branch."
+                        ),
+                    )
+                )
+    else:
+        # Homogeneous: every branch must match
+        for branch_name, actual in branch_types.items():
+            if not _composer_accepts(actual, composer_inputs):
+                issues.append(
+                    ValidationIssue(
+                        severity="error",
+                        code="COMPOSER_INPUT_TYPE_MISMATCH",
+                        message=(
+                            f"Composer '{next_step.name}' expects every Parallel "
+                            f"branch to output {_format_expected(composer_inputs)}, "
+                            f"but branch '{branch_name}' outputs "
+                            f"'{type_name(actual)}'."
+                        ),
+                        location=_format_location(next_step.location),
+                        suggestion=(
+                            f"Change branch '{branch_name}' to end with a step "
+                            f"that outputs {_format_expected(composer_inputs)}."
+                        ),
                     )
                 )
 
@@ -1389,17 +1841,6 @@ def _walk_refs_in_step(step: StepSpec) -> Iterator[ComponentRef]:
 _VALID_TIMEFRAMES = VALID_TIMEFRAMES
 
 
-def _is_valid_offset(offset: str) -> bool:
-    """Check if offset is a valid bar_offset format (Nh where N is 0-23)."""
-    import re
-
-    m = re.match(r"^(\d+)h$", offset)
-    if not m:
-        return False
-    n = int(m.group(1))
-    return 0 <= n <= 23
-
-
 def _validate_declarations(
     strategy: StrategyFile,
     expanded: StrategyFile,
@@ -1426,6 +1867,9 @@ def _validate_declarations(
     # E) Unused globals warning
     _warn_unused_globals(strategy, expanded, registry, issues)
 
+    # F) Resampler config validation (source_tf, target_tf, bar_offset rule table)
+    _validate_resampler_config(strategy, expanded, issues)
+
 
 def _validate_globals(globals_: GlobalsSpec, issues: list[ValidationIssue]) -> None:
     """Validate Globals declaration values."""
@@ -1446,13 +1890,18 @@ def _validate_globals(globals_: GlobalsSpec, issues: list[ValidationIssue]) -> N
             )
 
     if globals_.bar_offset is not None:
-        if not _is_valid_offset(globals_.bar_offset):
+        # Use the shared parser — permissive about format (any positive
+        # whole-minute pandas duration), strict about value. Resampler-config
+        # cross-checks (multiple-of-source, less-than-target) run in
+        # _validate_resampler_config.
+        try:
+            parse_bar_offset_minutes(globals_.bar_offset)
+        except ValueError as e:
             issues.append(
                 ValidationIssue(
                     severity="error",
                     code="INVALID_GLOBAL",
-                    message=f"Globals bar_offset '{globals_.bar_offset}' is not a valid "
-                    f"offset. Use format 'Nh' where N is 0-23 (e.g., '11h').",
+                    message=f"Globals bar_offset: {e}",
                     location=loc,
                 )
             )
@@ -1917,7 +2366,124 @@ def _warn_unused_globals(
             ValidationIssue(
                 severity="warning",
                 code="UNUSED_GLOBAL",
-                message=f"Globals '{field_name}' is declared but not referenced by any component.",
+                message=(
+                    f"Globals '{field_name}' is declared but not referenced by any component. "
+                    f"Either remove the Globals declaration, or add a component that consumes "
+                    f"it (e.g. TargetTimeframeResampler reads target_timeframe)."
+                ),
+                location="globals",
+            )
+        )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# RESAMPLER CONFIG (source_tf, target_tf, bar_offset) — mirrors
+# pipeline_engine.validation_shared.validate_resample_config rules across the
+# whole strategy.  Catches:
+#   - upsampling (source > target)
+#   - bar_offset that wouldn't survive the runtime check
+#   - the no-op TargetTimeframeResampler that bit jeff5908 on 2026-06-06
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _extract_price_loader_timeframe(expanded: StrategyFile) -> str | None:
+    """Find the first PriceDataLoader in the pipeline and return its `timeframe` param.
+
+    Returns None if no PriceDataLoader present, the param isn't a literal string,
+    or the value isn't a known timeframe key. None means "skip resampler config
+    validation" (callers should treat as 'can't enforce'), never "use a default."
+    """
+    for comp_ref in _walk_component_refs(expanded):
+        if comp_ref.name != "PriceDataLoader":
+            continue
+        tf = comp_ref.params.get("timeframe") if comp_ref.params else None
+        if isinstance(tf, str) and tf in TIMEFRAME_MINUTES:
+            return tf
+        return None
+    return None
+
+
+def _has_target_timeframe_resampler(expanded: StrategyFile) -> bool:
+    """True if any TargetTimeframeResampler appears in the pipeline."""
+    for comp_ref in _walk_component_refs(expanded):
+        if comp_ref.name == "TargetTimeframeResampler":
+            return True
+    return False
+
+
+def _validate_resampler_config(
+    strategy: StrategyFile,
+    expanded: StrategyFile,
+    issues: list[ValidationIssue],
+) -> None:
+    """Cross-component validation of (source_tf, target_tf, bar_offset).
+
+    Pulls `source_tf` from the first PriceDataLoader's `timeframe` param and
+    `target_tf` / `bar_offset` from Globals. If any piece is missing or
+    can't be parsed, the corresponding rule check is skipped (other passes
+    already report missing/invalid Globals + invalid component params).
+    """
+    if strategy.globals_ is None:
+        return
+    target_tf = strategy.globals_.target_timeframe
+    bar_offset = strategy.globals_.bar_offset
+    if target_tf is None:
+        # No target → resampler can't even run; downstream component validation
+        # already raises if TargetTimeframeResampler is present without it.
+        return
+    if target_tf not in TIMEFRAME_MINUTES:
+        # Already reported as INVALID_GLOBAL by _validate_globals.
+        return
+
+    source_tf = _extract_price_loader_timeframe(expanded)
+    if source_tf is None:
+        # No (parseable) PriceDataLoader — nothing to validate against.
+        return
+
+    # Apply the canonical rule table. Each ValueError maps to a specific issue
+    # code so the editor + agent can disambiguate.
+    try:
+        validate_resample_config(source_tf, target_tf, bar_offset)
+    except ValueError as e:
+        msg = str(e)
+        if "upsampling not supported" in msg:
+            code = "UPSAMPLE_NOT_SUPPORTED"
+        elif "no valid value when target_timeframe equals" in msg:
+            code = "BAR_OFFSET_AT_SAME_TF"
+        elif "must be a multiple" in msg:
+            code = "BAR_OFFSET_NOT_MULTIPLE"
+        elif "strictly less than" in msg:
+            code = "BAR_OFFSET_TOO_LARGE"
+        elif "must be positive" in msg or "whole number of minutes" in msg:
+            code = "INVALID_BAR_OFFSET"
+        elif "not a valid duration" in msg:
+            code = "INVALID_BAR_OFFSET"
+        else:
+            code = "INVALID_RESAMPLER_CONFIG"
+        issues.append(
+            ValidationIssue(
+                severity="error",
+                code=code,
+                message=msg,
+                location="globals",
+            )
+        )
+        return  # Don't emit the no-op warning when the config is already errored
+
+    # No-op resampler warning: same TF + a TargetTimeframeResampler in the
+    # pipeline. The runtime now short-circuits this case cleanly, but the
+    # component step itself is wasted and the Globals declaration is redundant.
+    if source_tf == target_tf and _has_target_timeframe_resampler(expanded):
+        issues.append(
+            ValidationIssue(
+                severity="warning",
+                code="RESAMPLER_NOOP",
+                message=(
+                    f"TargetTimeframeResampler is a no-op when target_timeframe "
+                    f"({target_tf}) equals the data loader's timeframe ({source_tf}). "
+                    f"Remove the TargetTimeframeResampler() step (and the redundant "
+                    f"Globals(target_timeframe=...) line if nothing else uses it)."
+                ),
                 location="globals",
             )
         )

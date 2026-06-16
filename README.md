@@ -16,6 +16,7 @@
   <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.11+-blue.svg" alt="Python 3.11+"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="MIT License"></a>
   <a href="https://usekeel.io/keel-mcp"><img src="https://img.shields.io/badge/product-keel--mcp-635BFF.svg" alt="Product page"></a>
+  <a href="https://glama.ai/mcp/servers/keel-trade/keel-trade"><img src="https://glama.ai/mcp/servers/keel-trade/keel-trade/badges/score.svg" alt="keel-trade MCP server"></a>
 </p>
 
 <p align="center">
@@ -95,15 +96,15 @@ For Cursor, Windsurf, and generic MCP clients, see [usekeel.io/keel-mcp#install]
 
 After install, sign in once via the agent (no terminal commands needed):
 
-> **You:** *"Connect to Keel."*
+> **You:** _"Connect to Keel."_
 >
-> **Agent:** *Calls `keel_auth_login`. Browser opens to app.usekeel.io, you click Allow, tokens land in `~/.keel/config.yaml`. Authenticated for 30 days with transparent refresh.*
+> **Agent:** _Calls `keel_auth_login`. Browser opens to app.usekeel.io, you click Allow, tokens land in `~/.keel/config.yaml`. Authenticated for 30 days with transparent refresh._
 
 Then describe what you want:
 
-> **You:** *"Find me momentum signals for Hyperliquid top-30 perps and compose a backtest from 2024-08-15 to today."*
+> **You:** _"Find me momentum signals for Hyperliquid top-30 perps and compose a backtest from 2024-08-15 to today."_
 >
-> **Agent:** *Calls `keel_components_search` → `keel_components_detail_batch` → `keel_strategy_compose` → `keel_backtest_run`. Returns a share URL with the full tearsheet (equity curve, Sharpe, max drawdown, per-asset attribution).*
+> **Agent:** _Calls `keel_components_search` → `keel_components_detail_batch` → `keel_strategy_compose` → `keel_backtest_run`. Returns a share URL with the full tearsheet (equity curve, Sharpe, max drawdown, per-asset attribution)._
 
 Concrete example: [this share URL](https://app.usekeel.io/share/gDXjURKqWPs8CZ4eXdqAI?ref=H0O2KN) is a funding-carry backtest produced through exactly this flow — Sharpe 2.17 over 2024-08-15 → 2026-04-30 on real Hyperliquid data.
 
@@ -136,16 +137,16 @@ Full CLI reference: [usekeel.io/docs/sdk/cli-reference](https://usekeel.io/docs/
 
 ## What you can do with Keel
 
-| Task | Surface |
-|---|---|
-| **Backtest a Hyperliquid strategy** — real fees, funding, slippage, ~220 perps | [usekeel.io/hyperliquid-backtest](https://usekeel.io/hyperliquid-backtest) |
-| **Screen HL perps** — momentum, funding, volume, breakout, regime | [usekeel.io/lab](https://usekeel.io/lab) |
-| **Use AI to build strategies** — typed composition, not freeform code | [usekeel.io/ai-trading-strategy-builder](https://usekeel.io/ai-trading-strategy-builder) |
-| **Backtest portfolios** across the HL universe | [usekeel.io/crypto-portfolio-backtesting](https://usekeel.io/crypto-portfolio-backtesting) |
-| **Robustness diagnostics** — walk-forward, Monte Carlo, deflated Sharpe, PBO | [usekeel.io/hyperliquid](https://usekeel.io/hyperliquid) |
-| **Deploy a strategy live** on Hyperliquid (non-custodial) | [usekeel.io/strategy-os](https://usekeel.io/strategy-os) |
-| **Compare strategies + venues** | [usekeel.io/compare](https://usekeel.io/compare) |
-| **Browse documented trading strategies** | [usekeel.io/strategies](https://usekeel.io/strategies) |
+| Task                                                                           | Surface                                                                                    |
+| ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
+| **Backtest a Hyperliquid strategy** — real fees, funding, slippage, ~220 perps | [usekeel.io/hyperliquid-backtest](https://usekeel.io/hyperliquid-backtest)                 |
+| **Screen HL perps** — momentum, funding, volume, breakout, regime              | [usekeel.io/lab](https://usekeel.io/lab)                                                   |
+| **Use AI to build strategies** — typed composition, not freeform code          | [usekeel.io/ai-trading-strategy-builder](https://usekeel.io/ai-trading-strategy-builder)   |
+| **Backtest portfolios** across the HL universe                                 | [usekeel.io/crypto-portfolio-backtesting](https://usekeel.io/crypto-portfolio-backtesting) |
+| **Robustness diagnostics** — walk-forward, Monte Carlo, deflated Sharpe, PBO   | [usekeel.io/hyperliquid](https://usekeel.io/hyperliquid)                                   |
+| **Deploy a strategy live** on Hyperliquid (non-custodial)                      | [usekeel.io/strategy-os](https://usekeel.io/strategy-os)                                   |
+| **Compare strategies + venues**                                                | [usekeel.io/compare](https://usekeel.io/compare)                                           |
+| **Browse documented trading strategies**                                       | [usekeel.io/strategies](https://usekeel.io/strategies)                                     |
 
 ## Documentation
 

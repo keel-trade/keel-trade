@@ -75,6 +75,7 @@ def _bootstrap() -> None:
         live_control,
         live_deploy,
         live_monitor,
+        ownership_status,
         share_create,
         status,
         strategy_checkout,

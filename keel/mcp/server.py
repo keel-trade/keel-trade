@@ -271,6 +271,45 @@ def create_server() -> FastMCP:
         """Latest backtest for one strategy, with exact result URI if available."""
         return json.dumps(_latest_backtest_payload(strategy_id), default=str)
 
+    @mcp.resource("keel://ownership/strategy/{strategy_id}")
+    def strategy_ownership(strategy_id: str) -> str:
+        """First-session ownership projection for one strategy."""
+        from keel.tools.outcomes._base import ToolContext
+        from keel.tools.outcomes._ownership import (
+            fetch_ownership_projection,
+            ownership_envelope_fields,
+        )
+
+        ctx = ToolContext()
+        projection = fetch_ownership_projection(ctx, strategy_id)
+        if projection:
+            out = {"strategy_id": strategy_id, "projection": projection}
+            out.update(ownership_envelope_fields(projection))
+            return json.dumps(out, default=str)
+        return json.dumps(
+            {
+                "strategy_id": strategy_id,
+                "projection_available": False,
+                "ownership_status": "not_started",
+                "next_recommended_action": {
+                    "kind": "write_strategy_brief",
+                    "reason": "No first-session ownership projection is available yet.",
+                },
+                "missing_evidence": [
+                    "strategy_brief",
+                    "baseline_evidence",
+                    "failure_modes",
+                ],
+                "live_readiness_blockers": [
+                    "no_baseline",
+                    "no_diagnosis",
+                    "no_ownership_decision",
+                    "no_readiness_review",
+                ],
+            },
+            default=str,
+        )
+
     @mcp.resource("keel://dsl/reference/{topic}")
     def dsl_reference_resource(topic: str) -> str:
         """DSL reference doc by topic (phases, types, slots, composition,

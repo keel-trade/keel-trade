@@ -71,6 +71,11 @@ class ComponentSignature:
     param_constraints: list[dict[str, Any]] = field(default_factory=list)
     declaration_refs: dict[str, str] = field(default_factory=dict)
     optional_declaration_refs: dict[str, str] = field(default_factory=dict)
+    # G1-followup-2: per-key dict input contract for composers. Two shapes:
+    # - dict[str, type | tuple]   — heterogeneous, role-param-name → expected types
+    # - type | tuple[type, ...]    — homogeneous, uniform value type for all branches
+    # - None                        — not declared (skip check)
+    composer_inputs: Any | None = None
     content_hash: str | None = None
     version: int = 1
     status: str = "active"  # "active" | "deprecated"

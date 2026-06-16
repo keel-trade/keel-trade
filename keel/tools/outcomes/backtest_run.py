@@ -19,6 +19,7 @@ from keel.errors import KeelError
 
 from . import register
 from ._base import OutcomeResult, OutcomeTool, ToolContext
+from ._ownership import fetch_ownership_projection, ownership_envelope_fields
 
 
 # Terminal API statuses (lowercased — the API returns lowercase).
@@ -204,24 +205,31 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
 
     hero_url = f"{ctx.app_url}/backtests/{backtest_id}?tab=tearsheet"
     resource_uri = f"keel://backtest/{backtest_id}/results"
+    ownership_fields = (
+        ownership_envelope_fields(fetch_ownership_projection(ctx, strategy_id))
+        if not args.get("no_ownership_hint", False)
+        else {}
+    )
 
     wait = args.get("wait", True)
     if not wait:
         info = "Submitted; not waiting (wait=false). Poll status_url or use keel_backtest_summarize when done."
         if divergence_warning:
             info = f"{divergence_warning} {info}"
+        extra = {
+            "status_url": hero_url,
+            "status": (submission.get("status") or "queued").lower(),
+            "strategy_id": strategy_id,
+            "info": info,
+            "auto_pushed_commit_id": args.get("commit_id") if divergence_warning else None,
+        }
+        extra.update(ownership_fields)
         return OutcomeResult(
             run_id=backtest_id,
             hero_url=hero_url,
             share_url=None,
             resource_uri=resource_uri,
-            extra={
-                "status_url": hero_url,
-                "status": (submission.get("status") or "queued").lower(),
-                "strategy_id": strategy_id,
-                "info": info,
-                "auto_pushed_commit_id": args.get("commit_id") if divergence_warning else None,
-            },
+            extra=extra,
         )
 
     final = _poll_until_terminal(client, backtest_id)
@@ -232,6 +240,7 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
         "status": final_status or "unknown",
         "strategy_id": strategy_id,
     }
+    extra.update(ownership_fields)
     if divergence_warning:
         extra["sync_note"] = divergence_warning
         extra["auto_pushed_commit_id"] = args.get("commit_id")
@@ -373,6 +382,11 @@ BACKTEST_RUN = register(
                         "Commit message to use when `auto_push=True` triggers a "
                         "pre-backtest push. Defaults to 'Auto-push before backtest'."
                     ),
+                },
+                "no_ownership_hint": {
+                    "type": "boolean",
+                    "default": False,
+                    "description": "Omit first-session ownership guidance fields.",
                 },
             },
         },

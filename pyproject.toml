@@ -1,6 +1,6 @@
 [project]
 name = "keel-trade"
-version = "0.5.7"
+version = "0.6.0"
 description = "Keel — CLI and MCP server for AI-driven crypto strategy development"
 readme = "AGENTS.md"
 requires-python = ">=3.11"

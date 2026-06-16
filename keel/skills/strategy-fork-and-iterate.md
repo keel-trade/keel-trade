@@ -80,6 +80,12 @@ Call `keel_strategy_diff(strategy_id=<id>, ref_a=<n>, ref_b=<n+1>)` and surface 
 
 If the user says "actually revert that" or "go back", use `keel_strategy_log` to find the prior sequence number, then `keel_strategy_restore ref=<n>` — it creates a forward-revert commit (history preserved). Pull the workspace afterward to catch up locally.
 
+# First-Session Ownership
+
+- Call `keel_ownership_status(strategy_id=<id>)` after fetching or checking out a fork.
+- If ownership evidence is missing or stale, explain the next proof step before suggesting broad optimization.
+- Use `keel://ownership/strategy/{strategy_id}` when you need the projection without another tool call.
+
 # Common mistakes
 
 - **Restructuring "for clarity" when the user asked for a one-line change** (collaboration rule). Preserve their intent and structure.

@@ -20,6 +20,7 @@ from keel.errors import KeelError
 
 from . import register
 from ._base import OutcomeResult, OutcomeTool, ToolContext
+from ._ownership import fetch_ownership_projection, ownership_envelope_fields
 
 
 def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
@@ -103,6 +104,8 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
     }
     if result.get("recent_commits") is not None:
         body["recent_commits"] = result["recent_commits"]
+    if resolved_id and not args.get("no_ownership_hint", False):
+        body.update(ownership_envelope_fields(fetch_ownership_projection(ctx, resolved_id)))
     return OutcomeResult(
         run_id=resolved_id,
         hero_url=f"{ctx.app_url}/strategies/{resolved_id}"
@@ -162,6 +165,11 @@ STRATEGY_STATUS = register(
                         "How many recent commits to include when "
                         "`include_recent=True`. Clamped to 0..20."
                     ),
+                },
+                "no_ownership_hint": {
+                    "type": "boolean",
+                    "default": False,
+                    "description": "Omit first-session ownership guidance fields.",
                 },
             },
         },

@@ -89,6 +89,42 @@ Parallel({
 Note: TopNAssetSelector does NOT change dimensions — it produces a mask,
 not a reduced universe.
 
+## M-19: TargetTimeframeResampler after a signal step
+
+**Wrong**: `RSI → NegateTransform → TargetTimeframeResampler`
+**Right**: `TargetTimeframeResampler → RSI → NegateTransform`
+
+TargetTimeframeResampler expects OHLCV data, not a signal. Place it
+immediately after the data loader, before any indicator or transform.
+Validator emits `TYPE_MISMATCH` with this code.
+
+## M-20: bar_offset at same source/target timeframe
+
+**Wrong**: `Globals(target_timeframe='15min', bar_offset='15min')` with a 15min loader.
+**Right**: Remove `bar_offset` — it has no valid value when target matches source.
+
+`bar_offset` shifts bin anchors when aggregating up (e.g. 15min → 1d at
+12:00 UTC). At same source/target it would silently mislabel bars.
+Validator emits `BAR_OFFSET_AT_SAME_TF`.
+
+## M-21: bar_offset not a multiple of source timeframe
+
+**Wrong**: `Globals(bar_offset='5min')` with a 15min loader.
+**Right**: Use a multiple of the source timeframe (e.g. `'15min'`, `'30min'`, `'12h'`).
+
+A non-multiple offset pulls partial source bars into the wrong aggregation
+bin. Validator emits `BAR_OFFSET_NOT_MULTIPLE`.
+
+## M-22: Unnecessary TargetTimeframeResampler at same timeframe
+
+**Wrong (works but noisy)**: `Globals(target_timeframe='15min') + PriceDataLoader(timeframe='15min') + TargetTimeframeResampler()`
+**Right (cleaner)**: Drop both `Globals(target_timeframe=...)` and the resampler step.
+
+The runtime short-circuits TargetTimeframeResampler when target equals
+source, so this is safe — just visually noisy. Validator emits
+`RESAMPLER_NOOP` as a warning. Keep the Globals+Resampler pair only if
+you want the timeframe-knob for later iteration; otherwise omit both.
+
 ## Polarity Mistakes
 
 - **Carry**: Always NegateTransform after FundingDataLoader — positive funding

@@ -67,6 +67,12 @@ Call `keel_strategy_memory_write(strategy_id=<id>, note=<one paragraph>)`. Futur
 
 End your reply with the `hero_url` on its own line. The user clicks once.
 
+# First-Session Ownership
+
+- Backtest envelopes may include `next_recommended_action`, `missing_evidence`, and `live_readiness_blockers`.
+- If the run is the first baseline, treat it as evidence to review, not proof of live readiness.
+- After analysis, check `keel_ownership_status(strategy_id=<id>)` so the next experiment is recorded against the current strategy version.
+
 # Common mistakes
 
 - **Comparing Sharpe across different date ranges without saying so** (catalog #6). Always print the range.

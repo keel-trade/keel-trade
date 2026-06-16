@@ -31,6 +31,95 @@ from pipeline_engine.dsl.spec import (
 )
 
 
+# ─── Canonical numeric rendering ───────────────────────────────────────────────
+#
+# When a param is declared ``float`` (incl. ``Optional[float]``) and the value
+# is a whole-number int — typically produced by a JS round-trip stripping the
+# trailing ``.0`` — the emitter renders it as a float literal (``0.0`` not
+# ``0``) so the saved source survives further round-trips without the
+# validator/agent churn. Plumbed via the ComponentSignature for each call
+# site; emission without a signature falls back to the historical ``repr``.
+
+
+def _resolve_emitter_registry(registry):
+    """Build a lazy ``{component_name: ComponentSignature}`` map.
+
+    Pass ``None`` to use the live ``COMPONENT_REGISTRY`` (latest version of
+    each component). Passing an explicit dict (e.g. for tests) overrides the
+    lookup. Returns an empty dict on import failure so the emitter still
+    produces non-canonical source rather than crashing.
+    """
+    if registry is not None:
+        return registry
+    try:
+        from pipeline_engine.base.registry import COMPONENT_REGISTRY, get_latest
+
+        return {name: get_latest(name) for name in COMPONENT_REGISTRY}
+    except Exception:  # pragma: no cover — registry import problems
+        return {}
+
+
+def _unwrap_target_type(target_type):
+    """Return the non-None members of a possibly-Optional/Union type."""
+    if target_type is None:
+        return ()
+    import types as _types
+    import typing
+
+    origin = typing.get_origin(target_type)
+    if origin is typing.Union or isinstance(target_type, _types.UnionType):
+        return tuple(a for a in typing.get_args(target_type) if a is not type(None))
+    return (target_type,)
+
+
+def _should_render_as_float(target_type, value) -> bool:
+    """True iff ``value`` is a whole int that should be emitted as ``N.0``.
+
+    Fires only when the declared type set is exactly ``{float}`` after
+    Optional unwrap. Ambiguous targets like ``int | float`` keep the input
+    form so the user's choice survives.
+    """
+    if not isinstance(value, int) or isinstance(value, bool):
+        return False
+    members = _unwrap_target_type(target_type)
+    return members == (float,)
+
+
+def _dict_value_type(target_type):
+    """Pull the value type out of ``dict[K, V]`` / ``Optional[dict[K, V]]``."""
+    if target_type is None:
+        return None
+    import typing
+
+    args = typing.get_args(target_type)
+    origin = typing.get_origin(target_type)
+    if origin is dict and len(args) == 2:
+        return args[1]
+    # Optional/Union wrappers — recurse into members
+    for a in args:
+        nested = _dict_value_type(a)
+        if nested is not None:
+            return nested
+    return None
+
+
+def _list_elem_type(target_type):
+    """Pull the element type out of ``list[T]`` / ``Optional[list[T]]``."""
+    if target_type is None:
+        return None
+    import typing
+
+    args = typing.get_args(target_type)
+    origin = typing.get_origin(target_type)
+    if origin is list and len(args) == 1:
+        return args[0]
+    for a in args:
+        nested = _list_elem_type(a)
+        if nested is not None:
+            return nested
+    return None
+
+
 def _block_id(parent_id: str, index: int, block_type: str, label: str = "") -> str:
     seed = f"{parent_id}:{index}:{block_type}:{label}"
     return hashlib.sha256(seed.encode("utf-8")).hexdigest()[:12]
@@ -754,8 +843,16 @@ def _step_to_graph_block(step, parent_id: str, index: int) -> GraphBlock:
     raise ValueError(f"Unsupported step type for graph conversion: {type(step).__name__}")
 
 
-def spec_to_dsl(spec: StrategyFile) -> str:
-    """Emit canonical DSL text from StrategyFile."""
+def spec_to_dsl(spec: StrategyFile, registry: dict | None = None) -> str:
+    """Emit canonical DSL text from StrategyFile.
+
+    Args:
+        spec: The strategy to render.
+        registry: Optional ``{component_name: ComponentSignature}`` map. When
+            omitted, the live ``COMPONENT_REGISTRY`` is used. Pass an empty
+            dict to disable canonical numeric rendering (legacy behaviour).
+    """
+    registry = _resolve_emitter_registry(registry)
     lines: list[str] = []
 
     # Emit Globals declaration
@@ -793,8 +890,17 @@ def spec_to_dsl(spec: StrategyFile) -> str:
 
     # Emit Execution declaration — driven by EXECUTION_PARAM_META
     if spec.execution is not None:
+        import typing as _typing
+
         from pipeline_engine.dsl.spec import EXECUTION_PARAM_META
 
+        # Resolve dataclass annotations (spec.py uses ``from __future__ import
+        # annotations``) so float / float|None canonicalization fires correctly
+        # for params like ``min_trade_size`` and ``buffer_threshold``.
+        try:
+            exec_arg_types = _typing.get_type_hints(ExecutionSpec)
+        except Exception:  # pragma: no cover — defensive
+            exec_arg_types = {}
         exec_args = []
         ex = spec.execution
         for param_name, meta in EXECUTION_PARAM_META.items():
@@ -803,19 +909,21 @@ def spec_to_dsl(spec: StrategyFile) -> str:
                 continue
             modes = meta.get("modes")
             is_default = val == meta.get("default")
+            target_type = exec_arg_types.get(param_name)
+            rendered = _emit_value(val, target_type=target_type)
             # Always emit: rebalance, or params flagged always_emit
             if meta.get("always_emit"):
-                exec_args.append(f"{param_name}={_emit_value(val)}")
+                exec_args.append(f"{param_name}={rendered}")
                 continue
             # Mode-specific params: emit if mode is active (even at default)
             if modes:
                 if ex.rebalance in modes:
-                    exec_args.append(f"{param_name}={_emit_value(val)}")
+                    exec_args.append(f"{param_name}={rendered}")
                 # Skip if mode not active (irrelevant param)
                 continue
             # Mode-independent params: only emit if non-default
             if not is_default:
-                exec_args.append(f"{param_name}={_emit_value(val)}")
+                exec_args.append(f"{param_name}={rendered}")
         lines.append(f"Execution({', '.join(exec_args)})")
         lines.append("")
 
@@ -827,7 +935,7 @@ def spec_to_dsl(spec: StrategyFile) -> str:
             else:
                 params.append(f"{param.name}={_emit_value(param.default)}")
         lines.append(f"def {factory.name}({', '.join(params)}):")
-        pipeline_expr = _emit_pipeline_expr(factory.body, indent=4)
+        pipeline_expr = _emit_pipeline_expr(factory.body, indent=4, registry=registry)
         lines.append(f"    return {pipeline_expr[0]}")
         for extra_line in pipeline_expr[1:]:
             lines.append(extra_line)
@@ -835,7 +943,7 @@ def spec_to_dsl(spec: StrategyFile) -> str:
 
     for var in spec.variables:
         if isinstance(var.value, PipelineSpec):
-            expr_lines = _emit_pipeline_expr(var.value, indent=0)
+            expr_lines = _emit_pipeline_expr(var.value, indent=0, registry=registry)
             lines.append(f"{var.name} = {expr_lines[0]}")
             lines.extend(expr_lines[1:])
         else:
@@ -850,18 +958,18 @@ def spec_to_dsl(spec: StrategyFile) -> str:
         name=None,
         location=spec.pipeline.location,
     )
-    main_expr = _emit_pipeline_expr(top_pipeline, indent=0)
+    main_expr = _emit_pipeline_expr(top_pipeline, indent=0, registry=registry)
     lines.extend(main_expr)
 
     # Normalize trailing whitespace and final newline
     return "\n".join(line.rstrip() for line in lines).strip() + "\n"
 
 
-def _emit_pipeline_expr(pipeline: PipelineSpec, indent: int) -> list[str]:
+def _emit_pipeline_expr(pipeline: PipelineSpec, indent: int, registry=None) -> list[str]:
     pad = " " * indent
     lines: list[str] = ["Pipeline(["]
     for step in pipeline.steps:
-        step_lines = _emit_step_expr(step, indent + 4)
+        step_lines = _emit_step_expr(step, indent + 4, registry)
         if len(step_lines) == 1:
             lines.append(f"{' ' * (indent + 4)}{step_lines[0]},")
         else:
@@ -877,10 +985,15 @@ def _emit_pipeline_expr(pipeline: PipelineSpec, indent: int) -> list[str]:
     return [f"{pad}{line}" if i == 0 else line for i, line in enumerate(lines)]
 
 
-def _emit_step_expr(step, indent: int) -> list[str]:
+def _emit_step_expr(step, indent: int, registry=None) -> list[str]:
     if isinstance(step, ComponentRef):
-        return [_emit_call(step.name, step.params)]
+        sig = registry.get(step.name) if registry else None
+        return [_emit_call(step.name, step.params, sig=sig)]
     if isinstance(step, FactoryCallSpec):
+        # Factory calls bind to FactoryParam, not ComponentSignature.
+        # The factory may produce typed canonicalization too if its FactoryParam
+        # has a declared type, but the bigger problem (component params) is
+        # already covered. Leave as-is for now.
         return [_emit_call(step.name, step.args)]
     if isinstance(step, SlotStoreSpec):
         return [f"Store({_emit_value(step.slot_name)})"]
@@ -893,14 +1006,14 @@ def _emit_step_expr(step, indent: int) -> list[str]:
     if isinstance(step, VariableRef):
         return [step.name]
     if isinstance(step, PipelineSpec):
-        return _emit_pipeline_expr(step, indent)
+        return _emit_pipeline_expr(step, indent, registry)
     if isinstance(step, ParallelSpec):
         pad = " " * indent
         lines = ["{"]
         for branch_name, branch_steps in step.branches.items():
             lines.append(f"{pad}    {_emit_value(branch_name)}: [")
             for branch_step in branch_steps:
-                branch_step_lines = _emit_step_expr(branch_step, indent + 8)
+                branch_step_lines = _emit_step_expr(branch_step, indent + 8, registry)
                 if len(branch_step_lines) == 1:
                     lines.append(f"{pad}        {branch_step_lines[0]},")
                 else:
@@ -914,14 +1027,18 @@ def _emit_step_expr(step, indent: int) -> list[str]:
     raise ValueError(f"Unsupported step type for DSL emission: {type(step).__name__}")
 
 
-def _emit_call(name: str, args: dict[str, Any] | None) -> str:
+def _emit_call(name: str, args: dict[str, Any] | None, sig=None) -> str:
     if not args:
         return f"{name}()"
-    ordered = [f"{key}={_emit_value(value)}" for key, value in args.items()]
-    return f"{name}({', '.join(ordered)})"
+    parts: list[str] = []
+    for key, value in args.items():
+        pinfo = sig.parameters.get(key) if sig is not None else None
+        target_type = pinfo.type_ if pinfo is not None else None
+        parts.append(f"{key}={_emit_value(value, target_type=target_type)}")
+    return f"{name}({', '.join(parts)})"
 
 
-def _emit_value(value: Any) -> str:
+def _emit_value(value: Any, target_type: Any = None) -> str:
     if isinstance(value, VariableRef):
         return value.name
     if value is MISSING:
@@ -929,15 +1046,25 @@ def _emit_value(value: Any) -> str:
     if isinstance(value, str):
         return repr(value)
     if isinstance(value, dict):
-        items = [f"{_emit_value(k)}: {_emit_value(v)}" for k, v in value.items()]
+        # Recurse with the declared value type so e.g. weights: dict[str, float]
+        # canonicalizes {"a": 1} → {'a': 1.0}.
+        v_type = _dict_value_type(target_type)
+        items = [
+            f"{_emit_value(k)}: {_emit_value(v, target_type=v_type)}"
+            for k, v in value.items()
+        ]
         return "{" + ", ".join(items) + "}"
     if isinstance(value, list):
-        return "[" + ", ".join(_emit_value(v) for v in value) + "]"
+        elem_type = _list_elem_type(target_type)
+        return "[" + ", ".join(_emit_value(v, target_type=elem_type) for v in value) + "]"
     if isinstance(value, tuple):
         inner = ", ".join(_emit_value(v) for v in value)
         if len(value) == 1:
             inner += ","
         return "(" + inner + ")"
+    # Canonical numeric: int → declared-float param renders with explicit ``.0``
+    if _should_render_as_float(target_type, value):
+        return f"{value}.0"
     return repr(value)
 
 

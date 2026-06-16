@@ -9,6 +9,7 @@ from keel.errors import KeelError, NotFoundError
 
 from . import register
 from ._base import OutcomeResult, OutcomeTool, ToolContext
+from ._ownership import fetch_ownership_projection, ownership_envelope_fields
 from .backtest_summarize import _extract_summary_metrics
 
 
@@ -37,6 +38,7 @@ def _snapshot_envelope(
     polls: int,
     watched_for_s: float,
     timed_out: bool,
+    include_ownership_hint: bool = True,
 ) -> OutcomeResult:
     status = (detail.get("status") or "").lower()
     terminal = status in _TERMINAL_STATUSES
@@ -61,6 +63,12 @@ def _snapshot_envelope(
     }
     if detail.get("error_message"):
         extra["error_message"] = detail["error_message"]
+    if include_ownership_hint and detail.get("strategy_id"):
+        extra.update(
+            ownership_envelope_fields(
+                fetch_ownership_projection(ctx, str(detail["strategy_id"]))
+            )
+        )
 
     summary_metrics = _extract_summary_metrics(detail.get("metrics"))
 
@@ -130,6 +138,7 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
                 polls=polls,
                 watched_for_s=now - started,
                 timed_out=False,
+                include_ownership_hint=not args.get("no_ownership_hint", False),
             )
 
         if now >= deadline:
@@ -140,6 +149,7 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
                 polls=polls,
                 watched_for_s=now - started,
                 timed_out=True,
+                include_ownership_hint=not args.get("no_ownership_hint", False),
             )
 
         time.sleep(min(interval_s, max(0.0, deadline - now)))
@@ -177,6 +187,11 @@ BACKTEST_WATCH = register(
                     "type": "integer",
                     "default": int(_DEFAULT_TIMEOUT_S),
                     "description": "Maximum watch duration in seconds. Clamped to 0-600.",
+                },
+                "no_ownership_hint": {
+                    "type": "boolean",
+                    "default": False,
+                    "description": "Omit first-session ownership guidance fields.",
                 },
             },
         },

@@ -310,7 +310,7 @@
   },
   {
     "name": "universe_resolve",
-    "description": "Resolve the universe declared in a strategy's source and bake the concrete asset list (`resolved=[...]`, `resolved_at=...`) back into the source. Reads criteria from the Universe(...) call \u2014 no need to repeat mode/top_n/categories. Always call this after `universe_set` (or before pushing/deploying a strategy), since deploy and backtest submit refuse strategies with no resolved list.",
+    "description": "Resolve the universe declared in a strategy's source and bake the concrete asset list (`resolved=[...]`, `resolved_at=...`) back into the source. Reads criteria from the Universe(...) call \u2014 no need to repeat mode/top_n/categories. Always call this after `universe_set` (or before pushing/deploying a strategy), since deploy and backtest submit refuse strategies with no resolved list. The resolved list is a fixed snapshot used by backtests/deploys; `mode='top_volume'` is a resolution criterion, not a rolling historical selector.",
     "inputSchema": {
       "type": "object",
       "properties": {

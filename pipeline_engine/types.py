@@ -176,8 +176,21 @@ PositionLevel = SignalSeries
 """Integer position levels {-N, ..., -1, 0, 1, ..., N}. Sign = direction, magnitude = level count.
 Output of ScalingPositionManager for pyramiding / DCA / laddered entries."""
 
-RegimeLabel = SignalSeries
-"""Regime classification output. Integer labels (e.g., 0=bear, 1=neutral, 2=bull)."""
+RegimeLabel = GlobalSeries
+"""Regime classification output as a 1-D market-wide time series.
+
+Values typically in {+1.0 bullish, 0.0 neutral, -1.0 bearish} but may be
+any float per the producing detector. Index: datetime. Single series —
+applies to all assets uniformly (consumers like RegimeLeverageScaler and
+RegimeGate broadcast across asset columns at the application site).
+
+Previously aliased to SignalSeries (DataFrame), but every registered
+RegimeDetector subclass actually returns ``pd.Series`` (verified across
+all 7 implementations on 2026-06-11). The annotation drift forced
+``RegimeGate`` to false-reject Series inputs and gave the validator a
+warped picture of the data flow — repointing to GlobalSeries restores
+honesty across the type-flow, slot-compatibility, and consumer-broadcast
+boundaries."""
 
 Forecast = ForecastSeries
 """Standardized forecast (alias for ForecastSeries)."""

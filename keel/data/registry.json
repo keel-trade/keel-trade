@@ -36,7 +36,7 @@
         "StreamSeries"
       ],
       "regime_detector": [
-        "SignalSeries"
+        "GlobalSeries"
       ],
       "indicator": [
         "SignalSeries"
@@ -53,7 +53,7 @@
         "SignalSeries"
       ],
       "regime_detector": [
-        "SignalSeries"
+        "GlobalSeries"
       ],
       "forecast_mapper": [
         "ForecastSeries"
@@ -163,6 +163,11 @@
       "reporter": [
         "OrderSeries"
       ]
+    },
+    "GlobalSeries": {
+      "reporter": [
+        "GlobalSeries"
+      ]
     }
   },
   "phase_index": {
@@ -196,6 +201,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -262,6 +268,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -330,6 +337,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -389,6 +397,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -448,6 +457,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -520,6 +530,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -570,6 +581,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -675,6 +687,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -792,6 +805,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -925,6 +939,10 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": {
+        "forecast_key": "ForecastSeries",
+        "correlation_key": "SignalSeries"
+      },
       "latest": 1,
       "version": 1,
       "status": "deprecated",
@@ -1026,7 +1044,7 @@
         },
         {
           "name": "shrinkage",
-          "type": "Literal",
+          "type": "enum",
           "default": "none",
           "required": false,
           "description": "Shrinkage method for correlation estimation. \"none\" = raw sample, \"oas\" = Oracle Approximating Shrinkage, \"lw\" = Ledoit-Wolf, \"constant\" = shrink toward constant target (requires shrinkage_target).",
@@ -1046,7 +1064,7 @@
         },
         {
           "name": "shrinkage_target",
-          "type": "float | None",
+          "type": "float",
           "default": null,
           "required": false,
           "description": "Target correlation for \"constant\" shrinkage. Required when shrinkage=\"constant\". Typical range [0.3, 0.7].",
@@ -1059,7 +1077,7 @@
         },
         {
           "name": "pooling",
-          "type": "Literal",
+          "type": "enum",
           "default": "cross_asset",
           "required": false,
           "description": "How to pool correlation data across assets. \"cross_asset\" = stack all assets for pooled estimate (recommended). \"per_asset\" = average per-asset matrices.",
@@ -1114,6 +1132,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": "ForecastSeries",
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -1143,7 +1162,7 @@
             },
             {
               "name": "shrinkage",
-              "type": "Literal",
+              "type": "enum",
               "default": "none",
               "required": false,
               "description": "Shrinkage method for correlation estimation. \"none\" = raw sample, \"oas\" = Oracle Approximating Shrinkage, \"lw\" = Ledoit-Wolf, \"constant\" = shrink toward constant target (requires shrinkage_target).",
@@ -1152,7 +1171,7 @@
             },
             {
               "name": "shrinkage_target",
-              "type": "float | None",
+              "type": "float",
               "default": null,
               "required": false,
               "description": "Target correlation for \"constant\" shrinkage. Required when shrinkage=\"constant\". Typical range [0.3, 0.7].",
@@ -1161,7 +1180,7 @@
             },
             {
               "name": "pooling",
-              "type": "Literal",
+              "type": "enum",
               "default": "cross_asset",
               "required": false,
               "description": "How to pool correlation data across assets. \"cross_asset\" = stack all assets for pooled estimate (recommended). \"per_asset\" = average per-asset matrices.",
@@ -1220,7 +1239,7 @@
         },
         {
           "name": "signals_list",
-          "type": "list[str] | None",
+          "type": "list",
           "default": null,
           "required": false,
           "description": "Alternative to positional args. List of signal names to combine. Useful when names are computed dynamically.",
@@ -1236,6 +1255,10 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": [
+        "BinarySignal",
+        "SignalSeries"
+      ],
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -1256,7 +1279,7 @@
             },
             {
               "name": "signals_list",
-              "type": "list[str] | None",
+              "type": "list",
               "default": null,
               "required": false,
               "description": "Alternative to positional args. List of signal names to combine. Useful when names are computed dynamically.",
@@ -1284,7 +1307,7 @@
       "parameters": [
         {
           "name": "score_signal",
-          "type": "Optional",
+          "type": "str",
           "default": null,
           "required": false,
           "description": "Name of the score/entry_exit signal key in the Parallel output dict. None = auto-detect the first non-filter key.",
@@ -1297,7 +1320,7 @@
         },
         {
           "name": "filter_signal",
-          "type": "Optional",
+          "type": "str",
           "default": null,
           "required": false,
           "description": "Name of the filter signal key in the Parallel output dict. None = auto-detect the first key that isn't the score.",
@@ -1313,6 +1336,13 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": {
+        "score_signal": [
+          "SignalSeries",
+          "ForecastSeries"
+        ],
+        "filter_signal": "BinarySignal"
+      },
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -1324,7 +1354,7 @@
           "parameters": [
             {
               "name": "score_signal",
-              "type": "Optional",
+              "type": "str",
               "default": null,
               "required": false,
               "description": "Name of the score/entry_exit signal key in the Parallel output dict. None = auto-detect the first non-filter key.",
@@ -1333,7 +1363,7 @@
             },
             {
               "name": "filter_signal",
-              "type": "Optional",
+              "type": "str",
               "default": null,
               "required": false,
               "description": "Name of the filter signal key in the Parallel output dict. None = auto-detect the first key that isn't the score.",
@@ -1377,6 +1407,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -1436,6 +1467,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -1504,6 +1536,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -1568,6 +1601,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -1602,7 +1636,7 @@
       "description": "Compute average pairwise correlation of log returns across the universe as a correlation regime indicator.\n\n    Use to detect crowded or highly correlated market regimes where\n    cross-sectional signals lose their edge. Feed into RegimeGate to disable\n    mean reversion or relative value strategies during high-correlation periods,\n    or into RegimeScale to reduce forecast intensity. Pairs well with\n    CrossSectionalDispersionRegime for complementary regime views.\n\n    Output:\n        Scalar GlobalSeries in range [-1, 1]. Values near 1 indicate all assets\n        moving in lockstep (risk-off, correlated selloff), values near 0 indicate\n        low correlation (idiosyncratic returns, favorable for cross-sectional\n        strategies). NaN during the first lookback bars.\n\n    Formula:\n        R = rolling pairwise correlation matrix of log returns\n        signal = mean of upper-triangular elements of R\n\n    Example:\n        Store('ohlcv') -> AveragePairwiseCorrelationRegime(ohlcv_slot='ohlcv', lookback=20) -> RegimeGate()\n    ",
       "usage_hint": "Use to detect crowded or highly correlated market regimes where cross-sectional signals lose their edge. Feed into RegimeGate to disable mean reversion or relative value strategies during high-correlation periods, or into RegimeScale to reduce forecast intensity. Pairs well with CrossSectionalDispersionRegime for complementary regime views.",
       "input_type": "SignalSeries",
-      "output_type": "SignalSeries",
+      "output_type": "GlobalSeries",
       "deterministic": true,
       "parameters": [
         {
@@ -1640,6 +1674,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -1669,7 +1704,7 @@
             }
           ],
           "input_type": "SignalSeries",
-          "output_type": "SignalSeries",
+          "output_type": "GlobalSeries",
           "declaration_refs": null,
           "optional_declaration_refs": null,
           "changelog_entry": "Initial release"
@@ -1721,6 +1756,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -1769,7 +1805,7 @@
       "parameters": [
         {
           "name": "benchmarks",
-          "type": "Optional",
+          "type": "Sequence",
           "default": null,
           "required": false,
           "description": "Symbol names whose mean signal is subtracted each bar. Default (\"BTC\", \"ETH\", \"SOL\") represents the systematic crypto factor for perp universes. Bars where none of the named benchmarks are present in the input pass through unchanged.",
@@ -1785,6 +1821,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -1796,7 +1833,7 @@
           "parameters": [
             {
               "name": "benchmarks",
-              "type": "Optional",
+              "type": "Sequence",
               "default": null,
               "required": false,
               "description": "Symbol names whose mean signal is subtracted each bar. Default (\"BTC\", \"ETH\", \"SOL\") represents the systematic crypto factor for perp universes. Bars where none of the named benchmarks are present in the input pass through unchanged.",
@@ -1874,6 +1911,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -1998,6 +2036,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 2,
       "version": 2,
       "status": "active",
@@ -2064,7 +2103,7 @@
       "parameters": [
         {
           "name": "fixed_weight",
-          "type": "float | None",
+          "type": "float",
           "default": null,
           "required": false,
           "description": "Per-asset weight for active positions. None (default) uses equal-weight allocation (1/n_active per position). Set to a fixed value (e.g., 0.1 = 10% per position) for constant exposure. Direction is preserved from the input signal (+1 * weight for long, -1 * weight for short).",
@@ -2084,6 +2123,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "deprecated",
@@ -2095,7 +2135,7 @@
           "parameters": [
             {
               "name": "fixed_weight",
-              "type": "float | None",
+              "type": "float",
               "default": null,
               "required": false,
               "description": "Per-asset weight for active positions. None (default) uses equal-weight allocation (1/n_active per position). Set to a fixed value (e.g., 0.1 = 10% per position) for constant exposure. Direction is preserved from the input signal (+1 * weight for long, -1 * weight for short).",
@@ -2160,6 +2200,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -2208,7 +2249,7 @@
       "parameters": [
         {
           "name": "lambda_param",
-          "type": "float | None",
+          "type": "float",
           "default": null,
           "required": false,
           "description": "Power parameter. None = auto-fit per column via scipy MLE (non-reproducible). 0.0 = log transform. 0.5 = square root. 1.0 = linear (no-op minus shift). Typical values: 0.0-0.5 for heavy-tailed distributions.",
@@ -2228,6 +2269,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -2239,7 +2281,7 @@
           "parameters": [
             {
               "name": "lambda_param",
-              "type": "float | None",
+              "type": "float",
               "default": null,
               "required": false,
               "description": "Power parameter. None = auto-fit per column via scipy MLE (non-reproducible). 0.0 = log transform. 0.5 = square root. 1.0 = linear (no-op minus shift). Typical values: 0.0-0.5 for heavy-tailed distributions.",
@@ -2297,7 +2339,7 @@
         },
         {
           "name": "min_periods",
-          "type": "int | None",
+          "type": "int",
           "default": null,
           "required": false,
           "description": "Minimum valid observations for rolling calculation. Defaults to lookback. Lower values produce earlier output but with less reliable channel estimates.",
@@ -2313,6 +2355,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -2342,7 +2385,7 @@
             },
             {
               "name": "min_periods",
-              "type": "int | None",
+              "type": "int",
               "default": null,
               "required": false,
               "description": "Minimum valid observations for rolling calculation. Defaults to lookback. Lower values produce earlier output but with less reliable channel estimates.",
@@ -2390,6 +2433,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -2446,7 +2490,7 @@
         },
         {
           "name": "min_periods",
-          "type": "int | None",
+          "type": "int",
           "default": null,
           "required": false,
           "description": "Minimum observations before producing output. Defaults to window // 2. Lower values produce earlier (noisier) output.",
@@ -2462,6 +2506,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -2482,7 +2527,7 @@
             },
             {
               "name": "min_periods",
-              "type": "int | None",
+              "type": "int",
               "default": null,
               "required": false,
               "description": "Minimum observations before producing output. Defaults to window // 2. Lower values produce earlier (noisier) output.",
@@ -2530,6 +2575,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -2589,6 +2635,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -2657,6 +2704,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -2725,6 +2773,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -2790,7 +2839,7 @@
         },
         {
           "name": "shrinkage",
-          "type": "Literal",
+          "type": "enum",
           "default": "none",
           "required": false,
           "description": "Shrinkage method for robust estimation. \"none\" = raw sample correlation, \"oas\" = Oracle Approximating Shrinkage (auto-tuned), \"lw\" = Ledoit-Wolf (auto-tuned), \"constant\" = shrink toward constant correlation target (requires shrinkage_target).",
@@ -2810,7 +2859,7 @@
         },
         {
           "name": "shrinkage_target",
-          "type": "float | None",
+          "type": "float",
           "default": null,
           "required": false,
           "description": "Target correlation for \"constant\" shrinkage. Only used when shrinkage=\"constant\". Typical range [0.3, 0.7].",
@@ -2827,7 +2876,7 @@
         },
         {
           "name": "pooling",
-          "type": "Literal",
+          "type": "enum",
           "default": "cross_asset",
           "required": false,
           "description": "How to pool data across assets. \"cross_asset\" = stack all assets for a single pooled estimate (recommended), \"per_asset\" = average per-asset correlation matrices.",
@@ -2858,7 +2907,7 @@
         },
         {
           "name": "min_periods",
-          "type": "int | None",
+          "type": "int",
           "default": null,
           "required": false,
           "description": "Minimum observations for correlation. Defaults to window // 2.",
@@ -2881,6 +2930,7 @@
       ],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": "ForecastSeries",
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -2910,7 +2960,7 @@
             },
             {
               "name": "shrinkage",
-              "type": "Literal",
+              "type": "enum",
               "default": "none",
               "required": false,
               "description": "Shrinkage method for robust estimation. \"none\" = raw sample correlation, \"oas\" = Oracle Approximating Shrinkage (auto-tuned), \"lw\" = Ledoit-Wolf (auto-tuned), \"constant\" = shrink toward constant correlation target (requires shrinkage_target).",
@@ -2919,7 +2969,7 @@
             },
             {
               "name": "shrinkage_target",
-              "type": "float | None",
+              "type": "float",
               "default": null,
               "required": false,
               "description": "Target correlation for \"constant\" shrinkage. Only used when shrinkage=\"constant\". Typical range [0.3, 0.7].",
@@ -2928,7 +2978,7 @@
             },
             {
               "name": "pooling",
-              "type": "Literal",
+              "type": "enum",
               "default": "cross_asset",
               "required": false,
               "description": "How to pool data across assets. \"cross_asset\" = stack all assets for a single pooled estimate (recommended), \"per_asset\" = average per-asset correlation matrices.",
@@ -2946,7 +2996,7 @@
             },
             {
               "name": "min_periods",
-              "type": "int | None",
+              "type": "int",
               "default": null,
               "required": false,
               "description": "Minimum observations for correlation. Defaults to window // 2.",
@@ -2974,7 +3024,7 @@
       "parameters": [
         {
           "name": "method",
-          "type": "Literal",
+          "type": "enum",
           "default": "mean",
           "required": false,
           "description": "Aggregation method. \"mean\" = simple average across assets, \"median\" = robust to outliers, \"trimmed_mean\" = trims extreme values before averaging (requires trim_pct).",
@@ -2993,7 +3043,7 @@
         },
         {
           "name": "trim_pct",
-          "type": "Optional",
+          "type": "float",
           "default": null,
           "required": false,
           "description": "Fraction to trim from each tail for trimmed_mean. Range (0, 0.5). 0.1 = trim bottom and top 10%. Required when method=\"trimmed_mean\".",
@@ -3029,6 +3079,7 @@
       ],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -3040,7 +3091,7 @@
           "parameters": [
             {
               "name": "method",
-              "type": "Literal",
+              "type": "enum",
               "default": "mean",
               "required": false,
               "description": "Aggregation method. \"mean\" = simple average across assets, \"median\" = robust to outliers, \"trimmed_mean\" = trims extreme values before averaging (requires trim_pct).",
@@ -3049,7 +3100,7 @@
             },
             {
               "name": "trim_pct",
-              "type": "Optional",
+              "type": "float",
               "default": null,
               "required": false,
               "description": "Fraction to trim from each tail for trimmed_mean. Range (0, 0.5). 0.1 = trim bottom and top 10%. Required when method=\"trimmed_mean\".",
@@ -3081,7 +3132,7 @@
       "description": "Measure cross-sectional return dispersion to detect high-differentiation regimes.\n\n    Use to identify periods where asset returns diverge, indicating opportunities for\n    cross-sectional strategies like relative value and momentum. Feed into RegimeGate\n    to enable cross-sectional signals only during high-dispersion periods, or into\n    RegimeScale to modulate forecast intensity. Complements\n    AveragePairwiseCorrelationRegime -- high dispersion with low correlation is the\n    ideal regime for cross-sectional alpha.\n\n    Output:\n        Scalar GlobalSeries, non-negative (std of returns). Higher values indicate\n        wider return spread across assets. Smoothed by rolling mean over lookback.\n        NaN only if fewer than 2 instruments are available.\n\n    Formula:\n        raw = std(return_i) across instruments per timestamp\n        signal = rolling_mean(raw, lookback)\n\n    Example:\n        Store('ohlcv') -> CrossSectionalDispersionRegime(ohlcv_slot='ohlcv', lookback=10) -> RegimeScale()\n    ",
       "usage_hint": "Use to identify periods where asset returns diverge, indicating opportunities for cross-sectional strategies like relative value and momentum. Feed into RegimeGate to enable cross-sectional signals only during high-dispersion periods, or into RegimeScale to modulate forecast intensity. Complements AveragePairwiseCorrelationRegime -- high dispersion with low correlation is the ideal regime for cross-sectional alpha.",
       "input_type": "SignalSeries",
-      "output_type": "SignalSeries",
+      "output_type": "GlobalSeries",
       "deterministic": true,
       "parameters": [
         {
@@ -3119,6 +3170,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -3148,7 +3200,7 @@
             }
           ],
           "input_type": "SignalSeries",
-          "output_type": "SignalSeries",
+          "output_type": "GlobalSeries",
           "declaration_refs": null,
           "optional_declaration_refs": null,
           "changelog_entry": "Initial release"
@@ -3169,6 +3221,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -3227,6 +3280,10 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": {
+        "fast_key": "SignalSeries",
+        "slow_key": "SignalSeries"
+      },
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -3330,6 +3387,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -3412,6 +3470,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -3480,6 +3539,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -3548,6 +3608,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -3603,6 +3664,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -3710,6 +3772,12 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": {
+        "dispersion_key": [
+          "GlobalSeries",
+          "SignalSeries"
+        ]
+      },
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -3879,6 +3947,14 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": {
+        "ts_key": "ForecastSeries",
+        "xs_key": "ForecastSeries",
+        "disp_key": [
+          "GlobalSeries",
+          "SignalSeries"
+        ]
+      },
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -3989,7 +4065,7 @@
         },
         {
           "name": "min_periods",
-          "type": "Optional",
+          "type": "int",
           "default": null,
           "required": false,
           "description": "Minimum observations required before producing output. Defaults to period // 2. Lower values produce earlier but less reliable output.",
@@ -4005,6 +4081,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -4025,7 +4102,7 @@
             },
             {
               "name": "min_periods",
-              "type": "Optional",
+              "type": "int",
               "default": null,
               "required": false,
               "description": "Minimum observations required before producing output. Defaults to period // 2. Lower values produce earlier but less reliable output.",
@@ -4069,6 +4146,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -4125,7 +4203,7 @@
         },
         {
           "name": "min_periods",
-          "type": "Optional",
+          "type": "int",
           "default": null,
           "required": false,
           "description": "Minimum observations before producing output. Defaults to `window`. Lower values start output earlier but with less stable estimates. Set to 1 for earliest possible output.",
@@ -4141,6 +4219,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -4161,7 +4240,7 @@
             },
             {
               "name": "min_periods",
-              "type": "Optional",
+              "type": "int",
               "default": null,
               "required": false,
               "description": "Minimum observations before producing output. Defaults to `window`. Lower values start output earlier but with less stable estimates. Set to 1 for earliest possible output.",
@@ -4202,7 +4281,7 @@
         },
         {
           "name": "min_periods",
-          "type": "int | None",
+          "type": "int",
           "default": null,
           "required": false,
           "description": "Minimum observations before producing output. None (default) uses pandas default of 0, producing output from bar 1. Set equal to window for stricter warmup.",
@@ -4231,6 +4310,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -4251,7 +4331,7 @@
             },
             {
               "name": "min_periods",
-              "type": "int | None",
+              "type": "int",
               "default": null,
               "required": false,
               "description": "Minimum observations before producing output. None (default) uses pandas default of 0, producing output from bar 1. Set equal to window for stricter warmup.",
@@ -4361,7 +4441,7 @@
         },
         {
           "name": "smoothing_half_life",
-          "type": "int | None",
+          "type": "int",
           "default": 30,
           "required": false,
           "description": "EWMA smoothing half-life in bars (default: 30). None disables smoothing.",
@@ -4381,6 +4461,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -4437,7 +4518,7 @@
             },
             {
               "name": "smoothing_half_life",
-              "type": "int | None",
+              "type": "int",
               "default": 30,
               "required": false,
               "description": "EWMA smoothing half-life in bars (default: 30). None disables smoothing.",
@@ -4467,6 +4548,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": "ForecastSeries",
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -4533,6 +4615,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -4583,6 +4666,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -4629,7 +4713,7 @@
         },
         {
           "name": "max_weight",
-          "type": "float | None",
+          "type": "float",
           "default": null,
           "required": false,
           "description": "Maximum absolute weight per position. None (default) = no cap. 0.3 = no position exceeds 30% regardless of how few positions are active. Excess goes to cash (gross leverage decreases), not redistributed to other positions.",
@@ -4649,6 +4733,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -4669,7 +4754,7 @@
             },
             {
               "name": "max_weight",
-              "type": "float | None",
+              "type": "float",
               "default": null,
               "required": false,
               "description": "Maximum absolute weight per position. None (default) = no cap. 0.3 = no position exceeds 30% regardless of how few positions are active. Excess goes to cash (gross leverage decreases), not redistributed to other positions.",
@@ -4713,6 +4798,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -4768,6 +4854,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -4823,6 +4910,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -4882,6 +4970,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -4941,6 +5030,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -5013,6 +5103,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -5081,6 +5172,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -5140,6 +5232,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -5179,7 +5272,7 @@
       "parameters": [
         {
           "name": "lower",
-          "type": "float | None",
+          "type": "float",
           "default": null,
           "required": false,
           "description": "Minimum forecast value. Forecasts below this are clamped up. Use 0 for long-only (negative forecasts \u2192 flat). None = no lower bound.",
@@ -5196,7 +5289,7 @@
         },
         {
           "name": "upper",
-          "type": "float | None",
+          "type": "float",
           "default": null,
           "required": false,
           "description": "Maximum forecast value. Forecasts above this are clamped down. Use 0 for short-only (positive forecasts \u2192 flat). None = no upper bound.",
@@ -5216,6 +5309,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -5227,7 +5321,7 @@
           "parameters": [
             {
               "name": "lower",
-              "type": "float | None",
+              "type": "float",
               "default": null,
               "required": false,
               "description": "Minimum forecast value. Forecasts below this are clamped up. Use 0 for long-only (negative forecasts \u2192 flat). None = no lower bound.",
@@ -5236,7 +5330,7 @@
             },
             {
               "name": "upper",
-              "type": "float | None",
+              "type": "float",
               "default": null,
               "required": false,
               "description": "Maximum forecast value. Forecasts above this are clamped down. Use 0 for short-only (positive forecasts \u2192 flat). None = no upper bound.",
@@ -5280,6 +5374,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": "ForecastSeries",
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -5348,6 +5443,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -5464,6 +5560,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -5607,6 +5704,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -5753,6 +5851,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -5836,7 +5935,7 @@
         },
         {
           "name": "pool",
-          "type": "Literal",
+          "type": "enum",
           "default": "global",
           "required": false,
           "description": "Pooling strategy for scalar calculation. \"global\" = single scalar across all assets (most stable), \"by_asset\" = per-asset scalar (captures asset-specific signal scale differences).",
@@ -5854,7 +5953,7 @@
         },
         {
           "name": "method",
-          "type": "Literal",
+          "type": "enum",
           "default": "MAD",
           "required": false,
           "description": "Statistic for measuring signal magnitude. \"MAD\" = median absolute deviation (robust to outliers, recommended), \"mean\" = simple mean of absolute values (sensitive to fat tails).",
@@ -5901,6 +6000,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -5921,7 +6021,7 @@
             },
             {
               "name": "pool",
-              "type": "Literal",
+              "type": "enum",
               "default": "global",
               "required": false,
               "description": "Pooling strategy for scalar calculation. \"global\" = single scalar across all assets (most stable), \"by_asset\" = per-asset scalar (captures asset-specific signal scale differences).",
@@ -5930,7 +6030,7 @@
             },
             {
               "name": "method",
-              "type": "Literal",
+              "type": "enum",
               "default": "MAD",
               "required": false,
               "description": "Statistic for measuring signal magnitude. \"MAD\" = median absolute deviation (robust to outliers, recommended), \"mean\" = simple mean of absolute values (sensitive to fat tails).",
@@ -5993,7 +6093,7 @@
         },
         {
           "name": "max_weight",
-          "type": "Optional",
+          "type": "float",
           "default": null,
           "required": false,
           "description": "Maximum absolute weight per asset. None = no cap. 0.20 = no single asset exceeds 20% of portfolio. Excess goes to cash (gross leverage reduced), not redistributed.",
@@ -6013,6 +6113,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -6033,7 +6134,7 @@
             },
             {
               "name": "max_weight",
-              "type": "Optional",
+              "type": "float",
               "default": null,
               "required": false,
               "description": "Maximum absolute weight per asset. None = no cap. 0.20 = no single asset exceeds 20% of portfolio. Excess goes to cash (gross leverage reduced), not redistributed.",
@@ -6087,7 +6188,7 @@
         },
         {
           "name": "symbols",
-          "type": "list[str] | None",
+          "type": "list",
           "default": null,
           "required": false,
           "description": "",
@@ -6191,7 +6292,7 @@
         },
         {
           "name": "cache_base_path",
-          "type": "str | None",
+          "type": "str",
           "default": null,
           "required": false,
           "description": "",
@@ -6217,7 +6318,7 @@
         },
         {
           "name": "cache_policy",
-          "type": "pipeline_engine.data_backend.CachePolicy | None",
+          "type": "CachePolicy",
           "default": null,
           "required": false,
           "description": "",
@@ -6230,7 +6331,7 @@
         },
         {
           "name": "market_type",
-          "type": "str | None",
+          "type": "str",
           "default": null,
           "required": false,
           "description": "",
@@ -6243,7 +6344,7 @@
         },
         {
           "name": "dex_name",
-          "type": "str | None",
+          "type": "str",
           "default": "native",
           "required": false,
           "description": "",
@@ -6259,6 +6360,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -6288,7 +6390,7 @@
             },
             {
               "name": "symbols",
-              "type": "list[str] | None",
+              "type": "list",
               "default": null,
               "required": false,
               "description": "",
@@ -6360,7 +6462,7 @@
             },
             {
               "name": "cache_base_path",
-              "type": "str | None",
+              "type": "str",
               "default": null,
               "required": false,
               "description": "",
@@ -6378,7 +6480,7 @@
             },
             {
               "name": "cache_policy",
-              "type": "pipeline_engine.data_backend.CachePolicy | None",
+              "type": "CachePolicy",
               "default": null,
               "required": false,
               "description": "",
@@ -6387,7 +6489,7 @@
             },
             {
               "name": "market_type",
-              "type": "str | None",
+              "type": "str",
               "default": null,
               "required": false,
               "description": "",
@@ -6396,7 +6498,7 @@
             },
             {
               "name": "dex_name",
-              "type": "str | None",
+              "type": "str",
               "default": "native",
               "required": false,
               "description": "",
@@ -6419,7 +6521,7 @@
       "description": "Measure cross-sectional dispersion of funding rates to detect carry differentiation regimes.\n\n    Use to gate or scale carry-based signals when funding rates diverge across\n    instruments. High dispersion indicates that carry signals can better differentiate\n    between long and short candidates. Feed into RegimeGate to enable carry strategies\n    only during high-dispersion periods, or into RegimeScale to modulate carry forecast\n    intensity.\n\n    Output:\n        Scalar GlobalSeries, non-negative (std of funding rates). Higher values\n        indicate more divergent funding across instruments. NaN during warmup\n        (lookback // 2 bars).\n\n    Formula:\n        raw = std(funding_rate_i) across instruments per timestamp\n        signal = rolling_mean(raw, lookback)\n\n    Example:\n        FundingDataLoader() -> FundingDispersionRegime(lookback=20) -> RegimeGate()\n    ",
       "usage_hint": "Use to gate or scale carry-based signals when funding rates diverge across instruments. High dispersion indicates that carry signals can better differentiate between long and short candidates. Feed into RegimeGate to enable carry strategies only during high-dispersion periods, or into RegimeScale to modulate carry forecast intensity.",
       "input_type": "SignalSeries",
-      "output_type": "SignalSeries",
+      "output_type": "GlobalSeries",
       "deterministic": true,
       "parameters": [
         {
@@ -6440,6 +6542,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -6460,7 +6563,7 @@
             }
           ],
           "input_type": "SignalSeries",
-          "output_type": "SignalSeries",
+          "output_type": "GlobalSeries",
           "declaration_refs": null,
           "optional_declaration_refs": null,
           "changelog_entry": "Initial release"
@@ -6474,7 +6577,7 @@
       "description": "Detect extreme funding regimes by averaging absolute funding rates across the universe.\n\n    Use to gate or scale carry and mean reversion strategies based on overall funding\n    intensity. High funding levels indicate large carry opportunities where\n    funding-based signals are most profitable. Feed into RegimeGate to enable/disable\n    strategy legs, or into RegimeScale to modulate forecast intensity.\n\n    Output:\n        Scalar GlobalSeries, non-negative (absolute funding rates). Higher values\n        indicate more extreme funding across the universe. NaN during warmup\n        (lookback // 2 bars).\n\n    Formula:\n        raw = mean(|funding_rate_i|) across instruments per timestamp\n        signal = rolling_mean(raw, lookback)\n\n    Example:\n        FundingDataLoader() -> FundingLevelRegime(lookback=20) -> RegimeScale()\n    ",
       "usage_hint": "Use to gate or scale carry and mean reversion strategies based on overall funding intensity. High funding levels indicate large carry opportunities where funding-based signals are most profitable. Feed into RegimeGate to enable/disable strategy legs, or into RegimeScale to modulate forecast intensity.",
       "input_type": "SignalSeries",
-      "output_type": "SignalSeries",
+      "output_type": "GlobalSeries",
       "deterministic": true,
       "parameters": [
         {
@@ -6499,6 +6602,7 @@
       "optional_declaration_refs": {
         "bar_offset": "globals.bar_offset"
       },
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -6519,7 +6623,7 @@
             }
           ],
           "input_type": "SignalSeries",
-          "output_type": "SignalSeries",
+          "output_type": "GlobalSeries",
           "declaration_refs": null,
           "optional_declaration_refs": {
             "bar_offset": "globals.bar_offset"
@@ -6570,7 +6674,7 @@
         },
         {
           "name": "min_periods",
-          "type": "Optional",
+          "type": "int",
           "default": null,
           "required": false,
           "description": "Minimum observations required. Defaults to window // 2. Lower values produce earlier but noisier output.",
@@ -6586,6 +6690,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -6615,7 +6720,7 @@
             },
             {
               "name": "min_periods",
-              "type": "Optional",
+              "type": "int",
               "default": null,
               "required": false,
               "description": "Minimum observations required. Defaults to window // 2. Lower values produce earlier but noisier output.",
@@ -6661,6 +6766,7 @@
         "group": "universe.groups"
       },
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -6704,6 +6810,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -6763,7 +6870,7 @@
         },
         {
           "name": "min_periods",
-          "type": "Optional",
+          "type": "int",
           "default": null,
           "required": false,
           "description": "Minimum observations required. Defaults to window // 2. Lower values produce earlier but noisier output.",
@@ -6779,6 +6886,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -6808,7 +6916,7 @@
             },
             {
               "name": "min_periods",
-              "type": "Optional",
+              "type": "int",
               "default": null,
               "required": false,
               "description": "Minimum observations required. Defaults to window // 2. Lower values produce earlier but noisier output.",
@@ -6865,6 +6973,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -6995,7 +7104,7 @@
         },
         {
           "name": "shrinkage",
-          "type": "Literal",
+          "type": "enum",
           "default": "oas",
           "required": false,
           "description": "Covariance shrinkage method. \"oas\" (default) = Oracle Approximating Shrinkage, \"lw\" = Ledoit-Wolf, \"constant\" = fixed shrinkage intensity, \"none\" = sample correlation.",
@@ -7015,7 +7124,7 @@
         },
         {
           "name": "shrinkage_target",
-          "type": "Optional",
+          "type": "float",
           "default": null,
           "required": false,
           "description": "Target correlation for shrinkage=\"constant\" mode. None = auto-computed from sample average. Ignored for other methods.",
@@ -7096,7 +7205,7 @@
         },
         {
           "name": "min_periods",
-          "type": "Optional",
+          "type": "int",
           "default": null,
           "required": false,
           "description": "Minimum number of periods before first IDM estimate. None (default) = window // 3 (e.g., 60 for 180d window). Shrinkage handles the noisier early estimates, and EWMA smoothing (smoothing_half_life) dampens volatility in the IDM series.",
@@ -7123,6 +7232,7 @@
       ],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -7188,7 +7298,7 @@
             },
             {
               "name": "shrinkage",
-              "type": "Literal",
+              "type": "enum",
               "default": "oas",
               "required": false,
               "description": "Covariance shrinkage method. \"oas\" (default) = Oracle Approximating Shrinkage, \"lw\" = Ledoit-Wolf, \"constant\" = fixed shrinkage intensity, \"none\" = sample correlation.",
@@ -7197,7 +7307,7 @@
             },
             {
               "name": "shrinkage_target",
-              "type": "Optional",
+              "type": "float",
               "default": null,
               "required": false,
               "description": "Target correlation for shrinkage=\"constant\" mode. None = auto-computed from sample average. Ignored for other methods.",
@@ -7242,7 +7352,7 @@
             },
             {
               "name": "min_periods",
-              "type": "Optional",
+              "type": "int",
               "default": null,
               "required": false,
               "description": "Minimum number of periods before first IDM estimate. None (default) = window // 3 (e.g., 60 for 180d window). Shrinkage handles the noisier early estimates, and EWMA smoothing (smoothing_half_life) dampens volatility in the IDM series.",
@@ -7321,7 +7431,7 @@
         },
         {
           "name": "min_periods",
-          "type": "Optional",
+          "type": "int",
           "default": null,
           "required": false,
           "description": "Minimum observations for rolling calculations. Defaults to half of each respective period. Lower values produce earlier (less stable) cloud boundaries.",
@@ -7337,6 +7447,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -7375,7 +7486,7 @@
             },
             {
               "name": "min_periods",
-              "type": "Optional",
+              "type": "int",
               "default": null,
               "required": false,
               "description": "Minimum observations for rolling calculations. Defaults to half of each respective period. Lower values produce earlier (less stable) cloud boundaries.",
@@ -7419,6 +7530,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -7458,7 +7570,7 @@
       "parameters": [
         {
           "name": "entry_slot",
-          "type": "Optional",
+          "type": "str",
           "default": null,
           "required": false,
           "description": "Slot name for entry signals. If None, uses current pipeline input as both entry and exit source (auto-detect mode).",
@@ -7471,7 +7583,7 @@
         },
         {
           "name": "exit_slot",
-          "type": "Optional",
+          "type": "str",
           "default": null,
           "required": false,
           "description": "Slot name for exit signals. Must be provided if entry_slot is provided, and vice versa.",
@@ -7532,6 +7644,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -7543,7 +7656,7 @@
           "parameters": [
             {
               "name": "entry_slot",
-              "type": "Optional",
+              "type": "str",
               "default": null,
               "required": false,
               "description": "Slot name for entry signals. If None, uses current pipeline input as both entry and exit source (auto-detect mode).",
@@ -7552,7 +7665,7 @@
             },
             {
               "name": "exit_slot",
-              "type": "Optional",
+              "type": "str",
               "default": null,
               "required": false,
               "description": "Slot name for exit signals. Must be provided if entry_slot is provided, and vice versa.",
@@ -7644,6 +7757,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -7708,6 +7822,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -7767,6 +7882,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -7835,6 +7951,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -7903,6 +8020,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -7958,6 +8076,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -8013,6 +8132,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -8052,7 +8172,7 @@
       "parameters": [
         {
           "name": "mode",
-          "type": "Literal",
+          "type": "enum",
           "default": "long",
           "required": false,
           "description": "Weight conversion mode. \"long\" = pass through unchanged (default). \"short\" = negate all positive weights for short selling. The position sizing and allocation logic remain the same regardless of mode.",
@@ -8073,6 +8193,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -8084,7 +8205,7 @@
           "parameters": [
             {
               "name": "mode",
-              "type": "Literal",
+              "type": "enum",
               "default": "long",
               "required": false,
               "description": "Weight conversion mode. \"long\" = pass through unchanged (default). \"short\" = negate all positive weights for short selling. The position sizing and allocation logic remain the same regardless of mode.",
@@ -8166,6 +8287,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -8243,6 +8365,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -8302,6 +8425,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -8391,6 +8515,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -8491,7 +8616,7 @@
           "constraints": {},
           "tier": "strategy",
           "slot_reference": true,
-          "expected_slot_type": "SignalSeries"
+          "expected_slot_type": "GlobalSeries"
         },
         {
           "name": "long_only",
@@ -8508,7 +8633,7 @@
         },
         {
           "name": "scale_method",
-          "type": "Literal",
+          "type": "enum",
           "default": "simple",
           "required": false,
           "description": "Scaling approach. \"simple\" (default) or \"proportional\".",
@@ -8529,6 +8654,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -8576,7 +8702,7 @@
             },
             {
               "name": "scale_method",
-              "type": "Literal",
+              "type": "enum",
               "default": "simple",
               "required": false,
               "description": "Scaling approach. \"simple\" (default) or \"proportional\".",
@@ -8613,7 +8739,7 @@
           "constraints": {},
           "tier": "strategy",
           "slot_reference": true,
-          "expected_slot_type": "SignalSeries"
+          "expected_slot_type": "GlobalSeries"
         },
         {
           "name": "base_scale",
@@ -8688,6 +8814,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -8758,7 +8885,7 @@
       "description": "Detect market-wide bull/bear trend regime using EMA crossover on a market index for portfolio-level decisions.\n\n    Use for portfolio-level exposure management. Constructs a market index from\n    cross-asset price data (trimmed mean or equal weight), then applies EMA crossover\n    to classify bull/bear/neutral regimes. Output is a Series suitable for leverage\n    scaling or regime gating. For volatility-based regimes, use VolatilityFilter.\n\n    Output:\n        Series with +1.0 (bull, fast EMA > slow EMA), -1.0 (bear), or 0.0 (neutral).\n        Shifted by 1 bar to prevent look-ahead bias. NaN during EMA warmup.\n\n    Formula:\n        market_index = trimmed_mean(prices) or equal_weight_mean(prices)\n        fast_ema = EMA(market_index, fast_period)\n        slow_ema = EMA(market_index, slow_period)\n        regime = +1 if fast > slow, -1 if fast < slow, 0 otherwise\n\n    Example:\n        PriceDataLoader() -> MarketTrendRegimeFilter(fast_period=5, slow_period=17)\n    ",
       "usage_hint": "Use for portfolio-level exposure management. Constructs a market index from cross-asset price data (trimmed mean or equal weight), then applies EMA crossover to classify bull/bear/neutral regimes. Output is a Series suitable for leverage scaling or regime gating. For volatility-based regimes, use VolatilityFilter.",
       "input_type": "SignalSeries",
-      "output_type": "SignalSeries",
+      "output_type": "GlobalSeries",
       "deterministic": true,
       "parameters": [
         {
@@ -8833,6 +8960,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -8880,7 +9008,7 @@
             }
           ],
           "input_type": "SignalSeries",
-          "output_type": "SignalSeries",
+          "output_type": "GlobalSeries",
           "declaration_refs": null,
           "optional_declaration_refs": null,
           "changelog_entry": "Initial release"
@@ -8894,7 +9022,7 @@
       "description": "Detect market-wide high-volume regime from cross-asset volume data for portfolio-level leverage scaling.\n\n    Use for portfolio-level decisions when you want to scale leverage based on overall\n    market volume activity. Computes the mean volume across all assets and compares to\n    a rolling average. Returns a binary Series (1.0 = high volume regime, 0.0 = normal).\n    For per-asset volume filtering, use AssetVolumeRegimeFilter instead.\n\n    Output:\n        Series with 1.0 (high volume regime) or 0.0 (normal). Shifted by 1 bar\n        to prevent look-ahead bias. NaN during warmup (window/2 bars).\n\n    Formula:\n        market_vol = mean(volume across assets)\n        threshold_line = threshold * rolling_mean(market_vol, window)\n        regime = 1.0 if market_vol >= threshold_line else 0.0\n\n    Example:\n        PriceDataLoader() -> MarketVolumeRegimeFilter(threshold=2.0, window=20)\n    ",
       "usage_hint": "Use for portfolio-level decisions when you want to scale leverage based on overall market volume activity. Computes the mean volume across all assets and compares to a rolling average. Returns a binary Series (1.0 = high volume regime, 0.0 = normal). For per-asset volume filtering, use AssetVolumeRegimeFilter instead.",
       "input_type": "SignalSeries",
-      "output_type": "SignalSeries",
+      "output_type": "GlobalSeries",
       "deterministic": true,
       "parameters": [
         {
@@ -8936,6 +9064,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -8965,7 +9094,7 @@
             }
           ],
           "input_type": "SignalSeries",
-          "output_type": "SignalSeries",
+          "output_type": "GlobalSeries",
           "declaration_refs": null,
           "optional_declaration_refs": null,
           "changelog_entry": "Initial release"
@@ -8986,6 +9115,10 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": [
+        "BinarySignal",
+        "SignalSeries"
+      ],
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -9017,6 +9150,10 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": [
+        "BinarySignal",
+        "SignalSeries"
+      ],
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -9105,6 +9242,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -9208,6 +9346,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -9273,7 +9412,7 @@
         },
         {
           "name": "min_periods",
-          "type": "int | None",
+          "type": "int",
           "default": null,
           "required": false,
           "description": "Minimum observations before producing output. Defaults to window // 2. Lower values produce earlier (noisier) output.",
@@ -9289,6 +9428,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -9309,7 +9449,7 @@
             },
             {
               "name": "min_periods",
-              "type": "int | None",
+              "type": "int",
               "default": null,
               "required": false,
               "description": "Minimum observations before producing output. Defaults to window // 2. Lower values produce earlier (noisier) output.",
@@ -9357,6 +9497,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -9398,6 +9539,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -9456,6 +9598,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -9506,6 +9649,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -9548,7 +9692,7 @@
         },
         {
           "name": "signals_list",
-          "type": "list[str] | None",
+          "type": "list",
           "default": null,
           "required": false,
           "description": "Alternative to positional args. List of signal names to combine. Useful when names are computed dynamically.",
@@ -9564,6 +9708,10 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": [
+        "BinarySignal",
+        "SignalSeries"
+      ],
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -9584,7 +9732,7 @@
             },
             {
               "name": "signals_list",
-              "type": "list[str] | None",
+              "type": "list",
               "default": null,
               "required": false,
               "description": "Alternative to positional args. List of signal names to combine. Useful when names are computed dynamically.",
@@ -9649,6 +9797,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -9743,6 +9892,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -9826,7 +9976,7 @@
         },
         {
           "name": "exit_mode",
-          "type": "Literal",
+          "type": "enum",
           "default": "scalar",
           "required": false,
           "description": "How exit signals are interpreted. \"scalar\" (default): exit fires when exit_signal == 1.0, regardless of position direction. Use with boolean/scalar exit signals (TimeBasedExitFilter, ValueStopExitFilter). \"directional\": exit fires when exit_signal opposes current position (exit * state < 0). Use with ThresholdCross as exit signal \u2014 e.g., ThresholdCross(upper=0, lower=0) produces +1 when signal > 0 (exits shorts) and -1 when signal < 0 (exits longs). Enables \"enter at extreme, exit at mean\" strategies.",
@@ -9847,6 +9997,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 2,
       "version": 2,
       "status": "active",
@@ -9876,7 +10027,7 @@
             },
             {
               "name": "exit_mode",
-              "type": "Literal",
+              "type": "enum",
               "default": "scalar",
               "required": false,
               "description": "How exit signals are interpreted. \"scalar\" (default): exit fires when exit_signal == 1.0, regardless of position direction. Use with boolean/scalar exit signals (TimeBasedExitFilter, ValueStopExitFilter). \"directional\": exit fires when exit_signal opposes current position (exit * state < 0). Use with ThresholdCross as exit signal \u2014 e.g., ThresholdCross(upper=0, lower=0) produces +1 when signal > 0 (exits shorts) and -1 when signal < 0 (exits longs). Enables \"enter at extreme, exit at mean\" strategies.",
@@ -9904,7 +10055,7 @@
       "parameters": [
         {
           "name": "timeframe",
-          "type": "Literal",
+          "type": "enum",
           "default": "15min",
           "required": false,
           "description": "Source data frequency. Only \"15min\" is supported.",
@@ -9934,7 +10085,7 @@
         },
         {
           "name": "symbols",
-          "type": "list[str] | None",
+          "type": "list",
           "default": null,
           "required": false,
           "description": "Explicit symbol list. None = auto-discover via SymbolLoader.",
@@ -10038,7 +10189,7 @@
         },
         {
           "name": "cache_base_path",
-          "type": "str | None",
+          "type": "str",
           "default": null,
           "required": false,
           "description": "Override cache directory path. None = use KEEL_CACHE_PATH.",
@@ -10077,7 +10228,7 @@
         },
         {
           "name": "cache_policy",
-          "type": "pipeline_engine.data_backend.CachePolicy | None",
+          "type": "CachePolicy",
           "default": null,
           "required": false,
           "description": "Explicit CachePolicy override. None = derive from flags.",
@@ -10103,7 +10254,7 @@
         },
         {
           "name": "market_type",
-          "type": "str | None",
+          "type": "str",
           "default": null,
           "required": false,
           "description": "Optional market type filter (e.g., \"perp\", \"spot\").",
@@ -10116,7 +10267,7 @@
         },
         {
           "name": "dex_name",
-          "type": "str | None",
+          "type": "str",
           "default": "native",
           "required": false,
           "description": "Filter by dex. \"native\" (default) = native HL perps only.",
@@ -10132,6 +10283,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -10143,7 +10295,7 @@
           "parameters": [
             {
               "name": "timeframe",
-              "type": "Literal",
+              "type": "enum",
               "default": "15min",
               "required": false,
               "description": "Source data frequency. Only \"15min\" is supported.",
@@ -10161,7 +10313,7 @@
             },
             {
               "name": "symbols",
-              "type": "list[str] | None",
+              "type": "list",
               "default": null,
               "required": false,
               "description": "Explicit symbol list. None = auto-discover via SymbolLoader.",
@@ -10233,7 +10385,7 @@
             },
             {
               "name": "cache_base_path",
-              "type": "str | None",
+              "type": "str",
               "default": null,
               "required": false,
               "description": "Override cache directory path. None = use KEEL_CACHE_PATH.",
@@ -10260,7 +10412,7 @@
             },
             {
               "name": "cache_policy",
-              "type": "pipeline_engine.data_backend.CachePolicy | None",
+              "type": "CachePolicy",
               "default": null,
               "required": false,
               "description": "Explicit CachePolicy override. None = derive from flags.",
@@ -10278,7 +10430,7 @@
             },
             {
               "name": "market_type",
-              "type": "str | None",
+              "type": "str",
               "default": null,
               "required": false,
               "description": "Optional market type filter (e.g., \"perp\", \"spot\").",
@@ -10287,7 +10439,7 @@
             },
             {
               "name": "dex_name",
-              "type": "str | None",
+              "type": "str",
               "default": "native",
               "required": false,
               "description": "Filter by dex. \"native\" (default) = native HL perps only.",
@@ -10315,7 +10467,7 @@
       "parameters": [
         {
           "name": "low_quantile",
-          "type": "Optional",
+          "type": "float",
           "default": null,
           "required": false,
           "description": "Lower percentile bound (0-100). None = no lower bound. 25 = bottom quartile cutoff, 50 = median. At least one of low_quantile or high_quantile required.",
@@ -10328,7 +10480,7 @@
         },
         {
           "name": "high_quantile",
-          "type": "Optional",
+          "type": "float",
           "default": null,
           "required": false,
           "description": "Upper percentile bound (0-100). None = no upper bound. 75 = top quartile cutoff. Must be >= low_quantile.",
@@ -10344,6 +10496,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 2,
       "version": 2,
       "status": "active",
@@ -10355,7 +10508,7 @@
           "parameters": [
             {
               "name": "low_quantile",
-              "type": "Optional",
+              "type": "float",
               "default": null,
               "required": false,
               "description": "Lower percentile bound (0-100). None = no lower bound. 25 = bottom quartile cutoff, 50 = median. At least one of low_quantile or high_quantile required.",
@@ -10364,7 +10517,7 @@
             },
             {
               "name": "high_quantile",
-              "type": "Optional",
+              "type": "float",
               "default": null,
               "required": false,
               "description": "Upper percentile bound (0-100). None = no upper bound. 75 = top quartile cutoff. Must be >= low_quantile.",
@@ -10394,6 +10547,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -10443,6 +10597,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -10502,6 +10657,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -10541,7 +10697,7 @@
       "parameters": [
         {
           "name": "low_threshold",
-          "type": "Optional",
+          "type": "float",
           "default": null,
           "required": false,
           "description": "Lower bound of the range. None = no lower bound (only upper bound applies). Use with high_threshold for band-pass filtering.",
@@ -10558,7 +10714,7 @@
         },
         {
           "name": "high_threshold",
-          "type": "Optional",
+          "type": "float",
           "default": null,
           "required": false,
           "description": "Upper bound of the range. None = no upper bound. At least one threshold must be specified.",
@@ -10604,6 +10760,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -10615,7 +10772,7 @@
           "parameters": [
             {
               "name": "low_threshold",
-              "type": "Optional",
+              "type": "float",
               "default": null,
               "required": false,
               "description": "Lower bound of the range. None = no lower bound (only upper bound applies). Use with high_threshold for band-pass filtering.",
@@ -10624,7 +10781,7 @@
             },
             {
               "name": "high_threshold",
-              "type": "Optional",
+              "type": "float",
               "default": null,
               "required": false,
               "description": "Upper bound of the range. None = no upper bound. At least one threshold must be specified.",
@@ -10712,6 +10869,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -10862,6 +11020,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -10941,7 +11100,7 @@
       "description": "Compute annualized realized volatility averaged across the universe as a volatility regime indicator.\n\n    Use to detect high-volatility regimes where strategies may need position scaling\n    or risk reduction. Feed into RegimeGate to disable momentum strategies during\n    vol spikes, or into RegimeScale to reduce forecast intensity. Pairs well with\n    StressCompositeRegime for multi-factor regime detection.\n\n    Output:\n        Scalar GlobalSeries, non-negative (annualized vol). Higher values indicate\n        elevated market-wide volatility. Annualized using sqrt(365) crypto factor.\n        NaN during warmup (lookback // 2 bars) or when fewer than 2 instruments\n        are available.\n\n    Formula:\n        vol_i = rolling_std(returns_i, lookback) * sqrt(365)\n        signal = mean(vol_i) across instruments\n\n    Example:\n        Store('ohlcv') -> RealizedVolatilityRegime(ohlcv_slot='ohlcv', lookback=20) -> RegimeGate()\n    ",
       "usage_hint": "Use to detect high-volatility regimes where strategies may need position scaling or risk reduction. Feed into RegimeGate to disable momentum strategies during vol spikes, or into RegimeScale to reduce forecast intensity. Pairs well with StressCompositeRegime for multi-factor regime detection.",
       "input_type": "SignalSeries",
-      "output_type": "SignalSeries",
+      "output_type": "GlobalSeries",
       "deterministic": true,
       "parameters": [
         {
@@ -10979,6 +11138,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -11008,7 +11168,7 @@
             }
           ],
           "input_type": "SignalSeries",
-          "output_type": "SignalSeries",
+          "output_type": "GlobalSeries",
           "declaration_refs": null,
           "optional_declaration_refs": null,
           "changelog_entry": "Initial release"
@@ -11069,6 +11229,13 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": {
+        "signal_key": "ForecastSeries",
+        "index_key": [
+          "GlobalSeries",
+          "SignalSeries"
+        ]
+      },
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -11169,7 +11336,7 @@
           "constraints": {},
           "tier": "strategy",
           "slot_reference": true,
-          "expected_slot_type": "SignalSeries"
+          "expected_slot_type": "GlobalSeries"
         },
         {
           "name": "long_only",
@@ -11186,7 +11353,7 @@
         },
         {
           "name": "max_stale_bars",
-          "type": "int | None",
+          "type": "int",
           "default": 5,
           "required": false,
           "description": "Maximum bars to forward-fill stale regime data before reverting to neutral. Default 5. Set to None to disable staleness limit. Protects against acting on outdated regime signals.",
@@ -11206,6 +11373,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -11253,7 +11421,7 @@
             },
             {
               "name": "max_stale_bars",
-              "type": "int | None",
+              "type": "int",
               "default": 5,
               "required": false,
               "description": "Maximum bars to forward-fill stale regime data before reverting to neutral. Default 5. Set to None to disable staleness limit. Protects against acting on outdated regime signals.",
@@ -11307,7 +11475,7 @@
         },
         {
           "name": "scale_method",
-          "type": "Literal",
+          "type": "enum",
           "default": "linear",
           "required": false,
           "description": "Method for computing the scaling factor. \"linear\" (default) = 1 - index/3, assumes index in [-3, 3]. \"inverse\" = 1/(1+|index|), smooth decay (experimental). \"sigmoid\" = S-curve transition (experimental).",
@@ -11345,6 +11513,13 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": {
+        "signal_key": "ForecastSeries",
+        "index_key": [
+          "GlobalSeries",
+          "SignalSeries"
+        ]
+      },
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -11374,7 +11549,7 @@
             },
             {
               "name": "scale_method",
-              "type": "Literal",
+              "type": "enum",
               "default": "linear",
               "required": false,
               "description": "Method for computing the scaling factor. \"linear\" (default) = 1 - index/3, assumes index in [-3, 3]. \"inverse\" = 1/(1+|index|), smooth decay (experimental). \"sigmoid\" = S-curve transition (experimental).",
@@ -11508,6 +11683,14 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": {
+        "signal_a_key": "ForecastSeries",
+        "signal_b_key": "ForecastSeries",
+        "regime_key": [
+          "GlobalSeries",
+          "SignalSeries"
+        ]
+      },
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -11621,6 +11804,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -11694,7 +11878,7 @@
         },
         {
           "name": "benchmarks",
-          "type": "Optional",
+          "type": "Sequence",
           "default": null,
           "required": false,
           "description": "Symbol names whose returns are the regression factors. Default (\"BTC\", \"ETH\") \u2014 for crypto perp universes, (\"BTC\", \"ETH\", \"SOL\") is the typical choice. These columns get their residuals zeroed in the output.",
@@ -11723,6 +11907,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -11752,7 +11937,7 @@
             },
             {
               "name": "benchmarks",
-              "type": "Optional",
+              "type": "Sequence",
               "default": null,
               "required": false,
               "description": "Symbol names whose returns are the regression factors. Default (\"BTC\", \"ETH\") \u2014 for crypto perp universes, (\"BTC\", \"ETH\", \"SOL\") is the typical choice. These columns get their residuals zeroed in the output.",
@@ -11802,7 +11987,7 @@
         },
         {
           "name": "returns",
-          "type": "Literal",
+          "type": "enum",
           "default": "pct",
           "required": false,
           "description": "Return calculation method. \"pct\" (default) = percentage returns, \"log\" = log returns. Both give similar results for small returns; \"log\" is slightly more accurate for large moves.",
@@ -11820,7 +12005,7 @@
         },
         {
           "name": "min_periods",
-          "type": "int | None",
+          "type": "int",
           "default": null,
           "required": false,
           "description": "Minimum observations for valid volatility. None (default) = use pandas EWMA default. Lower values produce earlier (noisier) output.",
@@ -11849,6 +12034,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -11869,7 +12055,7 @@
             },
             {
               "name": "returns",
-              "type": "Literal",
+              "type": "enum",
               "default": "pct",
               "required": false,
               "description": "Return calculation method. \"pct\" (default) = percentage returns, \"log\" = log returns. Both give similar results for small returns; \"log\" is slightly more accurate for large moves.",
@@ -11878,7 +12064,7 @@
             },
             {
               "name": "min_periods",
-              "type": "int | None",
+              "type": "int",
               "default": null,
               "required": false,
               "description": "Minimum observations for valid volatility. None (default) = use pandas EWMA default. Lower values produce earlier (noisier) output.",
@@ -11935,6 +12121,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -12007,6 +12194,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -12105,6 +12293,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -12179,7 +12368,7 @@
         },
         {
           "name": "min_periods",
-          "type": "int | None",
+          "type": "int",
           "default": null,
           "required": false,
           "description": "Minimum observations before producing output. Defaults to window // 2. Lower values produce earlier (noisier) output.",
@@ -12195,6 +12384,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -12215,7 +12405,7 @@
             },
             {
               "name": "min_periods",
-              "type": "int | None",
+              "type": "int",
               "default": null,
               "required": false,
               "description": "Minimum observations before producing output. Defaults to window // 2. Lower values produce earlier (noisier) output.",
@@ -12277,7 +12467,7 @@
         },
         {
           "name": "min_periods",
-          "type": "int | None",
+          "type": "int",
           "default": null,
           "required": false,
           "description": "Minimum observations required. Defaults to window // 2. Lower values produce earlier (noisier) output.",
@@ -12293,6 +12483,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -12322,7 +12513,7 @@
             },
             {
               "name": "min_periods",
-              "type": "int | None",
+              "type": "int",
               "default": null,
               "required": false,
               "description": "Minimum observations required. Defaults to window // 2. Lower values produce earlier (noisier) output.",
@@ -12367,7 +12558,7 @@
         },
         {
           "name": "benchmark_col",
-          "type": "str | None",
+          "type": "str",
           "default": null,
           "required": false,
           "description": "Column name to use as benchmark. None (default) uses the equal-weighted average of all other assets as the benchmark. Set to a specific asset (e.g., \"BTC\") for single-benchmark beta.",
@@ -12380,7 +12571,7 @@
         },
         {
           "name": "min_periods",
-          "type": "int | None",
+          "type": "int",
           "default": null,
           "required": false,
           "description": "Minimum observations required. Defaults to window // 2. Lower values produce earlier (noisier) output.",
@@ -12396,6 +12587,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -12416,7 +12608,7 @@
             },
             {
               "name": "benchmark_col",
-              "type": "str | None",
+              "type": "str",
               "default": null,
               "required": false,
               "description": "Column name to use as benchmark. None (default) uses the equal-weighted average of all other assets as the benchmark. Set to a specific asset (e.g., \"BTC\") for single-benchmark beta.",
@@ -12425,7 +12617,7 @@
             },
             {
               "name": "min_periods",
-              "type": "int | None",
+              "type": "int",
               "default": null,
               "required": false,
               "description": "Minimum observations required. Defaults to window // 2. Lower values produce earlier (noisier) output.",
@@ -12470,7 +12662,7 @@
         },
         {
           "name": "min_periods",
-          "type": "int | None",
+          "type": "int",
           "default": null,
           "required": false,
           "description": "Minimum observations required. Defaults to window // 2. Lower values produce earlier (noisier) output.",
@@ -12486,6 +12678,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -12506,7 +12699,7 @@
             },
             {
               "name": "min_periods",
-              "type": "int | None",
+              "type": "int",
               "default": null,
               "required": false,
               "description": "Minimum observations required. Defaults to window // 2. Lower values produce earlier (noisier) output.",
@@ -12551,7 +12744,7 @@
         },
         {
           "name": "min_periods",
-          "type": "int | None",
+          "type": "int",
           "default": null,
           "required": false,
           "description": "Minimum observations required. Defaults to window // 2. Lower values produce earlier (noisier) output.",
@@ -12567,6 +12760,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -12587,7 +12781,7 @@
             },
             {
               "name": "min_periods",
-              "type": "int | None",
+              "type": "int",
               "default": null,
               "required": false,
               "description": "Minimum observations required. Defaults to window // 2. Lower values produce earlier (noisier) output.",
@@ -12632,7 +12826,7 @@
         },
         {
           "name": "min_periods",
-          "type": "int | None",
+          "type": "int",
           "default": null,
           "required": false,
           "description": "Minimum observations required. Defaults to window // 2. Lower values produce earlier (noisier) output.",
@@ -12648,6 +12842,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -12668,7 +12863,7 @@
             },
             {
               "name": "min_periods",
-              "type": "int | None",
+              "type": "int",
               "default": null,
               "required": false,
               "description": "Minimum observations required. Defaults to window // 2. Lower values produce earlier (noisier) output.",
@@ -12713,7 +12908,7 @@
         },
         {
           "name": "min_periods",
-          "type": "int | None",
+          "type": "int",
           "default": null,
           "required": false,
           "description": "Minimum observations required. Defaults to window // 2. Lower values produce earlier (noisier) output.",
@@ -12729,6 +12924,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -12749,7 +12945,7 @@
             },
             {
               "name": "min_periods",
-              "type": "int | None",
+              "type": "int",
               "default": null,
               "required": false,
               "description": "Minimum observations required. Defaults to window // 2. Lower values produce earlier (noisier) output.",
@@ -12865,6 +13061,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -12957,7 +13154,7 @@
         },
         {
           "name": "min_periods",
-          "type": "int | None",
+          "type": "int",
           "default": null,
           "required": false,
           "description": "Minimum observations before producing output. Defaults to window // 2. Lower values produce earlier (noisier) output.",
@@ -12973,6 +13170,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -12993,7 +13191,7 @@
             },
             {
               "name": "min_periods",
-              "type": "int | None",
+              "type": "int",
               "default": null,
               "required": false,
               "description": "Minimum observations before producing output. Defaults to window // 2. Lower values produce earlier (noisier) output.",
@@ -13060,7 +13258,7 @@
         },
         {
           "name": "exit_mode",
-          "type": "Literal",
+          "type": "enum",
           "default": "all",
           "required": false,
           "description": "'all' closes entire position on any exit. 'one_level' decrements by 1 per exit fire.",
@@ -13081,6 +13279,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -13119,7 +13318,7 @@
             },
             {
               "name": "exit_mode",
-              "type": "Literal",
+              "type": "enum",
               "default": "all",
               "required": false,
               "description": "'all' closes entire position on any exit. 'one_level' decrements by 1 per exit fire.",
@@ -13167,6 +13366,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -13222,6 +13422,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": {},
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -13298,6 +13499,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -13366,6 +13568,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -13418,7 +13621,7 @@
         },
         {
           "name": "method",
-          "type": "Literal",
+          "type": "enum",
           "default": "mean",
           "required": false,
           "description": "Aggregation function for downsampling. \"mean\" (default) = average, \"sum\" = total, \"last\" = end-of-period value, \"first\" = start-of-period, \"median\" = median. Use \"last\" for point-in-time signals, \"mean\" for averaged indicators.",
@@ -13444,6 +13647,7 @@
       "optional_declaration_refs": {
         "bar_offset": "globals.bar_offset"
       },
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -13464,7 +13668,7 @@
             },
             {
               "name": "method",
-              "type": "Literal",
+              "type": "enum",
               "default": "mean",
               "required": false,
               "description": "Aggregation function for downsampling. \"mean\" (default) = average, \"sum\" = total, \"last\" = end-of-period value, \"first\" = start-of-period, \"median\" = median. Use \"last\" for point-in-time signals, \"mean\" for averaged indicators.",
@@ -13514,6 +13718,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -13566,7 +13771,7 @@
         },
         {
           "name": "method",
-          "type": "Literal",
+          "type": "enum",
           "default": "fill_all",
           "required": false,
           "description": "How to place signal values on the target index. \"fill_all\" (default) = forward-fill, every target bar gets the latest signal (safe, no lookahead). \"first_only\" = signal only in the first target bar, NaN elsewhere (most conservative, for VBT sparse weight semantics where NaN = hold position).",
@@ -13587,6 +13792,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -13607,7 +13813,7 @@
             },
             {
               "name": "method",
-              "type": "Literal",
+              "type": "enum",
               "default": "fill_all",
               "required": false,
               "description": "How to place signal values on the target index. \"fill_all\" (default) = forward-fill, every target bar gets the latest signal (safe, no lookahead). \"first_only\" = signal only in the first target bar, NaN elsewhere (most conservative, for VBT sparse weight semantics where NaN = hold position).",
@@ -13651,6 +13857,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -13706,6 +13913,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -13839,6 +14047,16 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": {
+        "mode_key": [
+          "GlobalSeries",
+          "SignalSeries"
+        ],
+        "stress_key": [
+          "GlobalSeries",
+          "SignalSeries"
+        ]
+      },
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -13982,6 +14200,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -14055,6 +14274,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -14123,6 +14343,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -14208,6 +14429,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -14282,7 +14504,7 @@
         },
         {
           "name": "symbol_filter",
-          "type": "list[str] | None",
+          "type": "list",
           "default": null,
           "required": false,
           "description": "Optional whitelist of symbols. Only these symbols are returned (if available). None = return all discovered symbols.",
@@ -14308,7 +14530,7 @@
         },
         {
           "name": "max_symbols",
-          "type": "int | None",
+          "type": "int",
           "default": null,
           "required": false,
           "description": "Maximum number of symbols to return. None = no limit. Truncates the list when exceeded.",
@@ -14347,7 +14569,7 @@
         },
         {
           "name": "market_type",
-          "type": "str | None",
+          "type": "str",
           "default": null,
           "required": false,
           "description": "Optional market type filter (e.g., \"perp\", \"spot\").",
@@ -14360,7 +14582,7 @@
         },
         {
           "name": "dex_name",
-          "type": "str | None",
+          "type": "str",
           "default": "native",
           "required": false,
           "description": "Filter by dex. \"native\" (default) = native HL perps only.",
@@ -14376,6 +14598,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -14405,7 +14628,7 @@
             },
             {
               "name": "symbol_filter",
-              "type": "list[str] | None",
+              "type": "list",
               "default": null,
               "required": false,
               "description": "Optional whitelist of symbols. Only these symbols are returned (if available). None = return all discovered symbols.",
@@ -14423,7 +14646,7 @@
             },
             {
               "name": "max_symbols",
-              "type": "int | None",
+              "type": "int",
               "default": null,
               "required": false,
               "description": "Maximum number of symbols to return. None = no limit. Truncates the list when exceeded.",
@@ -14450,7 +14673,7 @@
             },
             {
               "name": "market_type",
-              "type": "str | None",
+              "type": "str",
               "default": null,
               "required": false,
               "description": "Optional market type filter (e.g., \"perp\", \"spot\").",
@@ -14459,7 +14682,7 @@
             },
             {
               "name": "dex_name",
-              "type": "str | None",
+              "type": "str",
               "default": "native",
               "required": false,
               "description": "Filter by dex. \"native\" (default) = native HL perps only.",
@@ -14507,6 +14730,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -14605,6 +14829,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -14671,7 +14896,7 @@
       "parameters": [
         {
           "name": "method",
-          "type": "Literal",
+          "type": "enum",
           "default": "mean",
           "required": false,
           "description": "Aggregation function for downsampling. \"mean\" (default) = average, \"sum\" = total, \"last\" = end-of-period value, \"first\" = start-of-period, \"median\" = median. Use \"last\" for point-in-time signals like funding rates, \"mean\" for averaged indicators.",
@@ -14699,6 +14924,7 @@
       "optional_declaration_refs": {
         "bar_offset": "globals.bar_offset"
       },
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -14710,7 +14936,7 @@
           "parameters": [
             {
               "name": "method",
-              "type": "Literal",
+              "type": "enum",
               "default": "mean",
               "required": false,
               "description": "Aggregation function for downsampling. \"mean\" (default) = average, \"sum\" = total, \"last\" = end-of-period value, \"first\" = start-of-period, \"median\" = median. Use \"last\" for point-in-time signals like funding rates, \"mean\" for averaged indicators.",
@@ -14748,6 +14974,7 @@
       "optional_declaration_refs": {
         "bar_offset": "globals.bar_offset"
       },
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -14815,7 +15042,7 @@
         },
         {
           "name": "mode",
-          "type": "Literal",
+          "type": "enum",
           "default": "symmetric",
           "required": false,
           "description": "Which thresholds to evaluate. \"symmetric\" (default) \u2014 apply both upper and lower thresholds. signal > upper \u2192 +1, signal < lower \u2192 -1, between \u2192 0. \"long_only\" \u2014 only apply upper threshold. signal > upper \u2192 +1, otherwise \u2192 0. Short signals never generated. \"short_only\" \u2014 only apply lower threshold. signal < lower \u2192 -1, otherwise \u2192 0. Long signals never generated.",
@@ -14837,6 +15064,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -14866,7 +15094,7 @@
             },
             {
               "name": "mode",
-              "type": "Literal",
+              "type": "enum",
               "default": "symmetric",
               "required": false,
               "description": "Which thresholds to evaluate. \"symmetric\" (default) \u2014 apply both upper and lower thresholds. signal > upper \u2192 +1, signal < lower \u2192 -1, between \u2192 0. \"long_only\" \u2014 only apply upper threshold. signal > upper \u2192 +1, otherwise \u2192 0. Short signals never generated. \"short_only\" \u2014 only apply lower threshold. signal < lower \u2192 -1, otherwise \u2192 0. Long signals never generated.",
@@ -14927,6 +15155,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -15009,7 +15238,7 @@
         },
         {
           "name": "smooth_window",
-          "type": "Optional",
+          "type": "int",
           "default": null,
           "required": false,
           "description": "Optional EWMA span to smooth the final signal. Small values (2-5) reduce noise, None for no smoothing.",
@@ -15029,6 +15258,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -15058,7 +15288,7 @@
             },
             {
               "name": "smooth_window",
-              "type": "Optional",
+              "type": "int",
               "default": null,
               "required": false,
               "description": "Optional EWMA span to smooth the final signal. Small values (2-5) reduce noise, None for no smoothing.",
@@ -15099,7 +15329,7 @@
         },
         {
           "name": "source_timeframe",
-          "type": "str | None",
+          "type": "str",
           "default": null,
           "required": false,
           "description": "Source timeframe of input data. Auto-detected from slot_data if not provided. Specify explicitly if auto-detection fails.",
@@ -15117,6 +15347,7 @@
       "optional_declaration_refs": {
         "bar_offset": "globals.bar_offset"
       },
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -15137,7 +15368,7 @@
             },
             {
               "name": "source_timeframe",
-              "type": "str | None",
+              "type": "str",
               "default": null,
               "required": false,
               "description": "Source timeframe of input data. Auto-detected from slot_data if not provided. Specify explicitly if auto-detection fails.",
@@ -15209,6 +15440,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -15329,6 +15561,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -15449,6 +15682,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -15506,7 +15740,7 @@
       "parameters": [
         {
           "name": "window",
-          "type": "Optional",
+          "type": "int",
           "default": null,
           "required": false,
           "description": "Rolling window size in bars. None = cumulative VWAP from start of data (anchored), int = rolling window VWAP. 96 bars = 1 day on 15-min data. Cumulative mode is more standard; rolling mode acts as a moving average.",
@@ -15523,7 +15757,7 @@
         },
         {
           "name": "min_periods",
-          "type": "Optional",
+          "type": "int",
           "default": null,
           "required": false,
           "description": "Minimum observations required for rolling mode. Defaults to window // 2. Ignored in cumulative mode. Lower values produce earlier but less stable output.",
@@ -15539,6 +15773,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -15550,7 +15785,7 @@
           "parameters": [
             {
               "name": "window",
-              "type": "Optional",
+              "type": "int",
               "default": null,
               "required": false,
               "description": "Rolling window size in bars. None = cumulative VWAP from start of data (anchored), int = rolling window VWAP. 96 bars = 1 day on 15-min data. Cumulative mode is more standard; rolling mode acts as a moving average.",
@@ -15559,7 +15794,7 @@
             },
             {
               "name": "min_periods",
-              "type": "Optional",
+              "type": "int",
               "default": null,
               "required": false,
               "description": "Minimum observations required for rolling mode. Defaults to window // 2. Ignored in cumulative mode. Lower values produce earlier but less stable output.",
@@ -15613,7 +15848,7 @@
         },
         {
           "name": "direction",
-          "type": "Literal",
+          "type": "enum",
           "default": "auto",
           "required": false,
           "description": "Momentum direction to track. \"auto\" (default) \u2014 reads entry signal direction per-asset: +1 entries \u2192 track increasing (exit when stops rising). -1 entries \u2192 track decreasing (exit when stops falling). \"increasing\" \u2014 always track increasing (long-only override). \"decreasing\" \u2014 always track decreasing (short-only override).",
@@ -15682,6 +15917,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -15711,7 +15947,7 @@
             },
             {
               "name": "direction",
-              "type": "Literal",
+              "type": "enum",
               "default": "auto",
               "required": false,
               "description": "Momentum direction to track. \"auto\" (default) \u2014 reads entry signal direction per-asset: +1 entries \u2192 track increasing (exit when stops rising). -1 entries \u2192 track decreasing (exit when stops falling). \"increasing\" \u2014 always track increasing (long-only override). \"decreasing\" \u2014 always track decreasing (short-only override).",
@@ -15796,7 +16032,7 @@
         },
         {
           "name": "min_periods",
-          "type": "Optional",
+          "type": "int",
           "default": null,
           "required": false,
           "description": "Minimum samples before producing a percentile. Defaults to max(history_window // 3, 20).",
@@ -15863,6 +16099,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -15892,7 +16129,7 @@
             },
             {
               "name": "min_periods",
-              "type": "Optional",
+              "type": "int",
               "default": null,
               "required": false,
               "description": "Minimum samples before producing a percentile. Defaults to max(history_window // 3, 20).",
@@ -16010,6 +16247,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -16106,7 +16344,7 @@
         },
         {
           "name": "max_weight",
-          "type": "float | None",
+          "type": "float",
           "default": null,
           "required": false,
           "description": "Maximum absolute weight per position. None (default) = no cap. 0.3 = no position exceeds 30%. Excess goes to cash (gross leverage decreases), not redistributed.",
@@ -16126,6 +16364,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -16155,7 +16394,7 @@
             },
             {
               "name": "max_weight",
-              "type": "float | None",
+              "type": "float",
               "default": null,
               "required": false,
               "description": "Maximum absolute weight per position. None (default) = no cap. 0.3 = no position exceeds 30%. Excess goes to cash (gross leverage decreases), not redistributed.",
@@ -16217,7 +16456,7 @@
         },
         {
           "name": "min_periods",
-          "type": "int | None",
+          "type": "int",
           "default": null,
           "required": false,
           "description": "Minimum observations before producing output. Defaults to vol_span. Lower values produce earlier (noisier) estimates.",
@@ -16233,6 +16472,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -16262,7 +16502,7 @@
             },
             {
               "name": "min_periods",
-              "type": "int | None",
+              "type": "int",
               "default": null,
               "required": false,
               "description": "Minimum observations before producing output. Defaults to vol_span. Lower values produce earlier (noisier) estimates.",
@@ -16290,7 +16530,7 @@
       "parameters": [
         {
           "name": "mode",
-          "type": "Literal",
+          "type": "enum",
           "default": "high",
           "required": false,
           "description": "Volatility regime to select. \"high\" = trade during high-vol periods (z >= threshold), \"low\" = trade during low-vol periods (z <= threshold).",
@@ -16362,6 +16602,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -16373,7 +16614,7 @@
           "parameters": [
             {
               "name": "mode",
-              "type": "Literal",
+              "type": "enum",
               "default": "high",
               "required": false,
               "description": "Volatility regime to select. \"high\" = trade during high-vol periods (z >= threshold), \"low\" = trade during low-vol periods (z <= threshold).",
@@ -16465,6 +16706,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -16513,7 +16755,7 @@
       "parameters": [
         {
           "name": "signal_type",
-          "type": "Literal",
+          "type": "enum",
           "default": null,
           "required": true,
           "description": "Type of signal being standardized. Required. \"percentage\" = for percentage-based signals (ROC, momentum %). \"price_points\" = for price-based signals (EWMA crossover distance).",
@@ -16557,7 +16799,7 @@
         },
         {
           "name": "returns",
-          "type": "Literal",
+          "type": "enum",
           "default": "pct",
           "required": false,
           "description": "Method for computing price returns. \"pct\" = simple percentage change, \"log\" = log returns. Default \"pct\".",
@@ -16578,6 +16820,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -16589,7 +16832,7 @@
           "parameters": [
             {
               "name": "signal_type",
-              "type": "Literal",
+              "type": "enum",
               "default": null,
               "required": true,
               "description": "Type of signal being standardized. Required. \"percentage\" = for percentage-based signals (ROC, momentum %). \"price_points\" = for price-based signals (EWMA crossover distance).",
@@ -16616,7 +16859,7 @@
             },
             {
               "name": "returns",
-              "type": "Literal",
+              "type": "enum",
               "default": "pct",
               "required": false,
               "description": "Method for computing price returns. \"pct\" = simple percentage change, \"log\" = log returns. Default \"pct\".",
@@ -16691,7 +16934,7 @@
         },
         {
           "name": "rebalance_period",
-          "type": "str | None",
+          "type": "str",
           "default": null,
           "required": false,
           "description": "None, \"weekly\", or \"biweekly\".",
@@ -16710,6 +16953,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -16748,7 +16992,7 @@
             },
             {
               "name": "rebalance_period",
-              "type": "str | None",
+              "type": "str",
               "default": null,
               "required": false,
               "description": "None, \"weekly\", or \"biweekly\".",
@@ -16839,6 +17083,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -16969,7 +17214,7 @@
         },
         {
           "name": "method",
-          "type": "Literal",
+          "type": "enum",
           "default": "mean_normalized",
           "required": false,
           "description": "Multiplier formula \u2014 see class docstring for trade-offs.",
@@ -16993,6 +17238,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -17040,7 +17286,7 @@
             },
             {
               "name": "method",
-              "type": "Literal",
+              "type": "enum",
               "default": "mean_normalized",
               "required": false,
               "description": "Multiplier formula \u2014 see class docstring for trade-offs.",
@@ -17110,6 +17356,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -17169,6 +17416,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": "WeightSeries",
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -17218,6 +17466,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -17307,6 +17556,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -17415,7 +17665,7 @@
         },
         {
           "name": "min_periods",
-          "type": "int | None",
+          "type": "int",
           "default": null,
           "required": false,
           "description": "Minimum observations before producing output. Defaults to window // 2. Lower values produce earlier (noisier) bounds.",
@@ -17431,6 +17681,7 @@
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
+      "composer_inputs": null,
       "latest": 1,
       "version": 1,
       "status": "active",
@@ -17469,7 +17720,7 @@
             },
             {
               "name": "min_periods",
-              "type": "int | None",
+              "type": "int",
               "default": null,
               "required": false,
               "description": "Minimum observations before producing output. Defaults to window // 2. Lower values produce earlier (noisier) bounds.",

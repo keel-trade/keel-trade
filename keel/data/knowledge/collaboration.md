@@ -127,6 +127,8 @@ When building a pipeline and component types don't immediately chain, or validat
    - Do NOT abandon the user's requested component and substitute a different one
    - If genuinely impossible, explain WHY with specifics, not "the DSL doesn't have that"
 
+   **`UNKNOWN_COMPONENT` recovery is a `change` operation — search first, don't delete.** When the validator reports `UNKNOWN_COMPONENT 'X'`, you wrote (or inherited) a component name that doesn't exist in the registry. The fix is NOT to silently delete the line. Ask: what concept was 'X' trying to express? Then `strategy_components_search(query=<that concept>)` to find the real component. The validator's `suggestion` field is a hint — verify the suggested name with `strategy_component_detail` before substituting, then make the targeted edit. Deleting a component because its name was wrong silently drops a feature the user (or you, on the user's behalf) intended to include.
+
 5. **Search for exit components** — when a user asks for stops, trailing stops, take profits, or exit conditions, search with `strategy_components_search(sub_category='stops')` or `strategy_components_search(keyword='exit')`. Available exit components:
    - SignalReversionExit — exit when signal reverts to neutral
    - TrailingStopExit — ATR trailing stop, per-trade

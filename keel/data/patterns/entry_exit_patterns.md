@@ -75,6 +75,7 @@ negated_z  entry        exit         PSM state
 ```
 
 ```python
+Globals(target_timeframe='1d')
 Pipeline([
     PriceDataLoader(timeframe='15min'),
     TargetTimeframeResampler(),
@@ -143,6 +144,7 @@ Slot-reading components ignore `current` — they read entry signals and/or OHLC
 Replaces the confusing `ThresholdCross(0,0)` + `PSM(exit_mode='directional')` pattern. Entry fires when signal is extreme, exit fires when it reverts to neutral.
 
 ```python
+Globals(target_timeframe='1d')
 Pipeline([
     PriceDataLoader(),
     TargetTimeframeResampler(),
@@ -165,6 +167,7 @@ The gap between entry threshold (1.5) and exit threshold (0.5) creates hysteresi
 Per-trade ATR trailing stop. Resets on each new entry. Handles long and short via entry signal direction.
 
 ```python
+Globals(target_timeframe='1d')
 Pipeline([
     PriceDataLoader(),
     TargetTimeframeResampler(),
@@ -186,6 +189,7 @@ Pipeline([
 Use Parallel + MaskOr to combine multiple exit conditions — whichever fires first closes the position.
 
 ```python
+Globals(target_timeframe='1d')
 Pipeline([
     PriceDataLoader(),
     TargetTimeframeResampler(),
@@ -208,6 +212,7 @@ Pipeline([
 ### Pattern: Trailing Stop + Time-based (whichever fires first)
 
 ```python
+Globals(target_timeframe='1d')
 Pipeline([
     PriceDataLoader(),
     TargetTimeframeResampler(),
@@ -253,6 +258,7 @@ ScalingPositionManager(entry_slots=['entry_1', 'entry_2', 'entry_3'], exit_slots
 Enter more aggressively as conditions worsen, exit when signal reverts.
 
 ```python
+Globals(target_timeframe='1d')
 Pipeline([
     PriceDataLoader(),
     TargetTimeframeResampler(),

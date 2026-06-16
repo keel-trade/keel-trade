@@ -100,6 +100,12 @@ Call `keel_strategy_compose(dry_run=False, source=<validated>, name=<descriptive
 
 After the first create, immediately `keel_strategy_checkout <strategy_id>` so the file lives in the user's editor (project-local if cwd has `.keel/workspace.yaml`). Subsequent edits then go through the lightweight-git flow — edit → `keel_strategy_push` — which preserves history and is the right path for `strategy-fork-and-iterate`. Direct `keel_strategy_compose(strategy_id=..., source=...)` still works but bypasses the local file the user can see, so prefer the checkout flow for anything beyond the initial creation.
 
+# First-Session Ownership
+
+- After saving a strategy, call `keel_ownership_status(strategy_id=<id>)`.
+- Treat `next_recommended_action`, `missing_evidence`, and `live_readiness_blockers` as guidance for the next user-facing step.
+- Do not imply live readiness until baseline evidence, failure-mode review, and an ownership decision are present.
+
 # Common mistakes
 
 - **Defaulting to mean reversion when the user didn't ask** (M-24). Crypto has structural momentum bias. Without `NegateTransform`, high RSI = long. Only invert on explicit "fade"/"overbought" language.

@@ -15,6 +15,7 @@ from keel.errors import KeelError, NotFoundError
 
 from . import register
 from ._base import OutcomeResult, OutcomeTool, ToolContext
+from ._ownership import fetch_ownership_projection, ownership_envelope_fields
 
 
 def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
@@ -30,6 +31,7 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
     version: str = (args.get("version") or "HEAD").strip() or "HEAD"
     include_source: bool = bool(args.get("include_source", False))
     include_versions: bool = bool(args.get("include_versions", False))
+    include_ownership_hint: bool = not bool(args.get("no_ownership_hint", False))
 
     client = ctx.get_client()
 
@@ -59,6 +61,8 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
             body["source_error"] = str(e)
 
     body["resource_uri"] = f"keel://strategy/{strategy_id}/source"
+    if include_ownership_hint:
+        body.update(ownership_envelope_fields(fetch_ownership_projection(ctx, strategy_id)))
 
     return OutcomeResult(
         run_id=strategy_id,
@@ -106,6 +110,11 @@ STRATEGY_GET = register(
                     "type": "boolean",
                     "default": False,
                     "description": "Also list all versions.",
+                },
+                "no_ownership_hint": {
+                    "type": "boolean",
+                    "default": False,
+                    "description": "Omit first-session ownership guidance fields.",
                 },
             },
         },

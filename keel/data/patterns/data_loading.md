@@ -43,6 +43,14 @@ Pipeline([
 `TargetTimeframeResampler()` reads the target timeframe from the Globals declaration
 automatically -- no parameters needed.
 
+This is the recommended starting pattern even when `target_timeframe` matches the
+loader's timeframe (e.g. both `'15min'`). It gives you a single knob (the Globals
+declaration) to change the strategy's timeframe later without restructuring the
+pipeline. The runtime short-circuits TargetTimeframeResampler when target equals
+source, so there's no overhead — and if you want to drop the pair entirely for a
+fixed-timeframe strategy, just remove both lines and `PriceDataLoader` runs at its
+own timeframe.
+
 ## Stream Data Resampling
 
 Funding and OI data are 1h resolution. Before mixing with daily price signals,
