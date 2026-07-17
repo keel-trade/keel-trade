@@ -89,7 +89,7 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
             resource_uri=f"keel://dsl/reference/{topic}",
             extra={"topic": topic, "body": body, "source": "api"},
         )
-    except Exception:
+    except Exception:  # noqa: BLE001 — topic fetch boundary → re-raised as KeelError listing bundled topics
         # Surface the list of bundled topics so the agent can self-correct.
         available = sorted(_list_bundled_topics())
         raise KeelError(
@@ -150,6 +150,7 @@ HELP = register(
             },
         },
         annotations={
+            "title": "Keel Help",
             "readOnlyHint": True,
             "destructiveHint": False,
             "idempotentHint": True,

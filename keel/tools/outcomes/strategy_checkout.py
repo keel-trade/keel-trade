@@ -103,9 +103,14 @@ STRATEGY_CHECKOUT = register(
         required_action="strategy.read",
         cli_path=("strategy", "checkout"),
         toolset="backtest",
+        local_only=True,  # writes a workspace under ~/.keel — meaningless on a shared hosted server
         description=(
             "Pull a platform strategy into a local workspace so you can edit, "
-            "validate, and version-control it. Writes `strategy.py` + "
+            "validate, and version-control it. Server HEAD stays the single "
+            "source of truth — the checkout is a WORKING COPY (disposable, "
+            "always reconcilable); runnable actions (backtest/deploy) resolve "
+            "server commits and write through local edits by default. Writes "
+            "`strategy.py` + "
             "`.keel-meta.json` to the workspace dir (defaults to "
             "`~/.keel/workspace/<id>/`; project-local when cwd has "
             "`.keel/workspace.yaml`). Subsequent edits are local until "
@@ -140,6 +145,7 @@ STRATEGY_CHECKOUT = register(
             },
         },
         annotations={
+            "title": "Check Out Strategy Locally",
             "readOnlyHint": False,  # writes to local filesystem
             "destructiveHint": False,
             "idempotentHint": False,  # re-running overwrites local if hash matches HEAD

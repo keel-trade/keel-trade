@@ -62,7 +62,7 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
         result = client.get(f"/v1/strategies/{strategy_id}/versions", limit=limit)
     except KeelError:
         raise
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         raise KeelError(
             f"Failed to fetch version history for {strategy_id}: {e}",
             suggestion="Run `keel_doctor` to diagnose auth / API.",
@@ -71,7 +71,7 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
     # Endpoint returns a bare list[VersionResponse] today but the
     # canonical shape is {data: [...], pagination: ...}; shared helper
     # handles both transparently.
-    from keel.workspace import _normalize_paginated_versions
+    from keel.workspace import _normalize_paginated_versions, format_modified_via
 
     entries: list[dict[str, Any]] = [
         {
@@ -82,6 +82,14 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
             "message": v.get("message"),
             "created_at": v.get("created_at"),
             "tags": v.get("tags") or [],
+            # Surface attribution (spec 08 R5): which surface/client made
+            # this commit. None for commits predating the attribution
+            # migration.
+            "client_name": v.get("client_name"),
+            "auth_surface": v.get("auth_surface"),
+            "modified_via": format_modified_via(
+                v.get("client_name"), v.get("auth_surface"), v.get("created_at")
+            ),
         }
         for v in _normalize_paginated_versions(result)
     ]
@@ -119,9 +127,13 @@ STRATEGY_LOG = register(
         toolset="read-only",
         description=(
             "Show commit history for a strategy — sequence number, commit "
-            "id, parent, source hash, message, timestamp, and tags. The "
-            "'git log' of the sync model. Reverse-chronological (newest "
-            "first). Use to audit changes, find commits to restore/diff, "
+            "id, parent, source hash, message, timestamp, tags, and "
+            "surface attribution (`modified_via`, e.g. 'modified via "
+            "claude.ai, 2h ago' — which surface/client made each commit). "
+            "The 'git log' of the sync model over the server's canonical "
+            "history (server HEAD is the source of truth). "
+            "Reverse-chronological (newest first). Use to audit changes, "
+            "find commits to restore/diff, "
             "or see what's moved since you last checked out. "
             "Do NOT use to fetch source for one commit — that's a future "
             "`keel://strategy/{id}/versions/{ref}/source` resource. Do NOT "
@@ -146,11 +158,26 @@ STRATEGY_LOG = register(
             },
         },
         annotations={
+            "title": "Strategy Version History",
             "readOnlyHint": True,
             "destructiveHint": False,
             "idempotentHint": True,
             "openWorldHint": False,
         },
         handler=_handler,
+        # Listed-profile copy (spec 01 R3): must not route to tools
+        # absent from the listed surface (keel_strategy_diff).
+        listed_description=(
+            "Show commit history for a strategy — sequence number, commit "
+            "id, parent, source hash, message, timestamp, and tags. The "
+            "'git log' of the sync model. Reverse-chronological (newest "
+            "first). Use to audit changes, find commits to restore, or see "
+            "what's moved since you last looked. "
+            "Do NOT use to fetch source for one commit — that's a future "
+            "`keel://strategy/{id}/versions/{ref}/source` resource. "
+            "Do NOT use to compare two versions structurally — fetch each "
+            "with `keel_strategy_get` and compare. "
+            "Default `limit=50`; max 200 (server-enforced)."
+        ),
     )
 )

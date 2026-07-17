@@ -187,6 +187,26 @@ def _flag_aliases(prop: str, schema: dict) -> list[str]:
     return flags
 
 
+class _JSONObjectParamType(click.ParamType):
+    """Parse a CLI option as a JSON object before invoking its handler."""
+
+    name = "JSON object"
+
+    def convert(self, value, param, ctx):
+        if isinstance(value, dict):
+            return value
+        try:
+            parsed = json.loads(value)
+        except (TypeError, json.JSONDecodeError):
+            self.fail("must be a valid JSON object", param, ctx)
+        if not isinstance(parsed, dict):
+            self.fail("must decode to a JSON object", param, ctx)
+        return parsed
+
+
+_JSON_OBJECT = _JSONObjectParamType()
+
+
 def _prop_to_option(prop: str, schema: dict, *, required: bool):
     flags = _flag_aliases(prop, schema)
     help_text = schema.get("description", "")
@@ -244,6 +264,15 @@ def _prop_to_option(prop: str, schema: dict, *, required: bool):
             required=required,
             default=default,
             show_default=default is not None,
+            help=help_text,
+        )
+
+    if schema_type == "object":
+        return click.option(
+            *flags,
+            prop,
+            type=_JSON_OBJECT,
+            required=required,
             help=help_text,
         )
 

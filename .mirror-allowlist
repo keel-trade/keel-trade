@@ -1,0 +1,47 @@
+# ── Mirror publication allowlist — gate G1 (spec 07 §8.4, SC-6) ──────────────
+#
+# Glob patterns of the ONLY paths permitted in the public mirror
+# (github.com/keel-trade/keel-trade). On EVERY sync — tag push and manual
+# dispatch alike — every file in the staged public tree (excluding the
+# checkout's own .git/) must match at least one pattern below. Any unmatched
+# file turns the sync red BEFORE anything is pushed. Fail-closed: this
+# manifest inverts the trust direction — the rsync exclude list is a first
+# filter; this file is the boundary.
+#
+# Adding a new public file class REQUIRES a same-PR edit here — loud by
+# construction.
+#
+# Semantics: Python fnmatch globs, case-sensitive, matched against
+# posix paths relative to the staged-tree root by
+# .github/scripts/mirror_gates.py. NOTE: fnmatch `*` matches across `/`,
+# so `keel/*.py` covers every .py file nested anywhere under keel/.
+#
+# This file is intentionally published (self-allowlisted, first entry): it
+# names only public paths, and publishing it makes the publication boundary
+# third-party-auditable.
+.mirror-allowlist
+.mirror-import-denylist
+# ── Repo meta (public-overlay + SDK root) ────────────────────────────────────
+.gitignore
+.github/ISSUE_TEMPLATE/config.yml
+.github/ISSUE_TEMPLATE/*.md
+AGENTS.md
+CHANGELOG.md
+CODE_OF_CONDUCT.md
+CONTRIBUTING.md
+LICENSE
+README.md
+glama.json
+pyproject.toml
+# ── SDK package code + bundled data ──────────────────────────────────────────
+keel/*.py
+keel/data/*.json
+keel/data/knowledge/*.md
+keel/data/patterns/*.md
+keel/data/reference/*.md
+keel/skills/*.md
+pipeline_engine/*.py
+scripts/*.py
+scripts/icon.png
+scripts/manifest.template.json
+tests/*.py

@@ -26,84 +26,16 @@ def create_server() -> FastMCP:
     from keel.tools.outcomes import OUTCOMES
     from keel.tools.outcomes import _bootstrap as _outcomes_bootstrap
     from keel.tools.outcomes._mcp_adapter import register_all as _outcomes_mcp_register
-    from keel.tools.outcomes._toolsets import load_toolsets
+    from keel.tools.outcomes._toolsets import is_listed_profile, load_toolsets
 
     active_toolsets = load_toolsets()
     live_write_loaded = "live-write" in active_toolsets
 
-    mcp = FastMCP(
-        name="keel",
-        instructions=(
-            "Keel is a quantitative crypto trading platform for Hyperliquid. "
-            "The agent surface is a workflow-shaped set of outcome tools "
-            "(call by canonical `keel_*` name; see `tools/list` for the "
-            "active set under `KEEL_TOOLSETS`). "
-            "Start with `keel_status` to check auth + visible tools. "
-            "Auth: when `keel_status` returns `authenticated: false`, OR when "
-            "any tool's error envelope sets `suggested_next_action.tool` to "
-            "`keel_auth_login`, call `keel_auth_login` directly — it opens the "
-            "user's browser, captures the OAuth redirect, and persists tokens. "
-            "Optional `scope='live'` pre-checks live-trading consent. "
-            "\n\n"
-            "WORKFLOW ROUTES — prefer these paths over ad-hoc tool picking. "
-            "FIRST SESSION: `keel_status` → `keel_auth_login` if needed → "
-            "`prompts/list` and load `strategy-creation` before strategy work. "
-            "RESEARCH: decompose thesis → `keel_components_search` → "
-            "`keel_components_detail_batch` for every planned component → "
-            "`keel_strategy_compose(dry_run=true)` → save with "
-            "`keel_strategy_compose` → `keel_backtest_run` → "
-            "`keel_backtest_summarize`. "
-            "EXISTING STRATEGY: `strategy-fork-and-iterate` prompt → "
-            "`keel_strategy_search` or `keel_strategy_get` → checkout/status/push "
-            "when doing local file edits → backtest server HEAD. "
-            "DEBUG: read the structured error envelope first; use "
-            "`recover-from-error`, `keel_doctor`, and `keel_audit_list_last`. "
-            "LIVE READ: `keel_live_monitor` is visible by default for existing "
-            "deployments. Read `keel_live_monitor.freshness` before interpreting "
-            "live data; positions are exchange snapshots, while portfolio/history "
-            "views are recorded backend state. "
-            "LIVE WRITE: deploy/control tools require explicit user request and "
-            "`live-write` toolset opt-in. Load `deploy-and-monitor`, call "
-            "`keel_accounts_list`, preview with `keel_live_deploy`, show the "
-            "preview, then deploy only with the returned `confirmation_token` plus "
-            "host/CLI confirmation and local arming. "
-            "\n\n"
-            "SKILLS — load deep workflow guidance BEFORE composing or iterating. "
-            "This server exposes 8 MCP prompts under the `keel-skill` tag (see "
-            "`prompts/list`): `strategy-creation`, `strategy-fork-and-iterate`, "
-            "`backtest-and-analyze`, `component-discovery`, `deploy-and-monitor`, "
-            "`portfolio-review`, `overfit-check`, `recover-from-error`. Each "
-            "auto-loads the matching knowledge sections inline (e.g. "
-            "`strategy-creation` loads reasoning_principles + composition_mechanics "
-            "+ dsl_syntax + mistakes + tool_usage + universe_selection + "
-            "pipeline_system — the same knowledge chat-api keeps always-on). "
-            "INVOKE `strategy-creation` BEFORE the first `keel_strategy_compose` "
-            "in any session — without it you're composing blind. Same rule for "
-            "`backtest-and-analyze` before `keel_backtest_run`, and "
-            "`recover-from-error` when a tool keeps failing. The skill body "
-            "tells you which other tools to call and in what order. "
-            "\n\n"
-            "KNOWLEDGE RESOURCES — individual sections also available as MCP "
-            "resources at `keel://knowledge/{section}` (e.g. "
-            "`keel://knowledge/tool_usage`, `keel://knowledge/mistakes`, "
-            "`keel://knowledge/strategy_paths`) for direct fetch without "
-            "invoking a full skill. Latest backtest resources "
-            "(`keel://backtest/latest` and "
-            "`keel://strategy/{strategy_id}/backtest/latest`) provide a compact "
-            "last-run pointer without making agents build ad-hoc list loops. "
-            "See `resources/list` for the full set."
-            + (
-                ""
-                if live_write_loaded
-                else "\n\n"
-                "Live write tools (deploy/control) are NOT loaded under the default "
-                "toolset. Set "
-                "`KEEL_TOOLSETS=read-only,backtest,share,live-read,live-write` "
-                "to opt in. `live` remains a deprecated alias for both live-read "
-                "and live-write."
-            )
-        ),
+    instructions = (
+        LISTED_INSTRUCTIONS if is_listed_profile() else _full_instructions(live_write_loaded)
     )
+
+    mcp = FastMCP(name="keel", instructions=instructions)
 
     _outcomes_bootstrap()
     _outcomes_mcp_register(mcp, OUTCOMES)
@@ -127,7 +59,7 @@ def create_server() -> FastMCP:
                 return json.dumps(live, default=str)
             finally:
                 client.close()
-        except Exception:
+        except Exception:  # noqa: BLE001 — API unavailable → fall back to bundled local components dump
             from keel.tools.local import strategy_components_dump
 
             return json.dumps(strategy_components_dump(), default=str)
@@ -146,7 +78,7 @@ def create_server() -> FastMCP:
                 return json.dumps(client.get_public(f"/v1/components/{name}"), default=str)
             finally:
                 client.close()
-        except Exception:
+        except Exception:  # noqa: BLE001 — API unavailable → fall back to bundled local component detail
             from keel.tools.local import strategy_component_detail
 
             return json.dumps(strategy_component_detail(name), default=str)
@@ -402,6 +334,156 @@ def create_server() -> FastMCP:
     return mcp
 
 
+# ── Server instructions, per profile (spec 01 R3) ─────────────────────
+#
+# LISTED (directory registration): policy-vetted copy — no deploy/fund/
+# trade verbs, no routing to tools absent from the listed surface
+# (research/08 string rules; gate: tests/test_policy_scan.py).
+LISTED_INSTRUCTIONS = (
+    "Keel is a quantitative crypto research platform for Hyperliquid "
+    "strategy development: compose strategies in the Keel DSL, run "
+    "backtests on real market history, and review the results. The "
+    "agent surface is a workflow-shaped set of outcome tools (call by "
+    "canonical `keel_*` name; see `tools/list` for the active set). "
+    "Start with `keel_status` to check auth + visible tools. "
+    "\n\n"
+    "WORKFLOW ROUTES — prefer these paths over ad-hoc tool picking. "
+    "RESEARCH: decompose thesis → `keel_components_search` → "
+    "`keel_components_detail_batch` for every planned component → "
+    "`keel_strategy_compose(dry_run=true)` → save with "
+    "`keel_strategy_compose` → `keel_backtest_run` → "
+    "`keel_backtest_summarize`. "
+    "EXISTING STRATEGY: `keel_strategy_search` or `keel_strategy_get` → "
+    "`keel_strategy_fork` to iterate on a copy → backtest the fork. "
+    "MONITORING: `keel_live_monitor` gives read-only state for "
+    "strategies already running on the user's account. "
+    "WEB APP: `keel_open_in_app` returns a link to view and manage a "
+    "strategy in the Keel web app — offer it whenever the user wants "
+    "to see or act on results outside this chat. "
+    "DEBUG: read the structured error envelope first; use "
+    "`recover-from-error` and `keel_doctor`. "
+    "FEEDBACK: at the END of a session — and whenever the same friction "
+    "repeats (a tool erroring twice, a confusing result, a missing "
+    "capability) — file it with `keel_feedback` (kind: friction | praise "
+    "| bug). It never fails and nothing waits on it. "
+    "\n\n"
+    "SKILLS — load deep workflow guidance BEFORE composing or "
+    "iterating: see `prompts/list` (`strategy-creation`, "
+    "`strategy-fork-and-iterate`, `backtest-and-analyze`, "
+    "`component-discovery`, `portfolio-review`, `overfit-check`, "
+    "`recover-from-error`). INVOKE `strategy-creation` BEFORE the "
+    "first `keel_strategy_compose` in any session. "
+    "\n\n"
+    "KNOWLEDGE RESOURCES — individual sections available as MCP "
+    "resources at `keel://knowledge/{section}`; latest backtest "
+    "pointers at `keel://backtest/latest`. See `resources/list`."
+    "\n\n"
+    "STATE MODEL — strategy state lives on the Keel server: every tool "
+    "call reads and writes the server's canonical version (one linear "
+    "history), and `keel_strategy_log` shows which surface made each "
+    "change."
+)
+
+
+def _full_instructions(live_write_loaded: bool) -> str:
+    """Instructions for the full (unlisted endpoint / local) profile."""
+    return (
+        "Keel is a quantitative crypto trading platform for Hyperliquid. "
+        "The agent surface is a workflow-shaped set of outcome tools "
+        "(call by canonical `keel_*` name; see `tools/list` for the "
+        "active set under `KEEL_TOOLSETS`). "
+        "Start with `keel_status` to check auth + visible tools. "
+        "Auth: when `keel_status` returns `authenticated: false`, OR when "
+        "any tool's error envelope sets `suggested_next_action.tool` to "
+        "`keel_auth_login`, call `keel_auth_login` directly — it opens the "
+        "user's browser, captures the OAuth redirect, and persists tokens. "
+        "Optional `scope='live'` pre-checks live-trading consent. "
+        "\n\n"
+        "WORKFLOW ROUTES — prefer these paths over ad-hoc tool picking. "
+        "FIRST SESSION: `keel_status` → `keel_auth_login` if needed → "
+        "`prompts/list` and load `strategy-creation` before strategy work. "
+        "RESEARCH: decompose thesis → `keel_components_search` → "
+        "`keel_components_detail_batch` for every planned component → "
+        "`keel_strategy_compose(dry_run=true)` → save with "
+        "`keel_strategy_compose` → `keel_backtest_run` → "
+        "`keel_backtest_summarize`. "
+        "EXISTING STRATEGY: `strategy-fork-and-iterate` prompt → "
+        "`keel_strategy_search` or `keel_strategy_get` → checkout/status/push "
+        "when doing local file edits → backtest server HEAD. "
+        "DEBUG: read the structured error envelope first; use "
+        "`recover-from-error`, `keel_doctor`, and `keel_audit_list_last`. "
+        "FEEDBACK: at the END of a session — and whenever the same friction "
+        "repeats (a tool erroring twice, a confusing result, a missing "
+        "capability) — file it with `keel_feedback` (kind: friction | praise "
+        "| bug). It never fails and nothing waits on it. "
+        "LIVE READ: `keel_live_monitor` is visible by default for existing "
+        "deployments. Read `keel_live_monitor.freshness` before interpreting "
+        "live data; positions are exchange snapshots, while portfolio/history "
+        "views are recorded backend state. "
+        "LIVE WRITE: deploy/control tools require explicit user request and "
+        "`live-write` toolset opt-in. Load `deploy-and-monitor`, call "
+        "`keel_accounts_list`, preview with `keel_live_deploy`, show the "
+        "preview, then deploy only with the returned `confirmation_token` plus "
+        "host/CLI confirmation and local arming. "
+        "\n\n"
+        "STATE MODEL — server HEAD is the single source of truth: "
+        "backtests, deploys, and shares always resolve a server commit, "
+        "never a local file. Local checkouts are working copies that WRITE "
+        "THROUGH by default: `keel_backtest_run` and the `keel_live_deploy` "
+        "preview push unpushed local edits automatically and pin to the new "
+        "commit (`auto_push=false` opts out and raises `local_ahead`). "
+        "Server-side edits (`keel_strategy_compose`) write back into a "
+        "same-machine checkout; elsewhere `keel_strategy_status` detects "
+        "staleness by hash and says to run `keel_strategy_pull`. A true "
+        "conflict (local edited AND server moved) STOPS with a "
+        "`sync_conflict` envelope carrying three-way hashes plus options "
+        "`pull_force` | manual merge via `keel_strategy_diff` | pin "
+        "`commit_id` — never auto-merged, never force-pushed. Commits carry "
+        "surface attribution: `keel_strategy_log` shows 'modified via "
+        "claude.ai, 2h ago'. "
+        "\n\n"
+        "SKILLS — load deep workflow guidance BEFORE composing or iterating. "
+        "This server exposes 8 MCP prompts under the `keel-skill` tag (see "
+        "`prompts/list`): `strategy-creation`, `strategy-fork-and-iterate`, "
+        "`backtest-and-analyze`, `component-discovery`, `deploy-and-monitor`, "
+        "`portfolio-review`, `overfit-check`, `recover-from-error`. Each "
+        "auto-loads the matching knowledge sections inline (e.g. "
+        "`strategy-creation` loads reasoning_principles + composition_mechanics "
+        "+ dsl_syntax + mistakes + tool_usage + universe_selection + "
+        "pipeline_system — the same knowledge chat-api keeps always-on). "
+        "INVOKE `strategy-creation` BEFORE the first `keel_strategy_compose` "
+        "in any session — without it you're composing blind. Same rule for "
+        "`backtest-and-analyze` before `keel_backtest_run`, and "
+        "`recover-from-error` when a tool keeps failing. The skill body "
+        "tells you which other tools to call and in what order. "
+        "\n\n"
+        "KNOWLEDGE RESOURCES — individual sections also available as MCP "
+        "resources at `keel://knowledge/{section}` (e.g. "
+        "`keel://knowledge/tool_usage`, `keel://knowledge/mistakes`, "
+        "`keel://knowledge/strategy_paths`) for direct fetch without "
+        "invoking a full skill. Latest backtest resources "
+        "(`keel://backtest/latest` and "
+        "`keel://strategy/{strategy_id}/backtest/latest`) provide a compact "
+        "last-run pointer without making agents build ad-hoc list loops. "
+        "See `resources/list` for the full set."
+        + (
+            ""
+            if live_write_loaded
+            else "\n\n"
+            "Live write tools (deploy/control) are NOT loaded under the default "
+            "toolset. Set "
+            "`KEEL_TOOLSETS=read-only,backtest,share,live-read,live-write` "
+            "to opt in. `live` remains a deprecated alias for both live-read "
+            "and live-write."
+        )
+    )
+
+
+# Skills excluded from the listed-profile prompt surface — their bodies
+# guide workflows whose tools are not registered on that profile.
+LISTED_EXCLUDED_SKILLS: frozenset[str] = frozenset({"deploy-and-monitor"})
+
+
 def _register_skill_prompts(mcp: "FastMCP") -> None:
     """Register each bundled skill as an MCP prompt.
 
@@ -412,10 +494,11 @@ def _register_skill_prompts(mcp: "FastMCP") -> None:
     short description; the body lazy-loads via `compose_skill()`.
     """
     from keel.skills import BUNDLED_SKILLS, compose_skill, list_skills
+    from keel.tools.outcomes._toolsets import is_listed_profile
 
     try:
         skills_map = list_skills()
-    except Exception:
+    except Exception:  # noqa: BLE001 — skill parse failure at startup → serve no prompts, tools still work
         # If skill parsing fails at server startup, fall back to no
         # prompts rather than crashing the server. Tools still work.
         return
@@ -423,6 +506,11 @@ def _register_skill_prompts(mcp: "FastMCP") -> None:
     for name in BUNDLED_SKILLS:
         sk = skills_map.get(name)
         if sk is None:
+            continue
+        if is_listed_profile() and name in LISTED_EXCLUDED_SKILLS:
+            # The listed registration exposes no deploy workflow —
+            # its guidance would route to tools absent from the
+            # surface (spec 01 R3, research/08).
             continue
 
         # Closure capture: bind `name` per iteration so each prompt

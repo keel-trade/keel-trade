@@ -94,7 +94,7 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
 
     # 3. Toolset surface
     from . import all_tools
-    from ._toolsets import load_toolsets
+    from ._toolsets import is_tool_loaded, load_toolsets
 
     active = load_toolsets()
     checks.append(
@@ -104,7 +104,9 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
             "detail": {
                 "active": sorted(active),
                 "tool_count": sum(
-                    1 for t in all_tools() if t.toolset == "always" or t.toolset in active
+                    1
+                    for t in all_tools()
+                    if is_tool_loaded(t.toolset, active, local_only=t.local_only, name=t.name)
                 ),
             },
         }
@@ -147,11 +149,21 @@ DOCTOR = register(
         ),
         input_schema={"type": "object", "properties": {}, "required": []},
         annotations={
+            "title": "Diagnose Keel Setup",
             "readOnlyHint": True,
             "destructiveHint": False,
             "idempotentHint": True,
             "openWorldHint": False,
         },
         handler=_handler,
+        # Listed-profile copy (spec 01 R3): must not route to tools
+        # absent from the listed surface (keel_accounts_list).
+        listed_description=(
+            "Diagnose the Keel MCP connection: auth, API reachability, and "
+            "the active tool surface. Call this when a tool returns an "
+            "unexpected error or when wiring up for the first time. "
+            "Do NOT use to enumerate strategies — call "
+            "`keel_strategy_search` instead."
+        ),
     )
 )

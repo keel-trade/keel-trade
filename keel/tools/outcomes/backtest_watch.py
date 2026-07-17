@@ -65,9 +65,7 @@ def _snapshot_envelope(
         extra["error_message"] = detail["error_message"]
     if include_ownership_hint and detail.get("strategy_id"):
         extra.update(
-            ownership_envelope_fields(
-                fetch_ownership_projection(ctx, str(detail["strategy_id"]))
-            )
+            ownership_envelope_fields(fetch_ownership_projection(ctx, str(detail["strategy_id"])))
         )
 
     summary_metrics = _extract_summary_metrics(detail.get("metrics"))
@@ -196,6 +194,7 @@ BACKTEST_WATCH = register(
             },
         },
         annotations={
+            "title": "Watch Backtest Progress",
             "readOnlyHint": True,
             "destructiveHint": False,
             "idempotentHint": True,

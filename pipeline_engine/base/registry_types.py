@@ -438,6 +438,65 @@ def get_all_versions(name: str) -> dict[int, ComponentSignature]:
     return dict(COMPONENT_REGISTRY.get(name, {}))
 
 
+def _pin_resolution_error(name: str, pinned: int) -> "Exception":
+    """Build the spec-01 §2.1 structured error for an unresolvable version pin.
+
+    The SINGLE construction point for pin-enforcement errors, used by BOTH
+    execution paths — blob reconstruct (``compile._resolve_component_class``)
+    and live source (``_build_effective_registry`` below) — so the payload
+    (code, component, pinned/latest/available versions, changelog,
+    remediation) is unified by construction (spec 01 §2.1).
+
+    Returns (never raises) a :class:`~pipeline_engine.exceptions.ComponentVersionError`:
+
+    - name registered but pinned version absent → ``COMPONENT_VERSION_PHASED_OUT``
+    - name not registered at all → ``COMPONENT_UNREGISTERED``
+    """
+    # pipeline_engine.exceptions is import-cycle-free (imports nothing from
+    # pipeline_engine) and bundled in the SDK alongside this module.
+    from pipeline_engine.exceptions import ComponentVersionError
+
+    versions = get_all_versions(name)
+    if not versions:
+        return ComponentVersionError(
+            code="COMPONENT_UNREGISTERED",
+            component=name,
+            pinned_version=pinned,
+            remediation=(
+                f"This strategy references the component '{name}', which is "
+                f"no longer available on the platform. Open the strategy in "
+                f"the editor, replace or upgrade the component, and re-save — "
+                f"or contact support if you believe this component should "
+                f"still exist."
+            ),
+            detail=f"'{name}' has no registered versions (pinned v{pinned}).",
+        )
+
+    latest = max(versions)
+    changelog: dict[int, str] = {}
+    for ver in sorted(versions):
+        entry = versions[ver].changelog.get(ver)
+        if entry:
+            changelog[ver] = entry
+    return ComponentVersionError(
+        code="COMPONENT_VERSION_PHASED_OUT",
+        component=name,
+        pinned_version=pinned,
+        latest_version=latest,
+        available_versions=sorted(versions),
+        changelog=changelog,
+        remediation=(
+            f"This strategy is pinned to a retired version of {name}. Open "
+            f"the strategy in the editor and apply the component upgrade "
+            f"(Components → Upgrade), then re-run."
+        ),
+        detail=(
+            f"Locked version {pinned} for component '{name}' not found in "
+            f"registry; available versions: {sorted(versions)} (latest v{latest})."
+        ),
+    )
+
+
 def _build_effective_registry(
     lock: dict[str, int],
 ) -> dict[str, ComponentSignature]:
@@ -450,21 +509,17 @@ def _build_effective_registry(
         Flat dict suitable for validator / resolver passes.
 
     Raises:
-        LockError: If a locked component or version is not registered.
+        ComponentVersionError: If a locked component or version is not
+            registered. Subclasses ``LockError``, so every existing
+            ``except LockError`` site still catches it; the payload now
+            carries the same structured fields as the blob-reconstruct
+            path (spec 01 §2.1 unification — one error shape, both paths).
     """
-    # lock.py is bundled in the SDK now (see scripts/build_data.py); the
-    # prior `except ImportError: class LockError(Exception): pass` fallback
-    # was a silent-failure pattern — it produced a different LockError
-    # class identity, so `except LockError:` clauses elsewhere wouldn't
-    # catch it. Per code standards: validators/parsers behave in one
-    # exact way and error otherwise. Import the real class directly.
-    from pipeline_engine.base.lock import LockError
-
     flat: dict[str, ComponentSignature] = {}
     for name, ver in lock.items():
         sig = get_version(name, ver)
         if sig is None:
-            raise LockError(f"Locked version {ver} for component '{name}' not found in registry")
+            raise _pin_resolution_error(name, ver)
         flat[name] = sig
     return flat
 
@@ -712,6 +767,7 @@ __all__ = [
     "get_version",
     "get_all_versions",
     "_build_effective_registry",
+    "_pin_resolution_error",
     "_resolve_type_name",
     "_resolve_param_type",
     "unwrap_annotated",

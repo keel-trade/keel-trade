@@ -117,9 +117,43 @@ keel strategy log str_abc123
 keel strategy restore str_abc123 --ref 3
 ```
 
-Backtests run server-side strategy versions. If local edits are ahead of the
-server, push first or use `--auto-push` intentionally.
+Backtests run server-side strategy versions. Local edits that are ahead are
+pushed automatically before the run (write-through default; pass
+`auto_push=false` / `--no-auto-push` to opt out).
 `end_date` / `--end-date` is optional and defaults to today's UTC date.
+
+## State Model & Sync (read this once)
+
+**Server HEAD is the single source of truth for strategy source.** Every
+runnable action — backtest, deploy, share — resolves against a server
+commit, never a local file. The local workspace (`keel_strategy_checkout`)
+is a working copy: convenient, disposable, always reconcilable.
+
+- **Write-through by default.** `keel_backtest_run` and the
+  `keel_live_deploy` preview push unpushed local edits automatically
+  (generated commit message, or pass `push_message`) and pin to the
+  pushed commit, so you always run what you actually have. Opt out with
+  `auto_push=false` — then a locally-ahead strategy raises `local_ahead`
+  instead of silently testing old server code.
+- **Pull-through on server-side edits.** `keel_strategy_compose` updates
+  a same-machine checkout in the same operation (`workspace_sync` in the
+  response). Edits made elsewhere (web editor, another machine, hosted
+  MCP) are detected by hash on the next local tool touch;
+  `keel_strategy_status` then says exactly one thing to do
+  (`keel_strategy_pull`).
+- **Conflicts never resolve silently.** A true conflict (local edited AND
+  server moved) stops any push/pull/backtest/deploy with a `sync_conflict`
+  envelope carrying three-way context (`base_hash`, `local_hash`,
+  `server_hash`, `server_last_modified`, `server_modified_via`) and
+  exactly three recovery options: `pull_force` (take server, lose local),
+  manual merge via `keel_strategy_diff`, or pinning an explicit
+  `commit_id` on the blocked action. There is no auto-merge and no
+  force-push recommendation, ever.
+- **Commits carry surface attribution.** `keel_strategy_log` shows
+  `modified_via` per commit ("modified via claude.ai, 2h ago") so
+  multi-surface work stays legible.
+- Remote/hosted MCP is file-free: no workspace tools, inline `source`
+  only; web and chat write the server directly.
 
 ## Current MCP Tools
 

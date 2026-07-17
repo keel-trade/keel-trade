@@ -19,10 +19,32 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from keel.errors import KeelError, ValidationError
+from keel.errors import EntitlementError, KeelError, ValidationError
 
 from . import register
 from ._base import OutcomeResult, OutcomeTool, ToolContext
+
+
+def _maybe_compose_quota_handoff(e: EntitlementError, *, strategy_id: str | None, name: str | None):
+    """Plan-cap wall → shared handoff envelope (spec 03 R1).
+
+    Persisting can hit org plan caps (strategy counts, symbols per
+    strategy, feature gates); those 403s carry entitlement reasons and
+    only a human billing action clears them. Non-quota 403s return None
+    so the caller re-raises the original error untouched.
+    """
+    from ._handoff import maybe_quota_handoff
+
+    retry_args: dict[str, Any] = {}
+    if strategy_id:
+        retry_args["strategy_id"] = strategy_id
+    if name:
+        retry_args["name"] = name
+    return maybe_quota_handoff(
+        e,
+        blocked_action="strategy_compose",
+        retry_call={"tool": "keel_strategy_compose", "args": retry_args},
+    )
 
 
 def _read_source(args: dict) -> str:
@@ -41,6 +63,21 @@ def _read_source(args: dict) -> str:
     if source:
         return str(source)
     if source_file:
+        from keel.hosting import is_hosted
+
+        if is_hosted():
+            # No caller filesystem on the hosted server — the file-path
+            # convenience is local-only. Fail instructively instead of
+            # reading pod paths.
+            raise KeelError(
+                "`source_file` is not available on the hosted server — there "
+                "is no local filesystem here.",
+                error_code="usage_error",
+                exit_code=2,
+                suggestion=(
+                    "Pass the DSL text inline via `source='Globals(...)'` instead of a file path."
+                ),
+            )
         p = Path(str(source_file))
         if not p.exists():
             raise KeelError(
@@ -77,7 +114,7 @@ def _try_local_validate(source: str) -> dict[str, Any]:
         lock = None
         try:
             lock = strategy_lock_generate(source=source).get("component_lock")
-        except Exception:
+        except Exception:  # noqa: BLE001, S110 — lock generation optional; validation proceeds without it
             pass
         result = (
             strategy_validate(source=source, component_lock=lock)
@@ -167,6 +204,7 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
         )
 
     client = ctx.get_client()
+    workspace_sync: dict[str, Any] | None = None
     payload: dict[str, Any] = {"source": source}
     if name:
         payload["name"] = name
@@ -179,6 +217,11 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
         # Update existing
         try:
             result = client.patch(f"/v1/strategies/{strategy_id}", json=payload)
+        except EntitlementError as e:
+            handoff = _maybe_compose_quota_handoff(e, strategy_id=strategy_id, name=name)
+            if handoff is not None:
+                raise handoff from e
+            raise
         except KeelError:
             raise
         except Exception as e:  # noqa: BLE001
@@ -192,9 +235,37 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
                 ),
             )
         sid = result.get("strategy_id") or strategy_id
+
+        # Pull-through write-back (spec 08 R3): a server-side update to a
+        # strategy checked out ON THIS MACHINE propagates into the local
+        # working copy + meta in the same operation, so the checkout never
+        # silently goes stale here. Hosted servers have no caller
+        # filesystem — the branch is a deliberate no-op there (spec 01 R2).
+        # Advisory: a workspace problem must never fail the compose (the
+        # server update already succeeded).
+        from keel.hosting import is_hosted
+
+        if not is_hosted():
+            try:
+                from keel.workspace import write_back_after_server_update
+
+                workspace_sync = write_back_after_server_update(
+                    sid or strategy_id,
+                    source=source,
+                    server_source_hash=result.get("source_hash"),
+                    server_sequence=result.get("current_sequence"),
+                    server_name=result.get("name"),
+                )
+            except Exception:  # noqa: BLE001, S110 — advisory write-back; compose already succeeded
+                workspace_sync = None
     else:
         try:
             result = client.post("/v1/strategies", json=payload)
+        except EntitlementError as e:
+            handoff = _maybe_compose_quota_handoff(e, strategy_id=None, name=name)
+            if handoff is not None:
+                raise handoff from e
+            raise
         except KeelError:
             raise
         except Exception as e:  # noqa: BLE001
@@ -220,6 +291,8 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
             "warnings": validation["warnings"],
         },
     }
+    if workspace_sync is not None:
+        body["workspace_sync"] = workspace_sync
     return OutcomeResult(
         run_id=sid,
         hero_url=f"{ctx.app_url}/strategies/{sid}" if sid else f"{ctx.app_url}/strategies",
@@ -251,6 +324,12 @@ STRATEGY_COMPOSE = register(
             "catalogs. For modifying an existing strategy, invoke "
             "`strategy-fork-and-iterate` instead. "
             "\n\n"
+            "Server HEAD is the source of truth: updates commit directly to "
+            "the server. If the strategy is also checked out locally on this "
+            "machine, the update is written back into the working copy in "
+            "the same operation (`workspace_sync` in the response) unless "
+            "the local file has uncommitted edits — those are never "
+            "overwritten. "
             "Validation feedback (errors + warnings + type-flow) always "
             "surfaces in the response under `validation.errors` and "
             "`validation.warnings`. Validation does NOT block the save — "
@@ -298,6 +377,7 @@ STRATEGY_COMPOSE = register(
             "required": [],
         },
         annotations={
+            "title": "Compose Strategy",
             "readOnlyHint": False,
             "destructiveHint": False,
             "idempotentHint": True,

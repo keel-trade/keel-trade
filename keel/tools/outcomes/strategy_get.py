@@ -119,6 +119,7 @@ STRATEGY_GET = register(
             },
         },
         annotations={
+            "title": "Get Strategy",
             "readOnlyHint": True,
             "destructiveHint": False,
             "idempotentHint": True,

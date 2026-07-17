@@ -28,6 +28,9 @@ def _isolate_user_config(tmp_path, monkeypatch):
     fake_dir = tmp_path
     monkeypatch.delenv("KEEL_API_KEY", raising=False)
     monkeypatch.delenv("KEEL_API_URL", raising=False)
+    # Default every test to local execution mode — hosted-mode behavior
+    # (keel.hosting) is opted into explicitly by the hosted-mode tests.
+    monkeypatch.delenv("KEEL_EXECUTION_MODE", raising=False)
     with (
         patch("keel.config.CONFIG_FILE", fake_config),
         patch("keel.config.CONFIG_DIR", fake_dir),

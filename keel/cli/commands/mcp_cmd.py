@@ -17,6 +17,10 @@ def serve() -> None:
     Agent hosts launch this command as a local stdio child process.
     """
     from keel.mcp.server import create_server
+    from keel.surface import set_surface
 
+    # Surface self-identification (spec 08 R5): local stdio MCP — not the
+    # CLI (the parent `cli()` group already set "cli"; override).
+    set_surface("local-mcp")
     server = create_server()
     server.run(transport="stdio")

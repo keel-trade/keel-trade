@@ -136,6 +136,7 @@ STRATEGY_FORK = register(
             },
         },
         annotations={
+            "title": "Fork Strategy",
             "readOnlyHint": False,
             "destructiveHint": False,
             "idempotentHint": True,

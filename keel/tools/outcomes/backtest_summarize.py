@@ -110,6 +110,14 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
             # Surface no fatal — we already have the headline metrics.
             pass
 
+    # Good-result nudge (spec 03 R3a): exactly one line, exactly when the
+    # run's durable metrics.good_result marker is set (spec 02 gate).
+    from ._nudge import good_result_nudge
+
+    nudge = good_result_nudge(detail, strategy_id=detail.get("strategy_id"), ctx=ctx)
+    if nudge:
+        extra["nudge"] = nudge
+
     return OutcomeResult(
         run_id=backtest_id,
         hero_url=hero_url,
@@ -151,11 +159,29 @@ BACKTEST_SUMMARIZE = register(
             },
         },
         annotations={
+            "title": "Summarize Backtest Results",
             "readOnlyHint": True,
             "destructiveHint": False,
             "idempotentHint": True,
             "openWorldHint": False,
         },
         handler=_handler,
+        # Listed-profile copy (spec 01 R3): "funding-attribution" is the
+        # crypto-perps metric name, but the listed surface bans the
+        # fund* token family outright (research/08) — "carry
+        # attribution" is the equivalent finance term.
+        listed_description=(
+            "Summarize a completed backtest: Sharpe / max drawdown / total "
+            "return / turnover / carry attribution, plus period info and "
+            "a presigned `results.json` URL when the run is complete. "
+            "Returns `hero_url` deep-linked to the tearsheet view. "
+            "BE PROACTIVE: after `keel_backtest_run` returns successfully, "
+            "call this automatically with the same backtest_id to enrich "
+            "your reply to the user. Don't ask 'do you want the full "
+            "metrics?' first — they almost always do. "
+            "Do NOT use mid-run — agent should poll status_url or wait for "
+            "the post-run hook. Call `keel_backtest_run` (with `wait=true`) "
+            "for submission + completion."
+        ),
     )
 )

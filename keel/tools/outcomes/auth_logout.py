@@ -49,6 +49,7 @@ AUTH_LOGOUT = register(
         required_action="",  # no auth required — logout always allowed
         cli_path=("auth", "logout"),  # informational only; mcp_only skips registration
         toolset="always",
+        local_only=True,  # wipes ~/.keel/config.yaml; hosted sessions are revoked client-side
         mcp_only=True,
         description=(
             "Clear stored Keel credentials from ~/.keel/config.yaml so the "
@@ -68,6 +69,7 @@ AUTH_LOGOUT = register(
             "required": [],
         },
         annotations={
+            "title": "Log Out of Keel",
             "readOnlyHint": False,  # wipes ~/.keel/config.yaml
             "destructiveHint": True,  # removes user's session
             "idempotentHint": True,

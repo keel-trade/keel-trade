@@ -156,9 +156,31 @@ class OutcomeTool:
     cli_options_override: list = field(default_factory=list)
     confirm_in_cli: bool = False  # destructive tools: prompt unless --yes
     mcp_only: bool = False  # skip CLI registration (use when CLI surface is hand-rolled elsewhere)
+    # Tool only makes sense on the user's own machine (local workspace
+    # checkouts under ~/.keel, browser-based login, config-file writes).
+    # Hosted servers (KEEL_EXECUTION_MODE=hosted) never register these —
+    # enforced by `_toolsets.is_tool_loaded`. Spec 01 R2.
+    local_only: bool = False
+    # ── Listed-profile copy overrides (spec 01 R3, research/08) ──────
+    # The directory-listed registration carries policy-vetted copy: no
+    # deploy/fund/trade verbs anywhere in titles, descriptions, or
+    # parameter descriptions, and no routing to tools absent from the
+    # listed surface. When set, these replace the shared fields ONLY
+    # under KEEL_SERVER_PROFILE=listed (tests/test_policy_scan.py is
+    # the gate). Tool behavior, arg names, and required fields must
+    # stay identical across profiles — overrides are copy, not contract.
+    listed_description: str | None = None
+    listed_input_schema: dict | None = None
+    listed_title: str | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "input_schema", normalize_input_schema(self.input_schema))
+        if self.listed_input_schema is not None:
+            object.__setattr__(
+                self,
+                "listed_input_schema",
+                normalize_input_schema(self.listed_input_schema),
+            )
 
 
 # Sentinel set of all toolset names (parsing helper).

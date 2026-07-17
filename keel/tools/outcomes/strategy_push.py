@@ -84,9 +84,12 @@ STRATEGY_PUSH = register(
         required_action="strategy.update",
         cli_path=("strategy", "push"),
         toolset="backtest",
+        local_only=True,  # reads the local workspace working copy
         description=(
             "Commit local strategy.py changes back to the platform as a new "
-            "version. The 'git push' of the sync model. Reads the local "
+            "version. The 'git push' of the sync model — server HEAD is the "
+            "source of truth, and pushing is how local edits become runnable. "
+            "Reads the local "
             "working copy, validates, sends to the API, creates a new commit. "
             "Conflict-safe by default (uses `expected_source_hash` against "
             "what the server had at last checkout/pull). Pass `force=True` "
@@ -131,6 +134,7 @@ STRATEGY_PUSH = register(
             },
         },
         annotations={
+            "title": "Push Local Strategy Changes",
             "readOnlyHint": False,
             "destructiveHint": False,  # creates new commit, doesn't delete
             "idempotentHint": False,

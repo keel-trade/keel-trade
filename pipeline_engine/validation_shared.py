@@ -55,9 +55,7 @@ TIMEFRAME_MINUTES: dict[str, int] = {
 def timeframe_to_minutes(tf: str) -> int:
     """Convert a canonical timeframe string to minutes. Raises on unknown."""
     if tf not in TIMEFRAME_MINUTES:
-        raise ValueError(
-            f"Unknown timeframe '{tf}'. Valid: {sorted(TIMEFRAME_MINUTES)}"
-        )
+        raise ValueError(f"Unknown timeframe '{tf}'. Valid: {sorted(TIMEFRAME_MINUTES)}")
     return TIMEFRAME_MINUTES[tf]
 
 
@@ -68,15 +66,24 @@ _BAR_OFFSET_UNIT_MINUTES: dict[str, int] = {
     "w": 7 * 24 * 60,
 }
 
-_BAR_OFFSET_RE = re.compile(r"^\s*(\d+)\s*(min|h|d|w)\s*$", re.IGNORECASE)
+# Unified bar-offset grammar (core-engine-audit spec 02 §4.4, 2026-07-10):
+# strict — case-sensitive, no whitespace — matching the TS editor validator's
+# regex in pass9-declarations.ts exactly. Python used to accept '12H ' /
+# ' 15min' (IGNORECASE + \s*) while TS rejected them: a live, unfixtured
+# grammar divergence. Strictness is the safer unification direction and no
+# stored strategy depends on the lenient forms (emitters always write
+# canonical lowercase). Fixture bar_offset_grammar_reject pins the '12H '
+# case in both languages.
+_BAR_OFFSET_RE = re.compile(r"^(\d+)(min|h|d|w)$")
 
 
 def parse_bar_offset_minutes(bar_offset: str) -> int:
     """Parse bar_offset to whole minutes. Raises ValueError on invalid.
 
-    Permissive about format ('15min', '12h', '1d', '90min' all OK) but strict
-    about value (positive, whole minutes only — sub-minute offsets are nonsense
-    on a 15min-source platform).
+    Strict grammar ('15min', '12h', '1d', '90min' — lowercase unit, no
+    whitespace; unified with the TS editor validator, spec 02 §4.4) and
+    strict about value (positive, whole minutes only — sub-minute offsets
+    are nonsense on a 15min-source platform).
     """
     if not isinstance(bar_offset, str):
         raise ValueError(
@@ -90,15 +97,13 @@ def parse_bar_offset_minutes(bar_offset: str) -> int:
             f"Use a value like '15min', '30min', '1h', '12h'."
         )
     n = int(match.group(1))
-    unit = match.group(2).lower()
+    unit = match.group(2)
     if n <= 0:
         raise ValueError(f"bar_offset ({bar_offset!r}) must be positive.")
     return n * _BAR_OFFSET_UNIT_MINUTES[unit]
 
 
-def validate_resample_config(
-    source_tf: str, target_tf: str, bar_offset: str | None
-) -> None:
+def validate_resample_config(source_tf: str, target_tf: str, bar_offset: str | None) -> None:
     """Validate a (source_tf, target_tf, bar_offset) triple. Raises ValueError.
 
     Rules:
@@ -224,6 +229,16 @@ class ValidationResult:
     slot_types: dict[str, type] = field(default_factory=dict)
     pipeline_summary: str = ""
 
+    def all_issues(self) -> list[ValidationIssue]:
+        """Errors, then warnings, then info — flat list for serialization.
+
+        Use when emitting issues to API responses, MCP tool output, or any
+        consumer that surfaces issues to the user. Including info ensures
+        non-blocking advisory codes (LOCK_DRIFT, future signals) reach the
+        renderer instead of being silently dropped.
+        """
+        return self.errors + self.warnings + self.info
+
     def explain(self) -> str:
         """Produce readable multi-line output of all issues."""
         lines: list[str] = []
@@ -274,20 +289,14 @@ ANNOTATED_SEMANTIC_NAMES: dict[int, str] = {}
 
 def _init_annotated_semantic_names() -> None:
     """Auto-discover Annotated types from pipeline_engine.types."""
-    try:
-        from pipeline_engine import types as t
+    from pipeline_engine import types as t
 
-        for name in dir(t):
-            if name.startswith("_"):
-                continue
-            obj = getattr(t, name)
-            if get_origin(obj) is Annotated:
-                ANNOTATED_SEMANTIC_NAMES[id(obj)] = name
-    except ImportError:
-        # SDK mode: no types module available.
-        # ANNOTATED_SEMANTIC_NAMES stays empty — the validator uses
-        # string-based type names from registry.json instead.
-        pass
+    for name in dir(t):
+        if name.startswith("_"):
+            continue
+        obj = getattr(t, name)
+        if get_origin(obj) is Annotated:
+            ANNOTATED_SEMANTIC_NAMES[id(obj)] = name
 
 
 _init_annotated_semantic_names()
@@ -305,7 +314,13 @@ TYPE_TRANSITIONS: dict[str, dict[StepCategory, list[str]]] = {
     },
     # === Phase 1: DATA ===
     "OHLCVDict": {
-        StepCategory.DATA_TRANSFORM: ["OHLCVDict"],
+        # Most data transforms preserve OHLCV shape, while
+        # VolatilityAdjustedPriceSeries intentionally reduces close prices to
+        # a signal frame for BreakoutDistance.
+        StepCategory.DATA_TRANSFORM: ["OHLCVDict", "SignalSeries"],
+        # ExtractSeries is a signal transform because it starts a signal branch,
+        # but its truthful input is the upstream OHLCV dictionary.
+        StepCategory.SIGNAL_TRANSFORM: ["SignalSeries"],
         StepCategory.UNIVERSE_FILTER: ["SignalSeries", "OHLCVDict"],
         StepCategory.INDICATOR: ["SignalSeries"],
         # ConstantForecast accepts OHLCVDict directly as an index/basket entry point.
@@ -325,6 +340,9 @@ TYPE_TRANSITIONS: dict[str, dict[StepCategory, list[str]]] = {
     # === Phase 3: SIGNAL (within-branch transitions) ===
     "SignalSeries": {
         StepCategory.DATA_TRANSFORM: ["SignalSeries"],
+        # BreakoutDistance consumes the signal frame emitted by
+        # VolatilityAdjustedPriceSeries while retaining indicator semantics.
+        StepCategory.INDICATOR: ["SignalSeries"],
         StepCategory.SIGNAL_TRANSFORM: [
             "NormalizedSignal",
             "BinarySignal",

@@ -78,3 +78,12 @@ def strategy_lock_upgrade_remote(
         return client.post("/v1/strategies/lock/upgrade", json=body)
     finally:
         client.close()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# New "components" surface (2026-06-29). The HTTP endpoints stay the same
+# (server-side backward compat); these are SDK-side aliases so user code
+# uses the cleaner name.
+# ─────────────────────────────────────────────────────────────────────────────
+strategy_components_drift_remote = strategy_lock_status_remote
+strategy_components_upgrade_remote = strategy_lock_upgrade_remote

@@ -19,7 +19,11 @@ import json
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+
+if TYPE_CHECKING:
+    from keel.errors import KeelError
 
 
 WORKSPACE_ROOT = Path.home() / ".keel" / "workspace"
@@ -142,7 +146,7 @@ def _fetch_latest_commit_id(client: Any, strategy_id: str) -> str | None:
     """
     try:
         raw = client.get(f"/v1/strategies/{strategy_id}/versions", limit=1)
-    except Exception:
+    except Exception:  # noqa: BLE001 — version fetch best-effort on the happy path → None on failure
         return None
     versions = _normalize_paginated_versions(raw)
     if not versions:
@@ -532,7 +536,22 @@ def push(
 
     client = KeelClient()
     try:
-        result = client.patch(f"/v1/strategies/{strategy_id}", json=body)
+        try:
+            result = client.patch(f"/v1/strategies/{strategy_id}", json=body)
+        except Exception as exc:
+            from keel.errors import ConflictError
+
+            if isinstance(exc, ConflictError):
+                # Optimistic concurrency 409: server HEAD moved since
+                # checkout AND local has edits — a true three-way
+                # conflict. Raise the spec-08 R4 envelope (never forces).
+                raise build_conflict_envelope(
+                    strategy_id,
+                    base_hash=meta.source_hash,
+                    local_hash=local_hash,
+                    action="push",
+                ) from exc
+            raise
         # PATCH returns StrategyResponse (no commit_id). Follow up so
         # callers can quote the new HEAD commit_id back to the user.
         commit_id = _fetch_latest_commit_id(client, strategy_id)
@@ -693,6 +712,250 @@ def pull_force(strategy_id: str) -> dict[str, Any]:
     }
 
 
+def write_back_after_server_update(
+    strategy_id: str,
+    *,
+    source: str,
+    server_source_hash: str | None = None,
+    server_sequence: int | None = None,
+    server_name: str | None = None,
+) -> dict[str, Any] | None:
+    """Pull-through write-back after a server-side edit (spec 08 R3).
+
+    When a tool updates a strategy directly on the server (e.g.
+    `keel_strategy_compose` with inline source) and the strategy has a
+    local checkout ON THIS MACHINE, propagate the new source into the
+    working copy + meta in the same operation — so the checkout never
+    silently goes stale on the machine that made the edit.
+
+    Never clobbers local work: if the working copy has uncommitted edits
+    that differ from the new server source, the file is left untouched
+    and the returned status says exactly what to do.
+
+    Returns None when the strategy isn't checked out here; otherwise a
+    dict with `status` ∈ {"written_back", "meta_synced", "local_dirty"}.
+    """
+    meta = get_workspace(strategy_id)
+    if meta is None:
+        return None
+
+    new_hash = server_source_hash or _compute_hash(source)
+    ws_dir = _find_workspace_dir(strategy_id) or get_workspace_dir(strategy_id)
+    strategy_path = ws_dir / STRATEGY_FILE
+
+    try:
+        local_source = strategy_path.read_text()
+        local_hash = _compute_hash(local_source)
+    except OSError:
+        # Meta exists but the file is missing/unreadable — restore it.
+        local_source = None
+        local_hash = None
+
+    if (
+        local_hash is not None
+        and local_hash != _compute_hash(source)
+        and local_hash != meta.source_hash
+    ):
+        # Local has uncommitted edits AND they differ from the new server
+        # source: writing back would destroy work. Leave the file alone;
+        # the checkout is now conflicted (dirty + behind).
+        return {
+            "strategy_id": strategy_id,
+            "status": "local_dirty",
+            "file": str(strategy_path),
+            "local_hash": local_hash,
+            "server_hash": new_hash,
+            "instruction": (
+                "Local checkout has uncommitted edits and the server just "
+                "moved — NOT overwritten. Run `keel_strategy_status` then "
+                "resolve (diff/merge or `keel_strategy_pull force=True`)."
+            ),
+        }
+
+    already_matched = local_hash is not None and local_hash == _compute_hash(source)
+    if not already_matched:
+        strategy_path.write_text(source)
+
+    meta.source_hash = new_hash
+    if server_sequence is not None:
+        meta.current_sequence = server_sequence
+    if server_name:
+        meta.name = server_name
+    meta.save(ws_dir)
+    _append_notes_entry(
+        ws_dir,
+        f"server-side update written back → hash={new_hash[:12]}"
+        + (f" sequence={server_sequence}" if server_sequence is not None else ""),
+    )
+
+    return {
+        "strategy_id": strategy_id,
+        "status": "meta_synced" if already_matched else "written_back",
+        "file": str(strategy_path),
+        "local_hash": _compute_hash(source),
+        "server_hash": new_hash,
+    }
+
+
+def _relative_age(iso_timestamp: str | None) -> str | None:
+    """Humanize an ISO timestamp as '2h ago' / '3d ago'. None-tolerant."""
+    if not iso_timestamp:
+        return None
+    try:
+        ts = datetime.fromisoformat(str(iso_timestamp).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=timezone.utc)
+    delta = datetime.now(timezone.utc) - ts
+    seconds = max(int(delta.total_seconds()), 0)
+    if seconds < 60:
+        return "just now"
+    if seconds < 3600:
+        return f"{seconds // 60}m ago"
+    if seconds < 86400:
+        return f"{seconds // 3600}h ago"
+    return f"{seconds // 86400}d ago"
+
+
+def format_modified_via(
+    client_name: str | None,
+    auth_surface: str | None,
+    created_at: str | None = None,
+) -> str | None:
+    """Render commit surface attribution as a human/agent-readable string.
+
+    "modified via claude.ai (hosted-mcp), 2h ago" — the cross-surface
+    awareness message (spec 08 R5). Returns None when the commit carries
+    no attribution (legacy commits pre-migration).
+    """
+    who = client_name or auth_surface
+    if not who:
+        return None
+    label = who if not auth_surface or who == auth_surface else f"{who} ({auth_surface})"
+    age = _relative_age(created_at)
+    return f"modified via {label}, {age}" if age else f"modified via {label}"
+
+
+def _fetch_server_head_context(strategy_id: str) -> dict[str, Any]:
+    """Best-effort fetch of server HEAD commit context for conflict messages.
+
+    Returns {} on any failure — conflict envelopes must build even when
+    the follow-up context fetch can't (the conflict itself was already
+    detected).
+    """
+    try:
+        from keel.client import KeelClient
+
+        client = KeelClient()
+        try:
+            raw = client.get(f"/v1/strategies/{strategy_id}/versions", limit=1)
+        finally:
+            client.close()
+        versions = _normalize_paginated_versions(raw)
+        if not versions:
+            return {}
+        head = versions[0]
+        return {
+            "server_hash": head.get("source_hash"),
+            "server_commit_id": head.get("commit_id"),
+            "server_last_modified": head.get("created_at"),
+            "server_modified_via": format_modified_via(
+                head.get("client_name"),
+                head.get("auth_surface"),
+                head.get("created_at"),
+            ),
+        }
+    except Exception:  # noqa: BLE001 — context fetch best-effort; the conflict is already known
+        return {}
+
+
+def build_conflict_envelope(
+    strategy_id: str,
+    *,
+    base_hash: str | None,
+    local_hash: str | None,
+    action: str = "sync",
+    server_hash: str | None = None,
+) -> "KeelError":
+    """Build the spec-08 R4 conflict error for a true three-way conflict.
+
+    A true conflict = local edited AND server HEAD moved since checkout.
+    The returned error stops the calling action with three-way context
+    (`base_hash`, `local_hash`, `server_hash`, `server_last_modified`,
+    `server_modified_via`), a `diff_hint`, and explicit recovery
+    `options`. It NEVER auto-merges and NEVER force-pushes — those
+    decisions belong to the agent/user, one step away.
+    """
+    from keel.errors import ConflictError
+
+    server_ctx = _fetch_server_head_context(strategy_id)
+    resolved_server_hash = server_hash or server_ctx.get("server_hash")
+    server_commit_id = server_ctx.get("server_commit_id")
+    server_modified_via = server_ctx.get("server_modified_via")
+
+    diff_hint = {
+        "tool": "keel_strategy_diff",
+        "args": {"strategy_id": strategy_id},
+        "reason": (
+            "Compare the local file against server HEAD to see exactly "
+            "what diverged before choosing an option."
+        ),
+    }
+    options = [
+        {
+            "option": "pull_force",
+            "tool": "keel_strategy_pull",
+            "args": {"strategy_id": strategy_id, "force": True},
+            "effect": "Overwrite local with server HEAD (LOSES local edits).",
+        },
+        {
+            "option": "manual_merge",
+            "tool": "keel_strategy_diff",
+            "args": {"strategy_id": strategy_id},
+            "effect": (
+                "Inspect both versions, merge by hand in the local file, "
+                "then push the merged result."
+            ),
+        },
+        {
+            "option": "pin_commit",
+            "tool": "keel_strategy_log",
+            "args": {"strategy_id": strategy_id},
+            "effect": (
+                "Pick a commit_id from history and pass it explicitly to "
+                "the blocked action (e.g. `keel_backtest_run commit_id=…`) "
+                "without resolving the workspace yet."
+                + (f" Server HEAD is {server_commit_id}." if server_commit_id else "")
+            ),
+        },
+    ]
+    via = f" Server HEAD was {server_modified_via}." if server_modified_via else ""
+    return ConflictError(
+        f"Sync conflict on {strategy_id}: local workspace edited AND server "
+        f"HEAD moved since checkout — {action} stopped. Nothing was "
+        f"overwritten.{via}",
+        error_code="sync_conflict",
+        suggestion=(
+            "Pick ONE: (a) `keel_strategy_pull force=True` to take server "
+            "HEAD (loses local edits), (b) `keel_strategy_diff` to compare "
+            "and merge manually, or (c) pin an explicit `commit_id` on the "
+            "blocked action. Never resolved automatically; never force-push."
+        ),
+        input={
+            "strategy_id": strategy_id,
+            "base_hash": base_hash,
+            "local_hash": local_hash,
+            "server_hash": resolved_server_hash,
+            "server_commit_id": server_commit_id,
+            "server_last_modified": server_ctx.get("server_last_modified"),
+            "server_modified_via": server_modified_via,
+            "diff_hint": diff_hint,
+            "options": options,
+        },
+    )
+
+
 def status(
     strategy_id: str | None = None,
     *,
@@ -754,14 +1017,21 @@ def status(
                             "source_hash": (v.get("source_hash") or "")[:12],
                             "message": v.get("message"),
                             "created_at": v.get("created_at"),
+                            # Surface attribution (spec 08 R5); None for
+                            # commits predating the migration.
+                            "modified_via": format_modified_via(
+                                v.get("client_name"),
+                                v.get("auth_surface"),
+                                v.get("created_at"),
+                            ),
                         }
                         for v in _normalize_paginated_versions(raw)
                     ]
-                except Exception:
+                except Exception:  # noqa: BLE001 — commit fetch best-effort → None on failure
                     fetched_commits = None
         finally:
             client.close()
-    except Exception:
+    except Exception:  # noqa: BLE001, S110 — offline / no API key → show local state only
         # Offline or no API key — show local state only
         pass
 

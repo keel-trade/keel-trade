@@ -226,6 +226,17 @@ def _extract_detail(body: str | None) -> str | None:
 
 def translate_http_error(status: int, body: str) -> KeelError:
     """Map HTTP status codes to KeelError subclasses."""
+    if status == 400:
+        # keel-api 400s carry instructive remediation in `detail` (e.g. the
+        # deploy-intent token verdicts, spec 03 R7). Surface that text as the
+        # message instead of a raw `HTTP 400: {json}` dump.
+        return UsageError(
+            _extract_detail(body) or "Bad request — the server rejected the input.",
+            suggestion=(
+                "The message names what the server rejected — fix that input "
+                "and retry (a 400 is never fixed by retrying unchanged)."
+            ),
+        )
     if status == 401:
         return AuthError(
             "Not authenticated, or session expired. "

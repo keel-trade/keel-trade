@@ -208,7 +208,7 @@ def _search_via_api(ctx: ToolContext, args: dict) -> list[dict] | None:
         # passing `params=params` would send a single literal `params`
         # query string. Unpack.
         resp = client.get("/v1/components", **params)
-    except Exception:
+    except Exception:  # noqa: BLE001 — component search fetch best-effort → None on failure
         return None
 
     # API contract: either {"results": [...]} or a bare list. Normalize
@@ -319,6 +319,7 @@ COMPONENTS_SEARCH = register(
             "required": [],
         },
         annotations={
+            "title": "Search Components",
             "readOnlyHint": True,
             "destructiveHint": False,
             "idempotentHint": True,

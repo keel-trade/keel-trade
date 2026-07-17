@@ -221,6 +221,7 @@ SHARE_CREATE = register(
             },
         },
         annotations={
+            "title": "Create Public Share Link",
             "readOnlyHint": False,
             "destructiveHint": True,
             "idempotentHint": False,

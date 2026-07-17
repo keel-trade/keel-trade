@@ -42,7 +42,22 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
 
     resolved_id = result.get("strategy_id") or strategy_id
     status = result.get("status")
-    # Lib's pull() returns four shapes — translate each to a clear hint.
+
+    if status == "conflict":
+        # Both moved — a TRUE conflict. Stop with the spec-08 R4 envelope
+        # (three-way context + recovery options). Never resolved silently.
+        from keel.workspace import build_conflict_envelope
+
+        raise build_conflict_envelope(
+            resolved_id,
+            base_hash=result.get("base_hash"),
+            local_hash=result.get("local_hash"),
+            server_hash=result.get("remote_hash"),
+            action="pull",
+        )
+
+    # Lib's pull() returns the remaining shapes — translate each to a
+    # clear hint.
     if status == "pulled" or status == "force_pulled":
         next_hints = [
             "Local working copy is now at server HEAD.",
@@ -60,14 +75,6 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
             "Remote hasn't moved, but you have unpushed local edits.",
             "Push them when ready: `keel_strategy_push -m '<msg>'`.",
             "Or to discard local edits: `keel_strategy_pull force=True` (LOSES local work).",
-        ]
-    elif status == "conflict":
-        # Both moved — explicit resolution required.
-        next_hints = [
-            "Local AND server both moved — divergent history.",
-            "Resolve by: (a) `keel_strategy_push force=True` to overwrite server, "
-            "(b) `keel_strategy_pull force=True` to overwrite local (LOSES local edits), "
-            "or (c) `keel_strategy_discard` + re-checkout to start fresh.",
         ]
     else:
         next_hints = [f"Pull result status={status!r}."]
@@ -97,6 +104,7 @@ STRATEGY_PULL = register(
         required_action="strategy.read",
         cli_path=("strategy", "pull"),
         toolset="backtest",
+        local_only=True,  # writes the local workspace working copy
         description=(
             "Re-fetch the server HEAD into the local working copy. The 'git "
             "pull' of the sync model. Refuses if local has uncommitted "
@@ -126,6 +134,7 @@ STRATEGY_PULL = register(
             },
         },
         annotations={
+            "title": "Pull Strategy Updates",
             "readOnlyHint": False,  # writes to local filesystem
             "destructiveHint": False,
             "idempotentHint": True,  # pulling twice gives the same result

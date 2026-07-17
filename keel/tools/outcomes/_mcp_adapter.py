@@ -14,7 +14,38 @@ from typing import Any
 from keel.errors import KeelError
 
 from ._base import OutcomeResult, OutcomeTool, ToolContext, envelope_error
-from ._toolsets import is_tool_loaded, load_toolsets
+from ._toolsets import is_listed_profile, is_tool_loaded, load_toolsets
+
+
+def effective_description(tool: OutcomeTool) -> str:
+    """The description published for the active server profile.
+
+    Listed-profile registrations carry policy-vetted copy (spec 01 R3,
+    research/08 string rules); everything else uses the shared text.
+    """
+    if is_listed_profile() and tool.listed_description is not None:
+        return tool.listed_description
+    return tool.description
+
+
+def effective_input_schema(tool: OutcomeTool) -> dict:
+    """The input schema published for the active server profile.
+
+    Overrides are copy-only (parameter descriptions): the property
+    names, types, and required list must match the shared schema so
+    tool behavior never diverges between profiles (asserted in
+    tests/test_server_profiles.py).
+    """
+    if is_listed_profile() and tool.listed_input_schema is not None:
+        return tool.listed_input_schema
+    return tool.input_schema
+
+
+def effective_annotations(tool: OutcomeTool) -> dict:
+    """Annotations for the active server profile (title may be vetted)."""
+    if is_listed_profile() and tool.listed_title is not None:
+        return {**tool.annotations, "title": tool.listed_title}
+    return tool.annotations
 
 
 def _make_handler(tool: OutcomeTool, toolsets: frozenset[str]):
@@ -36,7 +67,7 @@ def _make_handler(tool: OutcomeTool, toolsets: frozenset[str]):
     `register_all()` wraps those framework validation errors and
     converts them into the same envelope shape.
     """
-    schema = tool.input_schema
+    schema = effective_input_schema(tool)
     schema_props: dict = schema.get("properties", {})
     schema_required: set = set(schema.get("required", []))
     known_props: set = set(schema_props.keys())
@@ -90,11 +121,34 @@ def _make_handler(tool: OutcomeTool, toolsets: frozenset[str]):
 
         import os as _os
 
+        from keel.hosting import current_request_credentials, hosted_auth_error, is_hosted
+
+        # ── Per-request identity (spec 01 R1) ───────────────────────
+        # Hosted servers bind the caller's validated Bearer to the
+        # request context; the ToolContext gets a KeelClient carrying
+        # that token, so every tool call acts as the calling principal.
+        # Hosted mode with NO binding fails instructively — a tool must
+        # never fall back to pod-ambient credentials.
+        request_client = None
+        creds = current_request_credentials()
+        if creds is not None:
+            from keel.client import KeelClient
+            from keel.config import KeelConfig
+
+            request_client = KeelClient(
+                config=KeelConfig(api_key=creds.token, api_url=creds.api_url)
+            )
+        elif is_hosted():
+            return json.dumps(hosted_auth_error().to_envelope(), default=str)
+
         _app_url = _os.environ.get("KEEL_APP_URL")
+        _share_url_root = _os.environ.get("KEEL_SHARE_URL_ROOT")
         ctx = ToolContext(
+            api_client=request_client,
             is_tty=False,
             toolsets=toolsets,
             **({"app_url": _app_url} if _app_url else {}),
+            **({"share_url_root": _share_url_root} if _share_url_root else {}),
         )
         try:
             result: OutcomeResult = tool.handler(args, ctx)
@@ -119,9 +173,15 @@ def _make_handler(tool: OutcomeTool, toolsets: frozenset[str]):
                 ),
                 default=str,
             )
+        finally:
+            if request_client is not None:
+                try:
+                    request_client.close()
+                except Exception:  # noqa: BLE001, S110 — close is best-effort; response already built
+                    pass
 
     handler.__name__ = tool.name
-    handler.__doc__ = tool.description
+    handler.__doc__ = effective_description(tool)
     return handler
 
 
@@ -157,7 +217,7 @@ def _make_param_synthesized_handler(tool: OutcomeTool, toolsets: frozenset[str])
     exact signature and handle unknown-argument ValidationError at the
     registered tool object layer.
     """
-    schema = tool.input_schema
+    schema = effective_input_schema(tool)
     properties: dict = schema.get("properties", {})
 
     impl = _make_handler(tool, toolsets)
@@ -179,7 +239,7 @@ def _make_param_synthesized_handler(tool: OutcomeTool, toolsets: frozenset[str])
     local_ns: dict[str, Any] = {"_impl": impl}
     exec(func_src, local_ns)  # noqa: S102 — controlled code-generation, no user input
     fn = local_ns[tool.name]
-    fn.__doc__ = tool.description
+    fn.__doc__ = effective_description(tool)
     fn.__module__ = "keel.tools.outcomes._mcp_adapter"
     return fn
 
@@ -206,19 +266,19 @@ def _mcp_parameters_schema(tool: OutcomeTool) -> dict:
     values, formats, descriptions, and top-level strictness before they
     call the tool.
     """
-    return _strip_cli_schema_extensions(tool.input_schema)
+    return _strip_cli_schema_extensions(effective_input_schema(tool))
 
 
 def _validation_error_envelope(tool: OutcomeTool, raw_error: Exception) -> dict:
     """Convert FastMCP/Pydantic argument validation into the Keel error shape."""
-    schema = tool.input_schema
+    schema = effective_input_schema(tool)
     props: dict = schema.get("properties", {})
     known = sorted(props)
     details = []
     try:
         # Pydantic ValidationError exposes machine-readable details.
         errors = raw_error.errors()  # type: ignore[attr-defined]
-    except Exception:
+    except Exception:  # noqa: BLE001 — pydantic detail extraction best-effort → empty details on failure
         errors = []
 
     unexpected: list[str] = []
@@ -319,18 +379,19 @@ def register_all(mcp_server: Any, outcomes: dict[str, OutcomeTool]) -> None:
 
     toolsets = load_toolsets()
     for tool in outcomes.values():
-        if not is_tool_loaded(tool.toolset, toolsets):
+        if not is_tool_loaded(tool.toolset, toolsets, local_only=tool.local_only, name=tool.name):
             continue
         fn = _make_param_synthesized_handler(tool, toolsets)
+        raw_annotations = effective_annotations(tool)
         annotations = (
-            ToolAnnotations(**tool.annotations)
-            if isinstance(tool.annotations, dict)
-            else tool.annotations
+            ToolAnnotations(**raw_annotations)
+            if isinstance(raw_annotations, dict)
+            else raw_annotations
         )
         tool_obj = FunctionTool.from_function(
             fn,
             name=tool.name,
-            description=tool.description,
+            description=effective_description(tool),
             annotations=annotations,
         )
         tool_obj.parameters = _mcp_parameters_schema(tool)
@@ -342,4 +403,8 @@ def loaded_tool_names(outcomes: dict[str, OutcomeTool]) -> list[str]:
     """Return the names of tools that would be registered under the
     current `KEEL_TOOLSETS`. Used by `keel_status`."""
     toolsets = load_toolsets()
-    return sorted(t.name for t in outcomes.values() if is_tool_loaded(t.toolset, toolsets))
+    return sorted(
+        t.name
+        for t in outcomes.values()
+        if is_tool_loaded(t.toolset, toolsets, local_only=t.local_only, name=t.name)
+    )

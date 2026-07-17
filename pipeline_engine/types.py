@@ -5,14 +5,7 @@ data flow and bounded type annotations using PEP 593.
 
 Quick Start:
     >>> from pipeline_engine.types import PriceFrame, SignalSeries
-    >>> # SDK-bundled stub — full file imports pandas; SDK strips it to keep
-# the wheel lightweight. NewType chain is preserved (used by validator);
-# the underlying pd.DataFrame/pd.Series typing is collapsed to `object`,
-# which is fine since the SDK never executes pipeline_engine.runtime code.
-class _PdStub:
-    DataFrame = object
-    Series = object
-pd = _PdStub()
+    >>> import pandas as pd
     >>> df = pd.DataFrame({"close": [1.0, 2.0]})
     >>> pf = PriceFrame(df)  # Transparent at runtime, typed for mypy
 
@@ -29,6 +22,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Annotated, NewType
 
+
 # SDK-bundled stub — full file imports pandas; SDK strips it to keep
 # the wheel lightweight. NewType chain is preserved (used by validator);
 # the underlying pd.DataFrame/pd.Series typing is collapsed to `object`,
@@ -36,6 +30,8 @@ from typing import Annotated, NewType
 class _PdStub:
     DataFrame = object
     Series = object
+
+
 pd = _PdStub()
 
 
@@ -202,14 +198,6 @@ TargetWeights = WeightSeries
 """Target portfolio weights (alias for WeightSeries)."""
 
 
-def expect_instrument(data, name: str = "data"):
-    """SDK stub — runtime helper not bundled."""
-    return data
-
-def expect_global(data, name: str = "data"):
-    """SDK stub — runtime helper not bundled."""
-    return data
-
 __all__ = [
     # Bounded type building blocks
     "Ge",
@@ -230,9 +218,6 @@ __all__ = [
     # Scope-aware types
     "InstrumentFrame",
     "GlobalSeries",
-    # Runtime scope guards
-    "expect_instrument",
-    "expect_global",
     # Semantic type aliases
     "RawSignal",
     "NormalizedSignal",

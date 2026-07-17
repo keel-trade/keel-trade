@@ -20,6 +20,7 @@ from pipeline_engine.dsl.spec import (
     FactoryCallSpec,
     ParallelSpec,
     PipelineSpec,
+    SlotExtractSpec,
     SlotLoadSpec,
     SlotStoreSpec,
     SlotStoreValueSpec,
@@ -142,7 +143,13 @@ def _flatten_steps(
     steps: list[StepSpec],
     prefix: str,
 ) -> list[dict[str, Any]]:
-    """Flatten a step list to canonical (path, component, params) tuples."""
+    """Flatten a step list to canonical (path, component, params) tuples.
+
+    Exhaustive over every ``StepSpec`` union member — an unhandled member
+    raises instead of silently vanishing from the diff (walker-exhaustiveness
+    convention, core-engine-audit F8: ``Extract`` steps used to fall through
+    here and semantics-changing Extract edits diffed as "identical").
+    """
     flat: list[dict[str, Any]] = []
 
     for i, step in enumerate(steps):
@@ -180,6 +187,14 @@ def _flatten_steps(
                     "params": {"slot_name": step.slot_name},
                 }
             )
+        elif isinstance(step, SlotExtractSpec):
+            flat.append(
+                {
+                    "path": path,
+                    "component": "Extract",
+                    "params": {"key": step.key},
+                }
+            )
         elif isinstance(step, FactoryCallSpec):
             flat.append(
                 {
@@ -203,6 +218,17 @@ def _flatten_steps(
         elif isinstance(step, PipelineSpec):
             sub_name = step.name or f"sub_{i}"
             flat.extend(_flatten_steps(step.steps, f"{path}.{sub_name}"))
+        else:
+            # Unhandled StepSpec member ⇒ raise. A silent fall-through here
+            # DROPS the step from the diff (the F8 Extract bug). Any new
+            # StepSpec member must get an explicit branch above; the
+            # exhaustiveness test in differ_test.py instantiates every
+            # member through this walker.
+            raise TypeError(
+                f"Unhandled StepSpec member {type(step).__name__} in "
+                f"differ._flatten_steps — StepSpec walkers must be exhaustive; "
+                f"add an explicit branch for every member."
+            )
 
     return flat
 

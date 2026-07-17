@@ -79,6 +79,7 @@ AUTH_LOGIN = register(
         required_action="",  # no auth required to call this!
         cli_path=("auth", "login"),  # informational only; mcp_only skips registration
         toolset="always",
+        local_only=True,  # opens the user's browser + writes ~/.keel/config.yaml; hosted auth is the client's OAuth flow
         mcp_only=True,
         description=(
             "Run the OAuth 2.1 + PKCE browser-loopback login flow against Keel "
@@ -120,6 +121,7 @@ AUTH_LOGIN = register(
             "required": [],
         },
         annotations={
+            "title": "Log In to Keel",
             "readOnlyHint": False,  # writes ~/.keel/config.yaml
             "destructiveHint": False,
             "idempotentHint": True,

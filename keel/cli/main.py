@@ -12,7 +12,8 @@ live alongside as escape hatches:
 
 from __future__ import annotations
 
-from importlib.metadata import PackageNotFoundError, version as _pkg_version
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as _pkg_version
 
 import click
 
@@ -39,6 +40,11 @@ except PackageNotFoundError:
 @click.pass_context
 def cli(ctx: click.Context, fmt: str | None, dry_run: bool, verbose: bool) -> None:
     """Keel — AI-native strategy development CLI."""
+    # Surface self-identification (spec 08 R5): commits made from the CLI
+    # attribute as `cli` regardless of which client minted the token.
+    from keel.surface import set_surface
+
+    set_surface("cli")
     ctx.ensure_object(dict)
     ctx.obj["format"] = fmt or default_format()
     ctx.obj["dry_run"] = dry_run
@@ -52,8 +58,10 @@ def _get_format(ctx: click.Context) -> str:
 
 # ── Outcome tool surface (CLI + MCP share these) ────────────────────────
 
-from keel.tools.outcomes import _bootstrap as _outcomes_bootstrap, OUTCOMES  # noqa: E402
+from keel.tools.outcomes import OUTCOMES
+from keel.tools.outcomes import _bootstrap as _outcomes_bootstrap  # noqa: E402
 from keel.tools.outcomes._cli_adapter import register_all as _outcomes_cli_register  # noqa: E402
+
 
 _outcomes_bootstrap()
 _outcomes_cli_register(cli, OUTCOMES)
@@ -61,13 +69,14 @@ _outcomes_cli_register(cli, OUTCOMES)
 
 # ── CLI-only escape-hatch verbs (not exposed as MCP tools) ──────────────
 
-from keel.cli.commands.auth import auth  # noqa: E402
-from keel.cli.commands.mcp_cmd import mcp  # noqa: E402
-from keel.cli.commands.universe import universe  # noqa: E402
-from keel.cli.commands.skills import skills  # noqa: E402
 from keel.cli.commands.arm import arm  # noqa: E402
+from keel.cli.commands.auth import auth  # noqa: E402
 from keel.cli.commands.context import context  # noqa: E402
+from keel.cli.commands.mcp_cmd import mcp  # noqa: E402
 from keel.cli.commands.project import project  # noqa: E402
+from keel.cli.commands.skills import skills  # noqa: E402
+from keel.cli.commands.universe import universe  # noqa: E402
+
 
 cli.add_command(auth)
 cli.add_command(mcp)

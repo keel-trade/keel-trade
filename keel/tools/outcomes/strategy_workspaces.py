@@ -103,6 +103,7 @@ STRATEGY_WORKSPACES = register(
         required_action="strategy.read",
         cli_path=("strategy", "workspaces"),
         toolset="read-only",
+        local_only=True,  # lists local checkouts under ~/.keel/workspace
         description=(
             "List all locally checked-out strategy workspaces. Each entry has "
             "the strategy id, name, sync metadata (source hash, last "
@@ -117,6 +118,7 @@ STRATEGY_WORKSPACES = register(
         ),
         input_schema={"type": "object", "properties": {}, "required": []},
         annotations={
+            "title": "List Local Workspaces",
             "readOnlyHint": True,
             "destructiveHint": False,
             "idempotentHint": True,

@@ -164,6 +164,7 @@ AUDIT_LIST_LAST = register(
             },
         },
         annotations={
+            "title": "List Recent Audit Events",
             "readOnlyHint": True,
             "destructiveHint": False,
             "idempotentHint": True,

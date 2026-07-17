@@ -64,7 +64,7 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
         raise
     except KeelError:
         raise
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         raise KeelError(
             f"Failed to restore strategy {strategy_id}@{ref}: {e}",
             suggestion="Verify the ref exists via `keel_strategy_log`.",
@@ -147,6 +147,7 @@ STRATEGY_RESTORE = register(
             },
         },
         annotations={
+            "title": "Restore Strategy Version",
             "readOnlyHint": False,
             "destructiveHint": False,  # creates new commit, doesn't delete
             "idempotentHint": False,

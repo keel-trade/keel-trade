@@ -75,12 +75,31 @@ def _step_name(step) -> str:
 
 
 def _read_path_or_source(value: str) -> str:
-    p = Path(value)
-    if p.exists() and p.is_file():
-        return p.read_text(encoding="utf-8")
+    from keel.hosting import is_hosted
+
+    if not is_hosted():
+        # Local file paths are a LOCAL-mode convenience only. A hosted
+        # server has no caller filesystem — reading pod paths here would
+        # be both wrong and an information-disclosure hole.
+        p = Path(value)
+        if p.exists() and p.is_file():
+            return p.read_text(encoding="utf-8")
     # Treat as already-DSL string only if multi-line; else error out
     if "\n" in value:
         return value
+    if is_hosted():
+        raise KeelError(
+            f"Diff ref is not multi-line DSL: {value!r}. File paths are not "
+            "available on the hosted server.",
+            error_code="not_found",
+            exit_code=3,
+            suggestion=(
+                "On the hosted server each ref must be either multi-line DSL "
+                "text, or (with `strategy_id=...`) a server version ref "
+                "(sequence number, commit_id, or tag — find via "
+                "`keel_strategy_log`)."
+            ),
+        )
     raise KeelError(
         f"Diff input not found and not multi-line DSL: {value!r}",
         error_code="not_found",
@@ -266,6 +285,7 @@ STRATEGY_DIFF = register(
             },
         },
         annotations={
+            "title": "Diff Strategy Versions",
             "readOnlyHint": True,
             "destructiveHint": False,
             "idempotentHint": True,

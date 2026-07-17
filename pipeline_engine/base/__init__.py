@@ -12,6 +12,7 @@ from .registry_types import (
     load_registry_from_json,
 )
 
+
 __all__ = [
     "StepCategory",
     "ComponentSignature",

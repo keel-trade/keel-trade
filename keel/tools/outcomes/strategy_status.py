@@ -77,18 +77,20 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
             "backtests run against server HEAD, not local.",
         ]
     elif state == "behind":
+        # Stale checkout: exactly ONE thing to do (spec 08 R3).
         next_hints = [
-            "Server has newer commits. Pull via `keel_strategy_pull` to "
-            "catch up. Use `keel_strategy_log` to see what changed.",
+            "Server has newer commits — run `keel_strategy_pull` to update your local copy.",
         ]
     elif state == "diverged":
+        # True conflict — same recovery options as the R4 envelope.
+        # Never recommends force-push; never resolved automatically.
         next_hints = [
-            "Local AND server both moved since checkout — divergent history.",
-            "Resolve by: (a) `keel_strategy_push force=True` to overwrite server "
-            "with local (loses server changes), OR (b) `keel_strategy_pull "
-            "force=True` to overwrite local with server (loses your local "
-            "changes), OR (c) `keel_strategy_discard` and re-checkout, OR "
-            "(d) compare with `keel_strategy_diff` and manually merge.",
+            "Local AND server both moved since checkout — true conflict.",
+            "Pick ONE: (a) `keel_strategy_pull force=True` to take server "
+            "HEAD (LOSES local edits), OR (b) `keel_strategy_diff` to "
+            "compare and merge manually in the local file, then push, OR "
+            "(c) pin an explicit `commit_id` on the blocked action (find "
+            "one via `keel_strategy_log`).",
         ]
 
     body: dict[str, Any] = {
@@ -122,6 +124,7 @@ STRATEGY_STATUS = register(
         required_action="strategy.read",
         cli_path=("strategy", "status"),
         toolset="backtest",
+        local_only=True,  # compares the local working copy against server HEAD
         description=(
             "Compare a local workspace's strategy.py against the server's "
             "current HEAD. The 'git status' of the sync model. Returns one "
@@ -174,6 +177,7 @@ STRATEGY_STATUS = register(
             },
         },
         annotations={
+            "title": "Local Workspace Status",
             "readOnlyHint": True,
             "destructiveHint": False,
             "idempotentHint": True,

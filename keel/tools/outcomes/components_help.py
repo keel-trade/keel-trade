@@ -108,7 +108,7 @@ def _detail_via_api(ctx: ToolContext, name: str) -> dict | None:
 
     try:
         resp = client.get(f"/v1/components/{name}")
-    except Exception:
+    except Exception:  # noqa: BLE001 — component detail fetch best-effort → None on failure
         return None
 
     if isinstance(resp, dict) and resp.get("name"):
@@ -188,6 +188,7 @@ COMPONENTS_COMPOSE_HELP = register(
             },
         },
         annotations={
+            "title": "Component Composition Help",
             "readOnlyHint": True,
             "destructiveHint": False,
             "idempotentHint": True,

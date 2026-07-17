@@ -16,7 +16,7 @@ Do NOT use to read state — call `keel_live_monitor` instead.
 
 from __future__ import annotations
 
-from keel.errors import KeelError, ValidationError
+from keel.errors import EntitlementError, KeelError, ValidationError
 
 from . import register
 from ._base import OutcomeResult, OutcomeTool, ToolContext
@@ -70,21 +70,41 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
     path = f"/v1/live/{deployment_id}{suffix}"
 
     client = ctx.get_client()
-    if method == "POST":
-        result = client.post(path)
-    elif method == "DELETE":
-        result = client.delete(path)
-    else:  # pragma: no cover — _ACTIONS is closed
-        raise KeelError(
-            f"Internal error: unsupported method {method!r}.",
-            error_code="internal_error",
-            exit_code=1,
-            suggestion=(
-                "This is a bug in the SDK — the action table is supposed to be "
-                "closed. Report it with the failing command + version "
-                "(`keel --version`)."
-            ),
-        )
+    try:
+        if method == "POST":
+            result = client.post(path)
+        elif method == "DELETE":
+            result = client.delete(path)
+        else:  # pragma: no cover — _ACTIONS is closed
+            raise KeelError(
+                f"Internal error: unsupported method {method!r}.",
+                error_code="internal_error",
+                exit_code=1,
+                suggestion=(
+                    "This is a bug in the SDK — the action table is supposed to be "
+                    "closed. Report it with the failing command + version "
+                    "(`keel --version`)."
+                ),
+            )
+    except EntitlementError as e:
+        # Scope wall (spec 03 R1): controlling a live deployment without
+        # the live scope is a human-consent handoff. Quota-shaped 403s
+        # (unlikely here) map to the billing handoff with exact numbers.
+        from ._handoff import live_scope_handoff, maybe_quota_handoff
+
+        retry_call = {
+            "tool": "keel_live_control",
+            "args": {"deployment_id": deployment_id, "action": action},
+        }
+        handoff = maybe_quota_handoff(e, blocked_action="live_control", retry_call=retry_call)
+        if handoff is None:
+            handoff = live_scope_handoff(
+                e,
+                blocked_action="live_control",
+                action_url=f"{ctx.app_url}/live/{deployment_id}",
+                retry_call=retry_call,
+            )
+        raise handoff from e
 
     return OutcomeResult(
         run_id=deployment_id,
@@ -132,6 +152,7 @@ LIVE_CONTROL = register(
             },
         },
         annotations={
+            "title": "Control Live Strategy",
             "readOnlyHint": False,
             "destructiveHint": True,
             "idempotentHint": False,

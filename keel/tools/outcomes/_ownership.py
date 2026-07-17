@@ -29,7 +29,7 @@ def fetch_ownership_projection(
             return projection
     except KeelError:
         return None
-    except Exception:
+    except Exception:  # noqa: BLE001 — ownership projection best-effort → None on any failure
         return None
     return None
 

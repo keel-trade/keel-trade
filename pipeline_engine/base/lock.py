@@ -1,11 +1,29 @@
-"""Component version lock — pin, update, and drift-check component versions.
+"""Component version lock — pin, evolve, and drift-check component versions.
 
-Provides functions to generate, update, and audit version locks for strategies.
-A lock is a ``dict[str, int]`` mapping component names to pinned version numbers.
+A strategy's "lock" is a ``dict[str, int]`` mapping component names to pinned
+version numbers. Package-lock semantics: a strategy compiled with v1 of a
+component stays on v1 until the user explicitly upgrades — regardless of
+what versions ship later.
+
+Public API:
+    - ``evolve_lock(prev_lock, strategy)`` — derive the working lock for a
+      strategy from the previous lock + current source. Preserve existing
+      pins; auto-add new components at latest; drop removed components.
+      The ONE source of lock evolution. Same function whether ``prev_lock``
+      is ``{}`` (brand-new strategy) or an existing lock from a previous
+      commit.
+    - ``upgrade_lock_entries(lock, upgrades)`` — explicit user-driven version
+      bump. Each entry in ``upgrades`` must reference a component already in
+      the lock AND a target version that exists in the registry. This is
+      what backs the components-upgrade UX.
+    - ``check_lock_drift(lock)`` — UX helper. Compares a lock to the current
+      registry, returns entries that are outdated / missing. Informational
+      only — never feeds back into validate / compile.
 
 Quick Start:
-    >>> from pipeline_engine.base.lock import generate_lock, check_lock_drift
-    >>> lock = generate_lock(parsed_strategy)
+    >>> from pipeline_engine.base.lock import evolve_lock, check_lock_drift
+    >>> lock = evolve_lock({}, parsed_strategy)   # fresh
+    >>> lock = evolve_lock(prev_lock, parsed_strategy)  # subsequent edit
     >>> drifts = check_lock_drift(lock)
 """
 
@@ -22,6 +40,12 @@ from pipeline_engine.dsl.spec import (
     StrategyFile,
 )
 
+# LockError is DEFINED in pipeline_engine.exceptions (spec 01 T3: the shared
+# structured-error module, so ComponentVersionError can subclass both
+# CompileError and LockError without an import cycle). This module remains
+# its canonical import path — same class identity, re-exported here.
+from pipeline_engine.exceptions import LockError
+
 
 @dataclass(frozen=True)
 class LockDrift:
@@ -32,10 +56,6 @@ class LockDrift:
     latest_version: int
     drift_type: str  # "outdated" | "missing" | "unknown"
     changes: list[str]
-
-
-class LockError(Exception):
-    """Raised when lock generation or update fails."""
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -83,75 +103,38 @@ def _walk_refs_in_step(step: StepSpec) -> Iterator[ComponentRef]:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
-def generate_lock(strategy: StrategyFile) -> dict[str, int]:
-    """Generate a version lock from a parsed strategy.
-
-    Walks all component references in the strategy and pins each to the
-    latest available version. Raises on unknown or deprecated components.
-
-    Args:
-        strategy: Parsed strategy file.
-
-    Returns:
-        Lock mapping component name → version number.
-
-    Raises:
-        LockError: If a component is unknown or deprecated.
-    """
-    from pipeline_engine.base.registry import COMPONENT_REGISTRY, get_latest
-    from pipeline_engine.registry_loader import ensure_registry_loaded
-
-    ensure_registry_loaded()
-
-    lock: dict[str, int] = {}
-    for ref in walk_component_refs(strategy):
-        if ref.name in lock:
-            continue
-        if ref.name not in COMPONENT_REGISTRY:
-            raise LockError(
-                f"Unknown component '{ref.name}' — cannot generate lock. "
-                f"Ensure all components are registered."
-            )
-        sig = get_latest(ref.name)
-        if sig is None:
-            raise LockError(f"No versions found for component '{ref.name}'.")
-        if sig.status == "deprecated":
-            raise LockError(
-                f"Component '{ref.name}' is deprecated (v{sig.version}). "
-                f"Replace it before generating a lock."
-            )
-        lock[ref.name] = sig.version
-
-    return dict(sorted(lock.items()))
-
-
-def update_lock(
+def evolve_lock(
+    prev_lock: dict[str, int],
     strategy: StrategyFile,
-    existing_lock: dict[str, int],
 ) -> dict[str, int]:
-    """Update an existing lock: preserve pins, add new, drop removed.
+    """Evolve a component lock to match a strategy's current source.
 
-    Components present in both the strategy and existing lock keep their
-    pinned version. New components get the latest version. Components no
-    longer in the strategy are dropped.
+    The single source of lock evolution. Package-lock semantics:
+
+    - Components in source AND in ``prev_lock`` → preserve the pinned version.
+    - Components in source but NOT in ``prev_lock`` → pin to ``get_latest()``.
+    - Components in ``prev_lock`` but NOT in source → drop from the lock.
+
+    Pass ``prev_lock={}`` for a brand-new strategy with no prior lock.
 
     Args:
+        prev_lock: Previous lock (or ``{}`` for a fresh derivation).
         strategy: Parsed strategy file.
-        existing_lock: Previous lock to preserve pins from.
 
     Returns:
-        Updated lock mapping.
+        Evolved lock mapping component name → version number.
 
     Raises:
-        LockError: If a locked version no longer exists in the registry,
-            or a new component is unknown/deprecated.
+        LockError: If a referenced component is unknown, a preserved pin's
+            version no longer exists in the registry, or a newly-added
+            component is deprecated. A pin that can't be preserved is the
+            user's signal to run ``upgrade_lock_entries`` and migrate.
     """
     from pipeline_engine.base.registry import COMPONENT_REGISTRY, get_latest, get_version
     from pipeline_engine.registry_loader import ensure_registry_loaded
 
     ensure_registry_loaded()
 
-    # Collect all component names referenced in strategy
     referenced: set[str] = set()
     for ref in walk_component_refs(strategy):
         referenced.add(ref.name)
@@ -160,19 +143,18 @@ def update_lock(
     for name in referenced:
         if name not in COMPONENT_REGISTRY:
             raise LockError(
-                f"Unknown component '{name}' — cannot update lock. "
+                f"Unknown component '{name}' — cannot evolve lock. "
                 f"Ensure all components are registered."
             )
-        if name in existing_lock:
-            # Preserve existing pin — verify it still exists
-            pinned = existing_lock[name]
+        if name in prev_lock:
+            pinned = prev_lock[name]
             if get_version(name, pinned) is None:
                 raise LockError(
-                    f"Locked version {pinned} for component '{name}' no longer exists in registry."
+                    f"Locked version {pinned} for component '{name}' no longer exists "
+                    f"in the registry. Use upgrade_lock_entries to migrate the pin."
                 )
             lock[name] = pinned
         else:
-            # New component — pin to latest
             sig = get_latest(name)
             if sig is None:
                 raise LockError(f"No versions found for component '{name}'.")
@@ -183,6 +165,49 @@ def update_lock(
             lock[name] = sig.version
 
     return dict(sorted(lock.items()))
+
+
+def upgrade_lock_entries(
+    lock: dict[str, int],
+    upgrades: dict[str, int],
+) -> dict[str, int]:
+    """Explicit user-driven version bump.
+
+    Returns a new lock with the requested entries bumped to the specified
+    target versions. Used by the components-upgrade UX path; never invoked
+    silently by validate / compile.
+
+    Args:
+        lock: The current lock to base the upgrade on.
+        upgrades: ``{component_name: target_version}``. Each entry must:
+            (a) name a component already in ``lock`` (cannot upgrade something
+                the strategy doesn't reference), and
+            (b) reference a target version that exists in the registry.
+
+    Returns:
+        New lock with the requested upgrades applied.
+
+    Raises:
+        LockError: If an upgrade target doesn't exist in the registry, or
+            a component being upgraded isn't in the current lock.
+    """
+    from pipeline_engine.base.registry import get_version
+    from pipeline_engine.registry_loader import ensure_registry_loaded
+
+    ensure_registry_loaded()
+
+    new_lock = dict(lock)
+    for name, target in upgrades.items():
+        if name not in lock:
+            raise LockError(
+                f"Cannot upgrade '{name}': not in current lock. "
+                f"Add the component to the strategy source first."
+            )
+        if get_version(name, target) is None:
+            raise LockError(f"Cannot upgrade '{name}' to v{target}: version not in registry.")
+        new_lock[name] = target
+
+    return dict(sorted(new_lock.items()))
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -262,7 +287,7 @@ __all__ = [
     "LockDrift",
     "LockError",
     "check_lock_drift",
-    "generate_lock",
-    "update_lock",
+    "evolve_lock",
+    "upgrade_lock_entries",
     "walk_component_refs",
 ]

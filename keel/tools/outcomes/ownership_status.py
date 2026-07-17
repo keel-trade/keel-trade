@@ -87,6 +87,7 @@ OWNERSHIP_STATUS = register(
             },
         },
         annotations={
+            "title": "Strategy Ownership Status",
             "readOnlyHint": True,
             "destructiveHint": False,
             "idempotentHint": True,

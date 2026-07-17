@@ -64,6 +64,7 @@ STRATEGY_DISCARD = register(
         required_action="strategy.read",
         cli_path=("strategy", "discard"),
         toolset="backtest",
+        local_only=True,  # deletes local workspace files
         description=(
             "Remove a local workspace (the checked-out strategy.py + "
             "`.keel-meta.json`). Server-side strategy is unchanged. Use for "
@@ -85,6 +86,7 @@ STRATEGY_DISCARD = register(
             },
         },
         annotations={
+            "title": "Discard Local Workspace",
             "readOnlyHint": False,  # deletes local files
             "destructiveHint": True,  # deletes local working copy
             "idempotentHint": True,

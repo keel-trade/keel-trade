@@ -325,23 +325,7 @@
     }
   },
   {
-    "name": "strategy_lock_generate",
-    "description": "Generate a fresh component lock from strategy source. Pins all components to their latest active versions.",
-    "inputSchema": {
-      "type": "object",
-      "properties": {
-        "source": {
-          "type": "string",
-          "description": "Strategy DSL source code"
-        }
-      },
-      "required": [
-        "source"
-      ]
-    }
-  },
-  {
-    "name": "strategy_lock_status",
+    "name": "strategy_components_drift",
     "description": "Check component version drift \u2014 which components have newer versions available. Returns changelogs and parameter diffs for available updates.",
     "inputSchema": {
       "type": "object",
@@ -365,7 +349,7 @@
     }
   },
   {
-    "name": "strategy_lock_upgrade",
+    "name": "strategy_components_upgrade",
     "description": "Upgrade component versions in a strategy's lock. Upgrades specified components (or all outdated) to latest versions and re-validates.",
     "inputSchema": {
       "type": "object",
@@ -460,8 +444,8 @@
     }
   },
   {
-    "name": "strategy_lock_status_by_id",
-    "description": "Check component version drift for a saved strategy.",
+    "name": "strategy_components_drift_by_id",
+    "description": "Check component version drift for a saved strategy (by ID). Reads the lock from the strategy's latest commit blob.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -476,8 +460,8 @@
     }
   },
   {
-    "name": "strategy_lock_upgrade_by_id",
-    "description": "Upgrade component versions for a saved strategy and persist the new lock.",
+    "name": "strategy_components_upgrade_by_id",
+    "description": "Upgrade component versions for a saved strategy and persist the upgraded lock as a new commit (by ID).",
     "inputSchema": {
       "type": "object",
       "properties": {

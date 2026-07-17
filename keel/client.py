@@ -37,6 +37,12 @@ class KeelClient:
         headers: dict[str, str] = {}
         if self._config.api_key:
             headers["Authorization"] = f"Bearer {self._config.api_key}"
+        # Surface self-identification (spec 08 R5): tell keel-api which
+        # surface is calling so commit attribution / telemetry classify
+        # correctly regardless of which client minted the token.
+        from keel.surface import current_surface
+
+        headers["x-keel-surface"] = current_surface()
         return headers
 
     def _require_auth(self) -> None:

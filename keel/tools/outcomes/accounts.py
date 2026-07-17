@@ -127,6 +127,7 @@ ACCOUNTS_LIST = register(
             },
         },
         annotations={
+            "title": "List Hyperliquid Accounts",
             "readOnlyHint": True,
             "destructiveHint": False,
             "idempotentHint": True,

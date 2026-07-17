@@ -67,6 +67,8 @@ More than 25 free parameters almost certainly means overfitting. Suggest complex
 4. **Prefer adding robustness over removing exposure.** Instead of "remove shorts," consider: add a trend filter, add position sizing, add a regime gate, reduce leverage. These address the mechanism (unfiltered mean reversion in strong trends) without eliminating half the strategy.
 5. **Always state the principled reason.** When suggesting a post-backtest change, lead with the trading principle, not the backtest result. "Mean reversion strategies benefit from a trend filter because reversals fail in strong trends" — not "Adding this filter because the strategy lost money here."
 
+**Match the suggestion to where the strategy is on its maturation arc.** Refinement on a non-thesis sands the edges of a strategy that has no edge. When the user is non-specific, locate the strategy on the arc (scoping / building / searching / iterating / refining / validating) and pick a move whose question matches the phase. See `strategy_phases.md` for the full arc and per-phase moves. User-directed moves always override phase.
+
 **Position sizing for entry/exit strategies** (after PSM):
 
 | Sizer | Use when | Example |

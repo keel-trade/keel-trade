@@ -5,8 +5,9 @@ and registry infrastructure. No runtime execution, no component implementations.
 """
 
 from pipeline_engine.dsl import parse_strategy, validate_strategy
-from pipeline_engine.dsl.emitter import spec_to_dsl, spec_to_graph
 from pipeline_engine.dsl.differ import diff_strategies
+from pipeline_engine.dsl.emitter import spec_to_dsl, spec_to_graph
+
 
 __all__ = [
     "parse_strategy",

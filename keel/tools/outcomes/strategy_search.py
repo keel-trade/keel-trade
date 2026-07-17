@@ -24,7 +24,7 @@ def _local_workspaces() -> list[dict[str, Any]]:
         from keel.workspace import list_workspaces
 
         items = list_workspaces() or []
-    except Exception:
+    except Exception:  # noqa: BLE001 — workspace listing unavailable → empty list
         return []
     out: list[dict[str, Any]] = []
     for ws in items:
@@ -96,8 +96,12 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
         )
 
     # Merge local workspaces only on CLI when no remote filters specified.
+    # Hosted servers have no caller filesystem — explicit no-op there
+    # (is_tty is already False on MCP, this makes the invariant local).
+    from keel.hosting import is_hosted
+
     no_filters = not any((query, tag, owner, share_id))
-    if no_filters and ctx.is_tty:
+    if no_filters and ctx.is_tty and not is_hosted():
         seen_ids = {r["strategy_id"] for r in results}
         for local in _local_workspaces():
             if local["strategy_id"] not in seen_ids:
@@ -143,6 +147,7 @@ STRATEGY_SEARCH = register(
             "required": [],
         },
         annotations={
+            "title": "Search Strategies",
             "readOnlyHint": True,
             "destructiveHint": False,
             "idempotentHint": True,

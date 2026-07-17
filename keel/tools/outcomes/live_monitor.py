@@ -225,11 +225,90 @@ LIVE_MONITOR = register(
             },
         },
         annotations={
+            "title": "Monitor Live Deployments",
             "readOnlyHint": True,
             "destructiveHint": False,
             "idempotentHint": True,
             "openWorldHint": True,
         },
         handler=_handler,
+        # ── Listed-profile copy (spec 01 R3, research/08 string rules) ──
+        # Same behavior, same args, same views — policy-vetted wording
+        # only (no deploy/fund/trade verbs, no routing to tools absent
+        # from the listed surface). Enum values are API data, not copy.
+        listed_title="Monitor Running Strategies",
+        listed_description=(
+            "Read-only monitoring for strategies currently running on your "
+            "account. Choose a slice with the `view` parameter (overview, "
+            "positions, equity, pnl, stats, weights, portfolio, and more — "
+            "see the enum). "
+            "DEFAULTS: when the user asks how their running strategies are "
+            "doing without naming one, just call with no args — returns the "
+            "portfolio summary across all of them. Pass `deployment_id` to "
+            "drill into a single one. "
+            "Returns `freshness` metadata so agents can distinguish "
+            "on-demand exchange snapshots from recorded backend state; this "
+            "tool is not a real-time stream. "
+            "Do NOT use to change the state of a running strategy — this "
+            "tool only reads. Manage strategies in the Keel web app "
+            "(`keel_open_in_app` returns the link)."
+        ),
+        listed_input_schema={
+            "type": "object",
+            "required": [],
+            "properties": {
+                "deployment_id": {
+                    "type": "string",
+                    "description": (
+                        "Running strategy to inspect. Optional; omit (or pass "
+                        "'all') with view='portfolio' (the default in this "
+                        "case) to fetch the portfolio summary across every "
+                        "running strategy."
+                    ),
+                    "x-cli-positional": True,
+                },
+                "view": {
+                    "type": "string",
+                    "enum": sorted(_VIEWS.keys()),
+                    "default": "overview",
+                    "description": (
+                        "Which slice to fetch. 'overview' returns metadata for "
+                        "one running strategy; 'portfolio' ignores "
+                        "deployment_id."
+                    ),
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": (
+                        "Maximum rows per page for paginated history views. "
+                        "Ignored for other views."
+                    ),
+                },
+                "symbol": {
+                    "type": "string",
+                    "description": "History views: filter to one instrument symbol.",
+                },
+                "side": {
+                    "type": "string",
+                    "description": "History views: filter by execution side.",
+                },
+                "start_time": {
+                    "type": "string",
+                    "description": "History views: ISO-8601 lower bound on event time.",
+                },
+                "sort_by": {
+                    "type": "string",
+                    "description": "History views: sort column.",
+                },
+                "sort_dir": {
+                    "type": "string",
+                    "description": "History views: 'asc' or 'desc'.",
+                },
+                "cursor": {
+                    "type": "string",
+                    "description": "History views: pagination cursor.",
+                },
+            },
+        },
     )
 )

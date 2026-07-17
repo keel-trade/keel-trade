@@ -93,6 +93,7 @@ STRATEGY_DELETE = register(
             },
         },
         annotations={
+            "title": "Delete Strategy",
             "readOnlyHint": False,
             "destructiveHint": True,
             "idempotentHint": False,

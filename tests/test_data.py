@@ -2,7 +2,63 @@
 
 from __future__ import annotations
 
+import ast
+import importlib.util
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
 import pytest
+
+
+def _load_build_data_module():
+    sdk_root = Path(__file__).resolve().parents[1]
+    build_script = sdk_root / "scripts" / "build_data.py"
+    spec = importlib.util.spec_from_file_location("keel_sdk_build_data", build_script)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_sdk_types_generation_replaces_only_top_level_pandas_import():
+    sdk_root = Path(__file__).resolve().parents[1]
+    repo_root = sdk_root.parents[2]
+    upstream = (repo_root / "libs" / "pipeline_engine" / "types.py").read_text()
+
+    rendered = _load_build_data_module()._render_sdk_types_module(upstream)
+
+    assert ast.get_docstring(ast.parse(rendered), clean=False) == ast.get_docstring(
+        ast.parse(upstream), clean=False
+    )
+    assert rendered.count("SDK-bundled stub") == 1
+    assert "\nimport pandas as pd\n" not in rendered
+    assert rendered == (sdk_root / "pipeline_engine" / "types.py").read_text()
+
+
+@pytest.mark.parametrize(
+    "source",
+    ["value = 1\n", "import pandas as pd\nimport pandas as pd\n"],
+)
+def test_sdk_types_generation_requires_exactly_one_top_level_pandas_import(source):
+    with pytest.raises(RuntimeError, match="Expected exactly one top-level pandas import"):
+        _load_build_data_module()._render_sdk_types_module(source)
+
+
+@pytest.mark.parametrize(
+    "relative_path",
+    ["validation_shared.py", "dsl/validator.py"],
+)
+def test_sdk_bundled_validation_modules_match_upstream(relative_path):
+    sdk_root = Path(__file__).resolve().parents[1]
+    repo_root = sdk_root.parents[2]
+
+    bundled = (sdk_root / "pipeline_engine" / relative_path).read_text()
+    upstream = (repo_root / "libs" / "pipeline_engine" / relative_path).read_text()
+
+    assert bundled == upstream
 
 
 class TestRegistry:
@@ -171,3 +227,30 @@ class TestTemplates:
 
         with pytest.raises(KeyError):
             get_template("nonexistent")
+
+
+def test_bundled_tool_schemas_match_build_data_owner():
+    sdk_root = Path(__file__).resolve().parents[1]
+    repo_root = sdk_root.parents[2]
+    build_script = sdk_root / "scripts" / "build_data.py"
+    bundled = json.loads((sdk_root / "keel" / "data" / "tool_schemas.json").read_text())
+    command = (
+        "import importlib.util,json;"
+        f"spec=importlib.util.spec_from_file_location('build_data',{str(build_script)!r});"
+        "module=importlib.util.module_from_spec(spec);"
+        "spec.loader.exec_module(module);"
+        "module.ensure_imports();"
+        "print(json.dumps(module.build_tool_schemas()))"
+    )
+    env = {**os.environ, "PYTHONPATH": str(repo_root / "libs")}
+
+    result = subprocess.run(
+        [sys.executable, "-c", command],
+        cwd=repo_root,
+        env=env,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert bundled == json.loads(result.stdout)

@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from pipeline_engine.dsl.spec import (
+    EXECUTION_PARAM_META,
     MISSING,
     ComponentRef,
     ExecutionSpec,
@@ -42,21 +43,37 @@ from pipeline_engine.dsl.spec import (
 
 
 def _resolve_emitter_registry(registry):
-    """Build a lazy ``{component_name: ComponentSignature}`` map.
+    """Build a ``{component_name: ComponentSignature}`` map.
 
     Pass ``None`` to use the live ``COMPONENT_REGISTRY`` (latest version of
-    each component). Passing an explicit dict (e.g. for tests) overrides the
-    lookup. Returns an empty dict on import failure so the emitter still
-    produces non-canonical source rather than crashing.
+    each component). Passing an explicit dict overrides the lookup; an
+    explicit empty dict (``registry={}``) is the documented opt-out that
+    disables canonical numeric rendering.
+
+    Raises:
+        ImportError: when ``registry is None`` and the live registry module
+            cannot be imported. ``spec_to_dsl`` is the canonicalization
+            point on the production save path (keel-api, chat-api, MCP
+            tools); silently emitting non-canonical source on import
+            failure is exactly the environment-dependent drift Option C
+            was built to kill, so a broken registry install must fail
+            loudly here — never degrade. (No-silent-fallbacks house rule;
+            mirrors ``_resolve_type_name`` in registry_types.py.)
     """
     if registry is not None:
         return registry
     try:
         from pipeline_engine.base.registry import COMPONENT_REGISTRY, get_latest
-
-        return {name: get_latest(name) for name in COMPONENT_REGISTRY}
-    except Exception:  # pragma: no cover — registry import problems
-        return {}
+    except ImportError as e:
+        raise ImportError(
+            "spec_to_dsl: cannot import the live component registry "
+            "(pipeline_engine.base.registry), so canonical numeric "
+            "rendering is unavailable. Fix the pipeline_engine install "
+            "(the registry module and its dependencies must be "
+            "importable), or pass an explicit registry mapping — "
+            "registry={} to intentionally disable canonicalization."
+        ) from e
+    return {name: get_latest(name) for name in COMPONENT_REGISTRY}
 
 
 def _unwrap_target_type(target_type):
@@ -556,17 +573,37 @@ def graph_to_spec(graph: GraphModel | dict[str, Any]) -> StrategyFile:
             location=_loc("universe", lc),
         )
 
-    # Reconstruct ExecutionSpec from graph model
+    # Reconstruct ExecutionSpec from graph model. Per-param fallbacks come from
+    # EXECUTION_PARAM_META (single source of truth in spec.py) — NOT hardcoded
+    # literals. Hardcoding rebalance_method's fallback as "to_edge" here (its
+    # real default is "to_center") was a B12 drift surface: a graph that omitted
+    # rebalance_method got "to_edge" injected, which then tripped a spurious
+    # IRRELEVANT_EXECUTION_PARAM warning in non-buffered modes.
     execution_spec = None
     if model.execution:
+
+        def _exec_default(param: str):
+            return EXECUTION_PARAM_META[param]["default"]
+
         execution_spec = ExecutionSpec(
-            rebalance=model.execution.get("rebalance", "every_bar"),
-            on_change_tolerance=model.execution.get("on_change_tolerance", 1e-8),
-            buffer_threshold=model.execution.get("buffer_threshold"),
-            buffer_mode=model.execution.get("buffer_mode", "relative"),
-            rebalance_method=model.execution.get("rebalance_method", "to_edge"),
-            min_trade_size=model.execution.get("min_trade_size", 0.0),
+            rebalance=model.execution.get("rebalance", _exec_default("rebalance")),
+            on_change_tolerance=model.execution.get(
+                "on_change_tolerance", _exec_default("on_change_tolerance")
+            ),
+            buffer_threshold=model.execution.get(
+                "buffer_threshold", _exec_default("buffer_threshold")
+            ),
+            buffer_mode=model.execution.get("buffer_mode", _exec_default("buffer_mode")),
+            rebalance_method=model.execution.get(
+                "rebalance_method", _exec_default("rebalance_method")
+            ),
+            min_trade_size=model.execution.get("min_trade_size", _exec_default("min_trade_size")),
             location=_loc("execution", lc),
+            # The graph dict's key-set IS its explicitness signal: spec_to_graph
+            # emits exactly the explicit param set (execution_params_to_emit),
+            # and the TS editor's parser likewise only includes keys the user
+            # wrote. Unknown keys are not explicitness (they aren't params).
+            explicit=frozenset(k for k in model.execution if k in EXECUTION_PARAM_META),
         )
 
     return StrategyFile(
@@ -723,22 +760,15 @@ def spec_to_graph(spec: StrategyFile) -> GraphModel:
             if val is not None:
                 universe_dict[attr] = val
 
-    # Convert ExecutionSpec to dict for graph model — driven by EXECUTION_PARAM_META
+    # Convert ExecutionSpec to dict for graph model. The param set comes from
+    # execution_params_to_emit — the SAME policy spec_to_dsl renders — so the
+    # stored DSL and the derived graph can never disagree about which
+    # Execution params exist (B6).
     execution_dict = None
     if spec.execution is not None:
-        from pipeline_engine.dsl.spec import EXECUTION_PARAM_META
+        from pipeline_engine.dsl.spec import execution_params_to_emit
 
-        execution_dict = {}
-        ex = spec.execution
-        for param_name, meta in EXECUTION_PARAM_META.items():
-            val = getattr(ex, param_name, None)
-            if val is None:
-                continue
-            # Only include params relevant to current mode (or mode-independent)
-            modes = meta.get("modes")
-            if modes and ex.rebalance not in modes and val == meta.get("default"):
-                continue
-            execution_dict[param_name] = val
+        execution_dict = dict(execution_params_to_emit(spec.execution))
 
     return GraphModel(
         blocks=blocks,
@@ -855,6 +885,16 @@ def spec_to_dsl(spec: StrategyFile, registry: dict | None = None) -> str:
     registry = _resolve_emitter_registry(registry)
     lines: list[str] = []
 
+    # Emit metadata block (``# key: value``, insertion order) — the leading
+    # comment lines parser._extract_metadata harvests. Emitting them back makes
+    # metadata survive the parse→emit round trip (spec 04 §4.5 / W8): the
+    # regex shape is identical in both directions, so emit∘parse is idempotent
+    # by construction. TS graphToDsl mirrors this from GraphModel.metadata.
+    if spec.metadata:
+        for key, value in spec.metadata.items():
+            lines.append(f"# {key}: {value}")
+        lines.append("")
+
     # Emit Globals declaration
     if spec.globals_ is not None:
         globals_args = []
@@ -888,42 +928,30 @@ def spec_to_dsl(spec: StrategyFile, registry: dict | None = None) -> str:
         lines.append(f"Universe({', '.join(universe_args)})")
         lines.append("")
 
-    # Emit Execution declaration — driven by EXECUTION_PARAM_META
+    # Emit Execution declaration. The param set comes from
+    # execution_params_to_emit (spec.py) — the SAME policy spec_to_graph
+    # dict-ifies — so a save can never persist a DSL and a graph that disagree
+    # about Execution params (B6: the old hand-written loop here silently
+    # dropped set-but-mode-irrelevant params that the graph loop kept).
+    # Mode-irrelevant explicit params are kept; the validator's
+    # IRRELEVANT_EXECUTION_PARAM advisory informs instead.
     if spec.execution is not None:
         import typing as _typing
 
-        from pipeline_engine.dsl.spec import EXECUTION_PARAM_META
+        from pipeline_engine.dsl.spec import execution_params_to_emit
 
         # Resolve dataclass annotations (spec.py uses ``from __future__ import
         # annotations``) so float / float|None canonicalization fires correctly
-        # for params like ``min_trade_size`` and ``buffer_threshold``.
-        try:
-            exec_arg_types = _typing.get_type_hints(ExecutionSpec)
-        except Exception:  # pragma: no cover — defensive
-            exec_arg_types = {}
+        # for params like ``min_trade_size`` and ``buffer_threshold``. This can
+        # only fail if spec.py's own annotations are broken — an engine bug
+        # that must propagate, not silently degrade Execution emission to
+        # non-canonical output (the old ``except Exception: exec_arg_types =
+        # {}`` did exactly that).
+        exec_arg_types = _typing.get_type_hints(ExecutionSpec)
         exec_args = []
-        ex = spec.execution
-        for param_name, meta in EXECUTION_PARAM_META.items():
-            val = getattr(ex, param_name, meta.get("default"))
-            if val is None:
-                continue
-            modes = meta.get("modes")
-            is_default = val == meta.get("default")
+        for param_name, val in execution_params_to_emit(spec.execution):
             target_type = exec_arg_types.get(param_name)
-            rendered = _emit_value(val, target_type=target_type)
-            # Always emit: rebalance, or params flagged always_emit
-            if meta.get("always_emit"):
-                exec_args.append(f"{param_name}={rendered}")
-                continue
-            # Mode-specific params: emit if mode is active (even at default)
-            if modes:
-                if ex.rebalance in modes:
-                    exec_args.append(f"{param_name}={rendered}")
-                # Skip if mode not active (irrelevant param)
-                continue
-            # Mode-independent params: only emit if non-default
-            if not is_default:
-                exec_args.append(f"{param_name}={rendered}")
+            exec_args.append(f"{param_name}={_emit_value(val, target_type=target_type)}")
         lines.append(f"Execution({', '.join(exec_args)})")
         lines.append("")
 
@@ -1050,8 +1078,7 @@ def _emit_value(value: Any, target_type: Any = None) -> str:
         # canonicalizes {"a": 1} → {'a': 1.0}.
         v_type = _dict_value_type(target_type)
         items = [
-            f"{_emit_value(k)}: {_emit_value(v, target_type=v_type)}"
-            for k, v in value.items()
+            f"{_emit_value(k)}: {_emit_value(v, target_type=v_type)}" for k, v in value.items()
         ]
         return "{" + ", ".join(items) + "}"
     if isinstance(value, list):

@@ -16,12 +16,22 @@ import difflib
 import math
 import re
 import sys
-from typing import Any, Iterator, Literal
+from typing import Any, Callable, Iterator
 
 from pipeline_engine.base.registry import ParamTier
 from pipeline_engine.base.step import PHASE_GROUP_NAMES
 from pipeline_engine.constants import VALID_TIMEFRAMES
+from pipeline_engine.dsl.catalog import (
+    RULES,
+    CatalogError,
+    _template_placeholders,
+    severity_for,
+)
 from pipeline_engine.dsl.spec import (
+    EXECUTION_PARAM_META,
+    EXECUTION_VALID_BUFFER_MODE,
+    EXECUTION_VALID_REBALANCE,
+    EXECUTION_VALID_REBALANCE_METHOD,
     MISSING,
     ComponentRef,
     ExecutionSpec,
@@ -90,9 +100,7 @@ def _suggest_component_matches(name: str, registry_names: list[str]) -> list[str
     """
     if not registry_names:
         return []
-    user_meaningful = {
-        t for t in _camel_tokens(name) if t not in _GENERIC_TOKEN_NAMES
-    }
+    user_meaningful = {t for t in _camel_tokens(name) if t not in _GENERIC_TOKEN_NAMES}
     name_lower = name.lower()
     scored: list[tuple[float, str, int, float]] = []  # score, name, overlap, sub
     for reg_name in registry_names:
@@ -105,8 +113,7 @@ def _suggest_component_matches(name: str, registry_names: list[str]) -> list[str
         shorter_len = min(len(name_lower), len(reg_lower))
         substr = (
             0.3
-            if shorter_len >= 5
-            and (name_lower in reg_lower or reg_lower in name_lower)
+            if shorter_len >= 5 and (name_lower in reg_lower or reg_lower in name_lower)
             else 0.0
         )
         # Filter: when there's no semantic signal (no shared token, no substring),
@@ -153,6 +160,21 @@ def _is_slot_compatible(stored_type: type, expected_type: type) -> bool:
     return stored_base is expected_base
 
 
+def _store_value_slot_type(value: Any) -> type:
+    """Slot type recorded for a ``StoreValue`` literal — shared by passes 6 + 8.
+
+    Honest typing: ``type(value)`` — including ``type(None)`` for a literal
+    ``None``. ``type(None)`` is already the validator's "unknown stored
+    type" sentinel (see the SlotStoreSpec branch of
+    ``_validate_slots_in_pipeline``): pass 8 skips SLOT_TYPE_MISMATCH for
+    it, and the resolver builds a NoneType-typed slot — which is exactly
+    what the slot holds at runtime. The previous behavior fabricated ``str``
+    for None (in two drifted copies), so downstream slot-type decisions were
+    made against a type the slot never stores.
+    """
+    return type(value)
+
+
 def _format_location(loc) -> str:
     """Format a SourceLocation as 'line N, context' for agent-friendly error locations."""
     if hasattr(loc, "line") and loc.line is not None:
@@ -177,6 +199,91 @@ def _group_by_severity(
     return errors, warnings, info
 
 
+#: Sentinel distinguishing "suggestion not passed" (render the rule's
+#: suggestion_template, if any) from an explicit ``suggestion=None``.
+_UNSET: Any = object()
+
+
+def emit(
+    issues: list[ValidationIssue],
+    code: str,
+    *,
+    location: str | None,
+    severity_context: str | None = None,
+    production_mode: bool = False,
+    suggestion: Any = _UNSET,
+    message_override: str | None = None,
+    **params: Any,
+) -> None:
+    """Append a catalog-rendered :class:`ValidationIssue` (spec 02 §2.1).
+
+    Code, severity, and message/suggestion text render from the rule catalog
+    (``pipeline_engine.dsl.catalog``) — severity is POLICY, never a per-site
+    literal:
+
+    - ``severity`` derives from the rule's category with declared overrides
+      only. ``severity_context`` selects a ``severity_context_overrides``
+      entry (an undeclared context raises); ``production_mode=True`` promotes
+      ``promote_in_production`` rules (UNRESOLVED_UNIVERSE / STALE_UNIVERSE)
+      to error — the catalog encoding of validator production semantics.
+    - ``message`` renders ``message_template`` from ``params``. Strict: the
+      passed params must exactly cover the placeholders of every template
+      being rendered — a missing or extra param raises :class:`CatalogError`
+      (no silent fallbacks).
+    - ``message_override`` is the escape hatch for the documented multi-shape
+      sites (the raw LockError text under UNKNOWN_COMPONENT, LOCK_DRIFT's
+      missing/unknown shape, the resampler ValueError→code dispatch whose
+      text IS the shared rule table's). Every override shape is documented in
+      the rule's ``explain``.
+    - ``suggestion``: omitted → render the rule's ``suggestion_template`` (if
+      any) from ``params``; pass an explicit string/None for dynamically
+      computed or site-specific variants.
+    """
+    rule = RULES.get(code)
+    if rule is None:
+        raise CatalogError(
+            f"emit(): unknown issue code {code!r} — add the catalog entry "
+            f"in dsl/catalog.py first (spec 02 §1.4 standing intake rule)."
+        )
+
+    severity = severity_for(rule, context=severity_context)
+    if production_mode and rule.promote_in_production:
+        severity = "error"
+
+    required: set[str] = set()
+    if message_override is None:
+        required |= _template_placeholders(rule.message_template, code, "message_template")
+    render_suggestion = suggestion is _UNSET and bool(rule.suggestion_template)
+    if render_suggestion:
+        required |= _template_placeholders(rule.suggestion_template, code, "suggestion_template")
+    if set(params) != required:
+        raise CatalogError(
+            f"emit({code}): template params mismatch — required "
+            f"{sorted(required)}, got {sorted(params)}."
+        )
+
+    if message_override is not None:
+        message = message_override
+    else:
+        message = rule.message_template.format(**params)
+    if render_suggestion:
+        rendered_suggestion: str | None = rule.suggestion_template.format(**params)
+    elif suggestion is _UNSET:
+        rendered_suggestion = None
+    else:
+        rendered_suggestion = suggestion
+
+    issues.append(
+        ValidationIssue(
+            severity=severity,  # type: ignore[arg-type]
+            code=code,
+            message=message,
+            location=location,  # type: ignore[arg-type]
+            suggestion=rendered_suggestion,
+        )
+    )
+
+
 def validate_strategy(
     strategy: StrategyFile,
     lock: dict[str, int] | None = None,
@@ -197,35 +304,33 @@ def validate_strategy(
 
     Args:
         strategy: Parsed strategy file.
-        lock: Component version lock. Three modes:
-            - dict: Use the provided lock as-is (production path; chat-api
-              and keel-api always pass an explicit lock).
-            - None: Auto-generate a lock from the strategy using latest
-              versions (convenience path for `/v1/strategies/validate`,
-              tests, and ad-hoc validation). If auto-generation fails,
-              the error is raised — callers must handle it or pass an
-              explicit lock.
-            - {} (empty dict): Validate against the full latest registry
-              with no version pinning. Useful for tests that don't care
-              about lock semantics. Explicit opt-in — distinct from
-              `None` (which still tries auto-generation).
+        lock: Component version lock. Two modes:
+            - non-empty dict: Use the provided lock as-is (production path;
+              chat-api and keel-api always pass an explicit lock).
+            - None or {} (empty dict): Auto-generate a lock from the
+              strategy using latest versions (convenience path for
+              `/v1/strategies/validate`, tests, and ad-hoc validation).
+              An empty dict is normalized to None at this boundary —
+              never-pinned means "validate at latest", matching the
+              loaders' `{} → None` collapse (core-engine-audit A13).
+              Pre-2026-07 behavior built an EMPTY effective registry from
+              `{}`, silently skipping semantic passes 5-9 — the banned
+              silent-fallback genre; there is no such mode anymore.
         production_mode: When True, promotes `UNRESOLVED_UNIVERSE` and
             `STALE_UNIVERSE` from warnings to errors. Used by deploy and
             backtest submit endpoints to refuse strategies that can't run.
             Editor / WIP paths leave this False so users can save unfinished
             strategies. Default False keeps existing callers' behavior intact.
     """
-    from pipeline_engine.base.lock import generate_lock
+    from pipeline_engine.base.lock import evolve_lock
     from pipeline_engine.base.registry import (
         COMPONENT_REGISTRY,
         _build_effective_registry,
         get_latest,
     )
-    try:
-        from pipeline_engine.registry_loader import ensure_registry_loaded
-        ensure_registry_loaded()
-    except ImportError:
-        pass  # SDK mode: registry loaded from JSON before calling validator
+    from pipeline_engine.registry_loader import ensure_registry_loaded
+
+    ensure_registry_loaded()
 
     # Full registry view (all latest) — needed for passes 2 & 4 which must
     # check against ALL known component names, not just locked ones.
@@ -233,19 +338,25 @@ def validate_strategy(
         name: sig for name in COMPONENT_REGISTRY if (sig := get_latest(name)) is not None
     }
 
-    # Auto-generate lock if not provided. `generate_lock` raises
+    # Never-pinned means "validate at latest": collapse `{}` → None here,
+    # exactly like the strategy loaders do (A13). An empty dict must NOT
+    # reach `_build_effective_registry` below — it would build an EMPTY
+    # registry and semantic passes 5-9 would silently skip every component.
+    if lock is not None and len(lock) == 0:
+        lock = None
+
+    # Auto-generate lock if not provided. `evolve_lock` raises
     # `LockError` when the strategy references unknown components — that's
     # not an internal bug, it's a legitimate validation failure we want to
     # surface to the caller as a structured `ValidationIssue` rather than
     # bubble up as an exception. Catch ONLY LockError (the known failure
-    # shape); any other exception (real bug) propagates. Tests that want
-    # to bypass auto-gen pass `lock={}` explicitly.
+    # shape); any other exception (real bug) propagates.
     from pipeline_engine.base.lock import LockError
 
     lock_gen_issues: list[ValidationIssue] = []
     if lock is None:
         try:
-            lock = generate_lock(strategy)
+            lock = evolve_lock({}, strategy)
         except LockError as e:
             # Surface as structured issue; validation continues with the
             # full latest registry so passes 2 + 4 can also catch the
@@ -270,14 +381,14 @@ def validate_strategy(
                         f"Use `strategy_components_search` (chat) or "
                         f"`keel components list` to find the right component."
                     )
-            lock_gen_issues.append(
-                ValidationIssue(
-                    severity="error",
-                    code="UNKNOWN_COMPONENT",
-                    message=err_text,
-                    location=None,
-                    suggestion=suggestion,
-                )
+            # message_override: the raw LockError text (documented shape in
+            # the catalog entry's explain).
+            emit(
+                lock_gen_issues,
+                "UNKNOWN_COMPONENT",
+                location=None,
+                message_override=err_text,
+                suggestion=suggestion,
             )
             lock = None
 
@@ -286,7 +397,6 @@ def validate_strategy(
     # by _validate_names below) rather than an uncaught LockError —
     # parity with TS pass4-names so the AI sees a structured issue, not
     # a crash.
-    invalid_lock_keys: set[str] = set()
     if lock is not None:
         # Lazy import to break the dsl ↔ base.lock circular import.
         from pipeline_engine.base.lock import LockError
@@ -297,9 +407,7 @@ def validate_strategy(
             from pipeline_engine.base.registry import get_all_versions
 
             invalid_lock_keys = {
-                name
-                for name, ver in lock.items()
-                if ver not in (get_all_versions(name) or {})
+                name for name, ver in lock.items() if ver not in (get_all_versions(name) or {})
             }
             safe_lock = {k: v for k, v in lock.items() if k not in invalid_lock_keys}
             registry = _build_effective_registry(safe_lock) if safe_lock else full_registry
@@ -313,6 +421,45 @@ def validate_strategy(
     issues: list[ValidationIssue] = list(lock_gen_issues)
     type_flow: list[TypeFlowEntry] = []
     slot_types: dict[str, type] = {}
+
+    # Drift check: when the caller passed a lock (or we successfully
+    # auto-generated one), surface any drift from the current registry as
+    # informational/warning issues. Operators get visible signal that a
+    # locked version is behind latest or no longer in the registry —
+    # without breaking validation. Auto-generated locks are fresh by
+    # construction so this is a no-op in that case.
+    if lock is not None:
+        from pipeline_engine.base.lock import check_lock_drift
+
+        # `check_lock_drift` already handles every expected input shape
+        # gracefully (unknown components and missing versions come back as
+        # LockDrift entries, not exceptions). If it raises, that's a real
+        # engine bug — let it propagate. The old `except Exception: pass`
+        # here silently discarded the entire LOCK_DRIFT channel on any
+        # internal failure (banned silent-fallback pattern).
+        for d in check_lock_drift(lock):
+            # All drift severities are at `warning` — `info` would be
+            # silently dropped by several downstream callers that only
+            # serialize errors + warnings (e.g. tools.py:strategy_validate
+            # response, keel-api /parse + /lock/validate endpoints,
+            # keel-app frontend renderer). Drift is meant to be visible
+            # signal, not silent metadata.
+            if d.drift_type == "outdated":
+                emit(
+                    issues,
+                    "LOCK_DRIFT",
+                    location=None,
+                    component=d.component,
+                    locked_version=d.locked_version,
+                    latest_version=d.latest_version,
+                )
+            else:  # "missing" or "unknown" — documented override shape
+                detail = "; ".join(c for c in d.changes if c) if d.changes else ""
+                msg = (
+                    f"Component '{d.component}' is locked at v{d.locked_version} "
+                    f"but {d.drift_type} from the registry." + (f" {detail}" if detail else "")
+                )
+                emit(issues, "LOCK_DRIFT", location=None, message_override=msg)
 
     # Pass 1: Variable and factory resolution
     _validate_references(strategy, issues)
@@ -362,7 +509,9 @@ def validate_strategy(
     _validate_slots(expanded, registry, issues, slot_types)
 
     # Pass 9: Globals, Universe, and declaration reference validation
-    _validate_declarations(strategy, expanded, registry, issues, production_mode=production_mode)
+    _validate_declarations(
+        strategy, expanded, registry, full_registry, issues, production_mode=production_mode
+    )
 
     errors, warnings, info = _group_by_severity(issues)
 
@@ -395,6 +544,57 @@ def _build_pipeline_summary(type_flow: list[TypeFlowEntry]) -> str:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# PARAM-VALUE REF WALKERS (shared with the resolver)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+def iter_variable_refs(value: Any) -> Iterator[VariableRef]:
+    """Yield every ``VariableRef`` in a parsed param value, at any depth.
+
+    Walks lists, tuples, and dict *values*. Dict keys and set elements cannot
+    contain refs — ``VariableRef`` is unhashable, so the parser rejects those
+    shapes before a spec exists. A bare top-level ref is yielded too.
+
+    This is the shared oracle for "which variables does this value
+    reference?" — used by validation pass 1 (unknown/forward-reference
+    detection inside containers), factory substitution (pass 3 and the
+    resolver), and the resolver's dependency sort. Before B4, only top-level
+    refs were seen: a ref nested in a list/dict param passed every validator
+    and reached the component constructor as a raw ``VariableRef`` object.
+    """
+    if isinstance(value, VariableRef):
+        yield value
+    elif isinstance(value, (list, tuple)):
+        for item in value:
+            yield from iter_variable_refs(item)
+    elif isinstance(value, dict):
+        for item in value.values():
+            yield from iter_variable_refs(item)
+
+
+def substitute_variable_refs(value: Any, resolve: Callable[[VariableRef], Any]) -> Any:
+    """Return ``value`` with every nested ``VariableRef`` replaced.
+
+    ``resolve(ref)`` returns the replacement value — or the ref itself to
+    leave it in place (factory substitution replaces only factory params) —
+    or raises (the resolver's scope lookup raises ``ResolveError`` for
+    unknown names, so no raw ref can survive param resolution). Containers
+    are rebuilt, never mutated; non-container leaves pass through unchanged.
+    Walks the same shapes as ``iter_variable_refs`` (one walker, one
+    behavior).
+    """
+    if isinstance(value, VariableRef):
+        return resolve(value)
+    if isinstance(value, list):
+        return [substitute_variable_refs(v, resolve) for v in value]
+    if isinstance(value, tuple):
+        return tuple(substitute_variable_refs(v, resolve) for v in value)
+    if isinstance(value, dict):
+        return {k: substitute_variable_refs(v, resolve) for k, v in value.items()}
+    return value
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # PASS 1: Variable and factory resolution
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -421,15 +621,7 @@ def _validate_references(strategy: StrategyFile, issues: list[ValidationIssue]) 
         """Check a single name reference."""
         loc_str = _format_location(location) if hasattr(location, "line") else location
         if name not in definitions:
-            issues.append(
-                ValidationIssue(
-                    severity="error",
-                    code="UNDEFINED_VARIABLE",
-                    message=f"Undefined reference '{name}'.",
-                    location=loc_str,
-                    suggestion=f"Define '{name}' before using it.",
-                )
-            )
+            emit(issues, "UNDEFINED_VARIABLE", location=loc_str, name=name)
             return
 
         def_line = definitions[name]
@@ -438,14 +630,12 @@ def _validate_references(strategy: StrategyFile, issues: list[ValidationIssue]) 
             # resolved by name, not definition order.  Graph-converted specs
             # have all locations at line 0, so we also skip the degenerate
             # 0 >= 0 case (both defined and used at synthetic line 0).
-            issues.append(
-                ValidationIssue(
-                    severity="warning",
-                    code="FORWARD_REFERENCE",
-                    message=f"Forward reference to '{name}' (defined at line {def_line}).",
-                    location=loc_str,
-                    suggestion=f"Move the definition of '{name}' before this usage.",
-                )
+            emit(
+                issues,
+                "FORWARD_REFERENCE",
+                location=loc_str,
+                name=name,
+                def_line=def_line,
             )
 
     def _walk_refs_in_steps(
@@ -477,21 +667,24 @@ def _validate_references(strategy: StrategyFile, issues: list[ValidationIssue]) 
             _check_ref(step.name, ref_line, step.location)
 
         elif isinstance(step, ComponentRef):
-            # Check VariableRef in params
+            # Check VariableRef in params — at any depth. Refs nested inside
+            # list/dict/tuple param values are real references (the parser
+            # accepts them; the resolver substitutes them), so unknown names
+            # must surface here with the same codes as top-level refs (B4).
             for pname, pval in step.params.items():
-                if isinstance(pval, VariableRef):
-                    if factory_params and pval.name in factory_params:
+                for ref in iter_variable_refs(pval):
+                    if factory_params and ref.name in factory_params:
                         continue
-                    _check_ref(pval.name, ref_line, pval.location)
+                    _check_ref(ref.name, ref_line, ref.location)
 
         elif isinstance(step, FactoryCallSpec):
             _check_ref(step.name, ref_line, step.location)
-            # Check VariableRef in factory args
+            # Check VariableRef in factory args — at any depth (see above)
             for aname, aval in step.args.items():
-                if isinstance(aval, VariableRef):
-                    if factory_params and aval.name in factory_params:
+                for ref in iter_variable_refs(aval):
+                    if factory_params and ref.name in factory_params:
                         continue
-                    _check_ref(aval.name, ref_line, aval.location)
+                    _check_ref(ref.name, ref_line, ref.location)
 
         elif isinstance(step, ParallelSpec):
             for branch_name, branch_steps in step.branches.items():
@@ -512,12 +705,14 @@ def _validate_references(strategy: StrategyFile, issues: list[ValidationIssue]) 
             factory_params=param_names,
         )
 
-    # Check variable values (Pipeline VariableRef in steps)
+    # Check variable values (Pipeline VariableRef in steps; refs at any
+    # depth in literal container values — the parser allows e.g. x = [a, b])
     for var in strategy.variables:
         if isinstance(var.value, PipelineSpec):
             _walk_refs_in_steps(var.value.steps, f"var[{var.name}]", var.location.line)
-        elif isinstance(var.value, VariableRef):
-            _check_ref(var.value.name, var.location.line, var.value.location)
+        else:
+            for ref in iter_variable_refs(var.value):
+                _check_ref(ref.name, var.location.line, ref.location)
 
     # Check main pipeline
     _walk_refs_in_steps(strategy.pipeline.steps, "pipeline", strategy.pipeline.location.line)
@@ -538,36 +733,36 @@ def _validate_name_collisions(
 
     for var in strategy.variables:
         if var.name in registry:
-            issues.append(
-                ValidationIssue(
-                    severity="error",
-                    code="NAME_COLLISION",
-                    message=f"Variable '{var.name}' collides with registered component '{var.name}'.",
-                    location=_format_location(var.location),
-                    suggestion="Rename the variable to avoid collision.",
-                )
+            emit(
+                issues,
+                "NAME_COLLISION",
+                location=_format_location(var.location),
+                suggestion="Rename the variable to avoid collision.",
+                kind="Variable",
+                name=var.name,
+                conflict=f"registered component '{var.name}'",
             )
         if var.name in factory_names:
-            issues.append(
-                ValidationIssue(
-                    severity="error",
-                    code="NAME_COLLISION",
-                    message=f"Variable '{var.name}' collides with factory '{var.name}' (ambiguous).",
-                    location=_format_location(var.location),
-                    suggestion="Use distinct names for variables and factories.",
-                )
+            emit(
+                issues,
+                "NAME_COLLISION",
+                location=_format_location(var.location),
+                suggestion="Use distinct names for variables and factories.",
+                kind="Variable",
+                name=var.name,
+                conflict=f"factory '{var.name}' (ambiguous)",
             )
 
     for factory in strategy.factories:
         if factory.name in registry:
-            issues.append(
-                ValidationIssue(
-                    severity="error",
-                    code="NAME_COLLISION",
-                    message=f"Factory '{factory.name}' collides with registered component '{factory.name}'.",
-                    location=_format_location(factory.location),
-                    suggestion="Rename the factory to avoid collision.",
-                )
+            emit(
+                issues,
+                "NAME_COLLISION",
+                location=_format_location(factory.location),
+                suggestion="Rename the factory to avoid collision.",
+                kind="Factory",
+                name=factory.name,
+                conflict=f"registered component '{factory.name}'",
             )
 
 
@@ -594,29 +789,25 @@ def _expand_factories(strategy: StrategyFile, issues: list[ValidationIssue]) -> 
             # Check for missing required params
             for req in required:
                 if req not in step.args:
-                    issues.append(
-                        ValidationIssue(
-                            severity="error",
-                            code="FACTORY_MISSING_PARAM",
-                            message=f"Factory '{step.name}' missing required parameter '{req}'.",
-                            location=_format_location(step.location),
-                            suggestion=f"Add {req}=<value> to the call.",
-                        )
+                    emit(
+                        issues,
+                        "FACTORY_MISSING_PARAM",
+                        location=_format_location(step.location),
+                        factory=step.name,
+                        param=req,
                     )
                     return step
 
             # Check for unknown params
             for arg_name in step.args:
                 if arg_name not in available:
-                    issues.append(
-                        ValidationIssue(
-                            severity="error",
-                            code="FACTORY_UNKNOWN_PARAM",
-                            message=f"Factory '{step.name}' has no parameter '{arg_name}'. "
-                            f"Available: {sorted(available)}.",
-                            location=_format_location(step.location),
-                            suggestion=f"Remove '{arg_name}' or use one of: {sorted(available)}.",
-                        )
+                    emit(
+                        issues,
+                        "FACTORY_UNKNOWN_PARAM",
+                        location=_format_location(step.location),
+                        factory=step.name,
+                        param=arg_name,
+                        available=sorted(available),
                     )
                     return step
 
@@ -694,9 +885,13 @@ def _substitute_params(pipeline: PipelineSpec, substitutions: dict[str, Any]) ->
                 # Literal values can't be steps — leave as-is (validation will catch)
 
         elif isinstance(step, ComponentRef):
+            # Substitute at any depth — factory params referenced inside
+            # list/dict/tuple param values must expand too (B4). Refs not
+            # matching a factory param are left in place for later passes.
             for pname, pval in step.params.items():
-                if isinstance(pval, VariableRef) and pval.name in substitutions:
-                    step.params[pname] = substitutions[pval.name]
+                step.params[pname] = substitute_variable_refs(
+                    pval, lambda r: substitutions.get(r.name, r)
+                )
 
         elif isinstance(step, ParallelSpec):
             for branch_steps in step.branches.values():
@@ -708,8 +903,9 @@ def _substitute_params(pipeline: PipelineSpec, substitutions: dict[str, Any]) ->
 
         elif isinstance(step, FactoryCallSpec):
             for aname, aval in step.args.items():
-                if isinstance(aval, VariableRef) and aval.name in substitutions:
-                    step.args[aname] = substitutions[aval.name]
+                step.args[aname] = substitute_variable_refs(
+                    aval, lambda r: substitutions.get(r.name, r)
+                )
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -744,36 +940,34 @@ def _validate_names(
                     f"Use `strategy_components_search` (chat) or "
                     f"`keel components list` to find the right component."
                 )
-            issues.append(
-                ValidationIssue(
-                    severity="error",
-                    code="UNKNOWN_COMPONENT",
-                    message=f"Unknown component '{ref.name}'.",
-                    location=_format_location(ref.location),
-                    suggestion=suggestion_text,
-                )
+            emit(
+                issues,
+                "UNKNOWN_COMPONENT",
+                location=_format_location(ref.location),
+                suggestion=suggestion_text,
+                name=ref.name,
             )
         else:
             # Warn on deprecated components
             sig = registry[ref.name]
             if getattr(sig, "status", None) == "deprecated":
-                issues.append(
-                    ValidationIssue(
-                        severity="warning",
-                        code="DEPRECATED_COMPONENT",
-                        message=f"Component '{ref.name}' is deprecated and may be removed in a future version.",
-                        location=_format_location(ref.location),
-                        suggestion=f"Consider replacing '{ref.name}' with a supported alternative.",
-                    )
+                emit(
+                    issues,
+                    "DEPRECATED_COMPONENT",
+                    location=_format_location(ref.location),
+                    name=ref.name,
                 )
 
             # INVALID_VERSION_LOCK — verify the locked version exists.
+            # `get_all_versions` is a registry dict copy and cannot
+            # legitimately fail; if it ever raises, that's an engine bug
+            # that must propagate. The old `except Exception: versions = {}`
+            # here converted such a bug into a fabricated
+            # INVALID_VERSION_LOCK for every locked component — the exact
+            # silent-fallback pattern the house rules forbid.
             if component_lock and ref.name in component_lock:
                 locked_version = component_lock[ref.name]
-                try:
-                    versions = get_all_versions(ref.name) or {}
-                except Exception:
-                    versions = {}
+                versions = get_all_versions(ref.name) or {}
                 if locked_version not in versions:
                     latest = getattr(sig, "version", None)
                     if latest is not None:
@@ -783,21 +977,39 @@ def _validate_names(
                         )
                     else:
                         hint = f"Remove the version lock for '{ref.name}'."
-                    issues.append(
-                        ValidationIssue(
-                            severity="error",
-                            code="INVALID_VERSION_LOCK",
-                            message=f"Component '{ref.name}' is locked to version "
-                            f"{locked_version}, which does not exist.",
-                            location=_format_location(ref.location),
-                            suggestion=hint,
-                        )
+                    emit(
+                        issues,
+                        "INVALID_VERSION_LOCK",
+                        location=_format_location(ref.location),
+                        suggestion=hint,
+                        component=ref.name,
+                        locked_version=locked_version,
                     )
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # PASS 5: Parameter validation
 # ═══════════════════════════════════════════════════════════════════════════════
+
+
+def _effective_param_value(
+    ref_params: dict[str, Any],
+    reg_params: dict[str, Any],
+    pname: str,
+) -> Any:
+    """The value ``__init__`` would see for ``pname``.
+
+    The explicitly written param when present (including an explicit None or
+    a VariableRef), else the registry default. Required-without-default params
+    that aren't written resolve to None — pass 5's MISSING_PARAM covers that
+    case separately.
+    """
+    if pname in ref_params:
+        return ref_params[pname]
+    pinfo = reg_params.get(pname)
+    if pinfo is None or pinfo.default is MISSING:
+        return None
+    return pinfo.default
 
 
 def _validate_params(
@@ -821,14 +1033,13 @@ def _validate_params(
                 default_hint = ""
                 if pinfo.suggestions:
                     default_hint = f" (e.g. {pname}={pinfo.suggestions[0]!r})"
-                issues.append(
-                    ValidationIssue(
-                        severity="error",
-                        code="MISSING_PARAM",
-                        message=f"Component '{ref.name}' missing required parameter '{pname}'.",
-                        location=_format_location(ref.location),
-                        suggestion=f"Add {pname}=<value>{default_hint}.",
-                    )
+                emit(
+                    issues,
+                    "MISSING_PARAM",
+                    location=_format_location(ref.location),
+                    component=ref.name,
+                    param=pname,
+                    default_hint=default_hint,
                 )
 
         # Check unknown params — show all params grouped by tier
@@ -840,18 +1051,15 @@ def _validate_params(
                 available_infra = sorted(
                     p for p, pi in reg_params.items() if pi.tier == ParamTier.INFRA
                 )
-                msg_parts = [f"Component '{ref.name}' has no parameter '{pname}'."]
-                msg_parts.append(f" Strategy params: {available_strategy}.")
-                if available_infra:
-                    msg_parts.append(f" Infra params: {available_infra}.")
-                issues.append(
-                    ValidationIssue(
-                        severity="error",
-                        code="UNKNOWN_PARAM",
-                        message="".join(msg_parts),
-                        location=_format_location(ref.location),
-                        suggestion=f"Remove '{pname}' or use one of: {available_strategy}.",
-                    )
+                infra_note = f" Infra params: {available_infra}." if available_infra else ""
+                emit(
+                    issues,
+                    "UNKNOWN_PARAM",
+                    location=_format_location(ref.location),
+                    component=ref.name,
+                    param=pname,
+                    strategy_params=available_strategy,
+                    infra_note=infra_note,
                 )
                 continue
 
@@ -885,79 +1093,69 @@ def _validate_params(
                             pass  # resolver converts str → Slot at runtime
                         else:
                             type_label = param_display_type(pinfo)
-                            issues.append(
-                                ValidationIssue(
-                                    severity="error",
-                                    code="PARAM_TYPE_MISMATCH",
-                                    message=f"Parameter '{pname}' of '{ref.name}' expects "
-                                    f"{type_label}, got {type(pval).__name__}.",
-                                    location=_format_location(ref.location),
-                                    suggestion=f"Change {pname} to a {type_label} value.",
-                                )
+                            emit(
+                                issues,
+                                "PARAM_TYPE_MISMATCH",
+                                location=_format_location(ref.location),
+                                param=pname,
+                                component=ref.name,
+                                expected=type_label,
+                                actual=type(pval).__name__,
                             )
                 except TypeError:
                     # Generic aliases (e.g. list[int], dict[str, float]) aren't
-                    # isinstance-checkable. Record as info-level issue.
-                    issues.append(
-                        ValidationIssue(
-                            severity="info",
-                            code="PARAM_TYPE_CHECK_SKIPPED",
-                            message=f"Cannot validate type of parameter '{pname}' of "
-                            f"'{ref.name}': complex type {pinfo.type_} is not "
-                            f"isinstance-checkable.",
-                            location=_format_location(ref.location),
-                            suggestion=None,
-                        )
+                    # isinstance-checkable. Record as info-level issue
+                    # (severity_override="info" in the catalog).
+                    emit(
+                        issues,
+                        "PARAM_TYPE_CHECK_SKIPPED",
+                        location=_format_location(ref.location),
+                        param=pname,
+                        component=ref.name,
+                        type=pinfo.type_,
                     )
 
             # Reject non-finite numbers (inf/nan) — these fail at compile
             if isinstance(pval, float) and not math.isfinite(pval):
-                issues.append(
-                    ValidationIssue(
-                        severity="error",
-                        code="PARAM_INVALID_VALUE",
-                        message=f"Parameter '{pname}' of '{ref.name}' has invalid value "
-                        f"{pval!r}. Infinity and NaN are not allowed.",
-                        location=_format_location(ref.location),
-                        suggestion=f"Change {pname} to a finite number.",
-                    )
+                emit(
+                    issues,
+                    "PARAM_INVALID_VALUE",
+                    location=_format_location(ref.location),
+                    suggestion=f"Change {pname} to a finite number.",
+                    detail=f"Parameter '{pname}' of '{ref.name}' has invalid value "
+                    f"{pval!r}. Infinity and NaN are not allowed.",
                 )
 
             # Constraint checking
             if pinfo.constraints and not isinstance(pval, VariableRef):
                 c = pinfo.constraints
                 if "min" in c and isinstance(pval, (int, float)) and pval < c["min"]:
-                    issues.append(
-                        ValidationIssue(
-                            severity="error",
-                            code="PARAM_OUT_OF_RANGE",
-                            message=f"Parameter '{pname}' of '{ref.name}' value {pval} "
-                            f"below minimum {c['min']}.",
-                            location=_format_location(ref.location),
-                            suggestion=f"Change {pname} to a value in range [{c.get('min', '...')}, {c.get('max', '...')}].",
-                        )
+                    emit(
+                        issues,
+                        "PARAM_OUT_OF_RANGE",
+                        location=_format_location(ref.location),
+                        suggestion=f"Change {pname} to a value in range [{c.get('min', '...')}, {c.get('max', '...')}].",
+                        detail=f"Parameter '{pname}' of '{ref.name}' value {pval} "
+                        f"below minimum {c['min']}.",
                     )
                 if "max" in c and isinstance(pval, (int, float)) and pval > c["max"]:
-                    issues.append(
-                        ValidationIssue(
-                            severity="error",
-                            code="PARAM_OUT_OF_RANGE",
-                            message=f"Parameter '{pname}' of '{ref.name}' value {pval} "
-                            f"above maximum {c['max']}.",
-                            location=_format_location(ref.location),
-                            suggestion=f"Change {pname} to a value in range [{c.get('min', '...')}, {c.get('max', '...')}].",
-                        )
+                    emit(
+                        issues,
+                        "PARAM_OUT_OF_RANGE",
+                        location=_format_location(ref.location),
+                        suggestion=f"Change {pname} to a value in range [{c.get('min', '...')}, {c.get('max', '...')}].",
+                        detail=f"Parameter '{pname}' of '{ref.name}' value {pval} "
+                        f"above maximum {c['max']}.",
                     )
                 if "options" in c and isinstance(pval, str) and pval not in c["options"]:
-                    issues.append(
-                        ValidationIssue(
-                            severity="error",
-                            code="PARAM_INVALID_OPTION",
-                            message=f"Parameter '{pname}' of '{ref.name}' value '{pval}' "
-                            f"is not a valid option. Valid: {c['options']}.",
-                            location=_format_location(ref.location),
-                            suggestion=f"Use one of: {c['options']}.",
-                        )
+                    emit(
+                        issues,
+                        "PARAM_INVALID_OPTION",
+                        location=_format_location(ref.location),
+                        param=pname,
+                        component=ref.name,
+                        value=pval,
+                        options=c["options"],
                     )
 
         # Dict weight-sum validation: "weights" params with numeric values must sum to 1.0
@@ -970,18 +1168,20 @@ def _validate_params(
             ):
                 weight_sum = sum(pval.values())
                 if abs(weight_sum - 1.0) > 1e-6:
-                    issues.append(
-                        ValidationIssue(
-                            severity="error",
-                            code="PARAM_INVALID_VALUE",
-                            message=f"Parameter 'weights' of '{ref.name}' must sum to 1.0, "
-                            f"got {weight_sum:.6f}.",
-                            location=_format_location(ref.location),
-                            suggestion="Adjust weight values so they sum to 1.0.",
-                        )
+                    emit(
+                        issues,
+                        "PARAM_INVALID_VALUE",
+                        location=_format_location(ref.location),
+                        suggestion="Adjust weight values so they sum to 1.0.",
+                        detail=f"Parameter 'weights' of '{ref.name}' must sum to 1.0, "
+                        f"got {weight_sum:.6f}.",
                     )
 
-        # Cross-parameter group constraints (param_constraints)
+        # Cross-parameter constraints (param_constraints, constraint schema v1).
+        # Shapes are guaranteed by registration-time validation
+        # (pipeline_engine.base.registration._validate_param_constraints):
+        # every entry carries a known "rule" discriminator, and "requires"
+        # entries carry a non-empty "when" condition dict.
         if sig.param_constraints:
             for constraint in sig.param_constraints:
                 group_params = constraint.get("params", [])
@@ -990,39 +1190,94 @@ def _validate_params(
 
                 if rule == "exactly_one":
                     if len(provided) == 0:
-                        issues.append(
-                            ValidationIssue(
-                                severity="error",
-                                code="PARAM_GROUP_MISSING",
-                                message=f"Component '{ref.name}' requires exactly one of "
-                                f"[{', '.join(group_params)}], but none provided.",
-                                location=_format_location(ref.location),
-                                suggestion=f"Provide one of: {', '.join(group_params)}.",
-                            )
+                        emit(
+                            issues,
+                            "PARAM_GROUP_MISSING",
+                            location=_format_location(ref.location),
+                            component=ref.name,
+                            group=", ".join(group_params),
                         )
                     elif len(provided) > 1:
-                        issues.append(
-                            ValidationIssue(
-                                severity="error",
-                                code="PARAM_GROUP_CONFLICT",
-                                message=f"Component '{ref.name}' accepts only one of "
-                                f"[{', '.join(group_params)}], but got: [{', '.join(provided)}].",
-                                location=_format_location(ref.location),
-                                suggestion=f"Remove one of: {', '.join(provided)}.",
-                            )
+                        emit(
+                            issues,
+                            "PARAM_GROUP_CONFLICT",
+                            location=_format_location(ref.location),
+                            component=ref.name,
+                            arity="only one",
+                            group=", ".join(group_params),
+                            provided=", ".join(provided),
                         )
                 elif rule == "at_most_one":
                     if len(provided) > 1:
-                        issues.append(
-                            ValidationIssue(
-                                severity="error",
-                                code="PARAM_GROUP_CONFLICT",
-                                message=f"Component '{ref.name}' accepts at most one of "
-                                f"[{', '.join(group_params)}], but got: [{', '.join(provided)}].",
-                                location=_format_location(ref.location),
-                                suggestion=f"Remove one of: {', '.join(provided)}.",
-                            )
+                        emit(
+                            issues,
+                            "PARAM_GROUP_CONFLICT",
+                            location=_format_location(ref.location),
+                            component=ref.name,
+                            arity="at most one",
+                            group=", ".join(group_params),
+                            provided=", ".join(provided),
                         )
+                elif rule == "requires":
+                    # Conditional requirement: when every `when` condition
+                    # matches the effective (explicit-or-default) value —
+                    # i.e. what __init__ will actually see — every param in
+                    # `params` must be provided. Mirrored in the TS editor
+                    # validator (pass5-params.ts).
+                    when = constraint.get("when") or {}
+                    if not when:
+                        # Registration mandates a non-empty `when` for
+                        # `requires` entries — a missing condition means the
+                        # signature bypassed the registration gate. Raise
+                        # rather than guess between "unconditional" and
+                        # "skip" (no silent fallbacks).
+                        raise ValueError(
+                            f"Component '{ref.name}' has a 'requires' "
+                            f"param_constraints entry without a 'when' "
+                            f"condition: {constraint!r}. Fix the registry "
+                            f"source (re-register the component or "
+                            f"regenerate the registry snapshot)."
+                        )
+                    cond_values = {
+                        k: _effective_param_value(ref.params, reg_params, k) for k in when
+                    }
+                    # A condition on a variable-bound param can't be evaluated
+                    # statically — same policy as pass 5's type checks.
+                    if any(isinstance(v, VariableRef) for v in cond_values.values()):
+                        continue
+                    if all(cond_values[k] == v for k, v in when.items()):
+                        # A param is missing when its effective value is None
+                        # (unset, or explicitly None). Variable-bound values
+                        # are non-None VariableRefs → count as provided.
+                        missing = [
+                            p
+                            for p in group_params
+                            if _effective_param_value(ref.params, reg_params, p) is None
+                        ]
+                        if missing:
+                            cond_text = " and ".join(f"{k}={v!r}" for k, v in when.items())
+                            emit(
+                                issues,
+                                "PARAM_REQUIRES_MISSING",
+                                location=_format_location(ref.location),
+                                component=ref.name,
+                                missing=", ".join(missing),
+                                condition=cond_text,
+                                when_params=" / ".join(when.keys()),
+                            )
+                else:
+                    # Registration (base/registration.py) admits only the
+                    # schema-v1 rules, so an unknown rule here means this
+                    # signature bypassed @register_component (e.g. a stale
+                    # or hand-built registry snapshot). Fail loudly — the
+                    # validator does not guess (no silent fallbacks).
+                    raise ValueError(
+                        f"Component '{ref.name}' has a param_constraints entry "
+                        f"with unknown rule {rule!r}: {constraint!r}. Valid "
+                        f"rules: ['at_most_one', 'exactly_one', 'requires']. "
+                        f"Fix the registry source (re-register the component "
+                        f"or regenerate the registry snapshot)."
+                    )
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1098,11 +1353,9 @@ def _validate_pipeline_type_flow(
 
     current_type = prev_output_type
     # Track the most recent Parallel for EXTRACT_MISSING_KEY checking.
+    # (Per-branch terminal types are threaded directly into
+    # ``_check_composer_input_types`` as ``branch_types`` below.)
     prev_parallel: ParallelSpec | None = None
-    # G1-followup-2: per-branch terminal output type for the most recent
-    # Parallel. Read by ``_check_composer_input_types`` when the next step
-    # is a Composer that declared a per-key contract.
-    prev_parallel_branch_types: dict[str, type] = {}
 
     for i, step in enumerate(pipeline.steps):
         step_context = f"{context}.step[{i}]"
@@ -1153,15 +1406,13 @@ def _validate_pipeline_type_flow(
                 and not is_data_loader
                 and current_type is not TypingAny
             ):
-                issues.append(
-                    ValidationIssue(
-                        severity="error",
-                        code="DICT_INPUT_EXPECTED",
-                        message=f"Composer '{step.name}' expects dict input "
-                        f"from Parallel, but got {type_name(current_type)}.",
-                        location=_format_location(step.location),
-                        suggestion=f"Place a Parallel block before '{step.name}'.",
-                    )
+                emit(
+                    issues,
+                    "DICT_INPUT_EXPECTED",
+                    location=_format_location(step.location),
+                    suggestion=f"Place a Parallel block before '{step.name}'.",
+                    step=f"Composer '{step.name}'",
+                    actual=type_name(current_type),
                 )
                 # Skip downstream TYPE_MISMATCH — DICT_INPUT_EXPECTED already
                 # describes the same authoring mistake; emitting both
@@ -1205,16 +1456,11 @@ def _validate_pipeline_type_flow(
                 and not is_data_loader
                 and not is_slot_reader
             ):
-                issues.append(
-                    ValidationIssue(
-                        severity="error",
-                        code="DICT_NOT_CONSUMED",
-                        message=f"Step '{step.name}' follows Parallel but is "
-                        f"not a Composer, Extract, or Load — dict input would "
-                        f"crash this step at runtime.",
-                        location=_format_location(step.location),
-                        suggestion="Use a Composer to join branch results, or Extract to select one.",
-                    )
+                emit(
+                    issues,
+                    "DICT_NOT_CONSUMED",
+                    location=_format_location(step.location),
+                    step=step.name,
                 )
                 type_flow.append(
                     TypeFlowEntry(
@@ -1234,16 +1480,15 @@ def _validate_pipeline_type_flow(
                 if not skip_check:
                     if not is_compatible(current_type, sig.input_type):
                         suggestion = _suggest_type_bridge(current_type, sig.input_type, registry)
-                        issues.append(
-                            ValidationIssue(
-                                severity="error",
-                                code="TYPE_MISMATCH",
-                                message=f"Type mismatch at {step_context}: "
-                                f"'{step.name}' expects {type_name(sig.input_type)} "
-                                f"but receives {type_name(current_type)}.",
-                                location=_format_location(step.location),
-                                suggestion=suggestion,
-                            )
+                        emit(
+                            issues,
+                            "TYPE_MISMATCH",
+                            location=_format_location(step.location),
+                            suggestion=suggestion,
+                            context=step_context,
+                            step=step.name,
+                            expected=type_name(sig.input_type),
+                            actual=type_name(current_type),
                         )
 
             # TRANSITION_OUTPUT_MISMATCH — author-facing warning when a
@@ -1259,20 +1504,16 @@ def _validate_pipeline_type_flow(
                 if category_map is not None and sig.category in category_map:
                     expected_outputs = category_map[sig.category]
                     step_out_name = type_to_transition_key(sig.output_type)
-                    if (
-                        step_out_name is not None
-                        and step_out_name not in expected_outputs
-                    ):
-                        issues.append(
-                            ValidationIssue(
-                                severity="warning",
-                                code="TRANSITION_OUTPUT_MISMATCH",
-                                message=f"Step '{step.name}' ({sig.category.value}) outputs "
-                                f"'{step_out_name}' but transition from "
-                                f"'{prev_out_name}' expects one of {expected_outputs}.",
-                                location=_format_location(step.location),
-                                suggestion=f"Check that '{step.name}' produces one of: {expected_outputs}.",
-                            )
+                    if step_out_name is not None and step_out_name not in expected_outputs:
+                        emit(
+                            issues,
+                            "TRANSITION_OUTPUT_MISMATCH",
+                            location=_format_location(step.location),
+                            step=step.name,
+                            category=sig.category.value,
+                            output=step_out_name,
+                            prev_output=prev_out_name,
+                            expected_outputs=expected_outputs,
                         )
 
             # Record type flow
@@ -1301,7 +1542,7 @@ def _validate_pipeline_type_flow(
 
         elif isinstance(step, SlotStoreValueSpec):
             # Pass-through; record slot type based on value
-            slot_types[step.slot_name] = type(step.value) if step.value is not None else str
+            slot_types[step.slot_name] = _store_value_slot_type(step.value)
             type_flow.append(
                 TypeFlowEntry(
                     step=f'StoreValue("{step.slot_name}", {step.value!r})',
@@ -1331,27 +1572,23 @@ def _validate_pipeline_type_flow(
             # at backtest. Without a preceding Parallel, emit
             # DICT_INPUT_EXPECTED for the same reason composers do.
             if prev_parallel is None or current_type is not dict:
-                issues.append(
-                    ValidationIssue(
-                        severity="warning",
-                        code="DICT_INPUT_EXPECTED",
-                        message=f"'Extract' expects dict input from Parallel, "
-                        f"but got {type_name(current_type)}.",
-                        location=_format_location(step.location),
-                        suggestion="Place a Parallel block before 'Extract'.",
-                    )
+                emit(
+                    issues,
+                    "DICT_INPUT_EXPECTED",
+                    location=_format_location(step.location),
+                    severity_context="extract",
+                    suggestion="Place a Parallel block before 'Extract'.",
+                    step="'Extract'",
+                    actual=type_name(current_type),
                 )
                 current_type = TypingAny
             elif step.key not in prev_parallel.branches:
-                issues.append(
-                    ValidationIssue(
-                        severity="error",
-                        code="EXTRACT_MISSING_KEY",
-                        message=f"Extract key '{step.key}' not found in Parallel "
-                        f"branches: {sorted(prev_parallel.branches.keys())}.",
-                        location=_format_location(step.location),
-                        suggestion=f"Use one of: {sorted(prev_parallel.branches.keys())}.",
-                    )
+                emit(
+                    issues,
+                    "EXTRACT_MISSING_KEY",
+                    location=_format_location(step.location),
+                    key=step.key,
+                    branches=sorted(prev_parallel.branches.keys()),
                 )
                 current_type = TypingAny
             else:
@@ -1387,7 +1624,6 @@ def _validate_pipeline_type_flow(
             # After parallel: output is dict
             current_type = dict
             prev_parallel = step
-            prev_parallel_branch_types = branch_types
 
             # D23: Composer key validation on next step
             if i + 1 < len(pipeline.steps):
@@ -1460,15 +1696,14 @@ def _check_composer_keys(
         if isinstance(param_value, dict) and all(isinstance(k, str) for k in param_value.keys()):
             extra = set(param_value.keys()) - branch_names
             if extra:
-                issues.append(
-                    ValidationIssue(
-                        severity="error",
-                        code="COMPOSER_KEY_MISMATCH",
-                        message=f"Composer '{next_step.name}' parameter '{param_name}' has keys "
-                        f"not in parallel branches: {sorted(extra)}.",
-                        location=_format_location(next_step.location),
-                        suggestion=f"Valid branch names: {sorted(branch_names)}.",
-                    )
+                emit(
+                    issues,
+                    "COMPOSER_KEY_MISMATCH",
+                    location=_format_location(next_step.location),
+                    composer=next_step.name,
+                    param=param_name,
+                    extra=sorted(extra),
+                    branches=sorted(branch_names),
                 )
 
 
@@ -1539,44 +1774,40 @@ def _check_composer_input_types(
             if actual is None:
                 continue  # COMPOSER_KEY_MISMATCH handles this
             if not _composer_accepts(actual, expected):
-                issues.append(
-                    ValidationIssue(
-                        severity="error",
-                        code="COMPOSER_INPUT_TYPE_MISMATCH",
-                        message=(
-                            f"Composer '{next_step.name}' role '{role_param}' "
-                            f"references branch '{branch_name}' which outputs "
-                            f"'{type_name(actual)}', but expects "
-                            f"{_format_expected(expected)}."
-                        ),
-                        location=_format_location(next_step.location),
-                        suggestion=(
-                            f"Change branch '{branch_name}' to end with a step "
-                            f"that outputs {_format_expected(expected)}, or point "
-                            f"'{role_param}' at a different branch."
-                        ),
-                    )
+                emit(
+                    issues,
+                    "COMPOSER_INPUT_TYPE_MISMATCH",
+                    location=_format_location(next_step.location),
+                    suggestion=(
+                        f"Change branch '{branch_name}' to end with a step "
+                        f"that outputs {_format_expected(expected)}, or point "
+                        f"'{role_param}' at a different branch."
+                    ),
+                    detail=(
+                        f"Composer '{next_step.name}' role '{role_param}' "
+                        f"references branch '{branch_name}' which outputs "
+                        f"'{type_name(actual)}', but expects "
+                        f"{_format_expected(expected)}."
+                    ),
                 )
     else:
         # Homogeneous: every branch must match
         for branch_name, actual in branch_types.items():
             if not _composer_accepts(actual, composer_inputs):
-                issues.append(
-                    ValidationIssue(
-                        severity="error",
-                        code="COMPOSER_INPUT_TYPE_MISMATCH",
-                        message=(
-                            f"Composer '{next_step.name}' expects every Parallel "
-                            f"branch to output {_format_expected(composer_inputs)}, "
-                            f"but branch '{branch_name}' outputs "
-                            f"'{type_name(actual)}'."
-                        ),
-                        location=_format_location(next_step.location),
-                        suggestion=(
-                            f"Change branch '{branch_name}' to end with a step "
-                            f"that outputs {_format_expected(composer_inputs)}."
-                        ),
-                    )
+                emit(
+                    issues,
+                    "COMPOSER_INPUT_TYPE_MISMATCH",
+                    location=_format_location(next_step.location),
+                    suggestion=(
+                        f"Change branch '{branch_name}' to end with a step "
+                        f"that outputs {_format_expected(composer_inputs)}."
+                    ),
+                    detail=(
+                        f"Composer '{next_step.name}' expects every Parallel "
+                        f"branch to output {_format_expected(composer_inputs)}, "
+                        f"but branch '{branch_name}' outputs "
+                        f"'{type_name(actual)}'."
+                    ),
                 )
 
 
@@ -1613,15 +1844,13 @@ def _check_ordering(
                 step_idx = PHASE_INDEX.get(sig.category)
                 if step_idx is not None and step_idx < max_idx:
                     expected_group = PHASE_GROUP_NAMES[max_idx]
-                    issues.append(
-                        ValidationIssue(
-                            severity="warning",
-                            code="PHASE_ORDER_VIOLATION",
-                            message=f"Phase ordering: '{step.name}' ({sig.category.value}) "
-                            f"appears after the {expected_group} phase.",
-                            location=_format_location(step.location),
-                            suggestion=f"Move '{step.name}' earlier in the pipeline, before the {expected_group} phase.",
-                        )
+                    emit(
+                        issues,
+                        "PHASE_ORDER_VIOLATION",
+                        location=_format_location(step.location),
+                        step=step.name,
+                        category=sig.category.value,
+                        expected_group=expected_group,
                     )
                 if step_idx is not None:
                     max_idx = max(max_idx, step_idx)
@@ -1650,24 +1879,43 @@ def _validate_slots(
     issues: list[ValidationIssue],
     slot_types: dict[str, type],
 ) -> None:
-    """Pass 8: Validate Store/Load pairs, slot-reference params, slot types."""
+    """Pass 8: Validate Store/Load pairs, slot-reference params, slot types.
+
+    Uses a single registry view — the lock-effective registry passed in.
+    No fallback to full_registry. A component referenced in source but
+    missing from the lock-effective registry surfaces upstream as
+    UNKNOWN_COMPONENT (pass 4) or INVALID_VERSION_LOCK (pass 4) — those
+    are loud structured errors the user must address. Pass 8 doesn't
+    over-helpfully complete the slot_reads contract for a component the
+    lock can't account for.
+
+    The fallback that existed here (commit 310dc5a8, 2026-06-22) was added
+    to suppress noisy false-positive SLOT_UNUSED warnings when the agent
+    passed a stale partial lock to validate. That class of bug is fixed
+    at the source — see services/chat-api/src/agent/executor.py which now
+    evolves the saved lock against in-memory source before calling
+    validate — so the fallback is no longer load-bearing.
+    """
     available_slots: dict[str, tuple] = {}
     used_slots: set[str] = set()
 
     _validate_slots_in_pipeline(
-        strategy.pipeline, registry, issues, available_slots, used_slots, slot_types
+        strategy.pipeline,
+        registry,
+        issues,
+        available_slots,
+        used_slots,
+        slot_types,
     )
 
     # Check for unused stores
     for slot_name, (_, store_loc) in available_slots.items():
         if slot_name not in used_slots:
-            issues.append(
-                ValidationIssue(
-                    severity="warning",
-                    code="SLOT_UNUSED",
-                    message=f"Slot '{slot_name}' is stored but never loaded or referenced.",
-                    location=_format_location(store_loc),
-                )
+            emit(
+                issues,
+                "SLOT_UNUSED",
+                location=_format_location(store_loc),
+                slot=slot_name,
             )
 
 
@@ -1689,23 +1937,28 @@ def _validate_slots_in_pipeline(
                 available_slots[step.slot_name] = (type(None), step.location)
 
         elif isinstance(step, SlotStoreValueSpec):
-            value_type = type(step.value) if step.value is not None else str
-            available_slots[step.slot_name] = (value_type, step.location)
+            available_slots[step.slot_name] = (
+                _store_value_slot_type(step.value),
+                step.location,
+            )
 
         elif isinstance(step, SlotLoadSpec):
             used_slots.add(step.slot_name)
             if step.slot_name not in available_slots:
-                issues.append(
-                    ValidationIssue(
-                        severity="error",
-                        code="SLOT_NOT_FOUND",
-                        message=f"Load('{step.slot_name}'): no prior Store('{step.slot_name}') found.",
-                        location=_format_location(step.location),
-                        suggestion=f'Add Store("{step.slot_name}") before this Load.',
-                    )
+                emit(
+                    issues,
+                    "SLOT_NOT_FOUND",
+                    location=_format_location(step.location),
+                    slot=step.slot_name,
                 )
 
         elif isinstance(step, ComponentRef):
+            # Single registry view. If the lock-effective registry doesn't
+            # have this component, pass 4 already emitted UNKNOWN_COMPONENT
+            # or INVALID_VERSION_LOCK with line locations — that's the
+            # actionable error. We don't fall back to full_registry to mask
+            # the gap; SLOT_UNUSED noise on upstream Stores is acceptable
+            # in that already-broken state.
             sig = registry.get(step.name)
             if sig and sig.slot_reads:
                 for param_name, expected_type in sig.slot_reads.items():
@@ -1727,15 +1980,13 @@ def _validate_slots_in_pipeline(
                     if isinstance(slot_name_val, str):
                         used_slots.add(slot_name_val)
                         if slot_name_val not in available_slots:
-                            issues.append(
-                                ValidationIssue(
-                                    severity="error",
-                                    code="SLOT_REF_NOT_FOUND",
-                                    message=f"Component '{step.name}' parameter '{param_name}' "
-                                    f"references slot '{slot_name_val}' which hasn't been stored.",
-                                    location=_format_location(step.location),
-                                    suggestion=f'Add Store("{slot_name_val}") before this component.',
-                                )
+                            emit(
+                                issues,
+                                "SLOT_REF_NOT_FOUND",
+                                location=_format_location(step.location),
+                                component=step.name,
+                                param=param_name,
+                                slot=slot_name_val,
                             )
                         else:
                             # Check type compatibility.
@@ -1747,17 +1998,15 @@ def _validate_slots_in_pipeline(
                             if stored_type is not type(None) and not _is_slot_compatible(
                                 stored_type, expected_type
                             ):
-                                issues.append(
-                                    ValidationIssue(
-                                        severity="error",
-                                        code="SLOT_TYPE_MISMATCH",
-                                        message=f"Component '{step.name}' parameter '{param_name}' "
-                                        f"expects slot type {type_name(expected_type)} "
-                                        f"but slot '{slot_name_val}' stores {type_name(stored_type)}.",
-                                        location=_format_location(step.location),
-                                        suggestion=f"Slot '{slot_name_val}' stores {type_name(stored_type)} "
-                                        f"but {type_name(expected_type)} is expected.",
-                                    )
+                                emit(
+                                    issues,
+                                    "SLOT_TYPE_MISMATCH",
+                                    location=_format_location(step.location),
+                                    component=step.name,
+                                    param=param_name,
+                                    expected=type_name(expected_type),
+                                    slot=slot_name_val,
+                                    stored=type_name(stored_type),
                                 )
 
         elif isinstance(step, ParallelSpec):
@@ -1789,7 +2038,12 @@ def _validate_slots_in_pipeline(
 
         elif isinstance(step, PipelineSpec):
             _validate_slots_in_pipeline(
-                step, registry, issues, available_slots, used_slots, slot_types
+                step,
+                registry,
+                issues,
+                available_slots,
+                used_slots,
+                slot_types,
             )
 
 
@@ -1845,10 +2099,19 @@ def _validate_declarations(
     strategy: StrategyFile,
     expanded: StrategyFile,
     registry: dict[str, Any],
+    full_registry: dict[str, Any],
     issues: list[ValidationIssue],
     production_mode: bool = False,
 ) -> None:
-    """Pass 9: Validate Globals, Universe, and declaration references."""
+    """Pass 9: Validate Globals, Universe, and declaration references.
+
+    `full_registry` is a fallback for the unused-globals existence check —
+    same precedent as pass 8: a component missing from the locked view (e.g.
+    in-progress strategy with a stale partial lock) would otherwise be
+    silently skipped, making globals that only it consumes look unused.
+    Semantic checks (declaration-ref correctness) continue to use only the
+    locked `registry` because those are version-accurate questions.
+    """
     # A) Globals validation
     if strategy.globals_ is not None:
         _validate_globals(strategy.globals_, issues)
@@ -1864,8 +2127,9 @@ def _validate_declarations(
     # D) Declaration reference validation
     _validate_declaration_refs(strategy, expanded, registry, issues)
 
-    # E) Unused globals warning
-    _warn_unused_globals(strategy, expanded, registry, issues)
+    # E) Unused globals warning — uses full_registry fallback so we don't
+    # false-flag globals consumed by a component missing from the lock.
+    _warn_unused_globals(strategy, expanded, registry, full_registry, issues)
 
     # F) Resampler config validation (source_tf, target_tf, bar_offset rule table)
     _validate_resampler_config(strategy, expanded, issues)
@@ -1879,31 +2143,27 @@ def _validate_globals(globals_: GlobalsSpec, issues: list[ValidationIssue]) -> N
 
     if globals_.target_timeframe is not None:
         if globals_.target_timeframe not in _VALID_TIMEFRAMES:
-            issues.append(
-                ValidationIssue(
-                    severity="error",
-                    code="INVALID_GLOBAL",
-                    message=f"Globals target_timeframe '{globals_.target_timeframe}' is not a valid "
-                    f"timeframe. Valid: {sorted(_VALID_TIMEFRAMES)}",
-                    location=loc,
-                )
+            emit(
+                issues,
+                "INVALID_GLOBAL",
+                location=loc,
+                detail=f"Globals target_timeframe '{globals_.target_timeframe}' is not a valid "
+                f"timeframe. Valid: {sorted(_VALID_TIMEFRAMES)}",
             )
 
     if globals_.bar_offset is not None:
-        # Use the shared parser — permissive about format (any positive
-        # whole-minute pandas duration), strict about value. Resampler-config
-        # cross-checks (multiple-of-source, less-than-target) run in
-        # _validate_resampler_config.
+        # Use the shared parser — strict grammar unified with the TS editor
+        # validator (spec 02 §4.4): '^(\\d+)(min|h|d|w)$', case-sensitive, no
+        # whitespace. Resampler-config cross-checks (multiple-of-source,
+        # less-than-target) run in _validate_resampler_config.
         try:
             parse_bar_offset_minutes(globals_.bar_offset)
         except ValueError as e:
-            issues.append(
-                ValidationIssue(
-                    severity="error",
-                    code="INVALID_GLOBAL",
-                    message=f"Globals bar_offset: {e}",
-                    location=loc,
-                )
+            emit(
+                issues,
+                "INVALID_GLOBAL",
+                location=loc,
+                detail=f"Globals bar_offset: {e}",
             )
 
 
@@ -1928,43 +2188,35 @@ def _validate_universe(
     # Mode-specific required fields
     if universe.mode == "manual":
         if not universe.symbols and not universe.resolved:
-            issues.append(
-                ValidationIssue(
-                    severity="error",
-                    code="INVALID_UNIVERSE",
-                    message="Universe mode='manual' requires 'symbols' or 'resolved' to be set.",
-                    location=loc,
-                )
+            emit(
+                issues,
+                "INVALID_UNIVERSE",
+                location=loc,
+                detail="Universe mode='manual' requires 'symbols' or 'resolved' to be set.",
             )
     elif universe.mode == "category":
         if not universe.categories:
-            issues.append(
-                ValidationIssue(
-                    severity="error",
-                    code="INVALID_UNIVERSE",
-                    message="Universe mode='category' requires 'categories' to be set.",
-                    location=loc,
-                )
+            emit(
+                issues,
+                "INVALID_UNIVERSE",
+                location=loc,
+                detail="Universe mode='category' requires 'categories' to be set.",
             )
     elif universe.mode == "top_volume":
         if universe.top_n is None:
-            issues.append(
-                ValidationIssue(
-                    severity="error",
-                    code="INVALID_UNIVERSE",
-                    message="Universe mode='top_volume' requires 'top_n' to be set.",
-                    location=loc,
-                )
+            emit(
+                issues,
+                "INVALID_UNIVERSE",
+                location=loc,
+                detail="Universe mode='top_volume' requires 'top_n' to be set.",
             )
     else:
-        issues.append(
-            ValidationIssue(
-                severity="error",
-                code="INVALID_UNIVERSE",
-                message=f"Unknown Universe mode '{universe.mode}'. "
-                f"Valid modes: manual, category, top_volume",
-                location=loc,
-            )
+        emit(
+            issues,
+            "INVALID_UNIVERSE",
+            location=loc,
+            detail=f"Unknown Universe mode '{universe.mode}'. "
+            f"Valid modes: manual, category, top_volume",
         )
 
     # ── Resolved-list checks ────────────────────────────────────────────────
@@ -1972,14 +2224,10 @@ def _validate_universe(
     # production path (deploy / backtest submit) has a resolved asset list
     # baked into its source. The web editor maintains this automatically;
     # CLI / MCP paths must too. This block is the single gate.
-    unresolved_severity: Literal["error", "warning"] = (
-        "error" if production_mode else "warning"
-    )
-
+    # production_mode promotion (warning → error) is catalog policy:
+    # promote_in_production=True on UNRESOLVED_UNIVERSE / STALE_UNIVERSE.
     has_resolved = bool(universe.resolved)  # non-None and non-empty
-    resolved_is_explicit_empty = (
-        universe.resolved is not None and len(universe.resolved) == 0
-    )
+    resolved_is_explicit_empty = universe.resolved is not None and len(universe.resolved) == 0
 
     if not has_resolved:
         # Two sub-cases:
@@ -1992,33 +2240,17 @@ def _validate_universe(
         #      resolve call returned zero assets (broken criteria → error).
         #      Otherwise it's a placeholder (treat same as case 1).
         if resolved_is_explicit_empty and universe.resolved_at:
-            issues.append(
-                ValidationIssue(
-                    severity="error",
-                    code="EMPTY_UNIVERSE",
-                    message="Universe 'resolved' list is empty after resolution. "
-                    "At least one asset is required — check your criteria "
-                    "(mode / categories / exclusions).",
-                    location=loc,
-                )
-            )
+            emit(issues, "EMPTY_UNIVERSE", location=loc)
         else:
             # Manual mode with explicit `symbols` is self-sufficient; the
             # resolver derives `resolved` from `symbols`. Skip the warning.
-            manual_self_sufficient = (
-                universe.mode == "manual" and bool(universe.symbols)
-            )
+            manual_self_sufficient = universe.mode == "manual" and bool(universe.symbols)
             if not manual_self_sufficient:
-                issues.append(
-                    ValidationIssue(
-                        severity=unresolved_severity,
-                        code="UNRESOLVED_UNIVERSE",
-                        message="Universe has not been resolved. Call universe_resolve "
-                        "(MCP tool or `keel universe resolve <file>`) or, in the web "
-                        "editor, open the Universe block and change any field — the "
-                        "editor auto-resolves and bakes the asset list into the source.",
-                        location=loc,
-                    )
+                emit(
+                    issues,
+                    "UNRESOLVED_UNIVERSE",
+                    location=loc,
+                    production_mode=production_mode,
                 )
 
     # ── Stale-list structural check ────────────────────────────────────────
@@ -2029,9 +2261,6 @@ def _validate_universe(
     # this, the deploy guard accepts a non-empty `resolved` that no longer
     # matches what the strategy declares.
     if has_resolved:
-        stale_severity: Literal["error", "warning"] = (
-            "error" if production_mode else "warning"
-        )
         assert universe.resolved is not None  # for type narrowing
         resolved_count = len(universe.resolved)
 
@@ -2049,16 +2278,15 @@ def _validate_universe(
             if universe.inclusions:
                 expected |= set(universe.inclusions)
             if expected != resolved_set:
-                issues.append(
-                    ValidationIssue(
-                        severity=stale_severity,
-                        code="STALE_UNIVERSE",
-                        message="Universe 'resolved' list does not match declared 'symbols' "
-                        f"(after exclusions/inclusions). Resolved has {resolved_count} "
-                        f"items; criteria imply {len(expected)}. Re-resolve via "
-                        "universe_resolve / `keel universe resolve` / web editor.",
-                        location=loc,
-                    )
+                emit(
+                    issues,
+                    "STALE_UNIVERSE",
+                    location=loc,
+                    production_mode=production_mode,
+                    detail="Universe 'resolved' list does not match declared 'symbols' "
+                    f"(after exclusions/inclusions). Resolved has {resolved_count} "
+                    f"items; criteria imply {len(expected)}. Re-resolve via "
+                    "universe_resolve / `keel universe resolve` / web editor.",
                 )
         elif universe.mode == "top_volume" and universe.top_n is not None:
             # Approximate expected count for top_volume:
@@ -2071,32 +2299,30 @@ def _validate_universe(
             expected_lower = max(0, universe.top_n - exc_count)
             expected_upper = universe.top_n + inc_count
             if not (expected_lower <= resolved_count <= expected_upper):
-                issues.append(
-                    ValidationIssue(
-                        severity=stale_severity,
-                        code="STALE_UNIVERSE",
-                        message=f"Universe 'resolved' has {resolved_count} items but "
-                        f"top_n={universe.top_n} implies "
-                        f"{expected_lower}–{expected_upper} (after exclusions/inclusions). "
-                        "Criteria likely changed since last resolve — re-resolve via "
-                        "universe_resolve / `keel universe resolve` / web editor.",
-                        location=loc,
-                    )
+                emit(
+                    issues,
+                    "STALE_UNIVERSE",
+                    location=loc,
+                    production_mode=production_mode,
+                    detail=f"Universe 'resolved' has {resolved_count} items but "
+                    f"top_n={universe.top_n} implies "
+                    f"{expected_lower}–{expected_upper} (after exclusions/inclusions). "
+                    "Criteria likely changed since last resolve — re-resolve via "
+                    "universe_resolve / `keel universe resolve` / web editor.",
                 )
         # For mode='category' we can't structurally verify staleness without
         # querying the registry. Leave it to eval-worker / runtime checks.
 
-    # exclusions and inclusions must not overlap
+    # exclusions and inclusions must not overlap (mirrored in TS pass 9 —
+    # ported 2026-07-10 per spec 02 Q2; fixture universe_exclusions_overlap)
     if universe.exclusions and universe.inclusions:
         overlap = set(universe.exclusions) & set(universe.inclusions)
         if overlap:
-            issues.append(
-                ValidationIssue(
-                    severity="error",
-                    code="INVALID_UNIVERSE",
-                    message=f"Universe exclusions and inclusions overlap: {sorted(overlap)}",
-                    location=loc,
-                )
+            emit(
+                issues,
+                "INVALID_UNIVERSE",
+                location=loc,
+                detail=f"Universe exclusions and inclusions overlap: {sorted(overlap)}",
             )
 
     # Groups must be subsets of resolved
@@ -2105,20 +2331,33 @@ def _validate_universe(
         for group_name, group_symbols in universe.groups.items():
             not_in_resolved = set(group_symbols) - resolved_set
             if not_in_resolved:
-                issues.append(
-                    ValidationIssue(
-                        severity="error",
-                        code="INVALID_UNIVERSE_GROUP",
-                        message=f"Universe group '{group_name}' contains assets not in resolved: "
-                        f"{sorted(not_in_resolved)}",
-                        location=loc,
-                    )
+                emit(
+                    issues,
+                    "INVALID_UNIVERSE_GROUP",
+                    location=loc,
+                    group=group_name,
+                    symbols=sorted(not_in_resolved),
                 )
 
 
-_VALID_REBALANCE = {"every_bar", "on_change", "buffered"}
-_VALID_BUFFER_MODE = {"relative", "absolute"}
-_VALID_REBALANCE_METHOD = {"to_edge", "to_center"}
+# Valid Execution option sets are DERIVED from EXECUTION_PARAM_META in spec.py
+# (the single source of truth), not hardcoded here. The TS editor validator
+# derives the same sets from the generated execution_param_meta.json, so neither
+# validator hardcodes execution literals.
+_VALID_REBALANCE = EXECUTION_VALID_REBALANCE
+_VALID_BUFFER_MODE = EXECUTION_VALID_BUFFER_MODE
+_VALID_REBALANCE_METHOD = EXECUTION_VALID_REBALANCE_METHOD
+
+
+def _is_param_at_default(execution: ExecutionSpec, param: str) -> bool:
+    """True if ``execution.<param>`` still equals its canonical registry default.
+
+    Defaults come from ``EXECUTION_PARAM_META`` (the single source of truth in
+    spec.py), NOT hardcoded literals — so an "irrelevant param" warning only
+    fires when the user explicitly set a NON-default value in a mode where the
+    param has no effect. A param left at its registry default never warns.
+    """
+    return getattr(execution, param) == EXECUTION_PARAM_META[param]["default"]
 
 
 def _validate_execution(execution: ExecutionSpec, issues: list[ValidationIssue]) -> None:
@@ -2129,122 +2368,110 @@ def _validate_execution(execution: ExecutionSpec, issues: list[ValidationIssue])
 
     # Mode validation
     if execution.rebalance not in _VALID_REBALANCE:
-        issues.append(
-            ValidationIssue(
-                severity="error",
-                code="INVALID_EXECUTION",
-                message=f"Invalid rebalance mode '{execution.rebalance}'. "
-                f"Must be one of: {sorted(_VALID_REBALANCE)}",
-                location=loc,
-            )
+        emit(
+            issues,
+            "INVALID_EXECUTION",
+            location=loc,
+            param="rebalance mode",
+            value=execution.rebalance,
+            options=sorted(_VALID_REBALANCE),
         )
         return  # short-circuit — other checks depend on valid mode
 
     # Conditional requirements
     if execution.rebalance == "buffered" and execution.buffer_threshold is None:
-        issues.append(
-            ValidationIssue(
-                severity="error",
-                code="MISSING_EXECUTION_PARAM",
-                message="buffer_threshold is required when rebalance='buffered'",
-                location=loc,
-                suggestion="Add buffer_threshold=0.10 (10% relative buffer)",
-            )
+        emit(
+            issues,
+            "MISSING_EXECUTION_PARAM",
+            location=loc,
+            param="buffer_threshold",
+            rebalance="buffered",
         )
 
-    # Irrelevant param warnings
-    if execution.rebalance != "buffered" and execution.buffer_threshold is not None:
-        issues.append(
-            ValidationIssue(
-                severity="warning",
-                code="IRRELEVANT_EXECUTION_PARAM",
-                message=f"buffer_threshold has no effect when rebalance='{execution.rebalance}'",
+    # Irrelevant param warnings — the advisory half of the B6 fix.
+    #
+    # The emitters KEEP every explicitly-set Execution param (spec 04 §4:
+    # execution_params_to_emit is the single emit policy for spec_to_dsl AND
+    # spec_to_graph); this warning is the channel that informs the user a kept
+    # param has no effect in the current mode, replacing the old behavior
+    # where spec_to_dsl silently deleted it. A param warns when its mode is
+    # inactive AND it was explicitly set (any value, ExecutionSpec.explicit)
+    # — key presence in the DSL call / graph dict is the explicitness signal,
+    # matching the TS validator, which warns on key presence. The non-default
+    # value check is kept as a fallback for programmatically-built specs that
+    # don't populate `explicit`: a back-filled registry default never warns
+    # (defaults come from EXECUTION_PARAM_META, the single source of truth in
+    # spec.py — NOT hardcoded literals. Hardcoding the literal is how B12
+    # happened: rebalance_method's default is "to_center", but the validator
+    # compared against "to_edge", so every non-buffered strategy left at the
+    # default tripped a spurious warning).
+    for param_name, meta in EXECUTION_PARAM_META.items():
+        modes = meta.get("modes")
+        if not modes or execution.rebalance in modes:
+            continue
+        explicitly_set = param_name in execution.explicit
+        if not explicitly_set and _is_param_at_default(execution, param_name):
+            continue
+        if param_name == "buffer_threshold":
+            # Rendered suggestion ({mode} = first mode where the param applies)
+            emit(
+                issues,
+                "IRRELEVANT_EXECUTION_PARAM",
                 location=loc,
-                suggestion="Remove buffer_threshold or switch to rebalance='buffered'",
+                param=param_name,
+                rebalance=execution.rebalance,
+                mode=modes[0],
             )
-        )
-    if execution.rebalance != "on_change" and execution.on_change_tolerance != 1e-8:
-        issues.append(
-            ValidationIssue(
-                severity="warning",
-                code="IRRELEVANT_EXECUTION_PARAM",
-                message=f"on_change_tolerance has no effect when rebalance='{execution.rebalance}'",
+        else:
+            emit(
+                issues,
+                "IRRELEVANT_EXECUTION_PARAM",
                 location=loc,
-            )
-        )
-    if execution.rebalance != "buffered":
-        if execution.buffer_mode != "relative":
-            issues.append(
-                ValidationIssue(
-                    severity="warning",
-                    code="IRRELEVANT_EXECUTION_PARAM",
-                    message=f"buffer_mode has no effect when rebalance='{execution.rebalance}'",
-                    location=loc,
-                )
-            )
-        if execution.rebalance_method != "to_edge":
-            issues.append(
-                ValidationIssue(
-                    severity="warning",
-                    code="IRRELEVANT_EXECUTION_PARAM",
-                    message=f"rebalance_method has no effect when rebalance='{execution.rebalance}'",
-                    location=loc,
-                )
+                suggestion=None,
+                param=param_name,
+                rebalance=execution.rebalance,
             )
 
-    # Range checks
-    if execution.buffer_threshold is not None:
-        if not (0.01 <= execution.buffer_threshold <= 0.5):
-            issues.append(
-                ValidationIssue(
-                    severity="error",
-                    code="PARAM_OUT_OF_RANGE",
-                    message=f"buffer_threshold={execution.buffer_threshold} out of range [0.01, 0.5]",
-                    location=loc,
-                )
-            )
-
-    if execution.min_trade_size < 0.0 or execution.min_trade_size > 0.1:
-        issues.append(
-            ValidationIssue(
-                severity="error",
-                code="PARAM_OUT_OF_RANGE",
-                message=f"min_trade_size={execution.min_trade_size} out of range [0.0, 0.1]",
+    # Range checks — bounds come from EXECUTION_PARAM_META's min/max keys
+    # (libs/pipeline_engine/dsl/spec.py), the single source of truth shared
+    # with the TS editor validator (via the generated execution_param_meta
+    # .json) and keel-api's /components/metadata. Spec 02 T-15 deleted the
+    # three hardcoded literal copies this loop replaces. A ranged param with
+    # value None is unset — nothing to range-check (buffer_threshold's
+    # missing-when-required case is MISSING_EXECUTION_PARAM above).
+    for param_name, meta in EXECUTION_PARAM_META.items():
+        if "min" not in meta and "max" not in meta:
+            continue
+        lo, hi = meta["min"], meta["max"]  # spec_test pins min ⟺ max pairing
+        value = getattr(execution, param_name)
+        if value is None:
+            continue
+        if not (lo <= value <= hi):
+            emit(
+                issues,
+                "PARAM_OUT_OF_RANGE",
                 location=loc,
-            )
-        )
-
-    if execution.on_change_tolerance is not None:
-        if not (1e-12 <= execution.on_change_tolerance <= 1e-4):
-            issues.append(
-                ValidationIssue(
-                    severity="error",
-                    code="PARAM_OUT_OF_RANGE",
-                    message=f"on_change_tolerance={execution.on_change_tolerance} out of range [1e-12, 1e-4]",
-                    location=loc,
-                )
+                detail=f"{param_name}={value} out of range [{lo}, {hi}]",
             )
 
     # Value checks
     if execution.buffer_mode not in _VALID_BUFFER_MODE:
-        issues.append(
-            ValidationIssue(
-                severity="error",
-                code="INVALID_EXECUTION",
-                message=f"Invalid buffer_mode '{execution.buffer_mode}'. "
-                f"Must be one of: {sorted(_VALID_BUFFER_MODE)}",
-                location=loc,
-            )
+        emit(
+            issues,
+            "INVALID_EXECUTION",
+            location=loc,
+            param="buffer_mode",
+            value=execution.buffer_mode,
+            options=sorted(_VALID_BUFFER_MODE),
         )
     if execution.rebalance_method not in _VALID_REBALANCE_METHOD:
-        issues.append(
-            ValidationIssue(
-                severity="error",
-                code="INVALID_EXECUTION",
-                message=f"Invalid rebalance_method '{execution.rebalance_method}'. "
-                f"Must be one of: {sorted(_VALID_REBALANCE_METHOD)}",
-                location=loc,
-            )
+        emit(
+            issues,
+            "INVALID_EXECUTION",
+            location=loc,
+            param="rebalance_method",
+            value=execution.rebalance_method,
+            options=sorted(_VALID_REBALANCE_METHOD),
         )
 
 
@@ -2266,7 +2493,14 @@ def _validate_declaration_refs(
         if strategy.universe.groups:
             scope["universe.groups"] = strategy.universe.groups
 
-    # Walk all components in expanded pipeline, check declaration refs
+    # Walk all components in expanded pipeline, check declaration refs.
+    # Uses locked `registry` only (no full_registry fallback) — declaration_refs
+    # are a version-specific semantic contract: which params on THIS version of
+    # the component reference Globals/Universe namespaces. Falling back to the
+    # latest signature here would weaken the version guarantee and could mask
+    # real breakage. Cross-component existence checks (passes 2, 4, 8,
+    # _warn_unused_globals) use full_registry; semantic checks like this one
+    # stay strict.
     for comp_ref in _walk_component_refs(expanded):
         sig = registry.get(comp_ref.name)
         if sig is None:
@@ -2282,26 +2516,22 @@ def _validate_declaration_refs(
                 if isinstance(group_name, str):
                     groups = scope.get("universe.groups", {})
                     if not groups:
-                        issues.append(
-                            ValidationIssue(
-                                severity="error",
-                                code="MISSING_DECLARATION_REF",
-                                message=f"Component '{comp_ref.name}' parameter '{param_name}' "
-                                f"references group '{group_name}' but no Universe groups are defined.",
-                                location=loc,
-                                suggestion="Add groups to your Universe declaration.",
-                            )
+                        emit(
+                            issues,
+                            "MISSING_DECLARATION_REF",
+                            location=loc,
+                            suggestion="Add groups to your Universe declaration.",
+                            detail=f"Component '{comp_ref.name}' parameter '{param_name}' "
+                            f"references group '{group_name}' but no Universe groups are defined.",
                         )
                     elif group_name not in groups:
-                        issues.append(
-                            ValidationIssue(
-                                severity="error",
-                                code="MISSING_DECLARATION_REF",
-                                message=f"Component '{comp_ref.name}' parameter '{param_name}' "
-                                f"references group '{group_name}' which does not exist in Universe. "
-                                f"Available groups: {sorted(groups.keys())}",
-                                location=loc,
-                            )
+                        emit(
+                            issues,
+                            "MISSING_DECLARATION_REF",
+                            location=loc,
+                            detail=f"Component '{comp_ref.name}' parameter '{param_name}' "
+                            f"references group '{group_name}' which does not exist in Universe. "
+                            f"Available groups: {sorted(groups.keys())}",
                         )
             else:
                 # Simple scalar ref (e.g., "globals.target_timeframe")
@@ -2309,17 +2539,15 @@ def _validate_declaration_refs(
                     # Determine available values in the same top-level namespace
                     ns_prefix = namespace.split(".")[0] + "."
                     available = sorted(k for k in scope if k.startswith(ns_prefix))
-                    issues.append(
-                        ValidationIssue(
-                            severity="error",
-                            code="MISSING_DECLARATION_REF",
-                            message=f"Component '{comp_ref.name}' requires '{namespace}' "
-                            f"but it is not declared in Globals/Universe. "
-                            + (f"Available: {available}" if available else "No globals declared."),
-                            location=loc,
-                            suggestion=f"Add {namespace.split('.')[-1]} to your "
-                            f"{namespace.split('.')[0].title()} declaration.",
-                        )
+                    emit(
+                        issues,
+                        "MISSING_DECLARATION_REF",
+                        location=loc,
+                        suggestion=f"Add {namespace.split('.')[-1]} to your "
+                        f"{namespace.split('.')[0].title()} declaration.",
+                        detail=f"Component '{comp_ref.name}' requires '{namespace}' "
+                        f"but it is not declared in Globals/Universe. "
+                        + (f"Available: {available}" if available else "No globals declared."),
                     )
 
         # Optional declaration refs — no error if missing, but mark as info
@@ -2330,9 +2558,16 @@ def _warn_unused_globals(
     strategy: StrategyFile,
     expanded: StrategyFile,
     registry: dict[str, Any],
+    full_registry: dict[str, Any],
     issues: list[ValidationIssue],
 ) -> None:
-    """Warn about globals that are declared but never referenced by any component."""
+    """Warn about globals that are declared but never referenced by any component.
+
+    Cross-component existence check — falls back to `full_registry` when a
+    component isn't in the locked view, otherwise we'd silently skip its
+    declaration_refs and produce false-positive UNUSED_GLOBAL warnings.
+    Same pattern as pass 8's slot_reads fallback.
+    """
     if strategy.globals_ is None:
         return
 
@@ -2348,7 +2583,7 @@ def _warn_unused_globals(
     # Collect all referenced globals namespaces from components
     referenced: set[str] = set()
     for comp_ref in _walk_component_refs(expanded):
-        sig = registry.get(comp_ref.name)
+        sig = registry.get(comp_ref.name) or full_registry.get(comp_ref.name)
         if sig is None:
             continue
         for namespace in sig.declaration_refs.values():
@@ -2362,18 +2597,7 @@ def _warn_unused_globals(
     unused = declared - referenced
     for ns in sorted(unused):
         field_name = ns.split(".")[-1]
-        issues.append(
-            ValidationIssue(
-                severity="warning",
-                code="UNUSED_GLOBAL",
-                message=(
-                    f"Globals '{field_name}' is declared but not referenced by any component. "
-                    f"Either remove the Globals declaration, or add a component that consumes "
-                    f"it (e.g. TargetTimeframeResampler reads target_timeframe)."
-                ),
-                location="globals",
-            )
-        )
+        emit(issues, "UNUSED_GLOBAL", location="globals", field=field_name)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -2460,32 +2684,22 @@ def _validate_resampler_config(
             code = "INVALID_BAR_OFFSET"
         else:
             code = "INVALID_RESAMPLER_CONFIG"
-        issues.append(
-            ValidationIssue(
-                severity="error",
-                code=code,
-                message=msg,
-                location="globals",
-            )
-        )
+        # message_override: the shared rule table's ValueError text IS the
+        # message (validate_resample_config is the single source, shared with
+        # the runtime resampler); the catalog templates mirror it verbatim.
+        emit(issues, code, location="globals", message_override=msg)
         return  # Don't emit the no-op warning when the config is already errored
 
     # No-op resampler warning: same TF + a TargetTimeframeResampler in the
     # pipeline. The runtime now short-circuits this case cleanly, but the
     # component step itself is wasted and the Globals declaration is redundant.
     if source_tf == target_tf and _has_target_timeframe_resampler(expanded):
-        issues.append(
-            ValidationIssue(
-                severity="warning",
-                code="RESAMPLER_NOOP",
-                message=(
-                    f"TargetTimeframeResampler is a no-op when target_timeframe "
-                    f"({target_tf}) equals the data loader's timeframe ({source_tf}). "
-                    f"Remove the TargetTimeframeResampler() step (and the redundant "
-                    f"Globals(target_timeframe=...) line if nothing else uses it)."
-                ),
-                location="globals",
-            )
+        emit(
+            issues,
+            "RESAMPLER_NOOP",
+            location="globals",
+            target_tf=target_tf,
+            source_tf=source_tf,
         )
 
 

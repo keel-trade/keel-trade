@@ -15,7 +15,10 @@ import time
 from datetime import UTC, datetime
 from typing import Any
 
-from keel.errors import KeelError
+from pydantic import ValidationError
+
+from keel.errors import EntitlementError, KeelError
+from pipeline_engine.backtest_config import BacktestConfig, adapt_legacy_initial_capital
 
 from . import register
 from ._base import OutcomeResult, OutcomeTool, ToolContext
@@ -29,6 +32,18 @@ _SUCCESS_STATUSES = {"succeeded", "completed"}
 # Polling cadence: ~90s total wall-clock budget when `wait=true`.
 _POLL_INTERVAL_S = 3.0
 _POLL_MAX_S = 90.0
+
+
+def _sdk_backtest_config_schema() -> dict[str, Any]:
+    """Canonical schema plus the one exact deprecated SDK alias."""
+    schema = BacktestConfig.model_json_schema()
+    schema["description"] = "Validated worker financial overrides."
+    schema["properties"]["initial_capital"] = {
+        **schema["properties"]["init_cash"],
+        "description": "Deprecated alias for init_cash; do not provide both.",
+        "deprecated": True,
+    }
+    return schema
 
 
 def _default_end_date() -> str:
@@ -107,80 +122,64 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
             suggestion="Pass a strategy_id (run `keel strategy search` to list).",
         )
 
-    # ── Local-divergence guard ────────────────────────────────────────
+    # Validate before the divergence guard can reach workspace.push().
+    canonical_config: dict[str, float] | None = None
+    if args.get("config") is not None:
+        try:
+            config_input = args["config"]
+            if not isinstance(config_input, dict):
+                raise TypeError("config must be an object")
+            canonical_input = adapt_legacy_initial_capital(config_input)
+            canonical_config = BacktestConfig.model_validate(canonical_input).as_overrides()
+        except (TypeError, ValueError, ValidationError) as exc:
+            raise KeelError(
+                f"Invalid backtest config: {exc}",
+                error_code="invalid_backtest_config",
+                exit_code=2,
+                suggestion=(
+                    "Use only init_cash, fees, slippage, and leverage; leverage must be "
+                    "greater than 0 and at most 100."
+                ),
+            ) from exc
+
+    # ── Write-through guard (spec 08 R2) ──────────────────────────────
     # Backtests run against SERVER HEAD. If the strategy is checked out
-    # locally AND the working copy has unpushed edits, the backtest will
-    # silently test the OLD code — the most surprising kind of bug. So:
+    # locally AND the working copy has unpushed edits, the backtest would
+    # silently test the OLD code — the most surprising kind of bug. The
+    # DEFAULT is write-through: push the local edits (generated message),
+    # pin to the pushed commit, then run. `auto_push=False` is the
+    # opt-out (raises `local_ahead` so the agent decides). A true
+    # conflict (server moved too) always stops — never force-overwrites.
     #
     #   * If explicit `commit_id` set → user pinned a version, skip check.
-    #   * If not checked out → no local copy to worry about, skip.
-    #   * If checked out + clean → proceed silently.
-    #   * If checked out + ahead + auto_push=True → push first, then run
-    #     against the new HEAD (capture commit_id from push result).
-    #   * If checked out + ahead + auto_push not set → raise so the agent
-    #     can decide (push, force-pull, or pin commit_id).
-    #
-    # All checks are advisory: wrapped so a workspace bug never blocks
-    # an otherwise-valid backtest.
-    auto_push = bool(args.get("auto_push", False))
+    #   * Hosted server → no caller filesystem, guard no-ops (spec 01 R2).
     divergence_warning: str | None = None
     if not args.get("commit_id"):
-        try:
-            from keel.workspace import (
-                _compute_hash,
-                get_workspace,
-                read_local_source,
-            )
-            from keel.workspace import (
-                push as _ws_push,
-            )
+        from ._sync_guard import write_through_guard
 
-            meta = get_workspace(strategy_id)
-            if meta is not None:
-                local_source = read_local_source(strategy_id)
-                local_hash = _compute_hash(local_source)
-                if local_hash != meta.source_hash:
-                    if auto_push:
-                        push_result = _ws_push(
-                            strategy_id=strategy_id,
-                            message=args.get("push_message") or "Auto-push before backtest",
-                        )
-                        # `push()` now propagates commit_id via a follow-up
-                        # GET on /versions?limit=1. Pin the backtest to it
-                        # explicitly so even if HEAD moves between push and
-                        # POST /v1/backtests we test the version we just
-                        # committed — not whatever happens to be HEAD.
-                        pushed_seq = push_result.get("sequence")
-                        pushed_hash = (push_result.get("source_hash") or "")[:12]
-                        pushed_commit = push_result.get("commit_id")
-                        if pushed_commit:
-                            args["commit_id"] = pushed_commit
-                        commit_str = f"commit_id={pushed_commit}, " if pushed_commit else ""
-                        divergence_warning = (
-                            f"Local was ahead — auto-pushed (sequence={pushed_seq}, "
-                            f"{commit_str}hash={pushed_hash}). Backtest pinned to the "
-                            "new commit."
-                        )
-                    else:
-                        raise KeelError(
-                            "Local workspace has unpushed edits — backtest would test "
-                            "the OLD server version, not your local changes.",
-                            error_code="local_ahead",
-                            exit_code=2,
-                            suggestion=(
-                                "Either `keel_strategy_push` first, OR re-run with "
-                                "`auto_push=True` to push and backtest in one step, OR "
-                                "pass an explicit `commit_id` to pin to a historical "
-                                "version. See `keel_strategy_status` for the diff."
-                            ),
-                        )
-        except KeelError:
-            raise
-        except Exception:
-            # Workspace lib problem (offline, missing files, etc.) — don't
-            # block the backtest. The server check on `commit_id` will
-            # surface any real config issue.
-            pass
+        push_result = write_through_guard(
+            args,
+            strategy_id=strategy_id,
+            action="backtest",
+            default_message="Auto-push before backtest",
+        )
+        if push_result is not None and push_result.get("status") == "pushed":
+            # `push()` propagates commit_id via a follow-up GET on
+            # /versions?limit=1. Pin the backtest to it explicitly so even
+            # if HEAD moves between push and POST /v1/backtests we test
+            # the version we just committed — not whatever happens to be
+            # HEAD.
+            pushed_seq = push_result.get("sequence")
+            pushed_hash = (push_result.get("source_hash") or "")[:12]
+            pushed_commit = push_result.get("commit_id")
+            if pushed_commit:
+                args["commit_id"] = pushed_commit
+            commit_str = f"commit_id={pushed_commit}, " if pushed_commit else ""
+            divergence_warning = (
+                f"Local was ahead — auto-pushed (sequence={pushed_seq}, "
+                f"{commit_str}hash={pushed_hash}). Backtest pinned to the "
+                "new commit."
+            )
 
     body: dict[str, Any] = {
         "strategy_id": strategy_id,
@@ -189,11 +188,34 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
     }
     if args.get("commit_id"):
         body["commit_id"] = args["commit_id"]
-    if args.get("config") is not None:
-        body["backtest_config"] = args["config"]
+    if canonical_config is not None:
+        body["backtest_config"] = canonical_config
 
     client = ctx.get_client()
-    submission = client.post("/v1/backtests", json=body)
+    try:
+        submission = client.post("/v1/backtests", json=body)
+    except EntitlementError as e:
+        # Quota wall (spec 03 R1): plan-limit 403s become the shared
+        # handoff envelope — exact numbers from the API, human-only
+        # billing action, do-nothing alternative. Scope-shaped 403s
+        # re-raise unchanged (re-auth is agent-recoverable).
+        from ._handoff import maybe_quota_handoff
+
+        handoff = maybe_quota_handoff(
+            e,
+            blocked_action="backtest_run",
+            retry_call={
+                "tool": "keel_backtest_run",
+                "args": {
+                    "strategy_id": strategy_id,
+                    "start_date": start_date,
+                    "end_date": end_date,
+                },
+            },
+        )
+        if handoff is not None:
+            raise handoff from e
+        raise
 
     backtest_id = submission.get("id") or submission.get("backtest_id")
     if not backtest_id:
@@ -211,6 +233,21 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
         else {}
     )
 
+    # Quota visibility (spec 04 R5): the submit response carries `remaining`
+    # counters ONLY when a consumed unit is strictly below 20% of the plan
+    # quota. Pass through verbatim so the agent can plan ahead of the wall —
+    # numbers only, no upsell language.
+    remaining_quota = submission.get("remaining") if isinstance(submission, dict) else None
+
+    # NOTE(M1.4, spec 01 R5 — MCP Tasks shape): this immediate-return
+    # envelope (run_id + status + status_url, polled via
+    # keel_backtest_watch / keel_backtest_summarize) is where
+    # spec-conformant task metadata would attach once the MCP Tasks
+    # extension (io.modelcontextprotocol/tasks, SEP-2663) finalizes in
+    # the 2026-07-28 release. Do NOT add draft-spec fields before the
+    # final spec lands — recheck against the published extension on
+    # 2026-07-28 (open item recorded in
+    # projects/fable/agent-first-build/orchestration/progress.md).
     wait = args.get("wait", True)
     if not wait:
         info = "Submitted; not waiting (wait=false). Poll status_url or use keel_backtest_summarize when done."
@@ -224,6 +261,8 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
             "auto_pushed_commit_id": args.get("commit_id") if divergence_warning else None,
         }
         extra.update(ownership_fields)
+        if remaining_quota:
+            extra["remaining"] = remaining_quota
         return OutcomeResult(
             run_id=backtest_id,
             hero_url=hero_url,
@@ -241,6 +280,8 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
         "strategy_id": strategy_id,
     }
     extra.update(ownership_fields)
+    if remaining_quota:
+        extra["remaining"] = remaining_quota
     if divergence_warning:
         extra["sync_note"] = divergence_warning
         extra["auto_pushed_commit_id"] = args.get("commit_id")
@@ -281,6 +322,14 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
     if final.get("execution_time") is not None:
         extra["execution_time_s"] = final["execution_time"]
 
+    # Good-result nudge (spec 03 R3a): exactly one line, exactly when the
+    # run's durable metrics.good_result marker is set (spec 02 gate).
+    from ._nudge import good_result_nudge
+
+    nudge = good_result_nudge(final, strategy_id=strategy_id, ctx=ctx)
+    if nudge:
+        extra["nudge"] = nudge
+
     return OutcomeResult(
         run_id=backtest_id,
         hero_url=hero_url,
@@ -312,11 +361,14 @@ BACKTEST_RUN = register(
             "Do NOT ask the user to pick a date range first. "
             "Pass `commit_id` to backtest a historical commit (find via "
             "`keel_strategy_log`); otherwise runs server HEAD. "
-            "Local-divergence guard: if the strategy is checked out AND "
-            "local has unpushed edits, raises `local_ahead` so you don't "
-            "silently test old code. Either push first, pass an explicit "
-            "`commit_id`, or set `auto_push=True` to push + backtest in "
-            "one step. "
+            "Write-through (server HEAD is the source of truth): if the "
+            "strategy is checked out locally with unpushed edits, they are "
+            "pushed automatically first (generated commit message, or pass "
+            "`push_message`) and the backtest pins to the new commit — so "
+            "you always test what you actually have. Set `auto_push=False` "
+            "to opt out (raises `local_ahead` instead). A true conflict "
+            "(local edited AND server moved) always stops with recovery "
+            "options — never force-overwrites. "
             "Do NOT use to re-fetch results for an already-completed run — "
             "read the `keel://backtest/<id>/results` resource instead, or call "
             "`keel_backtest_summarize`."
@@ -353,10 +405,7 @@ BACKTEST_RUN = register(
                         "Find historical commits via `keel_strategy_log`."
                     ),
                 },
-                "config": {
-                    "type": "object",
-                    "description": "Worker config overrides (slippage, fees, initial_capital).",
-                },
+                "config": _sdk_backtest_config_schema(),
                 "wait": {
                     "type": "boolean",
                     "default": True,
@@ -368,19 +417,22 @@ BACKTEST_RUN = register(
                 },
                 "auto_push": {
                     "type": "boolean",
-                    "default": False,
+                    "default": True,
                     "description": (
-                        "If the local workspace has unpushed edits, push them "
-                        "first and backtest the resulting commit. Without this, "
-                        "an unpushed local copy raises `local_ahead` to prevent "
-                        "silently testing old server code."
+                        "Write-through default (true): if the local workspace "
+                        "has unpushed edits, push them first and backtest the "
+                        "resulting commit. Set false to opt out — an unpushed "
+                        "local copy then raises `local_ahead` instead of "
+                        "silently testing old server code. Conflicts (server "
+                        "moved too) always stop regardless."
                     ),
                 },
                 "push_message": {
                     "type": "string",
                     "description": (
-                        "Commit message to use when `auto_push=True` triggers a "
-                        "pre-backtest push. Defaults to 'Auto-push before backtest'."
+                        "Commit message to use when the write-through guard "
+                        "pushes before the backtest. Defaults to 'Auto-push "
+                        "before backtest'."
                     ),
                 },
                 "no_ownership_hint": {
@@ -391,6 +443,7 @@ BACKTEST_RUN = register(
             },
         },
         annotations={
+            "title": "Run Backtest",
             "readOnlyHint": False,
             "destructiveHint": False,
             "idempotentHint": False,

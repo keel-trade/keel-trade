@@ -1,0 +1,17 @@
+# ── Proprietary-import denylist — gate G3 (spec 07 §8.4, SC-6) ───────────────
+#
+# One regex per line, applied line-by-line to every *.py file in the staged
+# public tree by .github/scripts/mirror_gates.py on EVERY sync (tag push AND
+# manual dispatch) before any push. Any match turns the sync red.
+#
+# The first two patterns are the sdk-release.yml proprietary-import check
+# (`^from components |^import components `), moved from release-only to the
+# publication boundary. `[ ]` encodes the significant trailing space so
+# whitespace-stripping tooling cannot silently weaken the pattern. The third
+# closes the bare-import variant the original grep missed. Extensible: add
+# patterns here; the gate reads this file on every sync.
+#
+# Published beside the allowlist so the boundary is third-party-auditable.
+^from components[ ]
+^import components[ ]
+^import components$

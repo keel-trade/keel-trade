@@ -304,6 +304,7 @@ STATUS = register(
         ),
         input_schema={"type": "object", "properties": {}, "required": []},
         annotations={
+            "title": "Keel Status",
             "readOnlyHint": True,
             "destructiveHint": False,
             "idempotentHint": True,

@@ -8,7 +8,11 @@
     },
     "OHLCVDict": {
       "data_transform": [
-        "OHLCVDict"
+        "OHLCVDict",
+        "SignalSeries"
+      ],
+      "signal_transform": [
+        "SignalSeries"
       ],
       "universe_filter": [
         "SignalSeries",
@@ -44,6 +48,9 @@
     },
     "SignalSeries": {
       "data_transform": [
+        "SignalSeries"
+      ],
+      "indicator": [
         "SignalSeries"
       ],
       "signal_transform": [
@@ -779,20 +786,7 @@
           "type": "str",
           "default": "ffill",
           "required": false,
-          "description": "How to fill gaps when upsampling. \"ffill\" (default) = carry forward last known value. \"bfill\" = fill from next value. \"nearest\" = use closest available value. **params: Extra keyword arguments (absorbed for pipeline deserialization compatibility, not used).",
-          "suggestions": [],
-          "optimizable": true,
-          "constraints": {},
-          "tier": "strategy",
-          "slot_reference": false,
-          "expected_slot_type": null
-        },
-        {
-          "name": "params",
-          "type": "Any",
-          "default": null,
-          "required": true,
-          "description": "",
+          "description": "How to fill gaps when upsampling. \"ffill\" (default) = carry forward last known value. \"bfill\" = fill from next value. \"nearest\" = use closest available value.",
           "suggestions": [],
           "optimizable": true,
           "constraints": {},
@@ -829,16 +823,7 @@
               "type": "str",
               "default": "ffill",
               "required": false,
-              "description": "How to fill gaps when upsampling. \"ffill\" (default) = carry forward last known value. \"bfill\" = fill from next value. \"nearest\" = use closest available value. **params: Extra keyword arguments (absorbed for pipeline deserialization compatibility, not used).",
-              "tier": "strategy",
-              "slot_reference": false
-            },
-            {
-              "name": "params",
-              "type": "Any",
-              "default": null,
-              "required": true,
-              "description": "",
+              "description": "How to fill gaps when upsampling. \"ffill\" (default) = carry forward last known value. \"bfill\" = fill from next value. \"nearest\" = use closest available value.",
               "tier": "strategy",
               "slot_reference": false
             }
@@ -1218,31 +1203,18 @@
       "name": "AndCombinator",
       "category": "signal_composer",
       "sub_category": "masking",
-      "description": "Combine multiple boolean filter masks with AND logic so all conditions must be True.\n\n    Use after a Parallel step producing multiple filter signals (e.g., volume, liquidity,\n    time filters) to require all conditions are met before trading. For OR logic where\n    any condition is sufficient, use OrCombinator instead. NaN values are treated as False.\n\n    Output:\n        Boolean DataFrame (0.0/1.0). 1.0 only where ALL input masks are True.\n        Same shape as input masks.\n\n    Example:\n        Parallel(vol=VolatilityFilter(...), liq=LiquidityFilter(...)) -> AndCombinator(\"vol\", \"liq\")\n    ",
+      "description": "Combine multiple boolean filter masks with AND logic so all conditions must be True.\n\n    Use after a Parallel step producing multiple filter signals (e.g., volume, liquidity,\n    time filters) to require all conditions are met before trading. For OR logic where\n    any condition is sufficient, use OrCombinator instead. NaN values are treated as False.\n\n    Output:\n        Boolean DataFrame (0.0/1.0). 1.0 only where ALL input masks are True.\n        Same shape as input masks.\n\n    Example:\n        Parallel(vol=VolatilityFilter(...), liq=LiquidityFilter(...)) -> AndCombinator(signals_list=[\"vol\", \"liq\"])\n    ",
       "usage_hint": "Use after a Parallel step producing multiple filter signals (e.g., volume, liquidity, time filters) to require all conditions are met before trading. For OR logic where any condition is sufficient, use OrCombinator instead. NaN values are treated as False.",
       "input_type": "dict",
       "output_type": "SignalSeries",
       "deterministic": true,
       "parameters": [
         {
-          "name": "signals",
-          "type": "str",
-          "default": null,
-          "required": true,
-          "description": "",
-          "suggestions": [],
-          "optimizable": true,
-          "constraints": {},
-          "tier": "strategy",
-          "slot_reference": false,
-          "expected_slot_type": null
-        },
-        {
           "name": "signals_list",
           "type": "list",
           "default": null,
           "required": false,
-          "description": "Alternative to positional args. List of signal names to combine. Useful when names are computed dynamically.",
+          "description": "Signal names (Parallel branch names) to combine. None (the default) combines all signals in the current dict.",
           "suggestions": [],
           "optimizable": true,
           "constraints": {},
@@ -1269,20 +1241,11 @@
         "1": {
           "parameters": [
             {
-              "name": "signals",
-              "type": "str",
-              "default": null,
-              "required": true,
-              "description": "",
-              "tier": "strategy",
-              "slot_reference": false
-            },
-            {
               "name": "signals_list",
               "type": "list",
               "default": null,
               "required": false,
-              "description": "Alternative to positional args. List of signal names to combine. Useful when names are computed dynamically.",
+              "description": "Signal names (Parallel branch names) to combine. None (the default) combines all signals in the current dict.",
               "tier": "strategy",
               "slot_reference": false
             }
@@ -2303,7 +2266,7 @@
       "sub_category": "trend",
       "description": "Compute continuous breakout distance from rolling channel midpoint as a trend-following signal.\n\n    Use after VolatilityAdjustedPriceSeries to measure how far price has broken\n    beyond its recent range, producing a continuous (not binary) breakout strength\n    signal already in vol-normalized units. Feed into ForecastScaler for\n    standardized forecasts. Prefer over binary breakout flags when signal\n    magnitude matters for position sizing.\n\n    Output:\n        Unbounded, already vol-normalized. Positive = price above channel midpoint\n        (uptrend/long breakout), negative = below (downtrend/short breakout).\n        Zero = price at exact channel midpoint. NaN during warmup (lookback bars).\n\n    Formula:\n        net = 2 * adj_price - (rolling_high + rolling_low)\n        where rolling_high/low are computed over lookback bars\n        (shifted by 1 bar when exclude_current=True to avoid lookahead)\n\n    Example:\n        VolatilityAdjustedPriceSeries(vol_span=32) -> BreakoutDistance(lookback=20) -> ForecastScaler()\n    ",
       "usage_hint": "Use after VolatilityAdjustedPriceSeries to measure how far price has broken beyond its recent range, producing a continuous (not binary) breakout strength signal already in vol-normalized units. Feed into ForecastScaler for standardized forecasts. Prefer over binary breakout flags when signal magnitude matters for position sizing.",
-      "input_type": "OHLCVDict",
+      "input_type": "SignalSeries",
       "output_type": "SignalSeries",
       "deterministic": true,
       "parameters": [
@@ -2356,14 +2319,51 @@
       "declaration_refs": null,
       "optional_declaration_refs": null,
       "composer_inputs": null,
-      "latest": 1,
-      "version": 1,
+      "latest": 2,
+      "version": 2,
       "status": "active",
       "changelog": {
-        "1": "Initial release"
+        "1": "Initial release",
+        "2": "Correct input type from OHLCVDict to SignalSeries."
       },
       "versions": {
         "1": {
+          "parameters": [
+            {
+              "name": "lookback",
+              "type": "int",
+              "default": null,
+              "required": true,
+              "description": "Rolling window in bars for high/low channel.",
+              "tier": "strategy",
+              "slot_reference": false
+            },
+            {
+              "name": "exclude_current",
+              "type": "bool",
+              "default": true,
+              "required": false,
+              "description": "Exclude current bar from rolling high/low.",
+              "tier": "strategy",
+              "slot_reference": false
+            },
+            {
+              "name": "min_periods",
+              "type": "int",
+              "default": null,
+              "required": false,
+              "description": "Minimum valid observations for rolling calculation.",
+              "tier": "strategy",
+              "slot_reference": false
+            }
+          ],
+          "input_type": "OHLCVDict",
+          "output_type": "SignalSeries",
+          "declaration_refs": null,
+          "optional_declaration_refs": null,
+          "changelog_entry": "Initial release"
+        },
+        "2": {
           "parameters": [
             {
               "name": "lookback",
@@ -2393,11 +2393,11 @@
               "slot_reference": false
             }
           ],
-          "input_type": "OHLCVDict",
+          "input_type": "SignalSeries",
           "output_type": "SignalSeries",
           "declaration_refs": null,
           "optional_declaration_refs": null,
-          "changelog_entry": "Initial release"
+          "changelog_entry": "Correct input type from OHLCVDict to SignalSeries."
         }
       }
     },
@@ -3129,7 +3129,7 @@
       "name": "CrossSectionalDispersionRegime",
       "category": "regime_detector",
       "sub_category": "regime",
-      "description": "Measure cross-sectional return dispersion to detect high-differentiation regimes.\n\n    Use to identify periods where asset returns diverge, indicating opportunities for\n    cross-sectional strategies like relative value and momentum. Feed into RegimeGate\n    to enable cross-sectional signals only during high-dispersion periods, or into\n    RegimeScale to modulate forecast intensity. Complements\n    AveragePairwiseCorrelationRegime -- high dispersion with low correlation is the\n    ideal regime for cross-sectional alpha.\n\n    Output:\n        Scalar GlobalSeries, non-negative (std of returns). Higher values indicate\n        wider return spread across assets. Smoothed by rolling mean over lookback.\n        NaN only if fewer than 2 instruments are available.\n\n    Formula:\n        raw = std(return_i) across instruments per timestamp\n        signal = rolling_mean(raw, lookback)\n\n    Example:\n        Store('ohlcv') -> CrossSectionalDispersionRegime(ohlcv_slot='ohlcv', lookback=10) -> RegimeScale()\n    ",
+      "description": "Measure cross-sectional return dispersion to detect high-differentiation regimes.\n\n    Use to identify periods where asset returns diverge, indicating opportunities for\n    cross-sectional strategies like relative value and momentum. Feed into RegimeGate\n    to enable cross-sectional signals only during high-dispersion periods, or into\n    RegimeScale to modulate forecast intensity. Complements\n    AveragePairwiseCorrelationRegime -- high dispersion with low correlation is the\n    ideal regime for cross-sectional alpha.\n\n    Output:\n        Scalar GlobalSeries, non-negative (std of returns). Higher values indicate\n        wider return spread across assets. Smoothed by rolling mean over lookback.\n        NaN where fewer than 2 valid instrument returns are available, including\n        missing-price observations and the return immediately following them.\n\n    Formula:\n        raw = std(return_i) across instruments per timestamp\n        signal = rolling_mean(raw, lookback)\n\n    Example:\n        Store('ohlcv') -> CrossSectionalDispersionRegime(ohlcv_slot='ohlcv', lookback=10) -> RegimeScale()\n    ",
       "usage_hint": "Use to identify periods where asset returns diverge, indicating opportunities for cross-sectional strategies like relative value and momentum. Feed into RegimeGate to enable cross-sectional signals only during high-dispersion periods, or into RegimeScale to modulate forecast intensity. Complements AveragePairwiseCorrelationRegime -- high dispersion with low correlation is the ideal regime for cross-sectional alpha.",
       "input_type": "SignalSeries",
       "output_type": "GlobalSeries",
@@ -3171,11 +3171,12 @@
       "declaration_refs": null,
       "optional_declaration_refs": null,
       "composer_inputs": null,
-      "latest": 1,
-      "version": 1,
+      "latest": 2,
+      "version": 2,
       "status": "active",
       "changelog": {
-        "1": "Initial release"
+        "1": "Initial release",
+        "2": "Preserve missing prices and undefined returns as NaN instead of forward-filling."
       },
       "versions": {
         "1": {
@@ -3204,6 +3205,33 @@
           "declaration_refs": null,
           "optional_declaration_refs": null,
           "changelog_entry": "Initial release"
+        },
+        "2": {
+          "parameters": [
+            {
+              "name": "ohlcv_slot",
+              "type": "str",
+              "default": "ohlcv",
+              "required": false,
+              "description": "Slot name for OHLCV price data. Must match a Store() upstream.",
+              "tier": "strategy",
+              "slot_reference": true
+            },
+            {
+              "name": "lookback",
+              "type": "int",
+              "default": 10,
+              "required": false,
+              "description": "Rolling window in bars for smoothing the cross-sectional return std. Shorter (5-10) captures rapid dispersion shifts, longer (15-30) produces a smoother regime signal. Default 10.",
+              "tier": "strategy",
+              "slot_reference": false
+            }
+          ],
+          "input_type": "SignalSeries",
+          "output_type": "GlobalSeries",
+          "declaration_refs": null,
+          "optional_declaration_refs": null,
+          "changelog_entry": "Preserve missing prices and undefined returns as NaN instead of forward-filling."
         }
       }
     },
@@ -3324,7 +3352,7 @@
       "name": "CrossoverCombinator",
       "category": "signal_transform",
       "sub_category": "conversion",
-      "description": "Generate binary regime signals from a fast/slow crossover for trend detection and regime switching.\n\n    Use after computing two moving averages (fast and slow) to create a regime signal\n    that switches between bull and bear states. Input must be a DataFrame with columns\n    matching fast_key and slow_key. Commonly used with EWMA at different periods fed\n    through a Parallel step, then combined here for regime-based signal gating.\n\n    Output:\n        Single-column DataFrame (\"regime\"). Values alternate between bull_value\n        (default 1) and bear_value (default -1). No NaN in output unless inputs\n        have NaN at the same timestamp.\n\n    Example:\n        Parallel(fast=EWMA(period=10), slow=EWMA(period=50)) -> CrossoverCombinator()\n    ",
+      "description": "Generate binary regime signals from a fast/slow crossover for trend detection and regime switching.\n\n    Use after computing two moving averages (fast and slow) to create a regime signal\n    that switches between bull and bear states. Input must be a DataFrame with columns\n    matching fast_key and slow_key. Commonly used with EWMA at different periods fed\n    through a Parallel step, then combined here for regime-based signal gating.\n\n    Output:\n        Single-column DataFrame (\"regime\"). Values alternate between bull_value\n        (default 1) and bear_value (default -1). NaN when either crossover input\n        is missing because the relative ordering is then unknown.\n\n    Example:\n        Parallel(fast=EWMA(period=10), slow=EWMA(period=50)) -> CrossoverCombinator()\n    ",
       "usage_hint": "Use after computing two moving averages (fast and slow) to create a regime signal that switches between bull and bear states. Input must be a DataFrame with columns matching fast_key and slow_key. Commonly used with EWMA at different periods fed through a Parallel step, then combined here for regime-based signal gating.",
       "input_type": "SignalSeries",
       "output_type": "SignalSeries",
@@ -3388,11 +3416,12 @@
       "declaration_refs": null,
       "optional_declaration_refs": null,
       "composer_inputs": null,
-      "latest": 1,
-      "version": 1,
+      "latest": 2,
+      "version": 2,
       "status": "active",
       "changelog": {
-        "1": "Initial release"
+        "1": "Initial release",
+        "2": "Preserve NaN when either crossover input is missing."
       },
       "versions": {
         "1": {
@@ -3439,6 +3468,51 @@
           "declaration_refs": null,
           "optional_declaration_refs": null,
           "changelog_entry": "Initial release"
+        },
+        "2": {
+          "parameters": [
+            {
+              "name": "fast_key",
+              "type": "str",
+              "default": "fast",
+              "required": false,
+              "description": "Column name for the fast (short-period) series in the input DataFrame. Must match the key used in the upstream Parallel step.",
+              "tier": "strategy",
+              "slot_reference": false
+            },
+            {
+              "name": "slow_key",
+              "type": "str",
+              "default": "slow",
+              "required": false,
+              "description": "Column name for the slow (long-period) series. Must match the key used in the upstream Parallel step.",
+              "tier": "strategy",
+              "slot_reference": false
+            },
+            {
+              "name": "bull_value",
+              "type": "int",
+              "default": 1,
+              "required": false,
+              "description": "Output value when fast > slow (bullish regime). Default 1.",
+              "tier": "strategy",
+              "slot_reference": false
+            },
+            {
+              "name": "bear_value",
+              "type": "int",
+              "default": -1,
+              "required": false,
+              "description": "Output value when fast <= slow (bearish regime). Default -1.",
+              "tier": "strategy",
+              "slot_reference": false
+            }
+          ],
+          "input_type": "SignalSeries",
+          "output_type": "SignalSeries",
+          "declaration_refs": null,
+          "optional_declaration_refs": null,
+          "changelog_entry": "Preserve NaN when either crossover input is missing."
         }
       }
     },
@@ -4888,7 +4962,7 @@
       "sub_category": "alignment",
       "description": "Extract a single price field (close, open, high, low, volume) from an OHLCV dict into a flat DataFrame.\n\n    Use as the first step in a pipeline branch when you need a specific price field\n    rather than the full OHLCV structure. Produces a DataFrame with symbols as columns\n    and timestamps as index. Case-insensitive column matching.\n\n    Output:\n        DataFrame (timestamps x symbols). Values match the original price field.\n        No NaN introduced beyond what exists in the source data.\n\n    Example:\n        PriceDataLoader() -> ExtractSeries(series_name=\"close\") -> ROC(period=10)\n    ",
       "usage_hint": "Use as the first step in a pipeline branch when you need a specific price field rather than the full OHLCV structure. Produces a DataFrame with symbols as columns and timestamps as index. Case-insensitive column matching.",
-      "input_type": "SignalSeries",
+      "input_type": "OHLCVDict",
       "output_type": "SignalSeries",
       "deterministic": true,
       "parameters": [
@@ -4911,11 +4985,12 @@
       "declaration_refs": null,
       "optional_declaration_refs": null,
       "composer_inputs": null,
-      "latest": 1,
-      "version": 1,
+      "latest": 2,
+      "version": 2,
       "status": "active",
       "changelog": {
-        "1": "Initial release"
+        "1": "Initial release",
+        "2": "Correct input type from SignalSeries to OHLCVDict."
       },
       "versions": {
         "1": {
@@ -4935,6 +5010,24 @@
           "declaration_refs": null,
           "optional_declaration_refs": null,
           "changelog_entry": "Initial release"
+        },
+        "2": {
+          "parameters": [
+            {
+              "name": "series_name",
+              "type": "str",
+              "default": "close",
+              "required": false,
+              "description": "OHLCV field to extract. One of \"close\", \"open\", \"high\", \"low\", \"volume\". Case-insensitive. Default \"close\".",
+              "tier": "strategy",
+              "slot_reference": false
+            }
+          ],
+          "input_type": "OHLCVDict",
+          "output_type": "SignalSeries",
+          "declaration_refs": null,
+          "optional_declaration_refs": null,
+          "changelog_entry": "Correct input type from SignalSeries to OHLCVDict."
         }
       }
     },
@@ -4971,11 +5064,12 @@
       "declaration_refs": null,
       "optional_declaration_refs": null,
       "composer_inputs": null,
-      "latest": 1,
-      "version": 1,
+      "latest": 2,
+      "version": 2,
       "status": "active",
       "changelog": {
-        "1": "Initial release"
+        "1": "Initial release",
+        "2": "Preserve NaN during warmup and when either comparison value is missing."
       },
       "versions": {
         "1": {
@@ -4995,6 +5089,24 @@
           "declaration_refs": null,
           "optional_declaration_refs": null,
           "changelog_entry": "Initial release"
+        },
+        "2": {
+          "parameters": [
+            {
+              "name": "periods",
+              "type": "int",
+              "default": 1,
+              "required": false,
+              "description": "Number of bars to look back for comparison. 1 = single bar decline, higher values (2-5) require sustained decline. Default 1.",
+              "tier": "strategy",
+              "slot_reference": false
+            }
+          ],
+          "input_type": "SignalSeries",
+          "output_type": "SignalSeries",
+          "declaration_refs": null,
+          "optional_declaration_refs": null,
+          "changelog_entry": "Preserve NaN during warmup and when either comparison value is missing."
         }
       }
     },
@@ -5204,7 +5316,7 @@
       "name": "ForecastCapper",
       "category": "forecast_mapper",
       "sub_category": "capping",
-      "description": "Clip forecast values to a symmetric hard cap to prevent extreme position sizes.\n\n    Place after ForecastScaler to limit outlier forecasts that would otherwise\n    dominate portfolio positions. Standard cap is +/-20 (2x the target magnitude\n    of 10). For a version with dead-zone filtering, use LinearForecastMapper instead.\n\n    Output:\n        Range [-limit, +limit]. Values within the cap pass through unchanged.\n        NaN values are preserved.\n\n    Formula:\n        capped = clip(forecast, -limit, +limit)\n\n    Example:\n        ForecastScaler() -> ForecastCapper(limit=20) -> ForecastCombiner()\n    ",
+      "description": "Clip forecast values to a symmetric hard cap to prevent extreme position sizes.\n\n    Place after ForecastScaler to limit outlier forecasts that would otherwise\n    dominate portfolio positions. Standard cap is +/-20 (2x the target magnitude\n    of 10). For a version with dead-zone filtering, use LinearForecastMapper instead.\n\n    Output:\n        Range [-limit, +limit]. Values within the cap pass through unchanged.\n        NaN values are preserved.\n\n    Formula:\n        capped = clip(forecast, -limit, +limit)\n\n    Example:\n        ForecastScaler() -> ForecastCapper(limit=20) -> EqualForecastCombiner()\n    ",
       "usage_hint": "Place after ForecastScaler to limit outlier forecasts that would otherwise dominate portfolio positions. Standard cap is +/-20 (2x the target magnitude of 10). For a version with dead-zone filtering, use LinearForecastMapper instead.",
       "input_type": "ForecastSeries",
       "output_type": "ForecastSeries",
@@ -5358,10 +5470,10 @@
       "parameters": [
         {
           "name": "weights",
-          "type": "dict",
-          "default": {},
+          "type": "dict[str, float] | str",
+          "default": "equal",
           "required": false,
-          "description": "Explicit weights keyed by branch name. Must sum to 1.0.",
+          "description": "Explicit weights keyed by branch name (must sum to 1.0, e.g. ``{\"momentum\": 0.6, \"mean_reversion\": 0.4}``), OR the literal string ``\"equal\"`` for cross-branch equal weighting. Defaults to ``\"equal\"`` so a bare ``ForecastCombiner()`` stays valid for saved blobs that pre-date the explicit contract (B5 / 2026-06-27). Explicit ``weights={}`` is still rejected \u2014 that's a caller mistake worth surfacing.",
           "suggestions": [],
           "optimizable": true,
           "constraints": {},
@@ -5386,10 +5498,10 @@
           "parameters": [
             {
               "name": "weights",
-              "type": "dict",
-              "default": {},
+              "type": "dict[str, float] | str",
+              "default": "equal",
               "required": false,
-              "description": "Explicit weights keyed by branch name. Must sum to 1.0.",
+              "description": "Explicit weights keyed by branch name (must sum to 1.0, e.g. ``{\"momentum\": 0.6, \"mean_reversion\": 0.4}``), OR the literal string ``\"equal\"`` for cross-branch equal weighting. Defaults to ``\"equal\"`` so a bare ``ForecastCombiner()`` stays valid for saved blobs that pre-date the explicit contract (B5 / 2026-06-27). Explicit ``weights={}`` is still rejected \u2014 that's a caller mistake worth surfacing.",
               "tier": "strategy",
               "slot_reference": false
             }
@@ -5406,7 +5518,7 @@
       "name": "ForecastMapperConvex",
       "category": "forecast_mapper",
       "sub_category": "convex",
-      "description": "Apply power-law mapping to disproportionately amplify or compress extreme forecast values.\n\n    Use when you want non-linear treatment of forecast magnitude. Power > 1 amplifies\n    extremes (convex/aggressive), power < 1 compresses extremes (concave/conservative).\n    At power=1.0 this is equivalent to ForecastCapper. Prefer over piecewise mappers\n    when you want a smooth, continuous non-linearity.\n\n    Output:\n        Range [-cap, +cap]. Preserves sign. Smooth non-linear curve.\n        NaN values are preserved.\n\n    Formula:\n        output = sign(x) * cap * (min(|x|, cap) / cap) ^ power\n\n    Example:\n        ForecastScaler() -> ForecastMapperConvex(power=1.5) -> ForecastCombiner()\n    ",
+      "description": "Apply power-law mapping to disproportionately amplify or compress extreme forecast values.\n\n    Use when you want non-linear treatment of forecast magnitude. Power > 1 amplifies\n    extremes (convex/aggressive), power < 1 compresses extremes (concave/conservative).\n    At power=1.0 this is equivalent to ForecastCapper. Prefer over piecewise mappers\n    when you want a smooth, continuous non-linearity.\n\n    Output:\n        Range [-cap, +cap]. Preserves sign. Smooth non-linear curve.\n        NaN values are preserved.\n\n    Formula:\n        output = sign(x) * cap * (min(|x|, cap) / cap) ^ power\n\n    Example:\n        ForecastScaler() -> ForecastMapperConvex(power=1.5) -> EqualForecastCombiner()\n    ",
       "usage_hint": "Use when you want non-linear treatment of forecast magnitude. Power > 1 amplifies extremes (convex/aggressive), power < 1 compresses extremes (concave/conservative). At power=1.0 this is equivalent to ForecastCapper. Prefer over piecewise mappers when you want a smooth, continuous non-linearity.",
       "input_type": "ForecastSeries",
       "output_type": "ForecastSeries",
@@ -5484,7 +5596,7 @@
       "name": "ForecastMapperGrouped",
       "category": "forecast_mapper",
       "sub_category": "grouped",
-      "description": "Apply two-slope piecewise-linear mapping to concentrate forecast distribution around a target value.\n\n    Use when you want forecasts clustered near a specific magnitude (+/- peak) rather\n    than uniformly spread. The steep first slope rapidly lifts signals out of the dead\n    zone to the target, while the gentle second slope compresses extremes. Produces a\n    \"double hump\" distribution. Prefer over LinearForecastMapper when you want explicit\n    control over the target forecast level.\n\n    Output:\n        Range [-cap_output, +cap_output]. Zero inside dead zone. Peaks at +/- peak\n        value near the breakpoint. NaN values are preserved.\n\n    Formula:\n        slope1 = peak / (breakpoint - dead_zone)    (steep ramp)\n        slope2 = (cap_output - peak) / (cap - breakpoint)  (gentle ramp)\n        |x| < dead_zone           -> 0\n        dead_zone <= |x| <= breakpoint -> slope1 * (|x| - dead_zone)\n        breakpoint < |x| <= cap   -> peak + slope2 * (|x| - breakpoint)\n        |x| > cap                 -> cap_output\n\n    Example:\n        ForecastScaler() -> ForecastMapperGrouped(dead_zone=2, breakpoint=8, peak=12) -> ForecastCombiner()\n    ",
+      "description": "Apply two-slope piecewise-linear mapping to concentrate forecast distribution around a target value.\n\n    Use when you want forecasts clustered near a specific magnitude (+/- peak) rather\n    than uniformly spread. The steep first slope rapidly lifts signals out of the dead\n    zone to the target, while the gentle second slope compresses extremes. Produces a\n    \"double hump\" distribution. Prefer over LinearForecastMapper when you want explicit\n    control over the target forecast level.\n\n    Output:\n        Range [-cap_output, +cap_output]. Zero inside dead zone. Peaks at +/- peak\n        value near the breakpoint. NaN values are preserved.\n\n    Formula:\n        slope1 = peak / (breakpoint - dead_zone)    (steep ramp)\n        slope2 = (cap_output - peak) / (cap - breakpoint)  (gentle ramp)\n        |x| < dead_zone           -> 0\n        dead_zone <= |x| <= breakpoint -> slope1 * (|x| - dead_zone)\n        breakpoint < |x| <= cap   -> peak + slope2 * (|x| - breakpoint)\n        |x| > cap                 -> cap_output\n\n    Example:\n        ForecastScaler() -> ForecastMapperGrouped(dead_zone=2, breakpoint=8, peak=12) -> EqualForecastCombiner()\n    ",
       "usage_hint": "Use when you want forecasts clustered near a specific magnitude (+/- peak) rather than uniformly spread. The steep first slope rapidly lifts signals out of the dead zone to the target, while the gentle second slope compresses extremes. Produces a \"double hump\" distribution. Prefer over LinearForecastMapper when you want explicit control over the target forecast level.",
       "input_type": "ForecastSeries",
       "output_type": "ForecastSeries",
@@ -5628,7 +5740,7 @@
       "name": "ForecastMapperWinged",
       "category": "forecast_mapper",
       "sub_category": "convex",
-      "description": "Apply tent-shaped mapping that amplifies moderate forecasts and dampens extreme ones for adjusted trend following.\n\n    Use for trend strategies where moderate signals are more predictive than\n    extreme ones (which signal reversal risk). Output rises to a peak at the\n    breakpoint, then declines back toward zero at the cap. Prefer over\n    ForecastMapperGrouped when you want to explicitly penalize extreme forecasts.\n\n    Output:\n        Range [0, peak] (magnitude). Output rises then falls in a triangle shape.\n        Beyond cap, output drops to floor_output (default 0). NaN preserved.\n\n    Formula:\n        dead_zone <= |x| <= breakpoint -> slope_up * (|x| - dead_zone)  (amplify)\n        breakpoint < |x| <= cap -> peak - slope_down * (|x| - breakpoint)  (dampen)\n        |x| > cap -> floor_output\n        slope_up = peak / (breakpoint - dead_zone)\n        slope_down = (peak - floor_output) / (cap - breakpoint)\n\n    Example:\n        ForecastScaler() -> ForecastMapperWinged(breakpoint=10, peak=20) -> ForecastCombiner()\n    ",
+      "description": "Apply tent-shaped mapping that amplifies moderate forecasts and dampens extreme ones for adjusted trend following.\n\n    Use for trend strategies where moderate signals are more predictive than\n    extreme ones (which signal reversal risk). Output rises to a peak at the\n    breakpoint, then declines back toward zero at the cap. Prefer over\n    ForecastMapperGrouped when you want to explicitly penalize extreme forecasts.\n\n    Output:\n        Range [0, peak] (magnitude). Output rises then falls in a triangle shape.\n        Beyond cap, output drops to floor_output (default 0). NaN preserved.\n\n    Formula:\n        dead_zone <= |x| <= breakpoint -> slope_up * (|x| - dead_zone)  (amplify)\n        breakpoint < |x| <= cap -> peak - slope_down * (|x| - breakpoint)  (dampen)\n        |x| > cap -> floor_output\n        slope_up = peak / (breakpoint - dead_zone)\n        slope_down = (peak - floor_output) / (cap - breakpoint)\n\n    Example:\n        ForecastScaler() -> ForecastMapperWinged(breakpoint=10, peak=20) -> EqualForecastCombiner()\n    ",
       "usage_hint": "Use for trend strategies where moderate signals are more predictive than extreme ones (which signal reversal risk). Output rises to a peak at the breakpoint, then declines back toward zero at the cap. Prefer over ForecastMapperGrouped when you want to explicitly penalize extreme forecasts.",
       "input_type": "ForecastSeries",
       "output_type": "ForecastSeries",
@@ -6538,16 +6650,19 @@
           "expected_slot_type": null
         }
       ],
-      "implicit_slot_reads": [],
+      "implicit_slot_reads": [
+        "funding_disp_funding_data"
+      ],
       "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
       "composer_inputs": null,
-      "latest": 1,
-      "version": 1,
+      "latest": 2,
+      "version": 2,
       "status": "active",
       "changelog": {
-        "1": "Initial release"
+        "1": "Initial release",
+        "2": "Correct implicit funding slot contract from OHLCVDict to StreamSeries."
       },
       "versions": {
         "1": {
@@ -6567,6 +6682,24 @@
           "declaration_refs": null,
           "optional_declaration_refs": null,
           "changelog_entry": "Initial release"
+        },
+        "2": {
+          "parameters": [
+            {
+              "name": "lookback",
+              "type": "int",
+              "default": 20,
+              "required": false,
+              "description": "Rolling window in bars for smoothing the cross-sectional funding std. Shorter (5-10) reacts faster to shifts in funding dispersion, longer (20-40) filters noise. Default 20.",
+              "tier": "strategy",
+              "slot_reference": false
+            }
+          ],
+          "input_type": "SignalSeries",
+          "output_type": "GlobalSeries",
+          "declaration_refs": null,
+          "optional_declaration_refs": null,
+          "changelog_entry": "Correct implicit funding slot contract from OHLCVDict to StreamSeries."
         }
       }
     },
@@ -6603,11 +6736,12 @@
         "bar_offset": "globals.bar_offset"
       },
       "composer_inputs": null,
-      "latest": 1,
-      "version": 1,
+      "latest": 2,
+      "version": 2,
       "status": "active",
       "changelog": {
-        "1": "Initial release"
+        "1": "Initial release",
+        "2": "Correct implicit funding slot type from OHLCVDict to StreamSeries."
       },
       "versions": {
         "1": {
@@ -6629,6 +6763,26 @@
             "bar_offset": "globals.bar_offset"
           },
           "changelog_entry": "Initial release"
+        },
+        "2": {
+          "parameters": [
+            {
+              "name": "lookback",
+              "type": "int",
+              "default": 20,
+              "required": false,
+              "description": "Rolling window in bars for smoothing the mean absolute funding rate. Shorter (5-10) reacts faster to funding regime shifts, longer (20-40) produces a more stable regime signal. Default 20 balances responsiveness and stability.",
+              "tier": "strategy",
+              "slot_reference": false
+            }
+          ],
+          "input_type": "SignalSeries",
+          "output_type": "GlobalSeries",
+          "declaration_refs": null,
+          "optional_declaration_refs": {
+            "bar_offset": "globals.bar_offset"
+          },
+          "changelog_entry": "Correct implicit funding slot type from OHLCVDict to StreamSeries."
         }
       }
     },
@@ -7222,14 +7376,7 @@
         }
       ],
       "implicit_slot_reads": [],
-      "param_constraints": [
-        {
-          "params": [
-            "shrinkage_target"
-          ],
-          "rule": "requires"
-        }
-      ],
+      "param_constraints": [],
       "declaration_refs": null,
       "optional_declaration_refs": null,
       "composer_inputs": null,
@@ -7506,7 +7653,7 @@
       "name": "IndexShiftTransform",
       "category": "signal_transform",
       "sub_category": "resampling",
-      "description": "Shift signal timestamps by a fixed number of bars for execution timing adjustment.\n\n    Use to test execution at different offsets within a bar period, or to align\n    signals that should be evaluated with a delay (e.g., trade on the bar after\n    the signal fires). Positive bars shift forward (delay execution), negative\n    bars shift backward (earlier execution). Place at the end of a signal chain\n    before position sizing.\n\n    Output:\n        Same scale and values as input, with shifted timestamps. No bars are\n        dropped; the index is simply offset. No NaN introduced.\n\n    Example:\n        ROC(period=10) -> CrossSectionalZScore() -> IndexShiftTransform(bars=1)\n    ",
+      "description": "Shift signal timestamps by a fixed number of bars for execution timing adjustment.\n\n    Use to test execution at different offsets within a bar period, or to align\n    signals that should be evaluated with a delay (e.g., trade on the bar after\n    the signal fires). Positive bars shift forward (delay execution), negative\n    bars shift backward (earlier execution). Place at the end of a signal chain\n    before position sizing.\n\n    Output:\n        Same scale and values as input, with shifted timestamps. No bars are\n        dropped; the index is simply offset. No NaN introduced.\n\n        A nonzero shift needs a known bar duration. Two or more timestamps use\n        the first observed interval; a single timestamp uses its index frequency\n        metadata. A single timestamp without frequency metadata raises an\n        explicit error instead of guessing an execution interval.\n\n    Example:\n        ROC(period=10) -> CrossSectionalZScore() -> IndexShiftTransform(bars=1)\n    ",
       "usage_hint": "Use to test execution at different offsets within a bar period, or to align signals that should be evaluated with a delay (e.g., trade on the bar after the signal fires). Positive bars shift forward (delay execution), negative bars shift backward (earlier execution). Place at the end of a signal chain before position sizing.",
       "input_type": "SignalSeries",
       "output_type": "SignalSeries",
@@ -7914,7 +8061,7 @@
       "name": "LinearForecastMapper",
       "category": "forecast_mapper",
       "sub_category": "linear",
-      "description": "Apply piecewise-linear mapping with dead zone and boost to eliminate weak forecasts and amplify conviction.\n\n    Drop-in replacement for ForecastCapper that adds a dead zone (zeroing weak signals)\n    and a boost (amplifying strong ones). Controlled by a single parameter `a_param`\n    that preserves forecast variance. Use after ForecastScaler when you want to filter\n    out noise near zero without losing the continuous signal shape.\n\n    Output:\n        Range [-cap*a_param, +cap*a_param]. Zero inside the dead zone (|x| < threshold).\n        NaN values are preserved. Polarity matches input.\n\n    Formula:\n        threshold = -19.811 + 22.263 * a_param\n        slope = (cap * a_param) / (cap - threshold)\n        |x| < threshold        -> 0             (dead zone)\n        threshold <= |x| <= cap -> slope * (|x| - threshold)  (linear ramp)\n        |x| > cap              -> cap * a_param  (boosted cap)\n\n    Example:\n        ForecastScaler() -> LinearForecastMapper(a_param=1.4) -> ForecastCombiner()\n    ",
+      "description": "Apply piecewise-linear mapping with dead zone and boost to eliminate weak forecasts and amplify conviction.\n\n    Drop-in replacement for ForecastCapper that adds a dead zone (zeroing weak signals)\n    and a boost (amplifying strong ones). Controlled by a single parameter `a_param`\n    that preserves forecast variance. Use after ForecastScaler when you want to filter\n    out noise near zero without losing the continuous signal shape.\n\n    Output:\n        Range [-cap*a_param, +cap*a_param]. Zero inside the dead zone (|x| < threshold).\n        NaN values are preserved. Polarity matches input.\n\n    Formula:\n        threshold = -19.811 + 22.263 * a_param\n        slope = (cap * a_param) / (cap - threshold)\n        |x| < threshold        -> 0             (dead zone)\n        threshold <= |x| <= cap -> slope * (|x| - threshold)  (linear ramp)\n        |x| > cap              -> cap * a_param  (boosted cap)\n\n    Example:\n        ForecastScaler() -> LinearForecastMapper(a_param=1.4) -> EqualForecastCombiner()\n    ",
       "usage_hint": "Drop-in replacement for ForecastCapper that adds a dead zone (zeroing weak signals) and a boost (amplifying strong ones). Controlled by a single parameter `a_param` that preserves forecast variance. Use after ForecastScaler when you want to filter out noise near zero without losing the continuous signal shape.",
       "input_type": "ForecastSeries",
       "output_type": "ForecastSeries",
@@ -9671,31 +9818,18 @@
       "name": "OrCombinator",
       "category": "signal_composer",
       "sub_category": "masking",
-      "description": "Combine multiple boolean filter masks with OR logic so any condition being True is sufficient.\n\n    Use after a Parallel step producing multiple filter signals when you want to trade\n    if ANY condition is met (e.g., trade if volume OR momentum is favorable). For AND\n    logic requiring all conditions, use AndCombinator instead. NaN values are treated\n    as False.\n\n    Output:\n        Boolean DataFrame (0.0/1.0). 1.0 where ANY input mask is True.\n        Same shape as input masks.\n\n    Example:\n        Parallel(vol=VolatilityFilter(...), momentum=MomentumFilter(...)) -> OrCombinator(\"vol\", \"momentum\")\n    ",
+      "description": "Combine multiple boolean filter masks with OR logic so any condition being True is sufficient.\n\n    Use after a Parallel step producing multiple filter signals when you want to trade\n    if ANY condition is met (e.g., trade if volume OR momentum is favorable). For AND\n    logic requiring all conditions, use AndCombinator instead. NaN values are treated\n    as False.\n\n    Output:\n        Boolean DataFrame (0.0/1.0). 1.0 where ANY input mask is True.\n        Same shape as input masks.\n\n    Example:\n        Parallel(vol=VolatilityFilter(...), momentum=MomentumFilter(...)) -> OrCombinator(signals_list=[\"vol\", \"momentum\"])\n    ",
       "usage_hint": "Use after a Parallel step producing multiple filter signals when you want to trade if ANY condition is met (e.g., trade if volume OR momentum is favorable). For AND logic requiring all conditions, use AndCombinator instead. NaN values are treated as False.",
       "input_type": "dict",
       "output_type": "SignalSeries",
       "deterministic": true,
       "parameters": [
         {
-          "name": "signals",
-          "type": "str",
-          "default": null,
-          "required": true,
-          "description": "",
-          "suggestions": [],
-          "optimizable": true,
-          "constraints": {},
-          "tier": "strategy",
-          "slot_reference": false,
-          "expected_slot_type": null
-        },
-        {
           "name": "signals_list",
           "type": "list",
           "default": null,
           "required": false,
-          "description": "Alternative to positional args. List of signal names to combine. Useful when names are computed dynamically.",
+          "description": "Signal names (Parallel branch names) to combine. None (the default) combines all signals in the current dict.",
           "suggestions": [],
           "optimizable": true,
           "constraints": {},
@@ -9722,20 +9856,11 @@
         "1": {
           "parameters": [
             {
-              "name": "signals",
-              "type": "str",
-              "default": null,
-              "required": true,
-              "description": "",
-              "tier": "strategy",
-              "slot_reference": false
-            },
-            {
               "name": "signals_list",
               "type": "list",
               "default": null,
               "required": false,
-              "description": "Alternative to positional args. List of signal names to combine. Useful when names are computed dynamically.",
+              "description": "Signal names (Parallel branch names) to combine. None (the default) combines all signals in the current dict.",
               "tier": "strategy",
               "slot_reference": false
             }
@@ -12122,11 +12247,12 @@
       "declaration_refs": null,
       "optional_declaration_refs": null,
       "composer_inputs": null,
-      "latest": 1,
-      "version": 1,
+      "latest": 2,
+      "version": 2,
       "status": "active",
       "changelog": {
-        "1": "Initial release"
+        "1": "Initial release",
+        "2": "Preserve NaN during warmup and when either comparison value is missing."
       },
       "versions": {
         "1": {
@@ -12146,6 +12272,24 @@
           "declaration_refs": null,
           "optional_declaration_refs": null,
           "changelog_entry": "Initial release"
+        },
+        "2": {
+          "parameters": [
+            {
+              "name": "periods",
+              "type": "int",
+              "default": 1,
+              "required": false,
+              "description": "Number of bars to look back for comparison. 1 = single bar increase, higher values (2-5) require sustained rise. Default 1.",
+              "tier": "strategy",
+              "slot_reference": false
+            }
+          ],
+          "input_type": "SignalSeries",
+          "output_type": "SignalSeries",
+          "declaration_refs": null,
+          "optional_declaration_refs": null,
+          "changelog_entry": "Preserve NaN during warmup and when either comparison value is missing."
         }
       }
     },
@@ -16417,7 +16561,7 @@
       "description": "Convert raw prices to volatility-adjusted price series for cross-asset breakout analysis.\n\n    Use as a preprocessing step before BreakoutDistance to normalize price\n    movements into \"vol units\" so breakout signals are comparable across assets\n    with different volatility levels. Essential for crypto markets where betas\n    vary dramatically. Pairs exclusively with BreakoutDistance downstream.\n\n    Output:\n        Unbounded cumulative vol-adjusted returns, starting near zero. Units are\n        \"vol-normalized return units\" \u2014 one unit equals one annualized standard\n        deviation of returns. NaN during warmup (vol_span bars).\n\n    Formula:\n        log_ret = ln(P_t / P_{t-1})\n        sigma = EWstd(log_ret, span=vol_span) * sqrt(annual_factor)\n        adj_ret = log_ret / sigma_{t-1}      # lagged vol avoids lookahead\n        adj_price = cumsum(adj_ret)\n\n    Example:\n        PriceDataLoader() -> VolatilityAdjustedPriceSeries(vol_span=32) -> BreakoutDistance(lookback=20)\n    ",
       "usage_hint": "Use as a preprocessing step before BreakoutDistance to normalize price movements into \"vol units\" so breakout signals are comparable across assets with different volatility levels. Essential for crypto markets where betas vary dramatically. Pairs exclusively with BreakoutDistance downstream.",
       "input_type": "OHLCVDict",
-      "output_type": "OHLCVDict",
+      "output_type": "SignalSeries",
       "deterministic": true,
       "parameters": [
         {
@@ -16473,11 +16617,12 @@
       "declaration_refs": null,
       "optional_declaration_refs": null,
       "composer_inputs": null,
-      "latest": 1,
-      "version": 1,
+      "latest": 2,
+      "version": 2,
       "status": "active",
       "changelog": {
-        "1": "Initial release"
+        "1": "Initial release",
+        "2": "Correct output type from OHLCVDict to SignalSeries."
       },
       "versions": {
         "1": {
@@ -16515,6 +16660,42 @@
           "declaration_refs": null,
           "optional_declaration_refs": null,
           "changelog_entry": "Initial release"
+        },
+        "2": {
+          "parameters": [
+            {
+              "name": "vol_span",
+              "type": "int",
+              "default": 32,
+              "required": false,
+              "description": "EWMA span for volatility estimation in bars. Shorter (16-24) adapts faster to vol regime changes, longer (32-64) gives smoother normalization. Default 32 balances responsiveness and stability.",
+              "tier": "strategy",
+              "slot_reference": false
+            },
+            {
+              "name": "annual_factor",
+              "type": "int",
+              "default": 365,
+              "required": false,
+              "description": "Annualization factor for volatility scaling. Use 365 for daily crypto bars, 365*24 for hourly, 365*96 for 15-min. Must match the bar frequency of input data.",
+              "tier": "strategy",
+              "slot_reference": false
+            },
+            {
+              "name": "min_periods",
+              "type": "int",
+              "default": null,
+              "required": false,
+              "description": "Minimum observations before producing output. Defaults to vol_span. Lower values produce earlier (noisier) estimates.",
+              "tier": "strategy",
+              "slot_reference": false
+            }
+          ],
+          "input_type": "OHLCVDict",
+          "output_type": "SignalSeries",
+          "declaration_refs": null,
+          "optional_declaration_refs": null,
+          "changelog_entry": "Correct output type from OHLCVDict to SignalSeries."
         }
       }
     },
@@ -16603,11 +16784,12 @@
       "declaration_refs": null,
       "optional_declaration_refs": null,
       "composer_inputs": null,
-      "latest": 1,
-      "version": 1,
+      "latest": 2,
+      "version": 2,
       "status": "active",
       "changelog": {
-        "1": "Initial release"
+        "1": "Initial release",
+        "2": "Preserve NaN during rolling warmup and missing-price periods."
       },
       "versions": {
         "1": {
@@ -16654,6 +16836,51 @@
           "declaration_refs": null,
           "optional_declaration_refs": null,
           "changelog_entry": "Initial release"
+        },
+        "2": {
+          "parameters": [
+            {
+              "name": "mode",
+              "type": "enum",
+              "default": "high",
+              "required": false,
+              "description": "Volatility regime to select. \"high\" = trade during high-vol periods (z >= threshold), \"low\" = trade during low-vol periods (z <= threshold).",
+              "tier": "strategy",
+              "slot_reference": false
+            },
+            {
+              "name": "threshold",
+              "type": "float",
+              "default": 1.0,
+              "required": false,
+              "description": "Z-score cutoff. Positive values select above/below-average vol. Negative thresholds select very calm periods. Typical range [-2.0, 2.0]. Default 1.0.",
+              "tier": "strategy",
+              "slot_reference": false
+            },
+            {
+              "name": "window",
+              "type": "int",
+              "default": 20,
+              "required": false,
+              "description": "Rolling window in bars for both volatility and z-score calculation. Shorter (10-15) = more adaptive, longer (30-60) = more stable. Default 20.",
+              "tier": "strategy",
+              "slot_reference": false
+            },
+            {
+              "name": "min_periods",
+              "type": "int",
+              "default": 10,
+              "required": false,
+              "description": "Minimum observations for rolling calculations. Default 10.",
+              "tier": "strategy",
+              "slot_reference": false
+            }
+          ],
+          "input_type": "SignalSeries",
+          "output_type": "SignalSeries",
+          "declaration_refs": null,
+          "optional_declaration_refs": null,
+          "changelog_entry": "Preserve NaN during rolling warmup and missing-price periods."
         }
       }
     },

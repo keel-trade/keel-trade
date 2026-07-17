@@ -12,7 +12,7 @@ the skill body — loads on demand via `compose_skill()`.
 
 The knowledge sections are loaded from `keel.data.knowledge` (the
 bundled copy of `the upstream reference system docs` regenerated
-by `projects/agent-sdk/keel-sdk/scripts/build_data.py`).
+by `packages/keel-trade/keel-sdk/scripts/build_data.py`).
 
 See spec §11 in `projects/agent-v2/03-ideal-experience-spec.md` for the
 design rationale.

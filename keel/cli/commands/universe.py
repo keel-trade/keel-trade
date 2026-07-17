@@ -70,6 +70,19 @@ def universe() -> None:
 @click.option("--top-n", type=int, help="Number of assets (top_volume mode)")
 @click.option("--exclusions", multiple=True)
 @click.option("--inclusions", multiple=True)
+@click.option(
+    "--lookback",
+    type=click.Choice(["7d", "30d", "90d"]),
+    default=None,
+    help="Volume-ranking lookback window (top_volume mode)",
+)
+@click.option(
+    "--volume-quartiles",
+    "volume_quartiles",
+    multiple=True,
+    type=click.Choice(["q1", "q2", "q3", "q4"]),
+    help="Volume quartile filter, e.g. q1=top 25% by volume (top_volume mode)",
+)
 @click.pass_context
 def set_universe(
     ctx: click.Context,
@@ -81,6 +94,8 @@ def set_universe(
     top_n: int | None,
     exclusions: tuple[str, ...],
     inclusions: tuple[str, ...],
+    lookback: str | None,
+    volume_quartiles: tuple[str, ...],
 ) -> None:
     """Set or replace universe criteria on a strategy."""
     from keel.tools.local import universe_set
@@ -98,6 +113,10 @@ def set_universe(
             kwargs["exclusions"] = list(exclusions)
         if inclusions:
             kwargs["inclusions"] = list(inclusions)
+        if lookback:
+            kwargs["lookback"] = lookback
+        if volume_quartiles:
+            kwargs["volume_quartiles"] = list(volume_quartiles)
         result = universe_set(**kwargs)
         # Write back modified source to file/workspace
         if "source" in result:

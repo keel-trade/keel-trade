@@ -35,7 +35,7 @@ tools:
 Identify the **three composition decisions** before touching tools:
 
 1. **Path** — continuous forecast, discrete entry/exit, screen-select, or direct allocation? (See `pipeline_system` and `strategy_patterns`.)
-2. **Universe** — what asset class, how many, filtered how? Default to `Universe(asset_class="hl_perp", max_assets=30)` if user gave no signal.
+2. **Universe** — what market, how many assets, and which current selector? Default to `Universe(mode="top_volume", top_n=30, market="perp", resolved=[], resolved_at="")` if the user gave no asset scope.
 3. **Polarity** — trend-following or mean-reversion? Default to trend-following unless the user explicitly says "fade", "overbought/oversold", "reversal", or "contrarian" (mistake M-24).
 
 Match complexity to specificity. Vague request → ask ONE clarifying question, then build the simplest viable version. Detailed request ("EWMAC 2/8 with FDM and vol sizing") → execute exactly as stated, no simplification.
@@ -77,7 +77,17 @@ For multi-signal joins: directional signals combine via `ApplyMask` (one signal 
 
 ## Step 4: Draft the DSL inline
 
-Build the strategy as a single `Strategy(...)` block. Keep it minimal — every component must have a purpose the user can defend. Add what the user mentioned, plus the *required* glue (data loaders, weight normalizer, sizer) and explain each addition in one sentence.
+Build the strategy as one declaration sequence ending in exactly one
+`Pipeline(...)`. Keep it minimal — every component must have a purpose the user
+can defend. Add what the user mentioned, plus the _required_ glue (data loaders,
+weight normalizer, sizer) and explain each addition in one sentence.
+
+Use the current declaration contract: `Globals(...)`, `Universe(...)`, and
+`Execution(...)` above exactly one `Pipeline(...)`. Shared timeframe settings
+belong in `Globals`, and asset selection belongs in `Universe`; do not substitute
+`StoreValue`, `VolumeUniverseReducer`, or the removed `asset_class` / `max_assets`
+fields. Declaration-backed components are resolved before compilation, and slot
+types plus component version locks are strict.
 
 ## Step 5: Validate via dry-run compose
 
@@ -118,7 +128,7 @@ After the first create, immediately `keel_strategy_checkout <strategy_id>` so th
 
 1. One-sentence summary of the thesis ("Trend-following on top-30 HL perps with regime-gated vol sizing").
 2. The DSL source (fenced code block).
-3. Bulleted explanation of the 3-5 key composition choices and *why*.
+3. Bulleted explanation of the 3-5 key composition choices and _why_.
 4. The `strategy_id` and `hero_url`.
 5. Suggested next step (run a backtest).
 

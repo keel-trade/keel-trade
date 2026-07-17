@@ -517,8 +517,14 @@ def universe_set(
     top_n: int | None = None,
     exclusions: list[str] | None = None,
     inclusions: list[str] | None = None,
+    lookback: str | None = None,
+    volume_quartiles: list[str] | None = None,
 ) -> dict[str, Any]:
     """Set or replace universe criteria on a strategy.
+
+    Accepts the full selector set (mode, market, symbols, categories, top_n,
+    exclusions, inclusions, lookback (7d/30d/90d), volume_quartiles (q1-q4)) for
+    parity with the web editor and the in-cluster universe_set tool.
 
     NOTE: this only writes the criteria. To bake the concrete asset list into
     the source (which `deploy` and `backtest_submit` require), call
@@ -541,6 +547,8 @@ def universe_set(
         top_n=top_n,
         exclusions=exclusions or [],
         inclusions=inclusions or [],
+        lookback=lookback,
+        volume_quartiles=volume_quartiles or [],
     )
 
     new_source = spec_to_dsl(parsed)
@@ -580,9 +588,7 @@ def universe_resolve(source: str) -> dict[str, Any]:
 
     parsed = parse_strategy(source)
     if parsed.universe is None:
-        raise ValueError(
-            "Strategy has no Universe declaration. Add one with universe_set first."
-        )
+        raise ValueError("Strategy has no Universe declaration. Add one with universe_set first.")
 
     u = parsed.universe
     body: dict[str, Any] = {
@@ -831,6 +837,16 @@ def strategy_lock_upgrade(
     return {"component_lock": new_lock, "upgraded": upgraded}
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# New "components" surface — preferred names (2026-06-29 lock collapse).
+# The old strategy_lock_* names are kept above as the implementations; these
+# are aliases so SDK callers can use either name. New code should use the
+# strategy_components_* names.
+# ─────────────────────────────────────────────────────────────────────────────
+strategy_components_drift = strategy_lock_status
+strategy_components_upgrade = strategy_lock_upgrade
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # WORKSPACE TOOLS
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -958,7 +974,7 @@ def strategy_find_local(directory: str | None = None) -> dict[str, Any]:
                     "source_hash": ws.source_hash[:12],
                 }
             )
-    except Exception:
+    except Exception:  # noqa: BLE001, S110 — workspace enrichment best-effort; partial result acceptable
         pass
 
     return {

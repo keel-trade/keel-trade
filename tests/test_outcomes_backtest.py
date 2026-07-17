@@ -6,12 +6,12 @@ Covers `keel_backtest_run` (submit + optional polling) and
 
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-
 from keel.errors import KeelError, NotFoundError
-from keel.tools.outcomes._base import ToolContext
+from keel.tools.outcomes import OUTCOMES
 
 # Import the modules directly — they self-register on import. We do NOT
 # rely on `_bootstrap()` here because the bootstrap whitelist is owned
@@ -19,7 +19,9 @@ from keel.tools.outcomes._base import ToolContext
 from keel.tools.outcomes import backtest_run as _bt_run_mod  # noqa: F401
 from keel.tools.outcomes import backtest_summarize as _bt_sum_mod  # noqa: F401
 from keel.tools.outcomes import backtest_watch as _bt_watch_mod  # noqa: F401
-from keel.tools.outcomes import OUTCOMES
+from keel.tools.outcomes._base import ToolContext
+
+from pipeline_engine.backtest_config import BacktestConfig
 
 
 # ─── shared fixtures ─────────────────────────────────────────────────────
@@ -33,12 +35,8 @@ def ctx():
 @pytest.fixture(autouse=True)
 def _fast_poll(monkeypatch):
     """Make polling instantaneous so tests don't sleep."""
-    monkeypatch.setattr(
-        "keel.tools.outcomes.backtest_run._POLL_INTERVAL_S", 0.0
-    )
-    monkeypatch.setattr(
-        "keel.tools.outcomes.backtest_run._POLL_MAX_S", 0.05
-    )
+    monkeypatch.setattr("keel.tools.outcomes.backtest_run._POLL_INTERVAL_S", 0.0)
+    monkeypatch.setattr("keel.tools.outcomes.backtest_run._POLL_MAX_S", 0.05)
     monkeypatch.setattr("keel.tools.outcomes.backtest_watch.time.sleep", lambda _s: None)
 
 
@@ -80,6 +78,125 @@ def test_backtest_run_returns_envelope_with_hero_url(ctx):
     assert env["status_url"] == env["hero_url"]
     assert env["resource_uri"] == "keel://backtest/bt_abc123/results"
     assert env["status"] == "queued"
+
+
+def test_backtest_run_preserves_valid_canonical_config(ctx):
+    submitted = {"id": "bt_config", "status": "queued", "strategy_id": "strat_xyz"}
+
+    with patch("keel.client.KeelClient.post", return_value=submitted) as mock_post:
+        OUTCOMES["keel_backtest_run"].handler(
+            {
+                "strategy_id": "strat_xyz",
+                "config": {
+                    "init_cash": 25_000,
+                    "fees": 0.002,
+                    "slippage": 0.003,
+                    "leverage": 7.5,
+                },
+                "wait": False,
+            },
+            ctx,
+        )
+
+    assert mock_post.call_args.kwargs["json"]["backtest_config"] == {
+        "init_cash": 25_000.0,
+        "fees": 0.002,
+        "slippage": 0.003,
+        "leverage": 7.5,
+    }
+
+
+@pytest.mark.parametrize(
+    "config",
+    [
+        {"leverage": 0},
+        {"leverage": -1},
+        {"leverage": 101},
+        {"leverage": float("nan")},
+        {"unknown": 1},
+    ],
+)
+def test_backtest_run_rejects_invalid_config_before_http(ctx, config):
+    with patch("keel.client.KeelClient.post") as mock_post:
+        with pytest.raises(KeelError) as exc_info:
+            OUTCOMES["keel_backtest_run"].handler(
+                {"strategy_id": "strat_xyz", "config": config, "wait": False}, ctx
+            )
+
+    assert exc_info.value.error_code == "invalid_backtest_config"
+    mock_post.assert_not_called()
+
+
+def test_backtest_run_rejects_invalid_config_before_auto_push(ctx):
+    with (
+        patch("keel.workspace.get_workspace") as get_workspace,
+        patch("keel.workspace.push") as push,
+        patch("keel.client.KeelClient.post") as post,
+        pytest.raises(KeelError) as exc_info,
+    ):
+        OUTCOMES["keel_backtest_run"].handler(
+            {
+                "strategy_id": "strat_xyz",
+                "config": {"leverage": 0},
+                "auto_push": True,
+                "wait": False,
+            },
+            ctx,
+        )
+
+    assert exc_info.value.error_code == "invalid_backtest_config"
+    get_workspace.assert_not_called()
+    push.assert_not_called()
+    post.assert_not_called()
+
+
+def test_backtest_run_exact_legacy_initial_capital_alias(ctx):
+    submitted = {"id": "bt_legacy", "status": "queued", "strategy_id": "strat_xyz"}
+
+    with patch("keel.client.KeelClient.post", return_value=submitted) as mock_post:
+        OUTCOMES["keel_backtest_run"].handler(
+            {
+                "strategy_id": "strat_xyz",
+                "config": {"initial_capital": 25_000},
+                "wait": False,
+            },
+            ctx,
+        )
+
+    assert mock_post.call_args.kwargs["json"]["backtest_config"] == {"init_cash": 25_000.0}
+
+
+def test_backtest_run_rejects_conflicting_capital_aliases(ctx):
+    with patch("keel.client.KeelClient.post") as mock_post:
+        with pytest.raises(KeelError, match="initial_capital"):
+            OUTCOMES["keel_backtest_run"].handler(
+                {
+                    "strategy_id": "strat_xyz",
+                    "config": {"initial_capital": 25_000, "init_cash": 30_000},
+                    "wait": False,
+                },
+                ctx,
+            )
+
+    mock_post.assert_not_called()
+
+
+def test_backtest_run_config_schema_matches_canonical_authority():
+    schema = OUTCOMES["keel_backtest_run"].input_schema["properties"]["config"]
+    canonical = BacktestConfig.model_json_schema()
+
+    assert schema["additionalProperties"] is False
+    for field in canonical["properties"]:
+        assert schema["properties"][field] == canonical["properties"][field]
+
+
+def test_sdk_backtest_config_vendor_copy_matches_canonical_source():
+    sdk_root = Path(__file__).resolve().parents[1]
+    repo_root = sdk_root.parents[2]
+
+    assert (sdk_root / "pipeline_engine" / "backtest_config.py").read_bytes() == (
+        repo_root / "libs" / "pipeline_engine" / "backtest_config.py"
+    ).read_bytes()
 
 
 def test_backtest_run_defaults_start_date_when_omitted(ctx):
@@ -206,11 +323,19 @@ def test_backtest_run_skips_divergence_check_when_no_workspace(ctx):
         patch("keel.workspace.get_workspace", return_value=None) as gw,
         patch("keel.client.KeelClient.post", return_value=submitted),
     ):
-        env = OUTCOMES["keel_backtest_run"].handler(
-            {"strategy_id": "s_no_ws", "start_date": "2025-01-01",
-             "end_date": "2025-06-30", "wait": False},
-            ctx,
-        ).to_envelope()
+        env = (
+            OUTCOMES["keel_backtest_run"]
+            .handler(
+                {
+                    "strategy_id": "s_no_ws",
+                    "start_date": "2025-01-01",
+                    "end_date": "2025-06-30",
+                    "wait": False,
+                },
+                ctx,
+            )
+            .to_envelope()
+        )
 
     gw.assert_called_once_with("s_no_ws")
     assert env["status"] == "queued"
@@ -224,8 +349,11 @@ def test_backtest_run_clean_workspace_proceeds(ctx):
 
     submitted = {"id": "bt_clean", "status": "queued", "strategy_id": "s_clean"}
     meta = WorkspaceMeta(
-        strategy_id="s_clean", name="C", source_hash="hash_x" * 10,
-        checked_out_at="2026-05-21T00:00:00Z", current_sequence=1,
+        strategy_id="s_clean",
+        name="C",
+        source_hash="hash_x" * 10,
+        checked_out_at="2026-05-21T00:00:00Z",
+        current_sequence=1,
     )
 
     with (
@@ -234,45 +362,175 @@ def test_backtest_run_clean_workspace_proceeds(ctx):
         patch("keel.workspace._compute_hash", return_value=meta.source_hash),
         patch("keel.client.KeelClient.post", return_value=submitted),
     ):
-        env = OUTCOMES["keel_backtest_run"].handler(
-            {"strategy_id": "s_clean", "start_date": "2025-01-01",
-             "end_date": "2025-06-30", "wait": False},
-            ctx,
-        ).to_envelope()
+        env = (
+            OUTCOMES["keel_backtest_run"]
+            .handler(
+                {
+                    "strategy_id": "s_clean",
+                    "start_date": "2025-01-01",
+                    "end_date": "2025-06-30",
+                    "wait": False,
+                },
+                ctx,
+            )
+            .to_envelope()
+        )
 
     assert env["status"] == "queued"
     assert "ahead" not in env.get("info", "").lower()
 
 
-def test_backtest_run_local_ahead_raises_unless_auto_push(ctx):
-    """Local edits unpushed → raise `local_ahead` to prevent silent old-code backtest."""
+def test_backtest_run_local_ahead_opt_out_raises(ctx):
+    """auto_push=False (the explicit opt-out) → raise `local_ahead`.
+
+    Spec 08 R2: write-through is the default; the old raise-and-ask
+    behavior is now behind the explicit opt-out flag.
+    """
     from keel.workspace import WorkspaceMeta
 
     meta = WorkspaceMeta(
-        strategy_id="s_ahead", name="A", source_hash="OLD_HASH",
-        checked_out_at="2026-05-21T00:00:00Z", current_sequence=1,
+        strategy_id="s_ahead",
+        name="A",
+        source_hash="OLD_HASH",
+        checked_out_at="2026-05-21T00:00:00Z",
+        current_sequence=1,
     )
 
     with (
         patch("keel.workspace.get_workspace", return_value=meta),
         patch("keel.workspace.read_local_source", return_value="edited_src"),
         patch("keel.workspace._compute_hash", return_value="NEW_HASH"),
+        patch("keel.workspace.push") as push_mock,
         patch("keel.client.KeelClient.post") as mock_post,
     ):
         with pytest.raises(KeelError) as exc:
             OUTCOMES["keel_backtest_run"].handler(
-                {"strategy_id": "s_ahead", "start_date": "2025-01-01",
-                 "end_date": "2025-06-30", "wait": False},
+                {
+                    "strategy_id": "s_ahead",
+                    "start_date": "2025-01-01",
+                    "end_date": "2025-06-30",
+                    "wait": False,
+                    "auto_push": False,
+                },
                 ctx,
             )
 
-    # Did NOT actually call the backtest endpoint
+    # Did NOT push and did NOT call the backtest endpoint
+    push_mock.assert_not_called()
     mock_post.assert_not_called()
     assert exc.value.error_code == "local_ahead"
     sug = exc.value.suggestion or ""
     assert "keel_strategy_push" in sug
-    assert "auto_push=True" in sug
     assert "commit_id" in sug
+
+
+def test_backtest_run_local_ahead_default_pushes_and_pins(ctx):
+    """No auto_push flag at all → write-through default: push, pin, run.
+
+    Spec 08 R2 acceptance: local checkout edited → `keel_backtest_run`
+    (no flags) pushes, pins, runs; the divergence note names the new
+    commit.
+    """
+    from keel.workspace import WorkspaceMeta
+
+    meta = WorkspaceMeta(
+        strategy_id="s_wt",
+        name="WT",
+        source_hash="OLD_HASH",
+        checked_out_at="2026-05-21T00:00:00Z",
+        current_sequence=3,
+    )
+    pushed = {
+        "strategy_id": "s_wt",
+        "status": "pushed",
+        "source_hash": "NEW_HASH",
+        "sequence": 4,
+        "commit_id": "cmt_wt_new",
+    }
+    submitted = {"id": "bt_wt", "status": "queued", "strategy_id": "s_wt"}
+
+    with (
+        patch("keel.workspace.get_workspace", return_value=meta),
+        patch("keel.workspace.read_local_source", return_value="edited_src"),
+        patch("keel.workspace._compute_hash", return_value="NEW_HASH"),
+        patch("keel.workspace.push", return_value=pushed) as push_mock,
+        patch("keel.client.KeelClient.post", return_value=submitted) as bt_mock,
+    ):
+        env = (
+            OUTCOMES["keel_backtest_run"]
+            .handler(
+                {
+                    "strategy_id": "s_wt",
+                    "start_date": "2025-01-01",
+                    "end_date": "2025-06-30",
+                    "wait": False,
+                    # NO auto_push key — the default must write through.
+                },
+                ctx,
+            )
+            .to_envelope()
+        )
+
+    push_mock.assert_called_once()
+    # Generated commit message used
+    assert push_mock.call_args.kwargs["message"] == "Auto-push before backtest"
+    # Backtest pinned to the freshly pushed commit
+    assert bt_mock.call_args.kwargs["json"]["commit_id"] == "cmt_wt_new"
+    assert env["auto_pushed_commit_id"] == "cmt_wt_new"
+    # The divergence note names the new commit
+    assert "cmt_wt_new" in env["info"]
+    assert "auto-pushed" in env["info"].lower()
+
+
+def test_backtest_run_conflict_stops_never_forces(ctx):
+    """Local ahead AND server moved → push 409s → stop with sync_conflict.
+
+    Spec 08 R2/R4: write-through never force-overwrites. The conflict
+    stops the backtest with three-way context + recovery options.
+    """
+    from keel.errors import ConflictError
+    from keel.workspace import WorkspaceMeta
+
+    meta = WorkspaceMeta(
+        strategy_id="s_cfl",
+        name="CFL",
+        source_hash="BASE_HASH",
+        checked_out_at="2026-05-21T00:00:00Z",
+        current_sequence=2,
+    )
+
+    with (
+        patch("keel.workspace.get_workspace", return_value=meta),
+        patch("keel.workspace.read_local_source", return_value="edited_src"),
+        patch("keel.workspace._compute_hash", return_value="LOCAL_HASH"),
+        patch(
+            "keel.workspace.push",
+            side_effect=ConflictError("Source hash mismatch"),
+        ) as push_mock,
+        patch("keel.client.KeelClient.post") as bt_mock,
+    ):
+        with pytest.raises(KeelError) as exc:
+            OUTCOMES["keel_backtest_run"].handler(
+                {
+                    "strategy_id": "s_cfl",
+                    "start_date": "2025-01-01",
+                    "end_date": "2025-06-30",
+                    "wait": False,
+                },
+                ctx,
+            )
+
+    # Pushed exactly once (the optimistic-concurrency attempt), never
+    # retried with force, and the backtest endpoint was never reached.
+    push_mock.assert_called_once()
+    assert push_mock.call_args.kwargs.get("force") is not True
+    bt_mock.assert_not_called()
+    assert exc.value.error_code == "sync_conflict"
+    payload = exc.value.input or {}
+    assert payload["base_hash"] == "BASE_HASH"
+    assert payload["local_hash"] == "LOCAL_HASH"
+    option_names = {o["option"] for o in payload["options"]}
+    assert option_names == {"pull_force", "manual_merge", "pin_commit"}
 
 
 def test_backtest_run_local_ahead_auto_push_pushes_first(ctx):
@@ -280,12 +538,18 @@ def test_backtest_run_local_ahead_auto_push_pushes_first(ctx):
     from keel.workspace import WorkspaceMeta
 
     meta = WorkspaceMeta(
-        strategy_id="s_ahead", name="A", source_hash="OLD_HASH",
-        checked_out_at="2026-05-21T00:00:00Z", current_sequence=1,
+        strategy_id="s_ahead",
+        name="A",
+        source_hash="OLD_HASH",
+        checked_out_at="2026-05-21T00:00:00Z",
+        current_sequence=1,
     )
     pushed = {
-        "strategy_id": "s_ahead", "status": "pushed",
-        "source_hash": "NEW_HASH", "sequence": 2, "commit_id": "cmt_new",
+        "strategy_id": "s_ahead",
+        "status": "pushed",
+        "source_hash": "NEW_HASH",
+        "sequence": 2,
+        "commit_id": "cmt_new",
     }
     submitted = {"id": "bt_auto", "status": "queued", "strategy_id": "s_ahead"}
 
@@ -296,11 +560,20 @@ def test_backtest_run_local_ahead_auto_push_pushes_first(ctx):
         patch("keel.workspace.push", return_value=pushed) as push_mock,
         patch("keel.client.KeelClient.post", return_value=submitted) as bt_mock,
     ):
-        env = OUTCOMES["keel_backtest_run"].handler(
-            {"strategy_id": "s_ahead", "start_date": "2025-01-01",
-             "end_date": "2025-06-30", "wait": False, "auto_push": True},
-            ctx,
-        ).to_envelope()
+        env = (
+            OUTCOMES["keel_backtest_run"]
+            .handler(
+                {
+                    "strategy_id": "s_ahead",
+                    "start_date": "2025-01-01",
+                    "end_date": "2025-06-30",
+                    "wait": False,
+                    "auto_push": True,
+                },
+                ctx,
+            )
+            .to_envelope()
+        )
 
     push_mock.assert_called_once()
     # Backtest body included the new commit_id
@@ -319,11 +592,20 @@ def test_backtest_run_explicit_commit_id_skips_divergence_check(ctx):
         patch("keel.workspace.get_workspace") as gw,
         patch("keel.client.KeelClient.post", return_value=submitted),
     ):
-        env = OUTCOMES["keel_backtest_run"].handler(
-            {"strategy_id": "s_pin", "commit_id": "cmt_old",
-             "start_date": "2025-01-01", "end_date": "2025-06-30", "wait": False},
-            ctx,
-        ).to_envelope()
+        env = (
+            OUTCOMES["keel_backtest_run"]
+            .handler(
+                {
+                    "strategy_id": "s_pin",
+                    "commit_id": "cmt_old",
+                    "start_date": "2025-01-01",
+                    "end_date": "2025-06-30",
+                    "wait": False,
+                },
+                ctx,
+            )
+            .to_envelope()
+        )
 
     gw.assert_not_called()
     assert env["status"] == "queued"
@@ -339,11 +621,19 @@ def test_backtest_run_workspace_lib_failure_does_not_block(ctx):
         patch("keel.workspace.get_workspace", side_effect=OSError("permission denied")),
         patch("keel.client.KeelClient.post", return_value=submitted) as mock_post,
     ):
-        env = OUTCOMES["keel_backtest_run"].handler(
-            {"strategy_id": "s_x", "start_date": "2025-01-01",
-             "end_date": "2025-06-30", "wait": False},
-            ctx,
-        ).to_envelope()
+        env = (
+            OUTCOMES["keel_backtest_run"]
+            .handler(
+                {
+                    "strategy_id": "s_x",
+                    "start_date": "2025-01-01",
+                    "end_date": "2025-06-30",
+                    "wait": False,
+                },
+                ctx,
+            )
+            .to_envelope()
+        )
 
     mock_post.assert_called_once()
     assert env["status"] == "queued"
@@ -477,10 +767,14 @@ def test_backtest_watch_polls_until_complete(ctx):
     fake_get.calls = 0
 
     with patch("keel.client.KeelClient.get", side_effect=fake_get):
-        env = OUTCOMES["keel_backtest_watch"].handler(
-            {"backtest_id": "bt_watch", "interval_s": 1, "timeout_s": 5},
-            ctx,
-        ).to_envelope()
+        env = (
+            OUTCOMES["keel_backtest_watch"]
+            .handler(
+                {"backtest_id": "bt_watch", "interval_s": 1, "timeout_s": 5},
+                ctx,
+            )
+            .to_envelope()
+        )
 
     assert env["run_id"] == "bt_watch"
     assert env["status"] == "completed"
@@ -496,10 +790,14 @@ def test_backtest_watch_returns_running_snapshot_on_timeout(ctx):
     running = {"id": "bt_slow", "status": "RUNNING", "strategy_id": "strat_q"}
 
     with patch("keel.client.KeelClient.get", return_value=running):
-        env = OUTCOMES["keel_backtest_watch"].handler(
-            {"backtest_id": "bt_slow", "timeout_s": 0},
-            ctx,
-        ).to_envelope()
+        env = (
+            OUTCOMES["keel_backtest_watch"]
+            .handler(
+                {"backtest_id": "bt_slow", "timeout_s": 0},
+                ctx,
+            )
+            .to_envelope()
+        )
 
     assert env["run_id"] == "bt_slow"
     assert env["status"] == "running"
@@ -516,3 +814,70 @@ def test_backtest_watch_404_raises_not_found(ctx):
     ):
         with pytest.raises(NotFoundError):
             OUTCOMES["keel_backtest_watch"].handler({"backtest_id": "bt_nope"}, ctx)
+
+
+# ─── quota visibility pass-through (spec 04 R5) ──────────────────────────
+
+
+def test_backtest_run_passes_through_remaining_when_present(ctx):
+    """A sub-20% `remaining` block from the API surfaces in the envelope."""
+    submitted = {
+        "id": "bt_low",
+        "status": "queued",
+        "strategy_id": "strat_xyz",
+        "remaining": {"backtest_runs": 4, "compute_seconds": 200},
+    }
+    with patch("keel.client.KeelClient.post", return_value=submitted):
+        env = (
+            OUTCOMES["keel_backtest_run"]
+            .handler(
+                {"strategy_id": "strat_xyz", "wait": False, "no_ownership_hint": True},
+                ctx,
+            )
+            .to_envelope()
+        )
+    assert env["remaining"] == {"backtest_runs": 4, "compute_seconds": 200}
+
+
+def test_backtest_run_omits_remaining_when_absent(ctx):
+    """No `remaining` from the API (>=20% quota left) → no envelope field."""
+    submitted = {"id": "bt_ok", "status": "queued", "strategy_id": "strat_xyz"}
+    with patch("keel.client.KeelClient.post", return_value=submitted):
+        env = (
+            OUTCOMES["keel_backtest_run"]
+            .handler(
+                {"strategy_id": "strat_xyz", "wait": False, "no_ownership_hint": True},
+                ctx,
+            )
+            .to_envelope()
+        )
+    assert "remaining" not in env
+
+
+def test_backtest_run_keeps_remaining_through_wait_path(ctx):
+    """`remaining` from the SUBMIT response survives the polled final envelope."""
+    submitted = {
+        "id": "bt_low2",
+        "status": "queued",
+        "strategy_id": "strat_xyz",
+        "remaining": {"backtest_runs": 2},
+    }
+    final = {
+        "id": "bt_low2",
+        "status": "completed",
+        "metrics": {"sharpe": 1.2},
+    }
+    with (
+        patch("keel.client.KeelClient.post", return_value=submitted),
+        patch("keel.client.KeelClient.get", return_value=final),
+    ):
+        env = (
+            OUTCOMES["keel_backtest_run"]
+            .handler(
+                {"strategy_id": "strat_xyz", "wait": True, "no_ownership_hint": True},
+                ctx,
+            )
+            .to_envelope()
+        )
+    assert env["status"] == "completed"
+    assert env["remaining"] == {"backtest_runs": 2}

@@ -127,6 +127,7 @@ COMPONENTS_DETAIL_BATCH = register(
             },
         },
         annotations={
+            "title": "Get Component Details (Batch)",
             "readOnlyHint": True,
             "destructiveHint": False,
             "idempotentHint": True,

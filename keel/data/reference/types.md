@@ -148,13 +148,6 @@ GlobalSeries = NewType("GlobalSeries", pd.Series)
 # Shape: (T,) -- one scalar per timestamp
 ```
 
-Runtime guards are available:
-```python
-from pipeline_engine.types import expect_instrument, expect_global
-df = expect_instrument(data)   # Raises TypeError if not DataFrame
-s = expect_global(data)        # Raises TypeError if not Series; auto-extracts single-column DF
-```
-
 ---
 
 ## Bounded Type Constraints
@@ -176,6 +169,7 @@ Le(1.0)   # Less than or equal
 ```
 
 Accessing constraints at runtime:
+
 ```python
 from typing import get_args, get_origin, Annotated
 
@@ -302,6 +296,7 @@ type checking. Key behaviors:
 - Any: `is_compatible(Any, X)` and `is_compatible(X, Any)` are both True
 
 The type system has two validation layers:
+
 1. **Structural** (`is_compatible`): Does the data physically fit?
 2. **Semantic** (`TYPE_TRANSITIONS`): Does the transition make domain sense?
 

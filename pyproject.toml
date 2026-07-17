@@ -46,7 +46,7 @@ packages = ["keel", "pipeline_engine"]
 # the 0.3.0 wheel — see `keel/data/knowledge/*.md` which ship the same
 # way). Knowledge files are regenerated from
 # `the upstream reference system docs` via
-# `projects/agent-sdk/keel-sdk/scripts/build_data.py`.
+# `packages/keel-trade/keel-sdk/scripts/build_data.py`.
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

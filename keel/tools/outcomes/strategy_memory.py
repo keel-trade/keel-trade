@@ -121,6 +121,7 @@ STRATEGY_MEMORY_READ = register(
             },
         },
         annotations={
+            "title": "Read Strategy Memory",
             "readOnlyHint": True,
             "destructiveHint": False,
             "idempotentHint": True,
@@ -247,6 +248,7 @@ STRATEGY_MEMORY_WRITE = register(
             },
         },
         annotations={
+            "title": "Write Strategy Memory",
             "readOnlyHint": False,
             "destructiveHint": False,
             "idempotentHint": False,

@@ -28,7 +28,7 @@ Key patterns:
 
 - **Slots**: `Store('name')` saves pipeline value, `Load('name')` retrieves it. Slot names are strings.
 - **Globals**: `Globals(target_timeframe='1d')` declares pipeline-wide config. Components like TargetTimeframeResampler read from Globals automatically via declaration_refs.
-- **Universe**: `Universe(mode='top_volume', top_n=30, ...)` declares which assets to trade. Use `universe_resolve` tool to resolve, not pipeline components.
+- **Universe**: `Universe(mode='top_volume', top_n=30, ...)` declares which assets to trade. Use `universe_resolve` tool to resolve, not pipeline components. Selectors: `mode` (`manual`/`category`/`top_volume`), `market` (`perp`/`spot`), `symbols`, `categories`, `top_n`, `inclusions`, `exclusions`, `lookback` (`7d`/`30d`/`90d` — volume-ranking window for `top_volume`, default `7d`), `volume_quartiles` (`q1`–`q4`, q1=top 25% by volume), `groups`.
 - **Execution**: `Execution(rebalance='every_bar')` controls when the engine trades. Modes:
   - `'every_bar'` — rebalance every bar. Use for continuous forecast strategies (Path 1) where weights change every bar.
   - `'on_change'` — trade only when weights change. **Use for entry/exit (Path 2) and screen-select (Path 3)** where binary weights only change on signal events. Using `every_bar` on discrete strategies creates unnecessary micro-rebalances.

@@ -163,7 +163,17 @@ class UniverseSpec:
 
 @dataclass
 class ExecutionSpec:
-    """Top-level Execution declaration — how target weights translate into trades."""
+    """Top-level Execution declaration — how target weights translate into trades.
+
+    ``explicit`` records which params the author actually set — keys present
+    in the ``Execution(...)`` call (parser) or in the graph's execution dict
+    (``graph_to_spec``). The other fields are back-filled registry defaults,
+    indistinguishable from user input by value alone; ``explicit`` is what
+    lets the emit policy (``execution_params_to_emit``) keep exactly what the
+    user wrote instead of silently dropping mode-irrelevant params (B6).
+    Programmatic constructors that want their params emitted must populate
+    ``explicit`` — an empty set emits only ``always_emit`` params.
+    """
 
     rebalance: str = "every_bar"
     on_change_tolerance: float = 1e-8
@@ -172,6 +182,7 @@ class ExecutionSpec:
     rebalance_method: str = "to_center"
     min_trade_size: float = 0.0
     location: SourceLocation | None = None
+    explicit: frozenset[str] = frozenset()
 
 
 # ── Canonical metadata for Execution params ──────────────────────────────
@@ -190,12 +201,22 @@ EXECUTION_PARAM_META: dict[str, dict] = {
     "on_change_tolerance": {
         "type": "number",
         "default": 1e-8,
+        # Numeric range (spec 02 T-15): min/max/step live HERE, the single
+        # source of truth. The Python validator, the TS editor validator
+        # (pass9-declarations.ts via the generated execution_param_meta.json),
+        # and keel-api's /components/metadata all derive their range checks
+        # from these keys — the three hardcoded literal copies are deleted.
+        "min": 1e-12,
+        "max": 1e-4,
         "modes": ["on_change"],
         "description": "Weight changes smaller than this are ignored. Default 1e-8 filters floating-point noise.",
     },
     "buffer_threshold": {
         "type": "number",
         "default": None,
+        "min": 0.01,
+        "max": 0.5,
+        "step": 0.01,
         "modes": ["buffered"],
         "required_for": ["buffered"],
         "description": "Width of the no-trade buffer band. Fraction of target (relative) or portfolio value (absolute). Typical: 0.05-0.30.",
@@ -217,9 +238,44 @@ EXECUTION_PARAM_META: dict[str, dict] = {
     "min_trade_size": {
         "type": "number",
         "default": 0.0,
+        "min": 0.0,
+        "max": 0.1,
+        "step": 0.001,
         "description": "Minimum trade size as portfolio weight fraction. Trades smaller than this are skipped. 0 = disabled.",
     },
 }
+
+
+def execution_params_to_emit(execution: ExecutionSpec) -> list[tuple[str, Any]]:
+    """THE single Execution emit-inclusion policy (B6 fix) — both serializers use it.
+
+    Returns ``(param_name, value)`` pairs in ``EXECUTION_PARAM_META`` order.
+    A param is emitted iff:
+
+    - it is flagged ``always_emit`` (``rebalance``), OR it is in
+      ``execution.explicit`` (the user set it), AND
+    - its value is not ``None`` (``None`` means unset — it is also not
+      representable in the graph dict, where JSON ``null`` and absent are
+      both read as "not set" by the TS emitter).
+
+    ``spec_to_dsl`` renders this list as ``Execution(...)`` args and
+    ``spec_to_graph`` dict-ifies the *same* list, so one save can never again
+    persist a DSL and a graph that disagree about the Execution param set
+    (final report B6: ``spec_to_dsl`` dropped set-but-mode-irrelevant params
+    that ``spec_to_graph`` kept). Mode-irrelevant explicit params are KEPT —
+    the validator's ``IRRELEVANT_EXECUTION_PARAM`` advisory informs instead
+    of the emitter deleting user data.
+    """
+    out: list[tuple[str, Any]] = []
+    for param_name, meta in EXECUTION_PARAM_META.items():
+        if not meta.get("always_emit") and param_name not in execution.explicit:
+            continue
+        val = getattr(execution, param_name)
+        if val is None:
+            continue
+        out.append((param_name, val))
+    return out
+
 
 # Derived constants (use these instead of hardcoding param names)
 EXECUTION_PARAM_NAMES: set[str] = set(EXECUTION_PARAM_META.keys())
@@ -277,4 +333,5 @@ __all__ = [
     "UniverseSpec",
     "VariableAssignment",
     "VariableRef",
+    "execution_params_to_emit",
 ]

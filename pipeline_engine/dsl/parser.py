@@ -629,6 +629,11 @@ def _parse_execution_call(node: ast.Call, factory_names: set[str]) -> ExecutionS
             spec_kwargs[param_name] = kwargs[param_name]
         elif meta.get("default") is not None:
             spec_kwargs[param_name] = meta["default"]
+    # Record which params the author actually wrote. Back-filled defaults are
+    # indistinguishable from user input by value alone; the emit policy
+    # (spec.execution_params_to_emit) keeps exactly the explicit set, so
+    # parse→emit preserves what the user typed — nothing more, nothing less.
+    spec_kwargs["explicit"] = frozenset(kwargs)
     return ExecutionSpec(**spec_kwargs)
 
 
