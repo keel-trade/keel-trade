@@ -59,7 +59,7 @@ def test_cli_project_init(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     result = runner.invoke(cli, ["--format", "json", "project", "init"])
     assert result.exit_code == 0, result.output
-    data = json.loads(result.output)
+    data = json.loads(result.stdout)
     assert "files" in data
     assert len(data["files"]) == 5
     assert (tmp_path / "CLAUDE.md").exists()

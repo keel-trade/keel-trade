@@ -37,23 +37,22 @@
       ]
     },
     {
-      "name": "ewmac_position_sizing",
-      "title": "EWMAC with Position Sizing",
-      "description": "An EWMA crossover signal with a complete position sizing pipeline. After generating the forecast, computes return volatility, converts to vol-targeted weights, aggregates with IDM, and caps leverage. Demonstrates factories and the unitless position sizing chain.",
-      "complexity": "medium",
+      "name": "rsi_mean_reversion",
+      "title": "RSI Mean Reversion",
+      "description": "A simple mean reversion strategy using the RSI indicator. Loads daily price data, computes RSI, negates it so oversold gives positive forecast, scales and caps. Demonstrates linear pipeline with a different indicator type.",
+      "complexity": "simple",
       "tags": [
-        "momentum",
-        "trend",
-        "position_sizing",
-        "volatility_targeting"
+        "mean_reversion",
+        "rsi",
+        "oscillator"
       ],
       "pattern": "forecast_size",
       "teaches": [
-        "volatility_sizing",
-        "position_pipeline"
+        "mean_reversion",
+        "polarity_inversion"
       ]
     }
   ],
-  "count": 14,
+  "count": 15,
   "showing": 3
 }

@@ -1,0 +1,184 @@
+/* Keel card styles — shared by all four cards. Theme-aware two ways:
+   the host-context theme sets [data-theme] on <html>, and
+   prefers-color-scheme covers hosts that never send one. */
+:root {
+  --bg: #ffffff;
+  --fg: #101418;
+  --muted: #5b6673;
+  --line: #e3e7ec;
+  --accent: #0b5fff;
+  --good: #0a7d43;
+  --bad: #b42318;
+  --tile: #f5f7fa;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #101418;
+    --fg: #e8ecf1;
+    --muted: #94a0ad;
+    --line: #262d35;
+    --accent: #6ea8ff;
+    --good: #4cc38a;
+    --bad: #f4746a;
+    --tile: #1a2028;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #101418;
+  --fg: #e8ecf1;
+  --muted: #94a0ad;
+  --line: #262d35;
+  --accent: #6ea8ff;
+  --good: #4cc38a;
+  --bad: #f4746a;
+  --tile: #1a2028;
+}
+:root[data-theme="light"] {
+  --bg: #ffffff;
+  --fg: #101418;
+  --muted: #5b6673;
+  --line: #e3e7ec;
+  --accent: #0b5fff;
+  --good: #0a7d43;
+  --bad: #b42318;
+  --tile: #f5f7fa;
+}
+* {
+  box-sizing: border-box;
+}
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font:
+    14px/1.45 -apple-system,
+    "Segoe UI",
+    Roboto,
+    Helvetica,
+    Arial,
+    sans-serif;
+}
+.keel-card {
+  padding: 12px 14px;
+  max-width: 720px;
+}
+.card-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.brand {
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.card-title {
+  color: var(--muted);
+  font-size: 13px;
+}
+.muted {
+  color: var(--muted);
+}
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 8px;
+  margin: 8px 0;
+}
+.stat {
+  background: var(--tile);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+.stat .label {
+  display: block;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.stat .value {
+  display: block;
+  font-size: 17px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.stat .value.pos {
+  color: var(--good);
+}
+.stat .value.neg {
+  color: var(--bad);
+}
+table.kv,
+table.rows {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 8px 0;
+  font-variant-numeric: tabular-nums;
+}
+table.kv td,
+table.rows td,
+table.rows th {
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+}
+table.rows th {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+table.kv td.k {
+  color: var(--muted);
+  white-space: nowrap;
+  width: 1%;
+}
+pre.source {
+  background: var(--tile);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  overflow-x: auto;
+  font-size: 12px;
+  max-height: 260px;
+}
+.embed-frame {
+  width: 100%;
+  height: 300px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--tile);
+}
+.badge {
+  display: inline-block;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-size: 11px;
+  color: var(--muted);
+  margin-right: 4px;
+}
+.link-row {
+  margin: 10px 0 2px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+  font-size: 13px;
+  word-break: break-all;
+}
+.link-row a {
+  color: var(--accent);
+  text-decoration: none;
+}
+.link-row a:hover {
+  text-decoration: underline;
+}
+.note {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 6px 0;
+}

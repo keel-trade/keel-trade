@@ -105,14 +105,20 @@ STRATEGY_PULL = register(
         cli_path=("strategy", "pull"),
         toolset="backtest",
         local_only=True,  # writes the local workspace working copy
+        # grounded-in: sync-contract (spec 08 R3/R4) — a stale/behind
+        # workspace has exactly one instruction (pull); diverged is refused
+        # unless forced; strategy_pull.py docstring.
         description=(
-            "Re-fetch the server HEAD into the local working copy. The 'git "
-            "pull' of the sync model. Refuses if local has uncommitted "
-            "changes (diverged state) so you don't lose work — push first "
-            "or pass `force=True` to overwrite local. Use when you suspect "
-            "someone (a teammate, the web editor, a fork) updated the strategy "
-            "while you were working locally. Check `keel_strategy_status` "
-            "first to see if a pull is needed."
+            "Re-fetch the server HEAD into the local working copy — the 'git "
+            "pull' of the sync model. Refuses when local has uncommitted "
+            "changes (diverged) so you don't silently lose work; push first, "
+            "or pass `force=True` to overwrite local (LOSES local edits). Use "
+            "it when someone else — a teammate, the web editor, a fork, a "
+            "restore — may have moved the strategy while you were working "
+            "locally; check `keel_strategy_status` first to see whether a "
+            "pull is even needed. "
+            "Do NOT use to send local edits UP — call `keel_strategy_push`. "
+            "Do NOT use to inspect what changed — call `keel_strategy_log`."
         ),
         input_schema={
             "type": "object",

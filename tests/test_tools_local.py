@@ -267,3 +267,333 @@ Pipeline([ROC(period=8)], name='s')
         assert captured["body"]["mode"] == "manual"
         assert captured["body"]["symbols"] == ["BTC", "ETH"]
         assert result["resolved"] == ["BTC", "ETH"]
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# universe_resolve — the v16 staging-audit §6.1 regressions
+# ─────────────────────────────────────────────────────────────────────────
+#
+# Two defects, both silent:
+#   (a) the request body dropped `lookback` / `volume_quartiles`, so a
+#       strategy declaring lookback="90d" resolved on the resolver's
+#       `lookback or "7d"` default — a wrong asset list, no error;
+#   (b) the source was re-emitted canonically (`spec_to_dsl`), which
+#       destroys every comment in the file. Flagship strategy files carry
+#       100+-line changelog headers.
+
+
+COMMENTED_SOURCE = """# ══════════════════════════════════════════════════════════
+# flagship v16 (C1, s=1.20) — changelog
+#   2026-07-04  seeded max_leverages from the venue snapshot
+#   2026-08-01  top_n bumped to the full perp pool
+# ══════════════════════════════════════════════════════════
+Globals(target_timeframe="1d")  # daily bars
+Universe(
+    mode="top_volume",
+    market="perp",
+    top_n=3,
+    lookback="90d",  # 90-day volume ranking, NOT the 7d default
+    volume_quartiles=["q1", "q2"],
+    exclusions=["USDC"],
+    inclusions=["HYPE"],
+)
+Execution(rebalance="every_bar")
+Pipeline([
+    PriceDataLoader(timeframe="15min"),  # loader keeps its comment
+    ROC(period=8),
+])
+"""
+
+
+class _RecordingClient:
+    """Stub KeelClient capturing the request body, returning a fixed payload."""
+
+    captured: dict = {}
+    extra_response: dict = {}
+
+    def post(self, path: str, json: dict):
+        type(self).captured = {"path": path, "body": json}
+        return {
+            "resolved": ["BTC", "ETH", "SOL"],
+            "resolved_at": "2026-08-02T00:00:00+00:00",
+            "count": 3,
+            **type(self).extra_response,
+        }
+
+
+@pytest.fixture
+def recording_client(monkeypatch):
+    class _Client(_RecordingClient):
+        captured: dict = {}
+        extra_response: dict = {}
+
+    monkeypatch.setattr("keel.client.KeelClient", _Client)
+    return _Client
+
+
+class TestUniverseResolveForwardsEverySelector:
+    """(a) Every selector the API accepts must reach the request body."""
+
+    def test_lookback_and_quartiles_are_forwarded(self, recording_client):
+        from keel.tools.local import universe_resolve
+
+        universe_resolve(source=COMMENTED_SOURCE)
+
+        body = recording_client.captured["body"]
+        assert recording_client.captured["path"] == "/v1/universe/resolve"
+        # The regression: these two were silently dropped.
+        assert body["lookback"] == "90d"
+        assert body["volume_quartiles"] == ["q1", "q2"]
+        # ...alongside the selectors that were already forwarded.
+        assert body["mode"] == "top_volume"
+        assert body["market"] == "perp"
+        assert body["top_n"] == 3
+        assert body["exclusions"] == ["USDC"]
+        assert body["inclusions"] == ["HYPE"]
+
+    def test_body_covers_the_whole_server_request_model(self, recording_client):
+        """Guard against the next dropped field: every criteria key the
+        source declares must appear in the body."""
+        from keel.tools.local import universe_resolve
+
+        source = (
+            'Universe(mode="top_volume", market="perp", top_n=3, '
+            'lookback="30d", volume_quartiles=["q1"], exclusions=["USDC"], '
+            'inclusions=["HYPE"], symbols=["BTC"], categories=["l1"], '
+            'resolved=["BTC", "DOGE"], resolved_at="2026-01-01T00:00:00+00:00")\n'
+            "Pipeline([ROC(period=8)], name='s')\n"
+        )
+        universe_resolve(source=source)
+
+        body = recording_client.captured["body"]
+        assert set(body) == {
+            "mode",
+            "market",
+            "symbols",
+            "categories",
+            "top_n",
+            "exclusions",
+            "inclusions",
+            "lookback",
+            "volume_quartiles",
+            "current_resolved",
+        }
+        # The previously-resolved list rides along so the API can diff.
+        assert body["current_resolved"] == ["BTC", "DOGE"]
+
+    def test_absent_selectors_are_omitted(self, recording_client):
+        """No fabricated defaults — an undeclared lookback stays undeclared."""
+        from keel.tools.local import universe_resolve
+
+        source = 'Universe(mode="top_volume", market="perp", top_n=3)\nPipeline([ROC(period=8)], name=\'s\')\n'
+        universe_resolve(source=source)
+
+        body = recording_client.captured["body"]
+        assert "lookback" not in body
+        assert "volume_quartiles" not in body
+        assert "current_resolved" not in body
+
+
+class TestUniverseResolvePreservesSource:
+    """(b) The rewrite is a span edit — everything outside the edited
+    `Universe(...)` arguments survives byte-for-byte."""
+
+    def test_comment_header_survives_byte_for_byte(self, recording_client):
+        from keel.tools.local import universe_resolve
+
+        result = universe_resolve(source=COMMENTED_SOURCE)
+        new_source = result["source"]
+
+        assert result["reformatted"] is False
+
+        # Byte-for-byte: everything before the Universe( call and everything
+        # after its closing paren is untouched.
+        head_end = COMMENTED_SOURCE.index("Universe(")
+        assert new_source[:head_end] == COMMENTED_SOURCE[:head_end]
+
+        tail = COMMENTED_SOURCE[COMMENTED_SOURCE.index("Execution(") :]
+        assert new_source.endswith(tail)
+
+        # Every comment line in the original is still present, verbatim.
+        for line in COMMENTED_SOURCE.splitlines():
+            if line.lstrip().startswith("#") or "#" in line:
+                assert line in new_source.splitlines(), line
+
+        # And the resolution actually landed.
+        assert "'BTC'" in new_source or '"BTC"' in new_source
+        assert "resolved_at" in new_source
+
+    def test_declared_selectors_are_not_rewritten(self, recording_client):
+        """The span edit must not touch sibling arguments — `lookback="90d"`
+        keeps its spelling, its inline comment, and its position."""
+        from keel.tools.local import universe_resolve
+
+        new_source = universe_resolve(source=COMMENTED_SOURCE)["source"]
+        assert '    lookback="90d",  # 90-day volume ranking, NOT the 7d default' in new_source
+        assert '    volume_quartiles=["q1", "q2"],' in new_source
+
+    def test_result_reparses_with_the_resolved_list(self, recording_client):
+        from keel.tools.local import universe_get, universe_resolve
+
+        new_source = universe_resolve(source=COMMENTED_SOURCE)["source"]
+        u = universe_get(source=new_source)["universe"]
+        assert u["resolved"] == ["BTC", "ETH", "SOL"]
+        assert u["resolved_at"] == "2026-08-02T00:00:00+00:00"
+        assert u["lookback"] == "90d"
+
+    def test_span_edit_failure_degrades_loudly(self, recording_client, monkeypatch):
+        """When the equivalence net fails we still return a correct file —
+        but the caller is TOLD the comments are gone."""
+        from keel.tools.local import universe_resolve
+
+        from pipeline_engine.dsl import edits
+
+        def _boom(*a, **kw):
+            raise edits.EditEquivalenceError("forced")
+
+        monkeypatch.setattr("pipeline_engine.dsl.edits.set_decl_arg", _boom)
+
+        result = universe_resolve(source=COMMENTED_SOURCE)
+        assert result["reformatted"] is True
+        assert result["resolved"] == ["BTC", "ETH", "SOL"]
+        assert "resolved" in result["source"]
+
+
+class TestUniverseResolveMaxLeverages:
+    """`max_leverages` passthrough — baked when the API returns it, never
+    fabricated when it does not."""
+
+    def test_max_leverages_is_baked_when_returned(self, recording_client):
+        from keel.tools.local import universe_get, universe_resolve
+
+        recording_client.extra_response = {"max_leverages": {"BTC": 40.0, "ETH": 25.0, "SOL": 20.0}}
+        result = universe_resolve(source=COMMENTED_SOURCE)
+
+        assert result["max_leverages"] == {"BTC": 40.0, "ETH": 25.0, "SOL": 20.0}
+        assert result["reformatted"] is False
+        # Committed into the source, next to resolved/resolved_at...
+        u = universe_get(source=result["source"])["universe"]
+        assert u["max_leverages"] == {"BTC": 40.0, "ETH": 25.0, "SOL": 20.0}
+        # ...without disturbing the header.
+        head_end = COMMENTED_SOURCE.index("Universe(")
+        assert result["source"][:head_end] == COMMENTED_SOURCE[:head_end]
+
+    def test_max_leverages_absent_when_api_omits_it(self, recording_client):
+        """Today's ResolveUniverseResponse has no max_leverages. The client
+        must not invent one (an empty/None map would trip
+        PortfolioMarginCap at run time with a wrong story)."""
+        from keel.tools.local import universe_get, universe_resolve
+
+        result = universe_resolve(source=COMMENTED_SOURCE)
+        assert "max_leverages" not in result
+        # (the word appears in the file's comment header, so assert on the
+        # parsed declaration rather than a substring)
+        assert "max_leverages" not in universe_get(source=result["source"])["universe"]
+
+    def test_diff_is_passed_through_when_returned(self, recording_client):
+        from keel.tools.local import universe_resolve
+
+        recording_client.extra_response = {"diff": {"added": ["SOL"], "removed": ["DOGE"]}}
+        result = universe_resolve(source=COMMENTED_SOURCE)
+        assert result["diff"] == {"added": ["SOL"], "removed": ["DOGE"]}
+
+
+class TestUniverseSetPreservesSource:
+    """`universe_set` is the step operators run immediately before
+    `universe_resolve` — it had the same whole-file canonical re-emission,
+    so fixing only resolve would still lose the header. Span edit here
+    too (twin of pipeline_engine.mcp.tools.universe_set)."""
+
+    def test_criteria_edit_keeps_every_other_byte(self):
+        from keel.tools.local import universe_set
+
+        result = universe_set(
+            source=COMMENTED_SOURCE, mode="top_volume", market="perp", top_n=10, lookback="30d"
+        )
+        new_source = result["source"]
+
+        assert result["reformatted"] is False
+        head_end = COMMENTED_SOURCE.index("Universe(")
+        assert new_source[:head_end] == COMMENTED_SOURCE[:head_end]
+        assert new_source.endswith(COMMENTED_SOURCE[COMMENTED_SOURCE.index("Execution(") :])
+        assert "# loader keeps its comment" in new_source
+
+        # The criteria really changed.
+        assert result["universe"]["top_n"] == 10
+        assert result["universe"]["lookback"] == "30d"
+
+    def test_falls_back_loudly_on_edit_failure(self, monkeypatch):
+        from keel.tools.local import universe_set
+
+        from pipeline_engine.dsl import edits
+
+        def _boom(*a, **kw):
+            raise edits.EditEquivalenceError("forced")
+
+        monkeypatch.setattr("pipeline_engine.dsl.edits.replace_declaration", _boom)
+        result = universe_set(source=COMMENTED_SOURCE, mode="manual", symbols=["BTC"])
+        assert result["reformatted"] is True
+        assert result["universe"]["mode"] == "manual"
+
+
+class TestUniverseResolveUnderfill:
+    """Lane U: under-filled top_n is written down so the STALE gate can't loop."""
+
+    def _resolve(self, monkeypatch, response):
+        from keel.tools.local import universe_resolve
+
+        class _StubClient:
+            def post(self, path: str, json: dict):
+                return response
+
+        monkeypatch.setattr("keel.client.KeelClient", _StubClient)
+        source = """Universe(mode="top_volume", market="perp", top_n=200)
+Pipeline([ROC(period=8)], name='s')
+"""
+        return universe_resolve(source=source)
+
+    def test_top_n_written_down_on_underfill(self, monkeypatch):
+        resolved = [f"S{i}" for i in range(177)]
+        result = self._resolve(
+            monkeypatch,
+            {
+                "resolved": resolved,
+                "resolved_at": "2026-08-20T00:00:00+00:00",
+                "count": 177,
+                "requested_top_n": 200,
+                "warnings": ["venue can supply 177 of 200 requested assets"],
+            },
+        )
+        assert result["top_n_written_down"] == {
+            "requested": 200,
+            "achievable": 177,
+            "reason": "venue can supply 177 of 200 requested assets",
+        }
+        assert "top_n=177" in result["source"].replace(" ", "")
+        assert result["warnings"] == ["venue can supply 177 of 200 requested assets"]
+
+    def test_exact_fill_leaves_top_n_alone(self, monkeypatch):
+        resolved = [f"S{i}" for i in range(200)]
+        result = self._resolve(
+            monkeypatch,
+            {
+                "resolved": resolved,
+                "resolved_at": "2026-08-20T00:00:00+00:00",
+                "count": 200,
+                "requested_top_n": 200,
+            },
+        )
+        assert "top_n_written_down" not in result
+        assert "top_n=200" in result["source"].replace(" ", "")
+
+    def test_old_server_without_requested_top_n_unchanged(self, monkeypatch):
+        result = self._resolve(
+            monkeypatch,
+            {
+                "resolved": ["BTC"],
+                "resolved_at": "2026-08-20T00:00:00+00:00",
+                "count": 1,
+            },
+        )
+        assert "top_n_written_down" not in result
+        assert "top_n=200" in result["source"].replace(" ", "")

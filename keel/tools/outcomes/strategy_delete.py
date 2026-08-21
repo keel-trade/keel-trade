@@ -72,14 +72,23 @@ STRATEGY_DELETE = register(
         required_action="strategy.delete",
         cli_path=("strategy", "delete"),
         toolset="backtest",
+        # grounded-in: collaboration.md:130 (recovery is a change operation —
+        # search/restore first, don't delete; deleting silently drops work);
+        # tool_usage.md (prefer recovery over destruction).
         description=(
-            "Hard-delete a strategy on the platform. Non-idempotent — once "
-            "deleted, the strategy_id cannot be reused and version history "
-            "is gone. Local workspace files are NOT removed; clean those up "
-            "separately. "
+            "Hard-delete a strategy on the platform — IRREVERSIBLE. Once "
+            "deleted, the strategy_id can't be reused and its entire version "
+            "history is gone. Prefer recovery over deletion: to undo a bad "
+            "edit use `keel_strategy_restore` (history is preserved), to drop "
+            "only the LOCAL working copy use `keel_strategy_discard`, and to "
+            "stop a live deployment use `keel_live_control` with action=stop. "
+            "Reach for delete only when the user explicitly wants the strategy "
+            "gone for good. Local workspace files are NOT removed — clean "
+            "those up separately. "
             "Do NOT use to stop a live deployment — call `keel_live_control` "
             "with action=stop. "
-            "Do NOT use to remove a local workspace — use the workspace tools."
+            "Do NOT use to remove a local workspace — call "
+            "`keel_strategy_discard`."
         ),
         input_schema={
             "type": "object",

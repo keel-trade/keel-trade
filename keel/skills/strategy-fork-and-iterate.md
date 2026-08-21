@@ -8,7 +8,8 @@ description: |
 trigger: |
   Use when the user says "fork", "based on", "like that strategy but ...",
   "modify the shared strategy", "import this share link", or names a
-  strategy_id and asks for a change. Do NOT use to author a strategy
+  strategy_id and asks for a change — or asks to start from a library /
+  verified strategy. Do NOT use to author a strategy
   from scratch (use `strategy-creation`) or to just inspect a strategy
   (read `keel://strategy/<id>/source` directly).
 knowledge:
@@ -19,6 +20,8 @@ knowledge:
   - mistakes
 tools:
   - keel_strategy_fork
+  - keel_library_list
+  - keel_library_fork
   - keel_strategy_search
   - keel_strategy_get
   - keel_strategy_checkout
@@ -39,13 +42,14 @@ Determine what the user wants to fork:
 
 - A strategy_id they own (e.g., `str_K9p2Lz`) → call `keel_strategy_get` directly.
 - A share link or share_id → call `keel_strategy_fork(source=<id>)` first; this returns a new owned `strategy_id`.
+- A Keel Library entry (a verified strategy by name/slug) → `keel_library_list` to find the slug, then `keel_library_fork(slug=<slug>)`; this returns a new owned `strategy_id`.
 - "Like that strategy I had last week" → call `keel_strategy_search(query=<hint>, limit=5)` or `keel_strategy_search(limit=5)`, then confirm which one.
 
 ## Step 2: Checkout to a local workspace
 
 Call `keel_strategy_checkout(strategy_id=<id>)`. This writes `strategy.py` + `.keel-meta.json` into a workspace dir (project-local if cwd has `.keel/workspace.yaml`, else `~/.keel/workspace/<id>/`). Read it end-to-end before proposing a change — the user's intent often presupposes structure that may or may not be there.
 
-(For just *reading* the source without editing, fetch `keel://strategy/<id>/source` directly. The checkout pattern is for the edit-and-push flow.)
+(For just _reading_ the source without editing, fetch `keel://strategy/<id>/source` directly. The checkout pattern is for the edit-and-push flow.)
 
 ## Step 3: Reason about the minimal diff
 
@@ -89,10 +93,10 @@ If the user says "actually revert that" or "go back", use `keel_strategy_log` to
 # Common mistakes
 
 - **Restructuring "for clarity" when the user asked for a one-line change** (collaboration rule). Preserve their intent and structure.
-- **Skipping the diff in your reply.** The user wants to see *what changed*, not just "done". Always print the structured diff.
+- **Skipping the diff in your reply.** The user wants to see _what changed_, not just "done". Always print the structured diff.
 - **Forgetting buffered rebalancing on production-targeted edits** (M-30 catalog #9). If the original strategy was live, preserve `Execution(rebalance="buffered", ...)`.
 - **Silently fixing unrelated bugs.** Flag them as a separate question. Don't conflate the fix with the requested change.
-- **Re-running the full creation flow.** This skill is for *focused diff*, not whole-cloth rebuilds.
+- **Re-running the full creation flow.** This skill is for _focused diff_, not whole-cloth rebuilds.
 
 # Expected output shape
 

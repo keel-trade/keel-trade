@@ -40,13 +40,35 @@ def validate_api_key(api_key: str, api_url: str | None = None) -> dict:
 
 
 def store_api_key(api_key: str, api_url: str | None = None) -> dict:
-    """Validate and store an API key. Returns principal info."""
+    """Validate and store an API key. Returns principal info.
+
+    If the previous credentials were an anonymous grant (spec 05 R3/R4),
+    the anonymous workspace is auto-claimed into the key's account —
+    same behavior as the browser login path.
+    """
+    prior_config = load_config()
     info = validate_api_key(api_key, api_url)
     config = load_config()
     config.api_key = api_key
+    # A PAT has no refresh capability — leaving a stale (anon/OAuth)
+    # refresh token behind would trigger proactive-refresh 401s that
+    # clear_oauth_tokens() the PAT away.
+    config.refresh_token = None
+    config.token_expires_at = None
+    # Spec 09 CL-9: fresh credentials start with a clean org context.
+    config.active_org_id = None
     if api_url:
         config.api_url = api_url
     save_config(config)
+
+    from keel.anon import maybe_claim_after_login
+
+    claim_result = maybe_claim_after_login(prior_config)
+    if claim_result is not None:
+        if "pending_claim" in claim_result:
+            info = {**info, "pending_claim": claim_result["pending_claim"]}
+        else:
+            info = {**info, "claimed_anon_org": claim_result}
     return info
 
 
@@ -67,6 +89,8 @@ def browser_login(
     auth_surface: str | None = None,
     timeout_seconds: int = 300,
     open_browser: bool = True,
+    attach_decision: bool | None = None,
+    confirm_attach=None,
 ) -> dict:
     """Drive the OAuth loopback flow + persist tokens + return identity.
 
@@ -81,7 +105,13 @@ def browser_login(
     from keel import browser_login as bl
     from keel.token_store import store_oauth_tokens
 
-    resolved_url = api_url or load_config().api_url
+    # Snapshot BEFORE login: if the stored credentials are an anonymous
+    # grant (spec 05 R3/R4), the post-OAuth step claims that workspace
+    # into the new account (auto-claim). store_oauth_tokens overwrites
+    # the anon tokens, so the proof material must be captured now.
+    prior_config = load_config()
+
+    resolved_url = api_url or prior_config.api_url
     resolved_name = client_name or _default_client_name()
 
     result = bl.run(
@@ -100,7 +130,26 @@ def browser_login(
         client_name=resolved_name,
         api_url=resolved_url,
     )
-    return get_identity()
+
+    # Auto-claim the anonymous workspace under the new account. Best-effort:
+    # a failed/expired claim degrades to a notice, never a failed login.
+    # Spec 09 CL-8: a fresh/empty account claims silently; an account that
+    # already has work confirms first — `attach_decision` (explicit) or
+    # `confirm_attach` (TTY prompt) decide, else the claim defers and the
+    # result carries `pending_claim` for the caller to surface.
+    from keel.anon import maybe_claim_after_login
+
+    claim_result = maybe_claim_after_login(
+        prior_config, attach_decision=attach_decision, confirm=confirm_attach
+    )
+
+    identity = get_identity()
+    if claim_result is not None:
+        if "pending_claim" in claim_result:
+            identity = {**identity, "pending_claim": claim_result["pending_claim"]}
+        else:
+            identity = {**identity, "claimed_anon_org": claim_result}
+    return identity
 
 
 def get_identity() -> dict:

@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 from click.testing import CliRunner
 
 from keel.cli.main import cli
+from keel.errors import NotFoundError
 from keel.tools.outcomes import OUTCOMES, OutcomeResult, _bootstrap, all_tools
 from keel.tools.outcomes._base import envelope_error
 from keel.tools.outcomes._toolsets import is_tool_loaded, load_toolsets
@@ -151,7 +153,7 @@ def test_pilot_tool_descriptions_include_dont_use_clause():
 def test_cli_status_returns_envelope_with_share_url_null():
     result = runner.invoke(cli, ["--format", "json", "status"])
     assert result.exit_code == 0, result.output
-    data = json.loads(result.output)
+    data = json.loads(result.stdout)
     assert data["share_url"] is None
     assert data["hero_url"].startswith("https://app.usekeel.io/")
     assert "toolsets_loaded" in data
@@ -166,7 +168,7 @@ def test_cli_status_returns_envelope_with_share_url_null():
 def test_cli_status_includes_progressive_workflow_routes():
     result = runner.invoke(cli, ["--format", "json", "status"])
     assert result.exit_code == 0, result.output
-    data = json.loads(result.output)
+    data = json.loads(result.stdout)
 
     routes = {route["name"]: route for route in data["workflow_routes"]}
     assert {
@@ -220,7 +222,7 @@ def test_cli_doctor_runs_checks(monkeypatch):
 def test_cli_help_positional_topic():
     result = runner.invoke(cli, ["--format", "json", "help", "dsl_syntax"])
     assert result.exit_code == 0, result.output
-    data = json.loads(result.output)
+    data = json.loads(result.stdout)
     assert data["topic"] == "dsl_syntax"
     assert data.get("source") in {"bundled", "api"}
     assert data["resource_uri"] == "keel://knowledge/dsl_syntax"
@@ -230,7 +232,7 @@ def test_cli_help_positional_topic():
 def test_cli_help_reference_topic_returns_actual_resource_uri():
     result = runner.invoke(cli, ["--format", "json", "help", "phases"])
     assert result.exit_code == 0, result.output
-    data = json.loads(result.output)
+    data = json.loads(result.stdout)
     assert data["topic"] == "phases"
     assert data["resource_uri"] == "keel://dsl/reference/phases"
     assert len(data.get("body", "")) > 0
@@ -239,7 +241,7 @@ def test_cli_help_reference_topic_returns_actual_resource_uri():
 def test_cli_help_pattern_topic_omits_missing_resource_uri():
     result = runner.invoke(cli, ["--format", "json", "help", "combining_signals"])
     assert result.exit_code == 0, result.output
-    data = json.loads(result.output)
+    data = json.loads(result.stdout)
     assert data["topic"] == "combining_signals"
     assert "resource_uri" not in data
     assert len(data.get("body", "")) > 0
@@ -252,7 +254,15 @@ def test_help_description_does_not_reference_stale_resource_uri():
 
 
 def test_cli_help_unknown_topic_surfaces_known_topics():
-    result = runner.invoke(cli, ["--format", "json", "help", "no_such_topic"])
+    # `help._handler` falls back to `GET /v1/reference/{topic}` when the
+    # topic isn't bundled — an endpoint that doesn't exist yet. Stub the
+    # miss it gets in reality; unstubbed, this test reached the PRODUCTION
+    # API (and, with no credentials, minted a real anonymous org).
+    with patch(
+        "keel.client.KeelClient.get",
+        side_effect=NotFoundError("no /v1/reference endpoint in this deployment"),
+    ):
+        result = runner.invoke(cli, ["--format", "json", "help", "no_such_topic"])
     # Exit 3 = not found per keel error codes
     assert result.exit_code == 3
     err_text = result.stderr if hasattr(result, "stderr") else result.output
@@ -265,7 +275,7 @@ def test_cli_help_bare_lists_topics():
     to orient themselves; the bare call should be useful, not an error."""
     result = runner.invoke(cli, ["--format", "json", "help"])
     assert result.exit_code == 0, result.output
-    data = json.loads(result.output)
+    data = json.loads(result.stdout)
     assert "topics" in data
     assert isinstance(data["topics"], list) and len(data["topics"]) > 0
     assert "info" in data
@@ -285,7 +295,7 @@ def test_cli_accepts_format_at_subcommand_position():
     subcommand-level flag first; the top-level form keeps working too."""
     result = runner.invoke(cli, ["status", "--format", "json"])
     assert result.exit_code == 0, result.output
-    data = json.loads(result.output)
+    data = json.loads(result.stdout)
     assert data["share_url"] is None
     assert "tools_visible" in data
 
@@ -294,7 +304,7 @@ def test_cli_subcommand_format_overrides_top_level():
     """If both --format positions are used, the subcommand one wins."""
     result = runner.invoke(cli, ["--format", "human", "status", "--format", "json"])
     assert result.exit_code == 0, result.output
-    data = json.loads(result.output)
+    data = json.loads(result.stdout)
     assert "tools_visible" in data
 
 
@@ -327,7 +337,7 @@ def test_cli_agent_mode_yes_allows_destructive_commands(monkeypatch):
     )
 
     assert result.exit_code == 0, result.stderr
-    data = json.loads(result.output)
+    data = json.loads(result.stdout)
     assert data["deleted"] is True
     assert data["run_id"] == "str_abc"
 
@@ -363,6 +373,7 @@ def test_cli_agent_mode_allows_live_deploy_preview_without_yes(monkeypatch, tmp_
             "str_abc",
             "--account-id",
             "acct_1",
+            "--direct",
             "--format",
             "json",
         ],
@@ -370,9 +381,42 @@ def test_cli_agent_mode_allows_live_deploy_preview_without_yes(monkeypatch, tmp_
     )
 
     assert result.exit_code == 0, result.stderr
-    data = json.loads(result.output)
+    data = json.loads(result.stdout)
     assert data["preview"]["strategy_id"] == "str_abc"
     assert data["next_action"]["args"]["confirmation_token"]
+
+
+def test_cli_live_deploy_default_returns_web_handoff(monkeypatch, tmp_path):
+    """D7: `keel live deploy <id>` (no --direct) hands the user to the web
+    app — a handoff_required envelope, never an in-terminal deploy, and no
+    account enumeration. No --yes needed (it's a link-out, not destructive)."""
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
+    def fake_post(_self, path, json=None, **_params):
+        # Only the deploy-intent mint is allowed — never /v1/live[/preview].
+        assert path == "/v1/live/deploy-intents", path
+        return {
+            "handoff_url": "https://app.usekeel.io/deploy?intent=tokC",
+            "intent_token": "tokC",
+        }
+
+    def fail_get(*_args, **_kwargs):
+        raise AssertionError("default handoff must not enumerate accounts")
+
+    monkeypatch.setattr("keel.client.KeelClient.post", fake_post)
+    monkeypatch.setattr("keel.client.KeelClient.get", fail_get)
+
+    result = runner.invoke(
+        cli,
+        ["live", "deploy", "str_abc", "--format", "json"],
+        env={"KEEL_AGENT_MODE": "true"},
+    )
+
+    assert result.exit_code == 6, result.stderr
+    data = json.loads(result.stderr)
+    assert data["code"] == "handoff_required"
+    assert data["blocked_action"] == "live_deploy"
+    assert data["action_url"] == "https://app.usekeel.io/deploy?intent=tokC"
 
 
 def test_cli_agent_mode_requires_yes_for_actual_live_deploy(monkeypatch):
@@ -389,6 +433,7 @@ def test_cli_agent_mode_requires_yes_for_actual_live_deploy(monkeypatch):
             "str_abc",
             "--account-id",
             "acct_1",
+            "--direct",
             "--no-preview",
             "--confirmation-token",
             "tok_abc",
@@ -414,7 +459,7 @@ def test_cli_agent_mode_false_keeps_non_tty_script_compat(monkeypatch):
     )
 
     assert result.exit_code == 0, result.stderr
-    data = json.loads(result.output)
+    data = json.loads(result.stdout)
     assert data["deleted"] is True
 
 
@@ -428,7 +473,7 @@ def test_cli_status_unauth_includes_next_hint_to_keel_auth_login(monkeypatch, tm
     monkeypatch.delenv("KEEL_API_KEY", raising=False)
     result = runner.invoke(cli, ["status", "--format", "json"])
     assert result.exit_code == 0, result.output
-    data = json.loads(result.output)
+    data = json.loads(result.stdout)
     assert data["authenticated"] is False
     assert "next" in data
     assert any("keel_auth_login" in line for line in data["next"])
@@ -462,11 +507,20 @@ def test_keel_status_identity_reads_nested_me_shape(monkeypatch, tmp_path):
         "credential_scopes": ["strategy.read", "backtest.read"],
     }
     monkeypatch.setattr("keel.auth.get_identity", lambda: me_payload)
+    # `keel_status` also runs a best-effort `GET /v1/entitlements` probe
+    # once it believes it's authed. The dummy api_key above satisfies the
+    # local auth precheck, so unstubbed that probe went to the PRODUCTION
+    # API. Same stub the entitlements tests below use.
+    monkeypatch.setattr(
+        "keel.client.KeelClient.get",
+        lambda self, path, **kw: {"balances": []},
+    )
 
     tool = OUTCOMES["keel_status"]
     ctx = ToolContext(is_tty=False, app_url="https://app.usekeel.io")
     env = tool.handler({}, ctx).to_envelope()
 
+    assert "entitlements_error" not in env
     identity = env.get("identity") or {}
     assert identity["principal_id"] == "prn_abc123"
     assert identity["org_id"] == "org_xyz789"
@@ -902,6 +956,12 @@ def test_keel_status_identity_marks_tier_live_with_runner_scope(monkeypatch, tmp
         "credential_scopes": ["strategy.read", "runner.*"],
     }
     monkeypatch.setattr("keel.auth.get_identity", lambda: me_payload)
+    # Stub the best-effort entitlements probe — the dummy api_key clears
+    # the local auth precheck, so unstubbed it reached the PRODUCTION API.
+    monkeypatch.setattr(
+        "keel.client.KeelClient.get",
+        lambda self, path, **kw: {"balances": []},
+    )
 
     tool = OUTCOMES["keel_status"]
     env = tool.handler({}, ToolContext(is_tty=False)).to_envelope()
@@ -955,21 +1015,19 @@ def test_mcp_server_instructions_teach_skills_discovery():
 
 def test_mcp_server_instructions_teach_progressive_workflows():
     """Instructions should give generic agents a route before they pick
-    lower-level tools from tools/list."""
+    lower-level tools from tools/list. Strategy routing now comes from the
+    corpus-distilled operating core (`Route:` / `New thesis:`); the full
+    wrapper adds the profile-specific plumbing routes (LIVE, DEBUG, skills)."""
     from keel.mcp.server import create_server
 
     instr = create_server().instructions or ""
-    for marker in (
-        "WORKFLOW ROUTES",
-        "FIRST SESSION",
-        "RESEARCH",
-        "EXISTING STRATEGY",
-        "DEBUG",
-        "LIVE",
-    ):
-        assert marker in instr
+    # Core-provided strategy routing + full-profile plumbing routes.
+    for marker in ("Route:", "New thesis:", "DEBUG", "LIVE WRITE"):
+        assert marker in instr, marker
+    # The concrete tool chain agents follow.
+    assert "keel_components_search" in instr
     assert "keel_components_detail_batch" in instr
-    assert "keel_strategy_compose(dry_run=true)" in instr
+    assert "keel_strategy_compose" in instr
     assert "keel_backtest_run" in instr
     assert "deploy-and-monitor" in instr
 
@@ -1046,21 +1104,30 @@ def test_cli_components_describe_alias_works():
     (the MCP tool is misnamed; rename is a v0.5.0 breaking change).
     Until then, `describe` and `detail` are registered as aliases so
     agents aren't blocked by a guess-and-fail on verb name."""
-    result = runner.invoke(cli, ["components", "describe", "ROC", "--format", "json"])
+    # The bundled registry is the data source under test; stub the
+    # opportunistic `GET /v1/components/{name}` probe with the miss it
+    # gets in reality (see `components_help._detail_via_api`). Unstubbed,
+    # each of these three invocations hit the PRODUCTION API.
+    with patch(
+        "keel.client.KeelClient.get",
+        side_effect=NotFoundError("no /v1/components endpoint in this deployment"),
+    ):
+        result = runner.invoke(cli, ["components", "describe", "ROC", "--format", "json"])
+        result2 = runner.invoke(cli, ["components", "detail", "ROC", "--format", "json"])
+        result3 = runner.invoke(cli, ["components", "compose-help", "ROC", "--format", "json"])
+
     assert result.exit_code == 0, result.output
-    data = json.loads(result.output)
+    data = json.loads(result.stdout)
     assert data["name"] == "ROC"
     assert data["category"] == "indicator"
 
     # `detail` is the second alias.
-    result2 = runner.invoke(cli, ["components", "detail", "ROC", "--format", "json"])
     assert result2.exit_code == 0
-    assert json.loads(result2.output)["name"] == "ROC"
+    assert json.loads(result2.stdout)["name"] == "ROC"
 
     # Canonical name still works too — aliases don't replace it.
-    result3 = runner.invoke(cli, ["components", "compose-help", "ROC", "--format", "json"])
     assert result3.exit_code == 0
-    assert json.loads(result3.output)["name"] == "ROC"
+    assert json.loads(result3.stdout)["name"] == "ROC"
 
 
 def test_strategy_compose_description_directs_first_use_to_skill():

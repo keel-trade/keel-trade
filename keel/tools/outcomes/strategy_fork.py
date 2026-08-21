@@ -108,10 +108,24 @@ STRATEGY_FORK = register(
         required_action="strategy.create",
         cli_path=("strategy", "fork"),
         toolset="backtest",
+        # grounded-in: collaboration.md §4 (iterate, don't rewrite — the
+        # SMALLEST change, one at a time; never rearchitect a working
+        # strategy without asking); tool_usage.md:23-27 (discovery applies
+        # to every edit); context-architecture-design Part F (fork to
+        # iterate on a copy).
         description=(
-            "Fork a strategy into your org. The `source` argument accepts either "
-            "a Keel strategy id (`str_*`) or a share-link id; the tool auto-detects "
-            "which endpoint to call. "
+            "Fork a strategy into your org to iterate on a COPY — the safe "
+            "way to improve or adapt an existing strategy (yours, or one "
+            "from a share link) without touching the original. The `source` "
+            "argument accepts either a Keel strategy id (`str_*`) or a "
+            "share-link id; the tool auto-detects which endpoint to call. "
+            "Once forked, iterate — don't rewrite: make the SMALLEST change "
+            "that answers the request, one at a time, and re-backtest "
+            "between changes; never rearchitect a working strategy or add "
+            "unrequested signals without asking first. Discovery still "
+            "applies to every edit — `keel_components_search` the concept, "
+            "then `keel_components_detail_batch`, before wiring it in via "
+            "`keel_strategy_compose`. "
             "Do NOT use to compose a new strategy from scratch — call "
             "`keel_strategy_compose`. "
             "Do NOT use to create a share link — call `keel_share_create`."

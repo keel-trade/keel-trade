@@ -1,0 +1,175 @@
+{
+  "AlignToFrequency": {
+    "frequency": [
+      {
+        "admitted": [
+          "15min",
+          "30min",
+          "1h",
+          "2h",
+          "3h",
+          "4h",
+          "6h",
+          "8h",
+          "12h",
+          "1d"
+        ],
+        "prior_admitted": null,
+        "reason": "not a platform timeframe \u2014 pandas builds the grid anyway, off the execution clock's alphabet",
+        "replacement": "frequency= one of ['15min', '30min', '1h', '2h', '3h', '4h', '6h', '8h', '12h', '1d']",
+        "retired_at": 2,
+        "version": 1
+      }
+    ],
+    "method": [
+      {
+        "admitted": [
+          "ffill"
+        ],
+        "prior_admitted": [
+          "bfill"
+        ],
+        "reason": "reads a bar that closes up to 18 hours in the future",
+        "replacement": "method='ffill'",
+        "retired_at": 2,
+        "version": 1
+      },
+      {
+        "admitted": [
+          "ffill"
+        ],
+        "prior_admitted": [
+          "nearest"
+        ],
+        "reason": "fills from the closest bar in either direction, so it can read a bar that has not closed",
+        "replacement": "method='ffill'",
+        "retired_at": 2,
+        "version": 1
+      },
+      {
+        "admitted": [
+          "ffill"
+        ],
+        "prior_admitted": null,
+        "reason": "the literal 'ffill' is the only causal fill v2 admits",
+        "replacement": "method='ffill'",
+        "retired_at": 2,
+        "version": 1
+      }
+    ]
+  },
+  "FundingDataLoader": {
+    "interval": [
+      {
+        "admitted": [
+          "15min",
+          "30min",
+          "1h",
+          "2h",
+          "3h",
+          "4h",
+          "6h",
+          "8h",
+          "12h",
+          "1d"
+        ],
+        "prior_admitted": null,
+        "reason": "not a platform timeframe \u2014 'interval' keys the funding cache partition, so an unknown value loads nothing",
+        "replacement": "interval= one of ['15min', '30min', '1h', '2h', '3h', '4h', '6h', '8h', '12h', '1d']",
+        "retired_at": 2,
+        "version": 1
+      }
+    ]
+  },
+  "SignalResampler": {
+    "target_timeframe": [
+      {
+        "admitted": [
+          "15min",
+          "30min",
+          "1h",
+          "2h",
+          "3h",
+          "4h",
+          "6h",
+          "8h",
+          "12h",
+          "1d"
+        ],
+        "prior_admitted": null,
+        "reason": "not a platform timeframe \u2014 v1 forwarded it to pandas ('5min' produced a 91.5%-NaN frame)",
+        "replacement": "target_timeframe= one of ['15min', '30min', '1h', '2h', '3h', '4h', '6h', '8h', '12h', '1d']",
+        "retired_at": 2,
+        "version": 1
+      }
+    ]
+  },
+  "SignalTimeframeConverter": {
+    "method": [
+      {
+        "admitted": [],
+        "prior_admitted": [
+          "fill_all"
+        ],
+        "reason": "the projector pair does this on a declared grid, not one anchored on the data",
+        "replacement": "TargetSignalProjector() (or SignalProjector(target_timeframe=...))",
+        "retired_at": 2,
+        "version": 1
+      },
+      {
+        "admitted": [],
+        "prior_admitted": [
+          "first_only"
+        ],
+        "reason": "sparse weight placement, not a projection semantics",
+        "replacement": "TargetSignalProjector() (or SignalProjector(target_timeframe=...))",
+        "retired_at": 2,
+        "version": 1
+      }
+    ],
+    "target_timeframe": [
+      {
+        "admitted": [
+          "15min",
+          "30min",
+          "1h",
+          "2h",
+          "3h",
+          "4h",
+          "6h",
+          "8h",
+          "12h",
+          "1d"
+        ],
+        "prior_admitted": null,
+        "reason": "not a platform timeframe \u2014 v1 built the target index straight from pandas",
+        "replacement": "TargetSignalProjector() (or SignalProjector(target_timeframe=...))",
+        "retired_at": 2,
+        "version": 1
+      }
+    ]
+  },
+  "TimeframeResampler": {
+    "target_timeframe": [
+      {
+        "admitted": [
+          "15min",
+          "30min",
+          "1h",
+          "2h",
+          "3h",
+          "4h",
+          "6h",
+          "8h",
+          "12h",
+          "1d"
+        ],
+        "prior_admitted": null,
+        "reason": "not a platform timeframe \u2014 v1 raises 'Unknown timeframe' at run time",
+        "replacement": "target_timeframe= one of ['15min', '30min', '1h', '2h', '3h', '4h', '6h', '8h', '12h', '1d']",
+        "retired_at": 2,
+        "version": 1
+      }
+    ]
+  }
+}

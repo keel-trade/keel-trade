@@ -125,6 +125,22 @@ source, so this is safe — just visually noisy. Validator emits
 `RESAMPLER_NOOP` as a warning. Keep the Globals+Resampler pair only if
 you want the timeframe-knob for later iteration; otherwise omit both.
 
+## M-23: Combining branches on different timeframes
+
+**Wrong**: a `carry` branch with `SignalResampler(target_timeframe='1d')`
+meeting a 12h branch at `ForecastCombiner`, under `Globals(target_timeframe='12h')`.
+**Right**: end the coarse branch with `TargetSignalProjector()` so it lands on
+the declared 12h clock before the combine.
+
+Every multi-input step (combiners, blenders, gates, `Parallel` consumers)
+requires all inputs on one timeframe. Validator emits `CLOCK_MISMATCH` and
+names both clocks; the fix is usually a one-step insert it suggests directly.
+A coarse signal projects DOWN (forward-fill of the last COMPLETED bar — no
+lookahead). If instead the offending branch is FINER than the declared clock,
+resample its raw data UP before the indicator — projection only goes coarse →
+fine, so nothing added later can rescue it. Related: `TERMINAL_CLOCK_MISMATCH`
+means the pipeline's final weights are not on the declared timeframe.
+
 ## Polarity Mistakes
 
 - **Carry**: Always NegateTransform after FundingDataLoader — positive funding

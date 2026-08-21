@@ -97,6 +97,12 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
 
     summary_metrics = _extract_summary_metrics(detail.get("metrics"))
 
+    # Full worker metrics dict, verbatim — the canonical list is
+    # ordering/labeling only, so stored keys (fee ratios, warnings,
+    # wipeout markers, ...) are never silently dropped from the envelope.
+    if detail.get("metrics"):
+        extra["metrics_raw"] = detail["metrics"]
+
     # Best-effort presigned URL for the full results.json — only available
     # post-completion. Don't raise on failure (the summary is still useful).
     if status in {"completed", "succeeded"}:
@@ -118,6 +124,14 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
     if nudge:
         extra["nudge"] = nudge
 
+    # Card + per-surface render hints (spec 06 R2/R3) — render-only,
+    # derived from fields already in this envelope.
+    from ._render import card_render_block
+
+    extra["render"] = card_render_block(
+        "backtest", fallback_url=hero_url, ctx=ctx, embed_id=backtest_id
+    )
+
     return OutcomeResult(
         run_id=backtest_id,
         hero_url=hero_url,
@@ -134,6 +148,10 @@ BACKTEST_SUMMARIZE = register(
         required_action="backtest.read",
         cli_path=("backtest", "summarize"),
         toolset="backtest",
+        # grounded-in: trading_domain.md:62-68 (post-backtest reasoning —
+        # diagnose the mechanism not the outcome; changes need a principled
+        # reason independent of the backtest; prefer robustness over
+        # removing exposure); tool_usage.md:17; reasoning_principles.md.
         description=(
             "Summarize a completed backtest: Sharpe / max drawdown / total "
             "return / turnover / funding-attribution, plus period info and "
@@ -143,6 +161,14 @@ BACKTEST_SUMMARIZE = register(
             "call this automatically with the same backtest_id to enrich "
             "your reply to the user. Don't ask 'do you want the full "
             "metrics?' first — they almost always do. "
+            "Then READ the result and reason about WHY: diagnose the "
+            "mechanism, not the outcome — 'mean-reversion shorts in a "
+            "parabolic breakout with no trend filter' is a mechanism; "
+            "'shorts lost money in Nov 2024' is an outcome. Any change you "
+            "propose must have a principled reason independent of this "
+            "backtest; prefer adding robustness (trend filter, sizing, "
+            "regime gate) over removing exposure to dodge one bad window — "
+            "that's curve-fitting. "
             "Do NOT use mid-run — agent should poll status_url or wait for "
             "the post-run hook. Call `keel_backtest_run` (with `wait=true`) "
             "for live submission + completion."
@@ -179,6 +205,14 @@ BACKTEST_SUMMARIZE = register(
             "call this automatically with the same backtest_id to enrich "
             "your reply to the user. Don't ask 'do you want the full "
             "metrics?' first — they almost always do. "
+            "Then READ the result and reason about WHY: diagnose the "
+            "mechanism, not the outcome — 'mean-reversion shorts in a "
+            "parabolic breakout with no trend filter' is a mechanism; "
+            "'shorts lost money in Nov 2024' is an outcome. Any change you "
+            "propose must have a principled reason independent of this "
+            "backtest; prefer adding robustness (trend filter, sizing, "
+            "regime gate) over removing exposure to dodge one bad window — "
+            "that's curve-fitting. "
             "Do NOT use mid-run — agent should poll status_url or wait for "
             "the post-run hook. Call `keel_backtest_run` (with `wait=true`) "
             "for submission + completion."

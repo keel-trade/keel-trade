@@ -187,6 +187,12 @@ PLAN_STATUS = register(
         required_action="audit.read",
         cli_path=("plan", "status"),
         toolset="read-only",
+        # grounded-in: costs_and_fees.md:28-43 (builder fee varies by plan;
+        # for a high-turnover strategy a higher tier materially lowers the
+        # per-order live cost) + plan_status.py _handler (server-computed
+        # plan_status block — numbers only, no recommendation). Kept
+        # policy-clean: "upgrade_options" (token, no word boundary), no bare
+        # "trade"/"upgrade"/money verbs.
         description=(
             "Report the org's current Keel plan as enforced numbers: plan "
             "name, per-plan limits, remaining quota this period (backtest "
@@ -195,7 +201,10 @@ PLAN_STATUS = register(
             "with USD prices and exact limit differences, returned as "
             "data, not a recommendation. Read-only: calling it never "
             "changes the plan and never spends quota. Check it before a "
-            "large backtest sweep to stay within the remaining allowance. "
+            "large backtest sweep to stay within the remaining allowance, "
+            "and when a high-turnover strategy's live cost comes up — the "
+            "builder fee in bps is the per-order cost a higher plan tier "
+            "lowers, so these figures are what to reason from. "
             "Do NOT use to check auth state or visible tools — call "
             "`keel_status`."
         ),

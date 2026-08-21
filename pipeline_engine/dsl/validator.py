@@ -22,11 +22,18 @@ from pipeline_engine.base.registry import ParamTier
 from pipeline_engine.base.step import PHASE_GROUP_NAMES
 from pipeline_engine.constants import VALID_TIMEFRAMES
 from pipeline_engine.dsl.catalog import (
+    _SEVERITY_RANK,
+    _STAGE_CAP,
     RULES,
+    SEVERITY_BY_CATEGORY,
+    STAGED_CHANGES,
     CatalogError,
+    Stage,
     _template_placeholders,
     severity_for,
 )
+from pipeline_engine.dsl.judgments import emit_template
+from pipeline_engine.dsl.relation import domain_leq
 from pipeline_engine.dsl.spec import (
     EXECUTION_PARAM_META,
     EXECUTION_VALID_BUFFER_MODE,
@@ -49,20 +56,26 @@ from pipeline_engine.dsl.spec import (
     VariableAssignment,
     VariableRef,
 )
+from pipeline_engine.dsl.trace_shim import (
+    Schema0Sink,
+    Schema1Sink,
+    activate_trace_sink,
+    active_trace_sink,
+)
 from pipeline_engine.validation_shared import (
     PHASE_INDEX,
     TIMEFRAME_MINUTES,
-    TYPE_TRANSITIONS,
+    UNIVERSE_MASK_APPLIERS,
+    StagingNote,
     TypeFlowEntry,
+    TypeRef,
     ValidationIssue,
     ValidationResult,
-    is_compatible,
+    ValidOption,
+    is_universe_mask_phase_exempt,
     param_accepts_numeric,
     param_display_type,
     parse_bar_offset_minutes,
-    type_name,
-    type_to_transition_key,
-    validate_resample_config,
 )
 
 
@@ -138,35 +151,13 @@ def _suggest_component_matches(name: str, registry_names: list[str]) -> list[str
     return out
 
 
-def _is_slot_compatible(stored_type: type, expected_type: type) -> bool:
-    """Lenient type check for slot reads.
-
-    Slots are untyped storage at runtime.  The slot_params declarations
-    often use SignalSeries as a generic "DataFrame data" type even when
-    the actual stored data is WeightSeries or ForecastSeries.  All of
-    these are NewType wrappers over DataFrame and interchangeable at
-    runtime.
-
-    This function first tries strict ``is_compatible``, then falls back
-    to comparing the NewType base types so that sibling NewTypes sharing
-    the same ``__supertype__`` (e.g. WeightSeries ↔ SignalSeries, both
-    wrapping DataFrame) are treated as compatible.
-    """
-    if is_compatible(stored_type, expected_type):
-        return True
-    # Same-base NewTypes are compatible for slot reads
-    stored_base = getattr(stored_type, "__supertype__", stored_type)
-    expected_base = getattr(expected_type, "__supertype__", expected_type)
-    return stored_base is expected_base
-
-
 def _store_value_slot_type(value: Any) -> type:
     """Slot type recorded for a ``StoreValue`` literal — shared by passes 6 + 8.
 
     Honest typing: ``type(value)`` — including ``type(None)`` for a literal
     ``None``. ``type(None)`` is already the validator's "unknown stored
-    type" sentinel (see the SlotStoreSpec branch of
-    ``_validate_slots_in_pipeline``): pass 8 skips SLOT_TYPE_MISMATCH for
+    type" sentinel (the interpreter's J-STOREVALUE Σ-lifecycle row):
+    pass 8 skips SLOT_TYPE_MISMATCH for
     it, and the resolver builds a NoneType-typed slot — which is exactly
     what the slot holds at runtime. The previous behavior fabricated ``str``
     for None (in two drifted copies), so downstream slot-type decisions were
@@ -204,6 +195,42 @@ def _group_by_severity(
 _UNSET: Any = object()
 
 
+def _terminal_severity(rule: Any, change: Any) -> str:
+    """The severity a staged code resolves to at its TERMINAL stage (spec 05 §3.1 #16).
+
+    Base = declared override | category policy; capped by the terminal stage
+    (PROMOTED → error, WARNING → warning) then the permanent ``severity_ceiling``
+    (min only). This is the "error-bound" honesty an agent seeing a warning-stage
+    emission needs.
+    """
+    sev = rule.severity_override or SEVERITY_BY_CATEGORY[rule.category]
+    cap = _STAGE_CAP.get(Stage(change.terminal_stage))  # DORMANT absent; terminal never DORMANT
+    if cap is not None and _SEVERITY_RANK[sev] > _SEVERITY_RANK[cap]:
+        sev = cap
+    if rule.severity_ceiling and _SEVERITY_RANK[sev] > _SEVERITY_RANK[rule.severity_ceiling]:
+        sev = rule.severity_ceiling
+    return sev
+
+
+def _staging_note(rule: Any, row_staged_by: str | None) -> StagingNote | None:
+    """Envelope #16: ``{stage, terminal_severity}`` for an ARMED staged code.
+
+    Row-key first (spec 05 §2.2/F7c). ``None`` for un-staged codes and for
+    flow-shape entries (which carry no severity). DORMANT codes never reach here
+    — ``severity_for`` raises before the envelope is built.
+    """
+    key = row_staged_by or rule.staged_by
+    if not key:
+        return None
+    change = STAGED_CHANGES.get(key)
+    if change is None or change.kind == "flow-shape":
+        return None
+    return StagingNote(
+        stage=Stage(change.stage).value,
+        terminal_severity=_terminal_severity(rule, change),
+    )
+
+
 def emit(
     issues: list[ValidationIssue],
     code: str,
@@ -213,6 +240,15 @@ def emit(
     production_mode: bool = False,
     suggestion: Any = _UNSET,
     message_override: str | None = None,
+    row_staged_by: str | None = None,
+    expected: TypeRef | str | None = None,
+    actual: TypeRef | str | None = None,
+    provenance: tuple = (),
+    path: tuple = (),
+    span: Any = None,
+    valid_options: tuple = (),
+    suggested_edit: Any = None,
+    applicability_override: str | None = None,
     **params: Any,
 ) -> None:
     """Append a catalog-rendered :class:`ValidationIssue` (spec 02 §2.1).
@@ -238,6 +274,18 @@ def emit(
     - ``suggestion``: omitted → render the rule's ``suggestion_template`` (if
       any) from ``params``; pass an explicit string/None for dynamically
       computed or site-specific variants.
+    - ``row_staged_by``: the emitting judgment row's staged-change key, when
+      it carries one — ROW-KEY-FIRST severity resolution (spec 05 §2.2/F7c):
+      the row's key selects the stage cap even when the rule itself carries
+      no ``staged_by`` (split severity, e.g. the D4 sib slot row).
+
+    Typed-envelope passthroughs (spec 05 §3.1/§3.3), all defaulted so the
+    non-type-shaped sites are unchanged: ``expected``/``actual`` (TypeRef, dual
+    purpose — also the ``{expected}``/``{actual}`` prose where the template uses
+    them), ``provenance`` (ProvenanceHop chain on domain/slot outcomes),
+    ``path``/``span``, ``valid_options`` and ``suggested_edit``. ``applicability``,
+    ``recoverable`` and ``staging`` are STAMPED from the catalog (the
+    dropped-applicability fix); ``tier`` is always ``"static"`` here.
     """
     rule = RULES.get(code)
     if rule is None:
@@ -246,9 +294,16 @@ def emit(
             f"in dsl/catalog.py first (spec 02 §1.4 standing intake rule)."
         )
 
-    severity = severity_for(rule, context=severity_context)
-    if production_mode and rule.promote_in_production:
-        severity = "error"
+    # Severity resolves in ONE function (spec 05 §2.2): context/declared
+    # overrides, the production_mode promotion, the staging cap, and the
+    # severity ceiling all live in severity_for — a DORMANT-staged code
+    # raises CatalogError here (structural silence, never a dropped issue).
+    severity = severity_for(
+        rule,
+        context=severity_context,
+        production_mode=production_mode,
+        row_staged_by=row_staged_by,
+    )
 
     required: set[str] = set()
     if message_override is None:
@@ -256,18 +311,30 @@ def emit(
     render_suggestion = suggestion is _UNSET and bool(rule.suggestion_template)
     if render_suggestion:
         required |= _template_placeholders(rule.suggestion_template, code, "suggestion_template")
-    if set(params) != required:
+
+    # ``expected``/``actual`` are DUAL-PURPOSE (spec 05 §3.3): the structured
+    # ENVELOPE fields AND, where a template references ``{expected}``/``{actual}``,
+    # the rendered prose. Inject their string form (a TypeRef renders as its
+    # ``declared`` name — byte-identical to today's ``type_name(...)`` strings)
+    # into the render namespace only when the template demands them. Every other
+    # passthrough (path/span/provenance/valid_options/suggested_edit) is
+    # envelope-only and never a template placeholder.
+    render_ns = dict(params)
+    for _name, _val in (("expected", expected), ("actual", actual)):
+        if _name in required and _name not in render_ns and _val is not None:
+            render_ns[_name] = _val.declared if isinstance(_val, TypeRef) else _val
+    if set(render_ns) != required:
         raise CatalogError(
             f"emit({code}): template params mismatch — required "
-            f"{sorted(required)}, got {sorted(params)}."
+            f"{sorted(required)}, got {sorted(render_ns)}."
         )
 
     if message_override is not None:
         message = message_override
     else:
-        message = rule.message_template.format(**params)
+        message = rule.message_template.format(**render_ns)
     if render_suggestion:
-        rendered_suggestion: str | None = rule.suggestion_template.format(**params)
+        rendered_suggestion: str | None = rule.suggestion_template.format(**render_ns)
     elif suggestion is _UNSET:
         rendered_suggestion = None
     else:
@@ -280,21 +347,53 @@ def emit(
             message=message,
             location=location,  # type: ignore[arg-type]
             suggestion=rendered_suggestion,
+            # ── Envelope extension (spec 05 §3.3) ──────────────────────────
+            # tier is "static" for every validator/interpreter emission (§3.1
+            # #6); the gate/compile/runtime tiers are stamped by their own
+            # mints (T-M3a-2). applicability/recoverable/staging are STAMPED
+            # from the catalog — the dropped-applicability fix (R6-I1/L102).
+            # applicability_override is the dsl-mtf-clocks spec 02 §4.3
+            # per-emission DOWNGRADE (machine_applicable → has_placeholders
+            # when no single edit legalizes the site); the rule-level value
+            # stays the declared default.
+            tier="static",
+            path=tuple(path),
+            span=span,
+            expected=expected if isinstance(expected, TypeRef) else None,
+            actual=actual if isinstance(actual, TypeRef) else None,
+            provenance=tuple(provenance),
+            valid_options=tuple(valid_options),
+            suggested_edit=suggested_edit,
+            applicability=applicability_override or rule.applicability.value,
+            recoverable=rule.recoverable,
+            staging=_staging_note(rule, row_staged_by),
         )
     )
+
+    # Schema-0 trace observation point 3 (spec 04 §2.2.2) — the single
+    # emission site every issue flows through. Observation only: a no-op
+    # unless a validate_strategy run activated a sink.
+    sink = active_trace_sink()
+    if sink is not None:
+        sink.on_issue(code, severity, location)
 
 
 def validate_strategy(
     strategy: StrategyFile,
     lock: dict[str, int] | None = None,
     production_mode: bool = False,
+    trace_sink: Schema0Sink | Schema1Sink | None = None,
+    resolution_pin: dict[str, int] | None = None,
 ) -> ValidationResult:
     """Validate a parsed StrategyFile against the component registry.
 
     Runs 9 validation passes:
     1. Variable and factory resolution
     2. Name collision check
-    3. Factory expansion
+    3. Factory expansion (3a: factory-call acyclicity gates BEFORE the
+       expansion, which inlines factory bodies; 3b: variable-reference
+       acyclicity after it — the structural gates the factory-inlining
+       expansion and the VariableRef-inlining walks rely on)
     4. Name resolution (component lookup)
     5. Parameter validation
     6. Type flow validation
@@ -321,6 +420,54 @@ def validate_strategy(
             backtest submit endpoints to refuse strategies that can't run.
             Editor / WIP paths leave this False so users can save unfinished
             strategies. Default False keeps existing callers' behavior intact.
+        trace_sink: Optional trace sink (`dsl/trace_shim.py`) — a
+            `Schema0Sink` (spec 04 §2.2.2's base trace) or, since the M2c
+            cutover, a `Schema1Sink` (spec 04 §2.2's full typed trace: the
+            interpreter walk feeds its typed hooks). Observation only —
+            with the default `None` (the only shipped configuration) every
+            hook site is a one-`if` no-op and behavior is byte-identical.
+            When set, the sink records the pass-6 walk, the terminal
+            pass-8 store map, every emitted issue, and the assembled
+            document (read it via `trace_sink.document` after this
+            returns).
+        resolution_pin: Recorded-resolution replay seam (dsl-type-system
+            spec 04 §2.2.7/§2.4) — trace-harness machinery only, never a
+            production input. Maps component name → the REGISTERED version
+            the pinned trace recorded (`step.version`). When set, the
+            effective registry consulted by passes 5–9 is overlaid with
+            exactly those versions AFTER the normal lock path computes its
+            view, so registry evolution (a later version moving `latest`)
+            can never move a recorded trace. Deliberately NOT a user lock:
+            it engages none of the lock channels (no LOCK_DRIFT, no
+            INVALID_VERSION_LOCK, no auto-lock change) — those report on
+            the LIVE registry by design and keep doing so. A pin entry
+            naming an unregistered component/version raises loudly
+            (removing a version any pinned trace records is a
+            corpus-invalidating breaking change, spec 02's registry-diff
+            gate class) — never a silent fallback.
+    """
+    if trace_sink is None:
+        return _validate_strategy_impl(
+            strategy, lock, production_mode, trace_sink=None, resolution_pin=resolution_pin
+        )
+    with activate_trace_sink(trace_sink):
+        return _validate_strategy_impl(
+            strategy, lock, production_mode, trace_sink=trace_sink, resolution_pin=resolution_pin
+        )
+
+
+def _validate_strategy_impl(
+    strategy: StrategyFile,
+    lock: dict[str, int] | None,
+    production_mode: bool,
+    trace_sink: Schema0Sink | Schema1Sink | None,
+    resolution_pin: dict[str, int] | None = None,
+) -> ValidationResult:
+    """Body of :func:`validate_strategy` (docstring there).
+
+    Split out so the schema-0 trace sink can be activated around the whole
+    run (the `emit()` observation point reads it via a contextvar) without
+    re-indenting the pass spine into a `with` block.
     """
     from pipeline_engine.base.lock import evolve_lock
     from pipeline_engine.base.registry import (
@@ -414,6 +561,39 @@ def validate_strategy(
     else:
         registry = full_registry
 
+    # Recorded-resolution replay (dsl-type-system spec 04 §2.2.7/§2.4):
+    # overlay the passes-5–9 registry view with the versions a pinned trace
+    # recorded, AFTER the normal lock path computed its view. Resolution
+    # only — the lock channels above/below (auto-lock, LOCK_DRIFT,
+    # INVALID_VERSION_LOCK) run unchanged against the LIVE registry, which
+    # is exactly what they report on. An unresolvable pin entry is a loud
+    # error: replaying recorded history requires the recorded version to
+    # still be registered (spec 02's add-a-version-keep-the-old
+    # discipline); its absence is a corpus-invalidating breaking change,
+    # never something to paper over with latest.
+    if resolution_pin:
+        from pipeline_engine.base.registry import get_version
+
+        pinned_sigs = {}
+        unresolvable = {}
+        for name, ver in resolution_pin.items():
+            sig = get_version(name, ver)
+            if sig is None:
+                unresolvable[name] = ver
+            else:
+                pinned_sigs[name] = sig
+        if unresolvable:
+            raise RuntimeError(
+                f"resolution_pin names unregistered component version(s) "
+                f"{unresolvable} — a pinned trace recorded them, so they must "
+                f"remain registered (spec 04 §2.2.7: recorded resolution binds "
+                f"replay; spec 02 add-a-version-keep-the-old). Removing a "
+                f"recorded version is a breaking registry change that "
+                f"invalidates the trace corpus — handle it through the "
+                f"registry-diff gate, never by resolving to latest."
+            )
+        registry = {**registry, **pinned_sigs}
+
     # Seed with any lock-generation errors so they surface in the final
     # result. Passes 2 + 4 still run with the full latest registry below
     # and will report the same unknown-component issues with line
@@ -421,6 +601,10 @@ def validate_strategy(
     issues: list[ValidationIssue] = list(lock_gen_issues)
     type_flow: list[TypeFlowEntry] = []
     slot_types: dict[str, type] = {}
+    # Terminal output name of the pass-6 walk for the trace sink. Runs that
+    # short-circuit before pass 6 keep the walk's initial fold value
+    # (rendered "None") — trace metadata only.
+    final_name: str = "None"
 
     # Drift check: when the caller passed a lock (or we successfully
     # auto-generated one), surface any drift from the current registry as
@@ -467,12 +651,37 @@ def validate_strategy(
     # Pass 2: Name collision check (uses full registry — all known components)
     _validate_name_collisions(strategy, full_registry, issues)
 
+    # Pass 3a: factory-call acyclicity — must gate BEFORE expansion (unlike
+    # its 3b variable sibling, which needs the EXPANDED graph): pass 3
+    # inlines factory bodies into their call sites and recurses into the
+    # inlined body, so a cyclic factory graph would overflow inside the
+    # expansion itself. On a cycle, short-circuit at the structural stage
+    # with the passes-1/2/3a issues — exactly the structural-error return
+    # below, minus the passes a cyclic graph makes unreachable.
+    if _validate_factory_acyclicity(strategy, issues):
+        cycle_errors, cycle_warnings, cycle_info = _group_by_severity(issues)
+        if trace_sink is not None:
+            trace_sink.finalize(final_name)
+        return ValidationResult(
+            valid=False,
+            errors=cycle_errors,
+            warnings=cycle_warnings,
+            info=cycle_info,
+            type_flow=type_flow,
+        )
+
     # Pass 3: Factory expansion
     expanded = _expand_factories(strategy, issues)
+
+    # Pass 3b: variable-reference acyclicity — the structural cycle gate
+    # every VariableRef-inlining walk below (passes 6, 7, 7b, 8) relies on.
+    _validate_variable_acyclicity(expanded, issues)
 
     # Only continue to registry-based passes if no structural errors
     structural_errors, structural_warnings, structural_info = _group_by_severity(issues)
     if structural_errors:
+        if trace_sink is not None:
+            trace_sink.finalize(final_name)
         return ValidationResult(
             valid=False,
             errors=structural_errors,
@@ -488,6 +697,8 @@ def validate_strategy(
     name_errors = [i for i in issues if i.code == "UNKNOWN_COMPONENT"]
     if name_errors:
         ne, nw, ni = _group_by_severity(issues)
+        if trace_sink is not None:
+            trace_sink.finalize(final_name)
         return ValidationResult(
             valid=False,
             errors=ne,
@@ -499,14 +710,35 @@ def validate_strategy(
     # Pass 5: Parameter validation
     _validate_params(expanded, registry, issues)
 
-    # Pass 6: Type flow validation
-    _validate_type_flow(expanded, registry, issues, type_flow, slot_types)
+    # Pass 6 position: the judgment-table interpreter walk (spec 03 §2.4,
+    # M2c cutover). ONE walk carries passes 6+8 under the shipped
+    # configuration (m2-compat at HEAD): typing issues emit inline;
+    # slot-lifecycle outcomes (SLOT_NOT_FOUND / SLOT_REF_NOT_FOUND /
+    # SLOT_TYPE_MISMATCH + usage facts) are journaled on the walk and
+    # flushed at the pass-8 position below, preserving today's observable
+    # issue order. The old hand-written pass bodies (_validate_type_flow /
+    # _validate_slots_in_pipeline) were deleted at the M2e step (spec 03 §6
+    # Step 3); this walk is the sole type-flow + slot path. Lazy import:
+    # interpreter.py imports emit()/helpers from this module and loads the
+    # generated judgment/domain tables at ITS import (loud-fail).
+    from pipeline_engine.dsl.interpreter import Walk
+
+    walk = Walk(registry, trace_sink=trace_sink)
+    final_name = walk.run(expanded, issues, type_flow, slot_types).name
 
     # Pass 7: Phase ordering
     _validate_phase_ordering(expanded, registry, issues)
 
-    # Pass 8: Slot validation
-    _validate_slots(expanded, registry, issues, slot_types)
+    # Pass 7b: universe-mask discipline (rolling-universe P2 (c)) — the
+    # masked-bit taint walk behind the three staged Contract-C codes. Runs
+    # after the interpreter walk so the terminal type is already in
+    # type_flow; structurally silent while the staged changes are DORMANT.
+    _validate_universe_mask_discipline(
+        expanded, registry, issues, type_flow, production_mode=production_mode
+    )
+
+    # Pass 8 position: Σ-journal flush (flush mode — spec 03 §2.4/§5, R-12)
+    _validate_slots(expanded, registry, issues, slot_types, trace_sink=trace_sink, walk=walk)
 
     # Pass 9: Globals, Universe, and declaration reference validation
     _validate_declarations(
@@ -517,6 +749,11 @@ def validate_strategy(
 
     # Build pipeline summary from type flow
     pipeline_summary = _build_pipeline_summary(type_flow)
+
+    # Schema-0 trace observation point 4 (spec 04 §2.2.2) — assemble the
+    # document once the complete issue set has been observed.
+    if trace_sink is not None:
+        trace_sink.finalize(final_name)
 
     return ValidationResult(
         valid=len(errors) == 0,
@@ -570,6 +807,167 @@ def iter_variable_refs(value: Any) -> Iterator[VariableRef]:
     elif isinstance(value, dict):
         for item in value.values():
             yield from iter_variable_refs(item)
+
+
+def _collect_variable_refs(spec: Any) -> set[str]:
+    """Recursively collect all VariableRef names referenced in a spec tree or value.
+
+    Covers refs used as steps, refs at any depth inside component params and
+    factory-call args, and refs inside plain container values (a variable may
+    be assigned e.g. ``x = [a, b]``).
+    """
+    refs: set[str] = set()
+    if isinstance(spec, VariableRef):
+        refs.add(spec.name)
+    elif isinstance(spec, PipelineSpec):
+        for step in spec.steps:
+            refs |= _collect_variable_refs(step)
+    elif isinstance(spec, ParallelSpec):
+        for branch_steps in spec.branches.values():
+            for step in branch_steps:
+                refs |= _collect_variable_refs(step)
+    elif isinstance(spec, ComponentRef):
+        for pval in spec.params.values():
+            refs |= {r.name for r in iter_variable_refs(pval)}
+    elif isinstance(spec, FactoryCallSpec):
+        # Factory bodies are resolved separately, but the call's args are
+        # resolved from the surrounding scope — they are dependencies.
+        for aval in spec.args.values():
+            refs |= {r.name for r in iter_variable_refs(aval)}
+    elif isinstance(spec, (list, tuple, dict)):
+        refs |= {r.name for r in iter_variable_refs(spec)}
+    return refs
+
+
+def _variable_deps(variables: list) -> dict[str, set[str]]:
+    """Dependency graph: var_name -> the other var_names its value references.
+
+    ``_collect_variable_refs`` walks pipelines, component params (at any
+    depth), factory-call args, and plain container values alike; external
+    (non-variable) refs are excluded.
+    """
+    var_names = {v.name for v in variables}
+    return {v.name: _collect_variable_refs(v.value) & var_names for v in variables}
+
+
+def _peel_and_name_cycle(
+    deps: dict[str, set[str]], original_order: dict[str, int]
+) -> list[str] | None:
+    """One concrete cycle in a name-dependency graph, or None when acyclic.
+
+    The shared peel-and-walk behind :func:`find_variable_cycle` and
+    :func:`find_factory_cycle` — one algorithm, one deterministic rendering
+    in both engines' messages for both cycle classes.
+
+    Deterministic naming: peel every node whose dependencies are all
+    resolved (the Kahn fixpoint — what remains is exactly the cycles plus
+    their transitive dependents); start from the FIRST-DEFINED remaining
+    node and always follow its first-defined remaining dependency until a
+    node repeats. The returned list closes the loop explicitly, e.g.
+    ``['a', 'b', 'a']`` renders as ``a → b → a``.
+    """
+    # Fixpoint peel: repeatedly discard nodes with no unresolved deps.
+    # Terminates with exactly the on-cycle nodes + their dependents.
+    remaining = set(deps)
+    changed = True
+    while changed:
+        changed = False
+        for name in list(remaining):
+            if not (deps[name] & remaining):
+                remaining.discard(name)
+                changed = True
+    if not remaining:
+        return None
+
+    # Every remaining node still depends on at least one other remaining
+    # node, so following deps inside the set must revisit a node — walk it
+    # (first-defined order at every choice) to name one concrete cycle.
+    path: list[str] = []
+    index: dict[str, int] = {}
+    cur = min(remaining, key=lambda n: original_order[n])
+    while cur not in index:
+        index[cur] = len(path)
+        path.append(cur)
+        cur = min(
+            (d for d in deps[cur] if d in remaining),
+            key=lambda n: original_order[n],
+        )
+    return path[index[cur] :] + [cur]
+
+
+def find_variable_cycle(variables: list) -> list[str] | None:
+    """One concrete cycle in the variable-reference graph, or None when acyclic.
+
+    The shared cycle oracle behind BOTH surfaces of the circular-variable
+    contract: ``_topo_sort_variables`` names its ``ResolveError`` from it
+    (the runtime resolve path, core-engine-audit F18) and the validator's
+    pass 3b emits ``PIPELINE_VARIABLE_CYCLE`` from it (the write-time path)
+    — one algorithm, one deterministic rendering in both engines' messages
+    (:func:`_peel_and_name_cycle`; ``['a', 'b', 'a']`` renders ``a → b → a``).
+    """
+    if not variables:
+        return None
+    return _peel_and_name_cycle(
+        _variable_deps(variables), {v.name: i for i, v in enumerate(variables)}
+    )
+
+
+def _collect_factory_calls(spec: Any) -> set[str]:
+    """Recursively collect FactoryCallSpec names in a step tree.
+
+    Edge semantics follow pass-3 expansion EXACTLY — an edge exists where
+    ``_expand_factories`` would recurse: factory calls used as steps, at any
+    structural depth (parallel branches, nested pipelines). ``VariableRef``
+    steps are deliberately NOT followed — expansion leaves them in place
+    (variable bodies are expanded separately), so a loop routed through a
+    variable body surfaces post-expansion as a direct variable→variable edge
+    (pass 3b, ``PIPELINE_VARIABLE_CYCLE``), never as a factory edge.
+    Component params and factory-call args hold values, not steps — no edges.
+    """
+    calls: set[str] = set()
+    if isinstance(spec, FactoryCallSpec):
+        calls.add(spec.name)
+    elif isinstance(spec, PipelineSpec):
+        for step in spec.steps:
+            calls |= _collect_factory_calls(step)
+    elif isinstance(spec, ParallelSpec):
+        for branch_steps in spec.branches.values():
+            for step in branch_steps:
+                calls |= _collect_factory_calls(step)
+    return calls
+
+
+def _factory_deps(factories: list) -> dict[str, set[str]]:
+    """Dependency graph: factory_name -> the other factories its body calls.
+
+    Unknown call targets are excluded — they are pass-1/pass-4 territory
+    (``UNDEFINED_VARIABLE`` / ``UNKNOWN_COMPONENT``), not cycle edges.
+    """
+    factory_names = {f.name for f in factories}
+    return {f.name: _collect_factory_calls(f.body) & factory_names for f in factories}
+
+
+def find_factory_cycle(factories: list) -> list[str] | None:
+    """One concrete cycle in the factory-call graph, or None when acyclic.
+
+    The shared cycle oracle behind BOTH surfaces of the circular-factory
+    contract (the factory sibling of :func:`find_variable_cycle`):
+    ``resolve_strategy`` names its ``ResolveError`` from it (the runtime
+    resolve path — ``_resolve_factory_call`` inlines factory bodies and
+    would recurse unbounded) and the validator's pass 3a emits
+    ``FACTORY_CALL_CYCLE`` from it (the write-time path) — one algorithm,
+    one deterministic rendering in both engines' messages
+    (:func:`_peel_and_name_cycle`; ``['f', 'g', 'f']`` renders ``f → g → f``).
+
+    Checks ALL defined factories, called or not — a cyclic definition can
+    never be legitimately called (any call site would recurse pass-3
+    expansion unbounded), so the defect is in the definitions themselves.
+    """
+    if not factories:
+        return None
+    return _peel_and_name_cycle(
+        _factory_deps(factories), {f.name: i for i, f in enumerate(factories)}
+    )
 
 
 def substitute_variable_refs(value: Any, resolve: Callable[[VariableRef], Any]) -> Any:
@@ -767,6 +1165,47 @@ def _validate_name_collisions(
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# PASS 3a: Factory-call acyclicity
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+def _validate_factory_acyclicity(strategy: StrategyFile, issues: list[ValidationIssue]) -> bool:
+    """Pass 3a: the factory-call graph must be a DAG (FACTORY_CALL_CYCLE).
+
+    Runs on the RAW strategy BEFORE pass-3 expansion — the placement is the
+    one deliberate difference from its variable sibling (pass 3b runs on
+    the EXPANDED strategy): here the overflow site IS the expansion —
+    ``_expand_factories`` inlines a factory body at every call site and
+    recurses into the inlined body, so a factory that reaches itself —
+    directly (``f`` calls ``f``) or mutually (``f`` calls ``g``, ``g``
+    calls ``f``) — recurses unbounded before any later pass could look.
+    Edges are the ones expansion actually follows (``_collect_factory_calls``:
+    factory calls as steps at any structural depth, never through
+    ``VariableRef`` — variable-routed loops are pass 3b's
+    ``PIPELINE_VARIABLE_CYCLE``, visible post-expansion as direct
+    variable→variable edges). The runtime twin is ``resolve_strategy``'s
+    ResolveError (same :func:`find_factory_cycle` oracle, same deterministic
+    cycle naming); ``verify_spec`` runs this check too, before it expands a
+    stored artifact; ``_expand_factories`` keeps a defensive raise for any
+    remaining ungated caller.
+
+    Returns True when a cycle was found — the caller must then SKIP pass-3
+    expansion entirely and short-circuit at the structural stage.
+    """
+    cycle = find_factory_cycle(strategy.factories)
+    if cycle is None:
+        return False
+    first = next((f for f in strategy.factories if f.name == cycle[0]), None)
+    emit(
+        issues,
+        "FACTORY_CALL_CYCLE",
+        location=_format_location(first.location) if first is not None else None,
+        cycle=" → ".join(cycle),
+    )
+    return True
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # PASS 3: Factory expansion
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -774,6 +1213,12 @@ def _validate_name_collisions(
 def _expand_factories(strategy: StrategyFile, issues: list[ValidationIssue]) -> StrategyFile:
     """Pass 3: Expand all FactoryCallSpec into PipelineSpec."""
     factory_map = {f.name: f for f in strategy.factories}
+    # Active-expansion stack — the defensive cycle backstop for UNGATED
+    # callers (mirrors the interpreter Walk's _var_stack): a clean error,
+    # never a silent skip and never a RecursionError. The gated entry
+    # points (validate_strategy's pass 3a, verify_spec) refuse cyclic
+    # factory graphs with FACTORY_CALL_CYCLE before this function runs.
+    active: list[str] = []
 
     def _expand_step(step: StepSpec) -> StepSpec:
         if isinstance(step, FactoryCallSpec):
@@ -781,6 +1226,15 @@ def _expand_factories(strategy: StrategyFile, issues: list[ValidationIssue]) -> 
             if factory is None:
                 # Will be caught by pass 1 or pass 4
                 return step
+
+            if step.name in active:
+                raise RuntimeError(
+                    f"Factory-call cycle reached pass-3 expansion: factory "
+                    f"'{step.name}' is already being expanded "
+                    f"({' → '.join([*active, step.name])}). Cyclic factory "
+                    f"graphs fail validation with FACTORY_CALL_CYCLE — run "
+                    f"validate_strategy or verify_spec before expanding."
+                )
 
             # Check params
             required = [p.name for p in factory.params if p.default is MISSING]
@@ -835,7 +1289,11 @@ def _expand_factories(strategy: StrategyFile, issues: list[ValidationIssue]) -> 
                     f"{step.name}_{'_'.join(arg_parts)}" if arg_parts else step.name
                 )
 
-            return _expand_steps_in(expanded_body)
+            active.append(step.name)
+            try:
+                return _expand_steps_in(expanded_body)
+            finally:
+                active.pop()
 
         elif isinstance(step, ParallelSpec):
             new_branches = {}
@@ -866,11 +1324,21 @@ def _expand_factories(strategy: StrategyFile, issues: list[ValidationIssue]) -> 
     # Expand main pipeline
     expanded_pipeline = _expand_steps_in(strategy.pipeline)
 
+    # Preserve the declaration state (Globals/Universe/Execution) on the
+    # expanded file. Pre-M4b the reconstruction silently DROPPED them —
+    # harmless while every consumer read declarations from the ORIGINAL
+    # strategy (pass 9's split), but the pass-6 clock facet reads κ_exec and
+    # the declaration-backed transfer sources from the strategy it walks
+    # (the expanded one), so the drop made every globals-wired clock
+    # unresolvable (dsl-mtf-clocks T-M4b-1 root-cause fix, not a workaround).
     return StrategyFile(
         metadata=strategy.metadata,
         factories=strategy.factories,
         variables=new_variables,
         pipeline=expanded_pipeline,
+        globals_=strategy.globals_,
+        universe=strategy.universe,
+        execution=strategy.execution,
     )
 
 
@@ -909,6 +1377,43 @@ def _substitute_params(pipeline: PipelineSpec, substitutions: dict[str, Any]) ->
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# PASS 3b: Variable-reference acyclicity
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+def _validate_variable_acyclicity(strategy: StrategyFile, issues: list[ValidationIssue]) -> None:
+    """Pass 3b: the variable-reference graph must be a DAG (PIPELINE_VARIABLE_CYCLE).
+
+    Runs on the EXPANDED strategy — factory bodies are already inlined, so a
+    cycle routed through a factory (variable ``a``'s body calls factory
+    ``f``; ``f``'s body references ``a``) appears as a direct
+    variable→variable edge here: exactly the ``variable_pipelines`` graph
+    the inlining walks consume. Emitting at the structural stage (the error
+    short-circuits before pass 4) is what makes every downstream
+    ``VariableRef``-inlining walk safe to recurse without a cycle guard of
+    its own: the pass-6 interpreter walk, pass-7 ``_check_ordering``, and
+    the pass-7b ``_find_mask_anchor``/``_mask_walk`` all rely on this gate.
+    The runtime twin is the resolver's ``_topo_sort_variables`` ResolveError
+    (core-engine-audit F18) — same :func:`find_variable_cycle` oracle, same
+    deterministic cycle naming, so validate-time and resolve-time name the
+    identical cycle. ``verify_spec`` runs this check too (its standalone
+    slot walk interprets stored artifacts that may never have been
+    validated); the interpreter keeps a defensive raise for any remaining
+    ungated caller.
+    """
+    cycle = find_variable_cycle(strategy.variables)
+    if cycle is None:
+        return
+    first = next((v for v in strategy.variables if v.name == cycle[0]), None)
+    emit(
+        issues,
+        "PIPELINE_VARIABLE_CYCLE",
+        location=_format_location(first.location) if first is not None else None,
+        cycle=" → ".join(cycle),
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # PASS 4: Name resolution
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -926,7 +1431,7 @@ def _validate_names(
     emits INVALID_VERSION_LOCK (mirrors TS pass4-names so the editor and
     server agree).
     """
-    from pipeline_engine.base.registry import get_all_versions
+    from pipeline_engine.base.registry import get_all_versions, get_version
 
     registry_names = list(registry.keys())
     for ref in _walk_component_refs(strategy):
@@ -956,6 +1461,30 @@ def _validate_names(
                     "DEPRECATED_COMPONENT",
                     location=_format_location(ref.location),
                     name=ref.name,
+                )
+
+            # Constrained shells (dsl-mtf-clocks spec 02 §8.2): the version
+            # this strategy will actually RESOLVE to does not execute. Pass 4
+            # is handed the latest-registry view, so the effective version is
+            # re-derived from the lock here — a blob pinned to a runnable
+            # version stays silent (blob/ABI invariant: pinned instances keep
+            # loading and running, which is the entire point of constraining
+            # at v2 instead of deleting). Only authoring that lands ON the
+            # shell errors.
+            effective = sig
+            if component_lock and ref.name in component_lock:
+                pinned = get_version(ref.name, component_lock[ref.name])
+                if pinned is not None:
+                    effective = pinned
+            redirect = getattr(effective, "not_runnable", None)
+            if redirect:
+                emit(
+                    issues,
+                    "COMPONENT_NOT_RUNNABLE",
+                    location=_format_location(ref.location),
+                    name=ref.name,
+                    version=getattr(effective, "version", "?"),
+                    redirect=redirect,
                 )
 
             # INVALID_VERSION_LOCK — verify the locked version exists.
@@ -1012,12 +1541,119 @@ def _effective_param_value(
     return pinfo.default
 
 
+def _literal_in_domain(value: int | float, domain: dict) -> bool:
+    """J-PARAM literal inclusion ``Set{v} ⊑ D`` via the shared domain evaluator.
+
+    The pass-5 constraint branches (A3 rows ``J-PARAM.range`` /
+    ``J-PARAM.option``) evaluate literal membership through relation.py's
+    inclusion evaluator instead of ad-hoc comparisons (spec 03 §1.1). The
+    DEMAND side of J-PARAM (only) admits ±inf sentinel endpoints, encoding the
+    half-open min-only / max-only constraint forms. Two guards keep the
+    premise verdict-identical to today's comparison semantics:
+
+    - NaN never violates a bound (``nan < min`` / ``nan > max`` are both
+      False today) — inclusion is vacuously satisfied;
+    - an int beyond IEEE-double range (``float()`` raises OverflowError)
+      falls back to Python's EXACT int/float comparisons — provably the same
+      predicate, evaluated without the lossy coercion.
+    """
+    if value != value:  # NaN — comparison-based bounds never fire on it
+        return True
+    try:
+        return domain_leq({"set": [float(value)]}, domain)
+    except OverflowError:
+        lo, hi = domain["interval"]
+        return lo <= value <= hi
+
+
+def _literal_in_options(value: str, options: list) -> bool:
+    """J-PARAM ``Set{v} ⊑ Set(options)`` over literal equality (A3 ``J-PARAM.option``).
+
+    Param-literal option universes are string-valued here (the
+    ``value-kind:str`` guard admits only str values to this premise), so the
+    inclusion operation is literal-equality set membership — spec 01 §7.2's
+    "one lattice, two uses" sanction (the ℝ-only/≤8 caps bind flow domains;
+    numeric singleton inclusion is served by :func:`_literal_in_domain`).
+    """
+    return value in options
+
+
+#: The generated tombstoned-options table, loaded once on first pass-5 run.
+_TOMBSTONED_OPTIONS: dict[str, dict] | None = None
+
+
+def _staged_key_armed(key: str) -> bool:
+    """True iff staged change ``key`` is in an EMITTING state (spec 05 §2.2).
+
+    A DORMANT code must be STRUCTURALLY silent — ``severity_for`` raises rather
+    than emit one, so an emitting site guards itself instead of relying on the
+    catalog to swallow the call. Mirrors ``interpreter.py``'s ``_stage_armed``
+    (kept local: the dsl interpreter imports the validator, not the reverse).
+    """
+    change = STAGED_CHANGES[key]
+    if change.kind == "flow-shape":
+        return change.stage != "pre"
+    return Stage(change.stage) is not Stage.DORMANT
+
+
+def _tombstoned_options() -> dict[str, dict]:
+    """The generated tombstoned-options table (dsl-mtf-clocks spec 02 §2.3).
+
+    Loaded once, lazily, from ``registry_metadata.json`` — the table is
+    GENERATED from the versioned registration data (spec 01 §8.4's
+    constrain-at-v2 + tombstone pattern as data), never hand-maintained.
+    """
+    global _TOMBSTONED_OPTIONS
+    if _TOMBSTONED_OPTIONS is None:
+        from pipeline_engine.dsl.fixtures.loader import load_tombstoned_options
+
+        _TOMBSTONED_OPTIONS = load_tombstoned_options()
+    return _TOMBSTONED_OPTIONS
+
+
+def _tombstone_record(component: str, param: str, version: int, value: Any) -> dict | None:
+    """The tombstone record a locked ``component`` v``version`` pin trips, if any.
+
+    O(1) per param over the generated table. Fires only when ALL of:
+
+    1. the resolved (lock-effective) version is a pre-constraint version the
+       table names — new authoring resolves to the latest version, where the
+       narrowed schema makes the value a plain ``PARAM_INVALID_OPTION``;
+    2. the pinned version's own schema ADMITS the value. A value that was
+       already invalid at the pinned version is ``PARAM_INVALID_OPTION``'s, not
+       this code's — firing here would double-report it;
+    3. the latest version no longer admits it. A re-widening at a later version
+       retires the tombstone automatically (the table's ``admitted`` is the
+       LATEST surface).
+    """
+    for record in _tombstoned_options().get(component, {}).get(param, ()):
+        if record["version"] != version:
+            continue
+        prior = record["prior_admitted"]
+        if prior is not None and value not in prior:
+            continue  # already invalid at the pinned version — not ours
+        if value in record["admitted"]:
+            continue  # still authorable at latest
+        return record
+    return None
+
+
 def _validate_params(
     strategy: StrategyFile,
     registry: dict[str, Any],
     issues: list[ValidationIssue],
 ) -> None:
-    """Pass 5: Validate component parameters against registry."""
+    """Pass 5: Validate component parameters against registry.
+
+    The five J-PARAM branches (type-match, type-check-skipped, finiteness,
+    range, options — A3 rows ``J-PARAM.*``) are re-based on the shared
+    evaluator at M2c (spec 03 §1.1): the min/max/options premises call the
+    inclusion evaluator, the finiteness branch is the ``J-PARAM.finite``
+    admission premise, and the type-ladder interop exemptions (int→float
+    numeric interop, str for ``*_slot`` params, the VariableRef static-check
+    skip) are the declared exemption semantics of the A3 rows. Verdicts,
+    emit kwargs, and message rendering are unchanged.
+    """
     for ref in _walk_component_refs(strategy):
         sig = registry.get(ref.name)
         if not sig:
@@ -1071,10 +1707,13 @@ def _validate_params(
             if isinstance(pval, VariableRef):
                 continue
 
-            # Type checking — uses param_display_type for user-visible labels
-            # and isinstance against the unwrapped non-None members of the
-            # declared type. Numeric interop (int satisfies any float-typed
-            # param, incl. Optional[float]) matches Python runtime laxness.
+            # Type checking (A3 rows J-PARAM.type-match /
+            # J-PARAM.type-check-skipped) — uses param_display_type for
+            # user-visible labels and isinstance against the unwrapped
+            # non-None members of the declared type. The interop exemptions
+            # (int→float numeric interop incl. Optional[float]; str for
+            # `*_slot` params; the VariableRef skip above) are the declared
+            # J-PARAM exemption semantics (spec 03 §1.1).
             if pinfo.type_ is not None and pval is not None:
                 try:
                     from typing import Any as TypingAny
@@ -1115,39 +1754,66 @@ def _validate_params(
                         type=pinfo.type_,
                     )
 
-            # Reject non-finite numbers (inf/nan) — these fail at compile
+            # J-PARAM.finite (A3): the finiteness premise on numeric
+            # literals — the domain lattice admits finite values only
+            # (spec 01 §1.4 / §7.2); non-finite literals fail at compile.
+            # Strings render from the A3 row's template data (F5.1).
             if isinstance(pval, float) and not math.isfinite(pval):
                 emit(
                     issues,
                     "PARAM_INVALID_VALUE",
                     location=_format_location(ref.location),
-                    suggestion=f"Change {pname} to a finite number.",
-                    detail=f"Parameter '{pname}' of '{ref.name}' has invalid value "
-                    f"{pval!r}. Infinity and NaN are not allowed.",
+                    suggestion=emit_template("param-nonfinite-fix").format(param=pname),
+                    detail=emit_template("param-nonfinite-detail").format(
+                        param=pname, component=ref.name, value=pval
+                    ),
                 )
 
-            # Constraint checking
+            # Constraint checking — A3 rows J-PARAM.range / J-PARAM.option,
+            # evaluated through the shared inclusion evaluator (spec 03 §1.1).
+            # The two half-open interval premises ARE the failing-bound
+            # channel: the below-min and above-max checks are distinct
+            # premises with distinct emissions, exactly today's messages.
+            # Value-kind guards (int-float for range, str for options) fire
+            # per the declared skip_when semantics.
             if pinfo.constraints and not isinstance(pval, VariableRef):
                 c = pinfo.constraints
-                if "min" in c and isinstance(pval, (int, float)) and pval < c["min"]:
+                range_suggestion = emit_template("param-range-fix").format(
+                    param=pname, min=c.get("min", "..."), max=c.get("max", "...")
+                )
+                if (
+                    "min" in c
+                    and isinstance(pval, (int, float))
+                    and not _literal_in_domain(pval, {"interval": [c["min"], math.inf]})
+                ):
                     emit(
                         issues,
                         "PARAM_OUT_OF_RANGE",
                         location=_format_location(ref.location),
-                        suggestion=f"Change {pname} to a value in range [{c.get('min', '...')}, {c.get('max', '...')}].",
-                        detail=f"Parameter '{pname}' of '{ref.name}' value {pval} "
-                        f"below minimum {c['min']}.",
+                        suggestion=range_suggestion,
+                        detail=emit_template("param-range-detail", "below-min").format(
+                            param=pname, component=ref.name, value=pval, min=c["min"]
+                        ),
                     )
-                if "max" in c and isinstance(pval, (int, float)) and pval > c["max"]:
+                if (
+                    "max" in c
+                    and isinstance(pval, (int, float))
+                    and not _literal_in_domain(pval, {"interval": [-math.inf, c["max"]]})
+                ):
                     emit(
                         issues,
                         "PARAM_OUT_OF_RANGE",
                         location=_format_location(ref.location),
-                        suggestion=f"Change {pname} to a value in range [{c.get('min', '...')}, {c.get('max', '...')}].",
-                        detail=f"Parameter '{pname}' of '{ref.name}' value {pval} "
-                        f"above maximum {c['max']}.",
+                        suggestion=range_suggestion,
+                        detail=emit_template("param-range-detail", "above-max").format(
+                            param=pname, component=ref.name, value=pval, max=c["max"]
+                        ),
                     )
-                if "options" in c and isinstance(pval, str) and pval not in c["options"]:
+                if (
+                    "options" in c
+                    and isinstance(pval, str)
+                    and not _literal_in_options(pval, c["options"])
+                ):
                     emit(
                         issues,
                         "PARAM_INVALID_OPTION",
@@ -1157,6 +1823,38 @@ def _validate_params(
                         value=pval,
                         options=c["options"],
                     )
+
+        # TOMBSTONED_OPTION_PINNED (dsl-mtf-clocks spec 02 §2.3, executing spec
+        # 01 §8.4 item 2). `registry` is the LOCK-EFFECTIVE view, so `sig` IS
+        # the resolved version: when a pin resolves to a pre-constraint version
+        # and its effective value was retired at a later one, say so. Runs over
+        # the registry params (not just the written ones) because a v1 DEFAULT
+        # can itself be a retired value — `_effective_param_value` is exactly
+        # "the value __init__ would see". Permanent WARNING by catalog ceiling:
+        # the blob/ABI invariant promises the pinned instance keeps loading and
+        # running, so this reports, never blocks.
+        if _staged_key_armed("tombstoned-option-pinned"):
+            for pname, pinfo in reg_params.items():
+                if pinfo.tier == ParamTier.INFRA:
+                    continue
+                pval = _effective_param_value(ref.params, reg_params, pname)
+                if not isinstance(pval, str):
+                    continue  # option surfaces are string-valued; VariableRef unresolvable
+                record = _tombstone_record(ref.name, pname, sig.version, pval)
+                if record is None:
+                    continue
+                emit(
+                    issues,
+                    "TOMBSTONED_OPTION_PINNED",
+                    location=_format_location(ref.location),
+                    component=ref.name,
+                    version=sig.version,
+                    param=pname,
+                    value=repr(pval),
+                    new_version=record["retired_at"],
+                    reason=record["reason"],
+                    replacement=record["replacement"],
+                )
 
         # Dict weight-sum validation: "weights" params with numeric values must sum to 1.0
         for pname, pval in ref.params.items():
@@ -1281,537 +1979,6 @@ def _validate_params(
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# PASS 6: Type flow validation
-# ═══════════════════════════════════════════════════════════════════════════════
-
-
-def _suggest_type_bridge(
-    current_type: type,
-    expected_type: type,
-    registry: dict[str, Any],
-) -> str:
-    """Suggest a component that bridges current_type -> expected_type."""
-
-    # Find components that accept current_type and output expected_type
-    candidates = []
-    for name, sig in registry.items():
-        if is_compatible(current_type, sig.input_type) and is_compatible(
-            sig.output_type, expected_type
-        ):
-            candidates.append(name)
-
-    if candidates:
-        examples = candidates[:3]
-        return f"Insert a component that transforms {type_name(current_type)} to {type_name(expected_type)}. Options: {', '.join(examples)}"
-    return (
-        f"Expected input type {type_name(expected_type)}, "
-        f"but previous step outputs {type_name(current_type)}."
-    )
-
-
-def _validate_type_flow(
-    strategy: StrategyFile,
-    registry: dict[str, Any],
-    issues: list[ValidationIssue],
-    type_flow: list[TypeFlowEntry],
-    slot_types: dict[str, type],
-) -> None:
-    """Pass 6: Walk expanded pipeline tree tracking output types."""
-
-    # Resolve variable values for type checking
-    variable_pipelines: dict[str, PipelineSpec] = {}
-    for var in strategy.variables:
-        if isinstance(var.value, PipelineSpec):
-            variable_pipelines[var.name] = var.value
-
-    _validate_pipeline_type_flow(
-        strategy.pipeline,
-        registry,
-        issues,
-        type_flow,
-        slot_types,
-        prev_output_type=type(None),
-        variable_pipelines=variable_pipelines,
-        context="pipeline",
-    )
-
-
-def _validate_pipeline_type_flow(
-    pipeline: PipelineSpec,
-    registry: dict[str, Any],
-    issues: list[ValidationIssue],
-    type_flow: list[TypeFlowEntry],
-    slot_types: dict[str, type],
-    prev_output_type: type,
-    variable_pipelines: dict[str, PipelineSpec],
-    context: str,
-) -> type:
-    """Validate type flow for a PipelineSpec, returning final output type."""
-    from typing import Any as TypingAny
-
-    from pipeline_engine.base.step import StepCategory
-
-    current_type = prev_output_type
-    # Track the most recent Parallel for EXTRACT_MISSING_KEY checking.
-    # (Per-branch terminal types are threaded directly into
-    # ``_check_composer_input_types`` as ``branch_types`` below.)
-    prev_parallel: ParallelSpec | None = None
-
-    for i, step in enumerate(pipeline.steps):
-        step_context = f"{context}.step[{i}]"
-
-        if isinstance(step, ComponentRef):
-            sig = registry.get(step.name)
-            if not sig:
-                type_flow.append(
-                    TypeFlowEntry(
-                        step=step.name,
-                        input_type=type_name(current_type),
-                        output_type="UNRESOLVED",
-                        category="error",
-                    )
-                )
-                current_type = TypingAny
-                continue
-
-            # DataLoader: generates new data regardless of position.
-            # In the runtime PipelineValidator, nested Pipelines starting with
-            # a DataSource skip type checks (pipeline_in is type(None)).
-            # After factory expansion the DSL validator flattens those nested
-            # Pipelines, so DataLoaders appear mid-branch with a non-None
-            # current_type. Skip the check unconditionally to match runtime.
-            is_data_loader = sig.category == StepCategory.DATA_LOADER
-
-            # After Parallel the pipeline type is dict. TYPE_TRANSITIONS
-            # defines which categories are valid after dict (composers,
-            # position sizers, etc.). Use that as source of truth.
-            is_dict_input = current_type is dict
-            _dict_allowed = TYPE_TRANSITIONS.get("dict", {})
-
-            # DICT_INPUT_EXPECTED — composer categories expect dict (the
-            # output of a preceding Parallel). Empirically verified
-            # (2026-06-11) that a composer with non-dict input crashes at
-            # runtime (`ValueError: The truth value of a DataFrame is
-            # ambiguous` or similar in step.run()). Severity = error so the
-            # save-time validator blocks the strategy — runtime
-            # PipelineValidator's lenient warning is the safety net, not
-            # the gate.
-            composer_categories = {
-                StepCategory.SIGNAL_COMPOSER,
-                StepCategory.FORECAST_COMPOSER,
-            }
-            if (
-                sig.category in composer_categories
-                and not is_dict_input
-                and not is_data_loader
-                and current_type is not TypingAny
-            ):
-                emit(
-                    issues,
-                    "DICT_INPUT_EXPECTED",
-                    location=_format_location(step.location),
-                    suggestion=f"Place a Parallel block before '{step.name}'.",
-                    step=f"Composer '{step.name}'",
-                    actual=type_name(current_type),
-                )
-                # Skip downstream TYPE_MISMATCH — DICT_INPUT_EXPECTED already
-                # describes the same authoring mistake; emitting both
-                # would double-warn the user / agent. Mirrors TS pass6.
-                type_flow.append(
-                    TypeFlowEntry(
-                        step=f"{step.name}({_format_params_brief(step.params)})",
-                        input_type=type_name(current_type),
-                        output_type=type_name(sig.output_type),
-                        category=sig.category.value,
-                    )
-                )
-                current_type = sig.output_type
-                prev_parallel = None
-                continue
-
-            # DICT_NOT_CONSUMED — non-composer step after Parallel discards
-            # the dict. Categories listed in TYPE_TRANSITIONS["dict"]
-            # (composers + position_sizer + position_manager) and slot ops
-            # are the legitimate consumers. Slot-readers
-            # (e.g. MaxDrawdownStopLoss) are also exempt — their `run()`
-            # treats ``current`` as a passthrough and pulls data from
-            # declared slots instead, so they survive a dict input fine.
-            # Without this exemption Python would false-positive on
-            # strategies the TS canvas validator (which already exempts
-            # slot-readers, pass6-types.ts:217) and the runtime both
-            # accept.
-            #
-            # Empirically verified (2026-06-11) that any other category
-            # crashes at runtime with `AttributeError: 'dict' object has
-            # no attribute 'index'` or similar — the runtime executor
-            # doesn't auto-unpack. Severity = error so the validator
-            # blocks the strategy at save-time. Short-circuits the
-            # downstream TYPE_MISMATCH check (would double-report the
-            # same authoring mistake).
-            is_slot_reader = bool(getattr(sig, "slot_reads", None))
-            if (
-                is_dict_input
-                and sig.category not in _dict_allowed
-                and sig.category != StepCategory.SLOT_OP
-                and not is_data_loader
-                and not is_slot_reader
-            ):
-                emit(
-                    issues,
-                    "DICT_NOT_CONSUMED",
-                    location=_format_location(step.location),
-                    step=step.name,
-                )
-                type_flow.append(
-                    TypeFlowEntry(
-                        step=f"{step.name}({_format_params_brief(step.params)})",
-                        input_type=type_name(current_type),
-                        output_type=type_name(sig.output_type),
-                        category=sig.category.value,
-                    )
-                )
-                current_type = sig.output_type
-                prev_parallel = None
-                continue
-
-            # Check compatibility
-            if current_type is not TypingAny and sig.input_type is not TypingAny:
-                skip_check = is_data_loader or (is_dict_input and sig.category in _dict_allowed)
-                if not skip_check:
-                    if not is_compatible(current_type, sig.input_type):
-                        suggestion = _suggest_type_bridge(current_type, sig.input_type, registry)
-                        emit(
-                            issues,
-                            "TYPE_MISMATCH",
-                            location=_format_location(step.location),
-                            suggestion=suggestion,
-                            context=step_context,
-                            step=step.name,
-                            expected=type_name(sig.input_type),
-                            actual=type_name(current_type),
-                        )
-
-            # TRANSITION_OUTPUT_MISMATCH — author-facing warning when a
-            # component's declared output_type disagrees with what the
-            # category-level TYPE_TRANSITIONS table says the category
-            # produces for this input. Mirrors runtime PipelineValidator
-            # and TS pass6 (it's a hint about component metadata, not the
-            # user's wiring — the strict per-component TYPE_MISMATCH above
-            # is authoritative for user-facing correctness).
-            prev_out_name = type_to_transition_key(current_type)
-            if prev_out_name is not None and not is_data_loader:
-                category_map = TYPE_TRANSITIONS.get(prev_out_name)
-                if category_map is not None and sig.category in category_map:
-                    expected_outputs = category_map[sig.category]
-                    step_out_name = type_to_transition_key(sig.output_type)
-                    if step_out_name is not None and step_out_name not in expected_outputs:
-                        emit(
-                            issues,
-                            "TRANSITION_OUTPUT_MISMATCH",
-                            location=_format_location(step.location),
-                            step=step.name,
-                            category=sig.category.value,
-                            output=step_out_name,
-                            prev_output=prev_out_name,
-                            expected_outputs=expected_outputs,
-                        )
-
-            # Record type flow
-            type_flow.append(
-                TypeFlowEntry(
-                    step=f"{step.name}({_format_params_brief(step.params)})",
-                    input_type=type_name(current_type),
-                    output_type=type_name(sig.output_type),
-                    category=sig.category.value,
-                )
-            )
-
-            current_type = sig.output_type
-
-        elif isinstance(step, SlotStoreSpec):
-            # Pass-through; record slot type
-            slot_types[step.slot_name] = current_type
-            type_flow.append(
-                TypeFlowEntry(
-                    step=f'Store("{step.slot_name}")',
-                    input_type=type_name(current_type),
-                    output_type=type_name(current_type),
-                    category="slot_op",
-                )
-            )
-
-        elif isinstance(step, SlotStoreValueSpec):
-            # Pass-through; record slot type based on value
-            slot_types[step.slot_name] = _store_value_slot_type(step.value)
-            type_flow.append(
-                TypeFlowEntry(
-                    step=f'StoreValue("{step.slot_name}", {step.value!r})',
-                    input_type=type_name(current_type),
-                    output_type=type_name(current_type),
-                    category="slot_op",
-                )
-            )
-
-        elif isinstance(step, SlotLoadSpec):
-            stored_type = slot_types.get(step.slot_name)
-            if stored_type is not None:
-                current_type = stored_type
-            type_flow.append(
-                TypeFlowEntry(
-                    step=f'Load("{step.slot_name}")',
-                    input_type=type_name(current_type),
-                    output_type=type_name(current_type),
-                    category="slot_op",
-                )
-            )
-
-        elif isinstance(step, SlotExtractSpec):
-            # EXTRACT_MISSING_KEY — Extract(key=…) following a Parallel must
-            # reference one of the branches by name. Mirrors runtime
-            # PipelineValidator so the AI sees this at validate-time, not
-            # at backtest. Without a preceding Parallel, emit
-            # DICT_INPUT_EXPECTED for the same reason composers do.
-            if prev_parallel is None or current_type is not dict:
-                emit(
-                    issues,
-                    "DICT_INPUT_EXPECTED",
-                    location=_format_location(step.location),
-                    severity_context="extract",
-                    suggestion="Place a Parallel block before 'Extract'.",
-                    step="'Extract'",
-                    actual=type_name(current_type),
-                )
-                current_type = TypingAny
-            elif step.key not in prev_parallel.branches:
-                emit(
-                    issues,
-                    "EXTRACT_MISSING_KEY",
-                    location=_format_location(step.location),
-                    key=step.key,
-                    branches=sorted(prev_parallel.branches.keys()),
-                )
-                current_type = TypingAny
-            else:
-                # Resolve to the matching branch's final step output type.
-                # The branch's type-flow was already recorded — we don't
-                # re-walk; we just unblock downstream type checks.
-                current_type = TypingAny
-
-        elif isinstance(step, ParallelSpec):
-            # Validate each branch independently with isolated slot_types snapshots
-            branch_types: dict[str, type] = {}
-            for branch_name, branch_steps in step.branches.items():
-                branch_slot_types = dict(slot_types)
-                branch_pipeline = PipelineSpec(
-                    steps=branch_steps,
-                    name=branch_name,
-                    location=step.location,
-                )
-                branch_terminal_type = _validate_pipeline_type_flow(
-                    branch_pipeline,
-                    registry,
-                    issues,
-                    type_flow,
-                    branch_slot_types,
-                    prev_output_type=current_type,
-                    variable_pipelines=variable_pipelines,
-                    context=f"{context}.branch[{branch_name}]",
-                )
-                branch_types[branch_name] = branch_terminal_type
-                # Merge branch stores into parent scope
-                slot_types.update(branch_slot_types)
-
-            # After parallel: output is dict
-            current_type = dict
-            prev_parallel = step
-
-            # D23: Composer key validation on next step
-            if i + 1 < len(pipeline.steps):
-                next_step = pipeline.steps[i + 1]
-                if isinstance(next_step, ComponentRef):
-                    _check_composer_keys(step, next_step, registry, issues)
-                    # G1-followup-2: also check the composer's per-key
-                    # input types against the actual branch terminal types.
-                    _check_composer_input_types(next_step, registry, branch_types, issues)
-            # prev_parallel stays set; subsequent EXTRACT_MISSING_KEY /
-            # DICT_INPUT_EXPECTED checks gate on current_type still being
-            # dict, so once a Composer consumes the dict, the stale
-            # prev_parallel becomes inert.
-
-        elif isinstance(step, PipelineSpec):
-            # Nested sub-pipeline: recurse
-            current_type = _validate_pipeline_type_flow(
-                step,
-                registry,
-                issues,
-                type_flow,
-                slot_types,
-                prev_output_type=current_type,
-                variable_pipelines=variable_pipelines,
-                context=step_context,
-            )
-
-        elif isinstance(step, VariableRef):
-            # Resolve to pipeline or literal
-            if step.name in variable_pipelines:
-                var_pipeline = variable_pipelines[step.name]
-                current_type = _validate_pipeline_type_flow(
-                    var_pipeline,
-                    registry,
-                    issues,
-                    type_flow,
-                    slot_types,
-                    prev_output_type=current_type,
-                    variable_pipelines=variable_pipelines,
-                    context=f"var[{step.name}]",
-                )
-            # Literal variables don't change type flow
-
-    return current_type
-
-
-def _check_composer_keys(
-    parallel: ParallelSpec,
-    next_step: ComponentRef,
-    registry: dict[str, Any],
-    issues: list[ValidationIssue],
-) -> None:
-    """D23: Check composer weight keys exist as parallel branch names.
-
-    Missing branches are fine (excluded from combination).
-    Extra keys that don't match any branch are errors (typo/stale).
-    """
-    from pipeline_engine.base.step import StepCategory
-
-    sig = registry.get(next_step.name)
-    if not sig:
-        return
-
-    if sig.category not in (StepCategory.SIGNAL_COMPOSER, StepCategory.FORECAST_COMPOSER):
-        return
-
-    branch_names = set(parallel.branches.keys())
-
-    for param_name, param_value in next_step.params.items():
-        if isinstance(param_value, dict) and all(isinstance(k, str) for k in param_value.keys()):
-            extra = set(param_value.keys()) - branch_names
-            if extra:
-                emit(
-                    issues,
-                    "COMPOSER_KEY_MISMATCH",
-                    location=_format_location(next_step.location),
-                    composer=next_step.name,
-                    param=param_name,
-                    extra=sorted(extra),
-                    branches=sorted(branch_names),
-                )
-
-
-def _composer_accepts(actual: type, expected) -> bool:
-    """Compatibility check used by ``_check_composer_input_types``.
-
-    ``expected`` is either a single type or a tuple of accepted types.
-    A tuple means "any of these" — we accept the first compat hit.
-    Delegates to ``is_compatible`` which already understands NewType
-    siblings (e.g. ForecastSeries → SignalSeries) and Annotated subtypes.
-    """
-    if isinstance(expected, tuple):
-        return any(is_compatible(actual, t) for t in expected)
-    return is_compatible(actual, expected)
-
-
-def _format_expected(expected) -> str:
-    """Pretty-print ``expected`` (single type or tuple) for error messages."""
-    if isinstance(expected, tuple):
-        return " or ".join(type_name(t) for t in expected)
-    return type_name(expected)
-
-
-def _check_composer_input_types(
-    next_step: ComponentRef,
-    registry: dict[str, Any],
-    branch_types: dict[str, type],
-    issues: list[ValidationIssue],
-) -> None:
-    """G1-followup-2: per-key dict-shape mismatch check.
-
-    When the step after a Parallel is a Composer that declared a
-    ``composer_inputs`` contract, each branch's terminal output type must
-    satisfy the role's expected type. Two shapes:
-
-    - ``dict[str, type | tuple[type, ...]]`` — heterogeneous. Each entry
-      maps an init-param NAME (e.g. ``signal_key``) to the expected type
-      at the branch that the user pointed that param at.
-    - ``type | tuple[type, ...]`` — homogeneous. Every branch in the
-      Parallel must satisfy this single type.
-
-    Skipped cleanly when:
-    - the composer didn't declare ``composer_inputs`` (still being audited)
-    - the role param is ``None`` (auto-detect mode in e.g. ``ApplyMask``)
-    - the role param is a ``VariableRef`` (resolved at runtime)
-    - the role param's branch name isn't in ``branch_types``
-      (``COMPOSER_KEY_MISMATCH`` already fires on that)
-    """
-    sig = registry.get(next_step.name)
-    if sig is None:
-        return
-    composer_inputs = getattr(sig, "composer_inputs", None)
-    if composer_inputs is None or not branch_types:
-        return
-
-    if isinstance(composer_inputs, dict):
-        if not composer_inputs:
-            return  # explicit opt-out (e.g. SelectiveCombinator passthrough)
-        for role_param, expected in composer_inputs.items():
-            branch_name = next_step.params.get(role_param)
-            if branch_name is None:
-                continue  # auto-detect / param omitted — skip
-            if isinstance(branch_name, VariableRef):
-                continue
-            if not isinstance(branch_name, str):
-                continue
-            actual = branch_types.get(branch_name)
-            if actual is None:
-                continue  # COMPOSER_KEY_MISMATCH handles this
-            if not _composer_accepts(actual, expected):
-                emit(
-                    issues,
-                    "COMPOSER_INPUT_TYPE_MISMATCH",
-                    location=_format_location(next_step.location),
-                    suggestion=(
-                        f"Change branch '{branch_name}' to end with a step "
-                        f"that outputs {_format_expected(expected)}, or point "
-                        f"'{role_param}' at a different branch."
-                    ),
-                    detail=(
-                        f"Composer '{next_step.name}' role '{role_param}' "
-                        f"references branch '{branch_name}' which outputs "
-                        f"'{type_name(actual)}', but expects "
-                        f"{_format_expected(expected)}."
-                    ),
-                )
-    else:
-        # Homogeneous: every branch must match
-        for branch_name, actual in branch_types.items():
-            if not _composer_accepts(actual, composer_inputs):
-                emit(
-                    issues,
-                    "COMPOSER_INPUT_TYPE_MISMATCH",
-                    location=_format_location(next_step.location),
-                    suggestion=(
-                        f"Change branch '{branch_name}' to end with a step "
-                        f"that outputs {_format_expected(composer_inputs)}."
-                    ),
-                    detail=(
-                        f"Composer '{next_step.name}' expects every Parallel "
-                        f"branch to output {_format_expected(composer_inputs)}, "
-                        f"but branch '{branch_name}' outputs "
-                        f"'{type_name(actual)}'."
-                    ),
-                )
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
 # PASS 7: Phase ordering
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -1821,9 +1988,23 @@ def _validate_phase_ordering(
     registry: dict[str, Any],
     issues: list[ValidationIssue],
 ) -> None:
-    """Pass 7: Check step categories follow PHASE_ORDER."""
+    """Pass 7: Check step categories follow PHASE_ORDER.
 
-    _check_ordering(strategy.pipeline, registry, issues)
+    Named ``Pipeline``-variable bodies are walked through their references
+    (the C11 treatment, pulled forward from the M5 evidence pass):
+    ``_check_ordering`` recurses into a ``VariableRef``'s body carrying the
+    CURRENT phase state in and the body's resulting state out, exactly like
+    the interpreter's transparent inlining (interpreter.py Walk._pipeline's
+    VariableRef arm). This is deliberately UNLIKE a nested ``PipelineSpec``
+    (an expanded factory body), which resets to phase 0 — multi-signal
+    factories legitimately restart at the data phase. Pre-fix, the walk
+    skipped ``VariableRef`` steps entirely, so the inline spelling of a
+    strategy fired violations its variable spelling did not
+    (AUDIT-v16-staging-readiness §1.5). Recursion is safe: pass 3b
+    guarantees the variable graph is acyclic before this pass runs.
+    """
+    variables = {v.name: v.value for v in strategy.variables if isinstance(v.value, PipelineSpec)}
+    _check_ordering(strategy.pipeline, registry, issues, variables=variables)
 
 
 def _check_ordering(
@@ -1831,16 +2012,27 @@ def _check_ordering(
     registry: dict[str, Any],
     issues: list[ValidationIssue],
     current_phase_idx: int = 0,
+    variables: dict[str, PipelineSpec] | None = None,
 ) -> int:
     """Check ordering, returning max phase index."""
     from pipeline_engine.base.step import StepCategory
 
+    if variables is None:
+        variables = {}
     max_idx = current_phase_idx
 
     for step in pipeline.steps:
         if isinstance(step, ComponentRef):
             sig = registry.get(step.name)
             if sig and sig.category != StepCategory.SLOT_OP:
+                # Universe-mask machinery is phase-transparent (rolling-
+                # universe P2 (c)): its placement law is Contract C's
+                # path-sensitive taint rule (XS_BEFORE_UNIVERSE_MASK), not
+                # the linear phase index — see is_universe_mask_phase_exempt.
+                if is_universe_mask_phase_exempt(
+                    step.name, sig.category, getattr(sig, "population_scope", None)
+                ):
+                    continue
                 step_idx = PHASE_INDEX.get(sig.category)
                 if step_idx is not None and step_idx < max_idx:
                     expected_group = PHASE_GROUP_NAMES[max_idx]
@@ -1860,12 +2052,411 @@ def _check_ordering(
                 branch_pipeline = PipelineSpec(
                     steps=branch_steps, name=None, location=step.location
                 )
-                _check_ordering(branch_pipeline, registry, issues, current_phase_idx=max_idx)
+                _check_ordering(
+                    branch_pipeline,
+                    registry,
+                    issues,
+                    current_phase_idx=max_idx,
+                    variables=variables,
+                )
 
         elif isinstance(step, PipelineSpec):
-            _check_ordering(step, registry, issues, current_phase_idx=0)
+            _check_ordering(step, registry, issues, current_phase_idx=0, variables=variables)
+
+        elif isinstance(step, VariableRef):
+            # A named Pipeline-variable reference inlines its body (mirrors
+            # interpreter.py Walk._pipeline's VariableRef arm): recurse with
+            # the CURRENT phase state and carry the body's resulting state
+            # OUT — the boundary is transparent, unlike the nested-
+            # PipelineSpec reset above. Unresolvable names are pass-1
+            # UNDEFINED_VARIABLE territory — skip, exactly like the
+            # interpreter. Acyclicity is pass 3b's guarantee.
+            vp = variables.get(step.name)
+            if vp is not None:
+                max_idx = _check_ordering(
+                    vp, registry, issues, current_phase_idx=max_idx, variables=variables
+                )
 
     return max_idx
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PASS 7b: Universe-mask discipline (rolling-universe P2 group (c))
+#
+# One masked-bit taint walk (the pass-7 recursive shape) computes all three
+# staged verdicts from the group-(b) ``population_scope`` registry metadata:
+#
+# - XS_BEFORE_UNIVERSE_MASK — a population_universe(source: input) op on a
+#   path whose masked bit is unset, in a strategy that uses a universe mask.
+# - MASK_SLOT_NOT_WIRED — a declared pooling slot (source 'slot', or D2
+#   input+slots) wired to a slot whose stored path never passed the mask.
+# - NONDENSE_TERMINAL_WEIGHTS — the terminal WeightSeries can still be NaN
+#   (bit set at the terminal; no declared densifier after the last mask).
+#
+# Bit semantics (contracts §1): the applier (ApplyUniverseMask) SETS the bit;
+# per_column components PRESERVE it; parallel combiners AND their branches'
+# bits; Store/Load carry it through slots; components whose declared
+# ``domain_transfer`` can produce constant cells (union-with-const — FillNaN's
+# declaration — or a data-independent fixed/const transfer) CLEAR it, because
+# a fill resurrects masked (NaN) cells into the pool. Mask emitters
+# (universe_filter × population_universe — the D3 discriminator) are the
+# selection boundary: they set the bit and are never flagged. Reporter
+# categories are skipped (D4). Sub-pipeline boundaries are TRANSPARENT: the
+# walk recurses through nested PipelineSpec steps AND named
+# ``Pipeline``-variable references (the interpreter's VariableRef inlining,
+# interpreter.py Walk._pipeline), carrying the bit in and out — the v16 audit's
+# C11 finding was this walk dropping the bit at the named-variable boundary,
+# false-positive-ing every flagship file that reaches its mask that way
+# (AUDIT-v16-staging-readiness §1.5). All three codes are staged DORMANT —
+# emission sites are guarded by ``_staged_key_armed`` so the shipped
+# configuration is structurally silent (spec 05 §2.2).
+# ═══════════════════════════════════════════════════════════════════════════════
+
+#: code → STAGED_CHANGES key for the three P2 (c) rules.
+_MASK_RULE_STAGED_KEYS: dict[str, str] = {
+    "XS_BEFORE_UNIVERSE_MASK": "xs-before-universe-mask",
+    "MASK_SLOT_NOT_WIRED": "mask-slot-not-wired",
+    "NONDENSE_TERMINAL_WEIGHTS": "nondense-terminal-weights",
+}
+
+_TERMINAL_WEIGHT_TYPE: str | None = None
+
+
+def _terminal_weight_type() -> str:
+    """The terminal weight carrier name, DERIVED from the generated tables.
+
+    Tokens-only discipline (spec 02 §3.6): neither engine hardcodes a
+    type-universe name — the weight carrier is the unique output type of the
+    RISK_MANAGER category in TYPE_TRANSITIONS (risk managers operate on the
+    weight book, so their output type IS the weight carrier; the TS driver
+    derives the same name from the served ``type_transitions``). A
+    non-singleton derivation raises — revisit the derivation, never guess.
+    """
+    global _TERMINAL_WEIGHT_TYPE
+    if _TERMINAL_WEIGHT_TYPE is None:
+        from pipeline_engine.base.step import StepCategory
+        from pipeline_engine.validation_shared import TYPE_TRANSITIONS
+
+        outs = {
+            out
+            for row in TYPE_TRANSITIONS.values()
+            for out in row.get(StepCategory.RISK_MANAGER, ())
+        }
+        if len(outs) != 1:
+            raise ValueError(
+                f"TYPE_TRANSITIONS no longer yields a unique risk_manager "
+                f"output type ({sorted(outs)}) — the terminal-weight-carrier "
+                f"derivation behind NONDENSE_TERMINAL_WEIGHTS must be revisited."
+            )
+        _TERMINAL_WEIGHT_TYPE = next(iter(outs))
+    return _TERMINAL_WEIGHT_TYPE
+
+
+def _population_scope(sig: Any) -> dict:
+    """A signature's normalized population scope ({} = per_column default)."""
+    return getattr(sig, "population_scope", None) or {}
+
+
+def _is_mask_emitter(sig: Any) -> bool:
+    """D3 discriminator: a dynamic universe-mask emitter.
+
+    ``universe_filter`` category × ``population_universe`` scope cleanly
+    separates the emitters (RollingUniverseMask, RollingVolumeUniverseMask,
+    TopNAssetSelector, VolumeUniverseReducer(Any)) from the population_fixed
+    universe filters (AssetSelect, GroupAssetFilter) and from every
+    non-emitter population op — verified over the full registry at the P2
+    (c) mint (projects/rolling-universe/05, D3).
+    """
+    from pipeline_engine.base.step import StepCategory
+
+    return (
+        sig.category is StepCategory.UNIVERSE_FILTER
+        and _population_scope(sig).get("kind") == "population_universe"
+    )
+
+
+def _transfer_clears_mask(sig: Any) -> bool:
+    """True when the declared domain transfer can resurrect masked cells.
+
+    Decided by the A1 domain machinery, not a component list: a ``union``
+    transfer with a ``const`` arm declares "output values = input values ∪
+    {constant}" — cells may be replaced by a constant (FillNaN's
+    ``union(id, const[fill_value])``; ApplyMask / RegimeGate's gated-to-0.0
+    branches). A top-level ``const`` transfer (ConstantForecast) replaces the
+    whole frame with a data-independent constant — never NaN, the full
+    column set again. Either way the masked-NaN taint cannot survive.
+
+    Deliberately NOT a clear: ``fixed`` transfers. Live effective transfers
+    use ``fixed`` as a value-DOMAIN statement (``{'fn':'fixed','interval':
+    [-20,20]}`` on ForecastScaler/EmpiricalFDM/ForecastCapper; value sets on
+    ThresholdCross) — those components preserve NaN cells at runtime, so
+    treating ``fixed`` as a fill would false-positive the entire canonical
+    forecast stack. Under-approximating here can only miss a fire, never
+    invent one — the right bias for a staged SUSPICIOUS rule.
+    """
+    dt = getattr(sig, "domain_transfer", None)
+    if not isinstance(dt, dict):
+        return False
+    fn = dt.get("fn")
+    if fn == "const":
+        return True
+    if fn == "union":
+        return any(isinstance(arg, dict) and arg.get("fn") == "const" for arg in dt.get("args", ()))
+    return False
+
+
+def _find_mask_anchor(
+    pipeline: PipelineSpec,
+    registry: dict[str, Any],
+    variables: dict[str, PipelineSpec],
+) -> str | None:
+    """The strategy's mask display string, or None when no universe mask is used.
+
+    Preference order: the first applier's effective ``mask_slot`` value
+    (rendered quoted, so suggestion templates read
+    ``ApplyUniverseMask(mask_slot='universe_mask')``), else the first
+    applier/emitter component name. ``None`` gates all three rules off —
+    Contract B static-pool strategies pool the full universe by design.
+    Named ``Pipeline``-variable bodies are scanned through their references
+    (C11): a strategy whose only applier lives inside a variable is still a
+    mask-using strategy.
+    """
+    applier_name: str | None = None
+    emitter_name: str | None = None
+
+    def scan(p: PipelineSpec) -> str | None:
+        nonlocal applier_name, emitter_name
+        for step in p.steps:
+            if isinstance(step, ComponentRef):
+                if step.name in UNIVERSE_MASK_APPLIERS:
+                    sig = registry.get(step.name)
+                    if sig is not None:
+                        value = _effective_param_value(step.params, sig.parameters, "mask_slot")
+                        if isinstance(value, str) and value:
+                            return f"'{value}'"
+                    applier_name = applier_name or step.name
+                else:
+                    sig = registry.get(step.name)
+                    if sig is not None and _is_mask_emitter(sig):
+                        emitter_name = emitter_name or step.name
+            elif isinstance(step, ParallelSpec):
+                for branch_steps in step.branches.values():
+                    found = scan(
+                        PipelineSpec(steps=branch_steps, name=None, location=step.location)
+                    )
+                    if found is not None:
+                        return found
+            elif isinstance(step, PipelineSpec):
+                found = scan(step)
+                if found is not None:
+                    return found
+            elif isinstance(step, VariableRef):
+                vp = variables.get(step.name)
+                if vp is not None:
+                    found = scan(vp)
+                    if found is not None:
+                        return found
+        return None
+
+    slot_anchor = scan(pipeline)
+    return slot_anchor or applier_name or emitter_name
+
+
+def _mask_walk(
+    pipeline: PipelineSpec,
+    registry: dict[str, Any],
+    variables: dict[str, PipelineSpec],
+    slot_state: dict[str, tuple[bool, str | None]],
+    bit: bool,
+    cleared_by: str | None,
+    fires: list[tuple[str, str | None, dict[str, Any]]],
+    mask_disp: str,
+) -> tuple[bool, str | None, dict[str, tuple[bool, str | None]] | None, str | None, Any]:
+    """The masked-bit taint walk. Returns (bit, cleared_by, branch_bits, last_name, last_loc).
+
+    ``branch_bits`` is the per-branch end state of the immediately preceding
+    Parallel output (consumed by Extract; any component collapses it via
+    AND). ``fires`` collects (code, location, template-params) — emission is
+    the caller's, gated per code by the staged-change arming. ``variables``
+    maps named ``Pipeline``-variable names to their bodies (the interpreter's
+    ``variable_pipelines`` shape): a ``VariableRef`` step recurses into the
+    body with the current state and carries the resulting bit OUT, exactly
+    like a nested ``PipelineSpec`` (C11 — the boundary is transparent).
+    """
+    from pipeline_engine.base.step import StepCategory
+
+    branch_bits: dict[str, tuple[bool, str | None]] | None = None
+    last_name: str | None = None
+    last_loc: Any = None
+
+    for step in pipeline.steps:
+        if isinstance(step, SlotStoreSpec):
+            slot_state[step.slot_name] = (bit, cleared_by)
+        elif isinstance(step, SlotStoreValueSpec):
+            slot_state[step.slot_name] = (False, None)
+        elif isinstance(step, SlotLoadSpec):
+            bit, cleared_by = slot_state.get(step.slot_name, (False, None))
+            branch_bits = None
+            last_name = f"Load('{step.slot_name}')"
+            last_loc = step.location
+        elif isinstance(step, SlotExtractSpec):
+            if branch_bits is not None:
+                bit, cleared_by = branch_bits.get(step.key, (bit, cleared_by))
+            branch_bits = None
+        elif isinstance(step, ParallelSpec):
+            ends: dict[str, tuple[bool, str | None]] = {}
+            for branch_name, branch_steps in step.branches.items():
+                b, c, _bb, _ln, _ll = _mask_walk(
+                    PipelineSpec(steps=branch_steps, name=None, location=step.location),
+                    registry,
+                    variables,
+                    slot_state,
+                    bit,
+                    cleared_by,
+                    fires,
+                    mask_disp,
+                )
+                ends[branch_name] = (b, c)
+            branch_bits = ends
+            bit = all(b for b, _c in ends.values()) if ends else bit
+            cleared_by = next((c for b, c in ends.values() if not b and c), None)
+        elif isinstance(step, PipelineSpec):
+            bit, cleared_by, branch_bits, ln, ll = _mask_walk(
+                step, registry, variables, slot_state, bit, cleared_by, fires, mask_disp
+            )
+            if ln is not None:
+                last_name, last_loc = ln, ll
+        elif isinstance(step, VariableRef):
+            # A named Pipeline-variable reference inlines its body (mirrors
+            # interpreter.py Walk._pipeline's VariableRef arm): recurse with
+            # the current state and carry the resulting bit out. Unresolvable
+            # names are pass-1 UNDEFINED_VARIABLE territory — skip, exactly
+            # like the interpreter.
+            vp = variables.get(step.name)
+            if vp is not None:
+                bit, cleared_by, branch_bits, ln, ll = _mask_walk(
+                    vp, registry, variables, slot_state, bit, cleared_by, fires, mask_disp
+                )
+                if ln is not None:
+                    last_name, last_loc = ln, ll
+        elif isinstance(step, ComponentRef):
+            sig = registry.get(step.name)
+            if sig is None or sig.category is StepCategory.SLOT_OP:
+                continue
+            last_name, last_loc = step.name, step.location
+            if sig.category is StepCategory.DATA_LOADER:
+                # A loader replaces the current value with a fresh, un-masked
+                # source frame.
+                bit, cleared_by, branch_bits = False, None, None
+                continue
+            if step.name in UNIVERSE_MASK_APPLIERS:
+                bit, cleared_by, branch_bits = True, None, None
+                continue
+            if _is_mask_emitter(sig):
+                # D3: the emitter IS the selection boundary — its output (the
+                # mask, or the reduced frame) is mask-carrying by definition.
+                bit, cleared_by, branch_bits = True, None, None
+                continue
+            if sig.category is StepCategory.REPORTER:
+                # D4: reporters are diagnostic pass-throughs — never checked.
+                branch_bits = None
+                continue
+
+            scope = _population_scope(sig)
+            if scope.get("kind") == "population_universe":
+                if scope.get("source") == "input" and not bit:
+                    cleared_text = (
+                        f" (the mask is cleared upstream by '{cleared_by}')" if cleared_by else ""
+                    )
+                    fires.append(
+                        (
+                            "XS_BEFORE_UNIVERSE_MASK",
+                            _format_location(step.location),
+                            {
+                                "component": step.name,
+                                "mask": mask_disp,
+                                "cleared": cleared_text,
+                            },
+                        )
+                    )
+                for slot_param in scope.get("slots") or ():
+                    if slot_param in sig.parameters:
+                        wired = _effective_param_value(step.params, sig.parameters, slot_param)
+                    elif slot_param in getattr(sig, "slot_reads", {}):
+                        # Implicit slot reads pool over the slot named by the
+                        # declaration itself (FundingDispersionRegime class).
+                        wired = slot_param
+                    else:
+                        wired = None
+                    if not isinstance(wired, str) or not wired:
+                        continue  # unresolvable statically (ref/None) — no verdict
+                    if not slot_state.get(wired, (False, None))[0]:
+                        fires.append(
+                            (
+                                "MASK_SLOT_NOT_WIRED",
+                                _format_location(step.location),
+                                {
+                                    "component": step.name,
+                                    "slot": wired,
+                                    "param": slot_param,
+                                    "mask": mask_disp,
+                                },
+                            )
+                        )
+
+            if _transfer_clears_mask(sig):
+                if bit:
+                    cleared_by = step.name
+                bit = False
+            branch_bits = None
+
+    return bit, cleared_by, branch_bits, last_name, last_loc
+
+
+def _validate_universe_mask_discipline(
+    strategy: StrategyFile,
+    registry: dict[str, Any],
+    issues: list[ValidationIssue],
+    type_flow: list[TypeFlowEntry],
+    production_mode: bool = False,
+) -> None:
+    """Pass 7b: the three staged universe-mask rules (P2 group (c))."""
+    armed = {code: _staged_key_armed(key) for code, key in _MASK_RULE_STAGED_KEYS.items()}
+    if not any(armed.values()):
+        return  # every rule dormant — structurally silent (spec 05 §2.2)
+
+    # Named Pipeline-variable bodies, keyed like the interpreter's
+    # ``variable_pipelines`` (Walk.run) — the walk inlines them at each
+    # reference so the masked bit crosses the boundary (C11).
+    variables = {v.name: v.value for v in strategy.variables if isinstance(v.value, PipelineSpec)}
+
+    mask_disp = _find_mask_anchor(strategy.pipeline, registry, variables)
+    if mask_disp is None:
+        return  # no universe mask in the strategy — Contract B territory
+
+    slot_state: dict[str, tuple[bool, str | None]] = {}
+    fires: list[tuple[str, str | None, dict[str, Any]]] = []
+    bit, _cleared, _bb, last_name, last_loc = _mask_walk(
+        strategy.pipeline, registry, variables, slot_state, False, None, fires, mask_disp
+    )
+
+    # NONDENSE_TERMINAL_WEIGHTS: terminal type from the interpreter's type
+    # flow (the existing judgment machinery — pass 6 already computed it);
+    # the weight-carrier name is derived from the generated tables.
+    terminal_type = type_flow[-1].output_type if type_flow else None
+    if bit and last_name is not None and terminal_type == _terminal_weight_type():
+        fires.append(
+            (
+                "NONDENSE_TERMINAL_WEIGHTS",
+                _format_location(last_loc) if last_loc is not None else None,
+                {"mask": mask_disp, "step": last_name},
+            )
+        )
+
+    for code, location, params in fires:
+        if not armed[code]:
+            continue
+        emit(issues, code, location=location, production_mode=production_mode, **params)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1878,8 +2469,30 @@ def _validate_slots(
     registry: dict[str, Any],
     issues: list[ValidationIssue],
     slot_types: dict[str, type],
+    trace_sink: Schema0Sink | Schema1Sink | None = None,
+    walk: Any | None = None,
 ) -> None:
-    """Pass 8: Validate Store/Load pairs, slot-reference params, slot types.
+    """Pass 8: Store/Load pairs, slot-reference params, slot types — two modes.
+
+    Since the M2c cutover the slot facts come from the ONE interpreter walk
+    (spec 03 §2.4/§3.3); this exported callable keeps its name and signature
+    and carries the R-12 journal-mode entry point (spec 03 §5):
+
+    - **Flush mode** (``walk=…`` — the ``validate_strategy`` path): pass 6's
+      interpreter walk already ran and journaled the slot-lifecycle
+      outcomes; emit the journal + the terminal slot states (schema-0
+      observation point 2, via the walk's sink) + the SLOT_UNUSED usage
+      lint, in today's order.
+    - **Standalone mode** (``walk=None`` — the ``verify_spec`` path and any
+      direct caller): no journal exists; the callable runs the interpreter
+      walk itself in structural-only capacity — Σ-lifecycle judgments only
+      (J-STORE/J-STOREVALUE/J-LOAD plus J-SLOTREAD binding resolution), Σ
+      seeded from the passed ``slot_types`` dict (its meaning is unchanged:
+      a caller-provided Σ seed). An empty dict reproduces the
+      NoneType-sentinel behavior: SLOT_NOT_FOUND / SLOT_REF_NOT_FOUND still
+      fire at every compile boundary while SLOT_TYPE_MISMATCH stays
+      S7-suppressed; no typing rows are evaluated, so no non-structural
+      issues enter the caller's list.
 
     Uses a single registry view — the lock-effective registry passed in.
     No fallback to full_registry. A component referenced in source but
@@ -1889,162 +2502,39 @@ def _validate_slots(
     over-helpfully complete the slot_reads contract for a component the
     lock can't account for.
 
-    The fallback that existed here (commit 310dc5a8, 2026-06-22) was added
-    to suppress noisy false-positive SLOT_UNUSED warnings when the agent
-    passed a stale partial lock to validate. That class of bug is fixed
-    at the source — see services/chat-api/src/agent/executor.py which now
-    evolves the saved lock against in-memory source before calling
-    validate — so the fallback is no longer load-bearing.
+    The old hand-written tree walk (``_validate_slots_in_pipeline``) was
+    deleted at the M2e step (spec 03 §6 Step 3); the interpreter's
+    Σ-lifecycle judgments are the sole slot path.
     """
-    available_slots: dict[str, tuple] = {}
-    used_slots: set[str] = set()
+    from pipeline_engine.dsl.interpreter import verify_slots_structural
 
-    _validate_slots_in_pipeline(
-        strategy.pipeline,
-        registry,
-        issues,
-        available_slots,
-        used_slots,
-        slot_types,
-    )
-
-    # Check for unused stores
-    for slot_name, (_, store_loc) in available_slots.items():
-        if slot_name not in used_slots:
-            emit(
-                issues,
-                "SLOT_UNUSED",
-                location=_format_location(store_loc),
-                slot=slot_name,
-            )
-
-
-def _validate_slots_in_pipeline(
-    pipeline: PipelineSpec,
-    registry: dict[str, Any],
-    issues: list[ValidationIssue],
-    available_slots: dict[str, tuple],
-    used_slots: set[str],
-    slot_types: dict[str, type],
-) -> None:
-    """Walk pipeline checking slot availability."""
-    for step in pipeline.steps:
-        if isinstance(step, SlotStoreSpec):
-            stored_type = slot_types.get(step.slot_name)
-            if stored_type is not None:
-                available_slots[step.slot_name] = (stored_type, step.location)
-            else:
-                available_slots[step.slot_name] = (type(None), step.location)
-
-        elif isinstance(step, SlotStoreValueSpec):
-            available_slots[step.slot_name] = (
-                _store_value_slot_type(step.value),
-                step.location,
-            )
-
-        elif isinstance(step, SlotLoadSpec):
-            used_slots.add(step.slot_name)
-            if step.slot_name not in available_slots:
+    if walk is not None:
+        # Flush mode — the ~30-LOC `_flush_slot_journal` shape of spec 03
+        # §2.4, kept behaviorally identical to `Walk.flush` (the
+        # standalone/shadow flush): the shadow-parity suite compares the
+        # two paths over the full corpus, so any drift between them reds
+        # parity. Journal first (walk order), then the terminal slot
+        # states (schema-0 observation point 2), then the usage lint.
+        for code, loc, kwargs in walk.journal:
+            emit(issues, code, location=loc, **kwargs)
+        # The J-SLOTREAD clock half (dsl-mtf-clocks spec 02 §4.3): journaled
+        # during the walk because the write-side-vs-read-side repair decision
+        # needs EVERY reader of the slot. Same position and same callable as
+        # ``Walk.flush``'s — the shadow-parity suite compares the two paths.
+        walk.flush_clock_slot_reads(issues)
+        if trace_sink is not None:
+            for slot_name, entry in walk.sigma.items():
+                trace_sink.on_slot_state(slot_name, entry.val.name)
+        for slot_name, entry in walk.sigma.items():
+            if slot_name not in walk.used:
                 emit(
                     issues,
-                    "SLOT_NOT_FOUND",
-                    location=_format_location(step.location),
-                    slot=step.slot_name,
+                    "SLOT_UNUSED",
+                    location=_format_location(entry.location),
+                    slot=slot_name,
                 )
-
-        elif isinstance(step, ComponentRef):
-            # Single registry view. If the lock-effective registry doesn't
-            # have this component, pass 4 already emitted UNKNOWN_COMPONENT
-            # or INVALID_VERSION_LOCK with line locations — that's the
-            # actionable error. We don't fall back to full_registry to mask
-            # the gap; SLOT_UNUSED noise on upstream Stores is acceptable
-            # in that already-broken state.
-            sig = registry.get(step.name)
-            if sig and sig.slot_reads:
-                for param_name, expected_type in sig.slot_reads.items():
-                    # Implicit slot reads: slot name IS the key, no init parameter
-                    if param_name not in sig.parameters:
-                        used_slots.add(param_name)
-                        continue
-
-                    slot_name_val = step.params.get(param_name)
-                    if slot_name_val is None:
-                        # Param not provided by user — check default from registry
-                        param_info = sig.parameters.get(param_name)
-                        if param_info is not None and isinstance(param_info.default, str):
-                            slot_name_val = param_info.default
-                        # VariableRef defaults can't be validated statically; skip
-                    if isinstance(slot_name_val, VariableRef):
-                        # VariableRef slot names resolved at runtime; skip static check
-                        continue
-                    if isinstance(slot_name_val, str):
-                        used_slots.add(slot_name_val)
-                        if slot_name_val not in available_slots:
-                            emit(
-                                issues,
-                                "SLOT_REF_NOT_FOUND",
-                                location=_format_location(step.location),
-                                component=step.name,
-                                param=param_name,
-                                slot=slot_name_val,
-                            )
-                        else:
-                            # Check type compatibility.
-                            # Slot reads use lenient matching: NewTypes sharing
-                            # the same base (e.g. WeightSeries and SignalSeries
-                            # both wrap DataFrame) are compatible. This matches
-                            # runtime behaviour where slots are untyped storage.
-                            stored_type, _ = available_slots[slot_name_val]
-                            if stored_type is not type(None) and not _is_slot_compatible(
-                                stored_type, expected_type
-                            ):
-                                emit(
-                                    issues,
-                                    "SLOT_TYPE_MISMATCH",
-                                    location=_format_location(step.location),
-                                    component=step.name,
-                                    param=param_name,
-                                    expected=type_name(expected_type),
-                                    slot=slot_name_val,
-                                    stored=type_name(stored_type),
-                                )
-
-        elif isinstance(step, ParallelSpec):
-            # Snapshot isolation: branches start with current slots
-            branch_written: list[dict[str, tuple]] = []
-
-            for branch_name, branch_steps in step.branches.items():
-                branch_slots = dict(available_slots)  # Snapshot
-                branch_used = set()
-                branch_pipeline = PipelineSpec(
-                    steps=branch_steps, name=branch_name, location=step.location
-                )
-                _validate_slots_in_pipeline(
-                    branch_pipeline,
-                    registry,
-                    issues,
-                    branch_slots,
-                    branch_used,
-                    slot_types,
-                )
-                used_slots.update(branch_used)
-                # Collect new slots written in this branch
-                new_slots = {k: v for k, v in branch_slots.items() if k not in available_slots}
-                branch_written.append(new_slots)
-
-            # Merge all branch-written slots into parent scope
-            for new_slots in branch_written:
-                available_slots.update(new_slots)
-
-        elif isinstance(step, PipelineSpec):
-            _validate_slots_in_pipeline(
-                step,
-                registry,
-                issues,
-                available_slots,
-                used_slots,
-                slot_types,
-            )
+        return
+    verify_slots_structural(strategy, registry, issues, slot_seed=slot_types, trace_sink=trace_sink)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -2131,8 +2621,10 @@ def _validate_declarations(
     # false-flag globals consumed by a component missing from the lock.
     _warn_unused_globals(strategy, expanded, registry, full_registry, issues)
 
-    # F) Resampler config validation (source_tf, target_tf, bar_offset rule table)
-    _validate_resampler_config(strategy, expanded, issues)
+    # F) The pass-9 residual: the INVALID_BAR_OFFSET grammar dual dispatch.
+    #    The resampler-family emitters moved to pass 6 at the
+    #    clock-transform-rebase flip (spec 02 §3.4).
+    _validate_bar_offset_grammar(strategy, expanded, issues)
 
 
 def _validate_globals(globals_: GlobalsSpec, issues: list[ValidationIssue]) -> None:
@@ -2339,6 +2831,45 @@ def _validate_universe(
                     symbols=sorted(not_in_resolved),
                 )
 
+    # max_leverages entries must be string symbol -> finite numeric > 0.
+    # Consumers divide by these values (PortfolioMarginCap mm fraction is
+    # 1/(2 x maxLev)): a 0 entry is a runtime ZeroDivisionError and a negative
+    # entry flips a margin cap into an amplifier — reject at write time.
+    # Mirrored in TS pass 9 (rules/declarations.ts checkUniverse).
+    if universe.max_leverages is not None:
+        if not isinstance(universe.max_leverages, dict):
+            emit(
+                issues,
+                "INVALID_UNIVERSE_LEVERAGE",
+                location=loc,
+                detail=f"Universe max_leverages must be a dict of symbol -> max "
+                f"leverage, got {type(universe.max_leverages).__name__}.",
+            )
+        else:
+            for lev_symbol, lev_value in universe.max_leverages.items():
+                if not isinstance(lev_symbol, str):
+                    emit(
+                        issues,
+                        "INVALID_UNIVERSE_LEVERAGE",
+                        location=loc,
+                        detail=f"Universe max_leverages key {lev_symbol!r} must be "
+                        f"a string symbol.",
+                    )
+                    continue
+                if (
+                    isinstance(lev_value, bool)
+                    or not isinstance(lev_value, (int, float))
+                    or not math.isfinite(lev_value)
+                    or lev_value <= 0
+                ):
+                    emit(
+                        issues,
+                        "INVALID_UNIVERSE_LEVERAGE",
+                        location=loc,
+                        detail=f"Universe max_leverages['{lev_symbol}'] must be a "
+                        f"finite number > 0, got {lev_value!r}.",
+                    )
+
 
 # Valid Execution option sets are DERIVED from EXECUTION_PARAM_META in spec.py
 # (the single source of truth), not hardcoded here. The TS editor validator
@@ -2360,6 +2891,14 @@ def _is_param_at_default(execution: ExecutionSpec, param: str) -> bool:
     return getattr(execution, param) == EXECUTION_PARAM_META[param]["default"]
 
 
+def _execution_valid_options(param: str, valid: Any) -> tuple[ValidOption, ...]:
+    """Envelope #12 (spec 05 §3.2): the declared option set as machine-readable
+    candidates for an ``INVALID_EXECUTION`` option violation."""
+    return tuple(
+        ValidOption(kind="value", value=opt, detail=f"valid '{param}'") for opt in sorted(valid)
+    )
+
+
 def _validate_execution(execution: ExecutionSpec, issues: list[ValidationIssue]) -> None:
     """Validate Execution declaration values."""
     loc = "execution"
@@ -2375,6 +2914,7 @@ def _validate_execution(execution: ExecutionSpec, issues: list[ValidationIssue])
             param="rebalance mode",
             value=execution.rebalance,
             options=sorted(_VALID_REBALANCE),
+            valid_options=_execution_valid_options("rebalance", _VALID_REBALANCE),
         )
         return  # short-circuit — other checks depend on valid mode
 
@@ -2463,6 +3003,7 @@ def _validate_execution(execution: ExecutionSpec, issues: list[ValidationIssue])
             param="buffer_mode",
             value=execution.buffer_mode,
             options=sorted(_VALID_BUFFER_MODE),
+            valid_options=_execution_valid_options("buffer_mode", _VALID_BUFFER_MODE),
         )
     if execution.rebalance_method not in _VALID_REBALANCE_METHOD:
         emit(
@@ -2472,6 +3013,7 @@ def _validate_execution(execution: ExecutionSpec, issues: list[ValidationIssue])
             param="rebalance_method",
             value=execution.rebalance_method,
             options=sorted(_VALID_REBALANCE_METHOD),
+            valid_options=_execution_valid_options("rebalance_method", _VALID_REBALANCE_METHOD),
         )
 
 
@@ -2492,6 +3034,8 @@ def _validate_declaration_refs(
     if strategy.universe is not None:
         if strategy.universe.groups:
             scope["universe.groups"] = strategy.universe.groups
+        if strategy.universe.max_leverages:
+            scope["universe.max_leverages"] = strategy.universe.max_leverages
 
     # Walk all components in expanded pipeline, check declaration refs.
     # Uses locked `registry` only (no full_registry fallback) — declaration_refs
@@ -2567,14 +3111,22 @@ def _warn_unused_globals(
     component isn't in the locked view, otherwise we'd silently skip its
     declaration_refs and produce false-positive UNUSED_GLOBAL warnings.
     Same pattern as pass 8's slot_reads fallback.
+
+    **`target_timeframe` is deliberately NOT checked** (dsl-mtf-clocks spec 02
+    §2.2, removed at the `clock-mismatch` promotion, T-M4f-5). Under the armed
+    J-PIPE terminal premise, `Globals(target_timeframe)` is consumed by every
+    strategy's terminal clock check, so the arm is vacuous — and while it fired
+    it was a measured FALSE POSITIVE whose suggestion ("remove the
+    declaration") breaks every backtest and live deploy if followed (R5
+    §2.2.11). The timing is R-18's: removing it before the flip would have
+    opened a coverage gap, because the terminal premise was still dormant.
+    `bar_offset` keeps its arm — nothing else consumes it.
     """
     if strategy.globals_ is None:
         return
 
     # Collect declared globals namespaces
     declared: set[str] = set()
-    if strategy.globals_.target_timeframe is not None:
-        declared.add("globals.target_timeframe")
     if strategy.globals_.bar_offset is not None:
         declared.add("globals.bar_offset")
     if not declared:
@@ -2601,12 +3153,21 @@ def _warn_unused_globals(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# RESAMPLER CONFIG (source_tf, target_tf, bar_offset) — mirrors
-# pipeline_engine.validation_shared.validate_resample_config rules across the
-# whole strategy.  Catches:
-#   - upsampling (source > target)
-#   - bar_offset that wouldn't survive the runtime check
-#   - the no-op TargetTimeframeResampler that bit jeff5908 on 2026-06-06
+# BAR-OFFSET GRAMMAR (the pass-9 residual).
+#
+# The pass-9 resampler-family emitter block is GONE (dsl-mtf-clocks spec 02
+# §3.4, T-M4f-5): UPSAMPLE_NOT_SUPPORTED / BAR_OFFSET_AT_SAME_TF /
+# BAR_OFFSET_NOT_MULTIPLE / BAR_OFFSET_TOO_LARGE / RESAMPLER_NOOP now fire from
+# the pass-6 judgment rows at EVERY transform site (not just the first
+# PriceDataLoader vs Globals path), the R-16 Globals-level κ_exec WF keeper row
+# covers the loader-free class, and INVALID_RESAMPLER_CONFIG — the str-dispatch
+# fallback over the ValueError text — is tombstoned with the dispatch itself.
+#
+# What survives here is ONE code with nothing to do with transform sites:
+# INVALID_BAR_OFFSET, the bar-offset GRAMMAR error that spec 02 §4.4 / T-7
+# unified across both engines as a dual dispatch alongside Globals'
+# INVALID_GLOBAL. Its reach is preserved EXACTLY (same gating as the removed
+# block, same emission shape), so the flip changes no verdict through it.
 # ─────────────────────────────────────────────────────────────────────────────
 
 
@@ -2614,8 +3175,8 @@ def _extract_price_loader_timeframe(expanded: StrategyFile) -> str | None:
     """Find the first PriceDataLoader in the pipeline and return its `timeframe` param.
 
     Returns None if no PriceDataLoader present, the param isn't a literal string,
-    or the value isn't a known timeframe key. None means "skip resampler config
-    validation" (callers should treat as 'can't enforce'), never "use a default."
+    or the value isn't a known timeframe key. None means "skip" (callers should
+    treat as 'can't enforce'), never "use a default."
     """
     for comp_ref in _walk_component_refs(expanded):
         if comp_ref.name != "PriceDataLoader":
@@ -2627,79 +3188,54 @@ def _extract_price_loader_timeframe(expanded: StrategyFile) -> str | None:
     return None
 
 
-def _has_target_timeframe_resampler(expanded: StrategyFile) -> bool:
-    """True if any TargetTimeframeResampler appears in the pipeline."""
-    for comp_ref in _walk_component_refs(expanded):
-        if comp_ref.name == "TargetTimeframeResampler":
-            return True
-    return False
-
-
-def _validate_resampler_config(
+def _validate_bar_offset_grammar(
     strategy: StrategyFile,
     expanded: StrategyFile,
     issues: list[ValidationIssue],
 ) -> None:
-    """Cross-component validation of (source_tf, target_tf, bar_offset).
+    """The INVALID_BAR_OFFSET dual dispatch (spec 02 §4.4 / T-7).
 
-    Pulls `source_tf` from the first PriceDataLoader's `timeframe` param and
-    `target_tf` / `bar_offset` from Globals. If any piece is missing or
-    can't be parsed, the corresponding rule check is skipped (other passes
-    already report missing/invalid Globals + invalid component params).
+    All that remains of the pass-9 resampler block after the
+    clock-transform-rebase flip. INVALID_BAR_OFFSET is a GRAMMAR error on
+    `Globals.bar_offset`, not a transform-site premise, so it has no pass-6
+    successor: the clock rows explicitly defer to it (`clocks.py`'s
+    unparseable-offset arm and `_clock_globals_keeper`'s parse guard both say
+    "the grammar codes own it"). Both engines emit it alongside the
+    INVALID_GLOBAL that the Globals format check raises for the same value.
+
+    The gating below reproduces the removed block's reach EXACTLY — Globals
+    present, `target_timeframe` a known token, a literal first PriceDataLoader,
+    and no upsample (which short-circuited before the offset was ever parsed) —
+    so no strategy gains or loses this code at the flip.
     """
     if strategy.globals_ is None:
         return
     target_tf = strategy.globals_.target_timeframe
     bar_offset = strategy.globals_.bar_offset
-    if target_tf is None:
-        # No target → resampler can't even run; downstream component validation
-        # already raises if TargetTimeframeResampler is present without it.
+    if bar_offset is None or target_tf is None:
         return
     if target_tf not in TIMEFRAME_MINUTES:
         # Already reported as INVALID_GLOBAL by _validate_globals.
         return
-
     source_tf = _extract_price_loader_timeframe(expanded)
     if source_tf is None:
-        # No (parseable) PriceDataLoader — nothing to validate against.
+        # No (parseable) PriceDataLoader — outside the historical reach.
         return
-
-    # Apply the canonical rule table. Each ValueError maps to a specific issue
-    # code so the editor + agent can disambiguate.
+    if TIMEFRAME_MINUTES[source_tf] > TIMEFRAME_MINUTES[target_tf]:
+        # The upsample arm fired first and returned before parsing the offset.
+        return
     try:
-        validate_resample_config(source_tf, target_tf, bar_offset)
+        parse_bar_offset_minutes(bar_offset)
     except ValueError as e:
-        msg = str(e)
-        if "upsampling not supported" in msg:
-            code = "UPSAMPLE_NOT_SUPPORTED"
-        elif "no valid value when target_timeframe equals" in msg:
-            code = "BAR_OFFSET_AT_SAME_TF"
-        elif "must be a multiple" in msg:
-            code = "BAR_OFFSET_NOT_MULTIPLE"
-        elif "strictly less than" in msg:
-            code = "BAR_OFFSET_TOO_LARGE"
-        elif "must be positive" in msg or "whole number of minutes" in msg:
-            code = "INVALID_BAR_OFFSET"
-        elif "not a valid duration" in msg:
-            code = "INVALID_BAR_OFFSET"
-        else:
-            code = "INVALID_RESAMPLER_CONFIG"
-        # message_override: the shared rule table's ValueError text IS the
-        # message (validate_resample_config is the single source, shared with
-        # the runtime resampler); the catalog templates mirror it verbatim.
-        emit(issues, code, location="globals", message_override=msg)
-        return  # Don't emit the no-op warning when the config is already errored
-
-    # No-op resampler warning: same TF + a TargetTimeframeResampler in the
-    # pipeline. The runtime now short-circuits this case cleanly, but the
-    # component step itself is wasted and the Globals declaration is redundant.
-    if source_tf == target_tf and _has_target_timeframe_resampler(expanded):
+        # message_override: the shared parser's ValueError text IS the message
+        # (the catalog template is the `{detail}` passthrough), byte-identical
+        # to what the removed dispatch emitted and to the TS mirror's render.
         emit(
             issues,
-            "RESAMPLER_NOOP",
+            "INVALID_BAR_OFFSET",
             location="globals",
-            target_tf=target_tf,
-            source_tf=source_tf,
+            message_override=str(e),
+            suggestion=None,
         )
 
 

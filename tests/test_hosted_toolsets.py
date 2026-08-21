@@ -157,7 +157,14 @@ def test_backtest_run_hosted_skips_divergence_guard(monkeypatch):
     bind_request_credentials(token="caller-tok", api_url="https://staging-api.test")
 
     submitted = {"id": "bt_hosted1", "status": "queued", "strategy_id": "strat_x"}
-    with patch("keel.client.KeelClient.post", return_value=submitted):
+    # The handler also runs the best-effort ownership projection
+    # (`_ownership.fetch_ownership_projection` → two GETs). Unstubbed
+    # that reached the real `api_url` bound above; stub it with the empty
+    # projection, which is the branch this test's assertions expect.
+    with (
+        patch("keel.client.KeelClient.post", return_value=submitted),
+        patch("keel.client.KeelClient.get", return_value={"items": []}),
+    ):
         result = OUTCOMES["keel_backtest_run"].handler(
             {
                 "strategy_id": "strat_x",

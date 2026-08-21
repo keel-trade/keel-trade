@@ -92,6 +92,23 @@ class DiscreteValues:
     values: frozenset[float]
 
 
+DOMAIN_ALIASES: dict[str, frozenset[float] | tuple[float, float]] = {
+    "Mask": frozenset({0.0, 1.0}),
+    "Binary": frozenset({-1.0, 0.0, 1.0}),  # = dom(BinarySignal)
+    "Flag": frozenset({1.0}),
+}
+"""Named value-domain aliases (dsl-type-system spec 01 §1.4 / spec 02 §2.3).
+
+The v1 alias LIST is owned by spec 01 §1.4 — exactly ``Mask``/``Binary``/
+``Flag``; this module is the single declaration home (spec 02 ledger R5).
+A ``frozenset`` value denotes a finite Set domain; a 2-tuple denotes a
+closed Interval (none in v1). Referenced from component declarations as
+``{"alias": "<name>"}`` (``output_domain``/``input_domain``) and
+``{"fn": "fixed", "alias": "<name>"}`` (transfer terms). Domains describe
+the NON-NaN values of a series/frame — NaN is never a domain element
+(spec 01 §1.4 NaN convention)."""
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # BASE DOMAIN TYPES
 # These provide semantic meaning to DataFrames flowing through the pipeline.
@@ -204,6 +221,8 @@ __all__ = [
     "Le",
     "Bounds",
     "DiscreteValues",
+    # Named value-domain aliases (dsl-type-system spec 02 §2.3)
+    "DOMAIN_ALIASES",
     # Base domain types
     "OHLCVDict",
     "PriceFrame",

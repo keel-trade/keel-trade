@@ -98,6 +98,11 @@ class AgentCardEnvelope(BaseModel):
 class AgentCardMcp(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    # Hosted remote MCP (the quickest connect — paste one URL + OAuth).
+    hosted_url: HttpUrl
+    hosted_transport: str
+    hosted_auth: str
+    # Local stdio MCP (CLI install).
     transport: str
     install: str
     command: str

@@ -570,6 +570,7 @@ def graph_to_spec(graph: GraphModel | dict[str, Any]) -> StrategyFile:
             resolved=model.universe.get("resolved"),
             resolved_at=model.universe.get("resolved_at"),
             groups=model.universe.get("groups"),
+            max_leverages=model.universe.get("max_leverages"),
             location=_loc("universe", lc),
         )
 
@@ -755,6 +756,7 @@ def spec_to_graph(spec: StrategyFile) -> GraphModel:
             "resolved",
             "resolved_at",
             "groups",
+            "max_leverages",
         ):
             val = getattr(spec.universe, attr)
             if val is not None:
@@ -921,6 +923,7 @@ def spec_to_dsl(spec: StrategyFile, registry: dict | None = None) -> str:
             "resolved",
             "resolved_at",
             "groups",
+            "max_leverages",
         ):
             val = getattr(spec.universe, attr)
             if val is not None:

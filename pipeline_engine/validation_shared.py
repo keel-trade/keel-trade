@@ -59,6 +59,30 @@ def timeframe_to_minutes(tf: str) -> int:
     return TIMEFRAME_MINUTES[tf]
 
 
+#: Inverse alphabet: minutes → canonical token (10 entries; bijective).
+MINUTES_TO_TOKEN: dict[int, str] = {m: tf for tf, m in TIMEFRAME_MINUTES.items()}
+
+
+def render_clock(clock: tuple[int, int]) -> str:
+    """Canonical clock rendering — ONE helper drives both engines' message
+    text (dsl-mtf-clocks spec 02 §4.2).
+
+    The canonical token, plus ``@`` + offset-literal iff the phase is
+    non-zero: ``(240, 0) → "4h"``; ``(1440, 720) → "1d@12h"``. Non-token
+    offsets — any positive minute count ``parse_bar_offset_minutes`` admits —
+    render canonically as ``@{n}min`` (R02-MIN-12): ``(60, 45) → "1h@45min"``.
+    The TS mirror (M4e) reads the same tokens from generated data
+    (``validation_tables.json``'s TIMEFRAME_MINUTES); no engine ever does
+    arithmetic on these display strings.
+    """
+    p, o = clock
+    base = MINUTES_TO_TOKEN.get(p, f"{p}min")
+    if o == 0:
+        return base
+    tok = MINUTES_TO_TOKEN.get(o)
+    return f"{base}@{tok}" if tok is not None else f"{base}@{o}min"
+
+
 _BAR_OFFSET_UNIT_MINUTES: dict[str, int] = {
     "min": 1,
     "h": 60,
@@ -103,17 +127,42 @@ def parse_bar_offset_minutes(bar_offset: str) -> int:
     return n * _BAR_OFFSET_UNIT_MINUTES[unit]
 
 
-def validate_resample_config(source_tf: str, target_tf: str, bar_offset: str | None) -> None:
+def validate_resample_config(
+    source_tf: str,
+    target_tf: str,
+    bar_offset: str | None,
+    source_offset_minutes: int = 0,
+) -> None:
     """Validate a (source_tf, target_tf, bar_offset) triple. Raises ValueError.
 
-    Rules:
-      - source_tf > target_tf            → upsampling not supported
-      - source == target AND offset set  → no valid offset range at same TF
-      - source < target AND offset set:
-          offset % source != 0           → must be a multiple of source bar size
-          offset >= target               → must be strictly less than target
-                                            (whole-period offsets are silent no-ops
-                                            because pandas wraps mod-period)
+    The phase rows are the **general Theorem-1 form** of
+    dsl-multi-timeframe-clocks spec 01 §5.2, landed at the
+    ``clock-transform-rebase`` PROMOTED flip (spec 03 §3.5 / §10 row 21,
+    resolution R-7): ``o_in`` — the phase of the INPUT clock — is a parameter,
+    never assumed 0.
+
+    Rules (``p_in``/``p_out`` = source/target minutes, ``o_in`` =
+    ``source_offset_minutes``, ``off`` = the requested offset):
+
+      - ``p_in > p_out``                      → upsampling not supported
+      - ``p_in == p_out ∧ off ≠ o_in``        → no valid offset range at same TF
+      - ``off ≢ o_in (mod p_in)``             → must be a multiple of source bar size
+      - ``off ≥ p_out``                       → must be strictly less than target
+                                                (whole-period offsets are silent
+                                                no-ops because pandas wraps
+                                                mod-period)
+
+    ``source_offset_minutes=0`` (the default) reproduces the historical
+    per-hop rule exactly: an input read straight off a loader sits on the
+    epoch grid at phase 0. The parameter matters for the **chained-offset**
+    shape — ``(15,0) → (60,30) → (240,30)`` under
+    ``Globals(bar_offset="30min")`` — which the old ``off % p_in`` form
+    rejected at the second hop and the general form legalizes, because the
+    target's boundaries never cut a source bar. That legalization is an
+    INTENDED verdict change, enumerated in the D5 fire inventory and the D6
+    expectations ledger (``prior_semantics: per_hop_reject``); it is the one
+    place where validation and runtime BOTH loosen, together, so the two can
+    never disagree on a chained shape.
     """
     source_mins = timeframe_to_minutes(source_tf)
     target_mins = timeframe_to_minutes(target_tf)
@@ -128,15 +177,22 @@ def validate_resample_config(source_tf: str, target_tf: str, bar_offset: str | N
         return
 
     offset_mins = parse_bar_offset_minutes(bar_offset)
+    o_in = source_offset_minutes % source_mins
 
     if source_mins == target_mins:
+        if offset_mins == o_in:
+            # κ_out == κ_in: the offset is already the input's own phase, so
+            # the "transform" is the identity — a no-op lint, not an error
+            # (spec 01 §5.2's RESAMPLER_NOOP row owns it at the write-time
+            # surface; the runtime short-circuits it).
+            return
         raise ValueError(
             f"bar_offset ({bar_offset}) has no valid value when target_timeframe "
             f"equals the data loader's timeframe ({source_tf}). Remove bar_offset, "
             f"or set a larger target_timeframe."
         )
 
-    if offset_mins % source_mins != 0:
+    if (offset_mins - o_in) % source_mins != 0:
         raise ValueError(
             f"bar_offset ({bar_offset}) must be a multiple of the data loader's "
             f"timeframe ({source_tf})."
@@ -177,24 +233,231 @@ class ErrorCode:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# TYPED-ISSUE ENVELOPE SUB-SCHEMAS (dsl-type-system spec 05 §3.2)
+#
+# JSON-native, stable shapes. Each carries a ``to_dict()`` producing exactly the
+# spec 05 §3.2 wire form; the TS mirror (spec 05 §3.6) and the shared
+# ``dsl/fixtures/envelope/full_issue.json`` fixture pin these shapes across both
+# languages.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+@dataclass(frozen=True)
+class DomainRef:
+    """A value-domain lattice element in wire form (spec 05 §3.2).
+
+    ``kind == "top"`` (⊤, no constraint); ``"set"`` (a literal value set, with
+    the optional spec 02 ``domain_aliases`` name — Binary/Flag/Mask); or
+    ``"interval"`` (a ``[low, high]`` bound).
+    """
+
+    kind: Literal["top", "set", "interval"]
+    values: tuple[float, ...] | None = None
+    low: float | None = None
+    high: float | None = None
+    alias: str | None = None
+
+    @staticmethod
+    def top() -> "DomainRef":
+        return DomainRef("top")
+
+    def to_dict(self) -> dict[str, Any]:
+        if self.kind == "set":
+            return {
+                "kind": "set",
+                "values": [float(v) for v in (self.values or ())],
+                "alias": self.alias,
+            }
+        if self.kind == "interval":
+            return {
+                "kind": "interval",
+                "low": float(self.low),  # type: ignore[arg-type]
+                "high": float(self.high),  # type: ignore[arg-type]
+                "alias": self.alias,
+            }
+        return {"kind": "top"}
+
+
+@dataclass(frozen=True)
+class ClockRef:
+    """A clock in wire form (dsl-mtf-clocks spec 01 §10; spec 02 §4.1).
+
+    ``timeframe`` carries the canonical TOKEN (e.g. ``"4h"`` — never minutes
+    alone) because the alphabet is generated data and both engines manipulate
+    tokens; ``period_minutes``/``phase_minutes`` ride along so no engine does
+    arithmetic on display strings; ``origin`` is the path of the step that
+    last set this clock, in the existing envelope path addressing (§3.1 #7 —
+    no new addressing scheme).
+    """
+
+    timeframe: str
+    period_minutes: int
+    phase_minutes: int
+    origin: tuple[str, ...] = ()
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "timeframe": self.timeframe,
+            "period_minutes": self.period_minutes,
+            "phase_minutes": self.phase_minutes,
+            "origin": list(self.origin),
+        }
+
+
+@dataclass(frozen=True)
+class TypeRef:
+    """A synthesized or demanded type ``(declared, base, domain, tier, clock)`` (§3.2).
+
+    ``declared`` is the name as shown (refined names verbatim, e.g.
+    ``"BinarySignal"``); ``base`` is the checked base (for demands, the
+    exp-unfolded parent); ``tier`` is the refinement demand strength
+    (``hard`` set / ``soft`` interval / ``none`` ⊤); ``clock`` is the fourth
+    member, exactly parallel to ``domain`` (dsl-mtf-clocks spec 01 §10 —
+    ``None`` when the value is clock-less). ``to_dict()`` always emits the
+    ``clock`` key, matching the envelope's always-present-keys discipline
+    (spec 02 §4.1).
+    """
+
+    declared: str
+    base: str
+    domain: DomainRef
+    tier: Literal["hard", "soft", "none"] = "none"
+    clock: ClockRef | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "declared": self.declared,
+            "base": self.base,
+            "domain": self.domain.to_dict(),
+            "tier": self.tier,
+            "clock": self.clock.to_dict() if self.clock is not None else None,
+        }
+
+
+@dataclass(frozen=True)
+class Span:
+    """A source-text span in the strategy declaration (§3.2)."""
+
+    line: int
+    col: int
+    end_line: int
+    end_col: int
+
+    def to_dict(self) -> dict[str, int]:
+        return {
+            "line": self.line,
+            "col": self.col,
+            "end_line": self.end_line,
+            "end_col": self.end_col,
+        }
+
+
+@dataclass(frozen=True)
+class ProvenanceHop:
+    """One hop of a domain/slot blame chain (origin → transfer → store → load)."""
+
+    kind: Literal["origin", "transfer", "store", "load", "projection"]
+    step: str
+    path: tuple[str, ...] = ()
+    type: TypeRef | None = None
+    slot: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "kind": self.kind,
+            "step": self.step,
+            "path": list(self.path),
+            "type": self.type.to_dict() if self.type is not None else None,
+            "slot": self.slot,
+        }
+
+
+@dataclass(frozen=True)
+class ValidOption:
+    """A machine-readable candidate, type-fit ranked (§3.2, R6-REQ4)."""
+
+    kind: Literal["component", "value", "key", "slot", "version"]
+    value: str | float
+    detail: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"kind": self.kind, "value": self.value, "detail": self.detail}
+
+
+@dataclass(frozen=True)
+class SuggestedEdit:
+    """A concrete edit payload (§3.2, R6-REQ5) — closed op vocabulary."""
+
+    kind: Literal["set_param", "replace_component", "insert_step", "remove_step", "rename"]
+    path: tuple[str, ...]
+    payload: dict[str, Any]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"kind": self.kind, "path": list(self.path), "payload": dict(self.payload)}
+
+
+@dataclass(frozen=True)
+class StagingNote:
+    """Severity honesty for a staged code (§3.1 #16): ``{stage, terminal_severity}``."""
+
+    stage: str
+    terminal_severity: str
+
+    def to_dict(self) -> dict[str, str]:
+        return {"stage": self.stage, "terminal_severity": self.terminal_severity}
+
+
 @dataclass
 class ValidationIssue:
-    """A single validation finding."""
+    """A single validation finding — the 16-field typed envelope (spec 05 §3.1).
+
+    Five preserved fields (``severity``/``code``/``message``/``location``/
+    ``suggestion``) keep their names, types, and meanings so every existing
+    consumer is untouched; eleven new fields are all defaulted so the ~60
+    non-type-shaped emission sites change zero call sites. ``to_dict()``
+    serializes all 16 keys, always present (spec 05 §3.4 stable-shape).
+    """
 
     severity: Literal["error", "warning", "info"]
     code: str
     message: str
     location: str
     suggestion: str | None = None
+    # ── Envelope extension (dsl-type-system spec 05 §3.1) — 11 new fields ──
+    tier: Literal["static", "compile", "runtime", "gate"] = "static"
+    path: tuple[str, ...] = ()
+    span: Span | None = None
+    expected: TypeRef | None = None
+    actual: TypeRef | None = None
+    provenance: tuple[ProvenanceHop, ...] = ()
+    valid_options: tuple[ValidOption, ...] = ()
+    suggested_edit: SuggestedEdit | None = None
+    applicability: str = "none"
+    recoverable: bool = True
+    staging: StagingNote | None = None
 
-    def to_dict(self) -> dict[str, str | None]:
-        """Convert to a JSON-serializable dict."""
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize all 16 envelope fields, always present (spec 05 §3.4)."""
         return {
             "severity": self.severity,
             "code": self.code,
             "message": self.message,
             "location": self.location,
             "suggestion": self.suggestion,
+            "tier": self.tier,
+            "path": list(self.path),
+            "span": self.span.to_dict() if self.span is not None else None,
+            "expected": self.expected.to_dict() if self.expected is not None else None,
+            "actual": self.actual.to_dict() if self.actual is not None else None,
+            "provenance": [h.to_dict() for h in self.provenance],
+            "valid_options": [o.to_dict() for o in self.valid_options],
+            "suggested_edit": (
+                self.suggested_edit.to_dict() if self.suggested_edit is not None else None
+            ),
+            "applicability": self.applicability,
+            "recoverable": self.recoverable,
+            "staging": self.staging.to_dict() if self.staging is not None else None,
         }
 
 
@@ -276,6 +539,58 @@ for _group_idx, _group_cats in enumerate(PHASE_GROUPS):
         PHASE_INDEX[_cat] = _group_idx
 
 
+#: The sanctioned universe-mask APPLIER components (rolling-universe P2 (c)).
+#: ApplyUniverseMask's registered category (signal_transform) describes its
+#: value effect, not its placement: Contract C (projects/rolling-universe/
+#: 01-contracts.md §1) fixes its position at the TS→XS boundary of each path,
+#: which is phase-VARIABLE by design (signals are computed on the full pool,
+#: the mask lands wherever the first cross-sectional op needs it). Keyed by
+#: name because no registration metadata isolates "mask applier" today — its
+#: population_scope is per_column (it pools nothing). If a second applier
+#: ever ships, prefer promoting this to registration metadata over growing
+#: the list (flagged in the P2 (c) report).
+UNIVERSE_MASK_APPLIERS: frozenset[str] = frozenset({"ApplyUniverseMask"})
+
+
+def is_universe_mask_phase_exempt(
+    name: str,
+    category: "StepCategory | None",
+    population_scope: dict | None,
+) -> bool:
+    """True for universe-mask machinery that is PHASE-TRANSPARENT (P2 (c)).
+
+    The phase ladder models the single-path refinement DATA → UNIVERSE →
+    SIGNAL → FORECAST → POSITION → OUTPUT. Universe-mask machinery breaks the
+    single-path premise on purpose:
+
+    - **Dynamic mask emitters** — ``universe_filter``-category components
+      declaring ``population_universe`` scope (RollingUniverseMask,
+      RollingVolumeUniverseMask, TopNAssetSelector, VolumeUniverseReducer /
+      ...Any) — rank by data that needs indicators computed first, so the
+      canonical rolling pattern legitimately places them after INDICATOR
+      steps on a fresh ``Load(...)`` path. ``population_fixed`` universe
+      filters (AssetSelect, GroupAssetFilter) have no data dependency and
+      KEEP their phase position — the discriminator deliberately excludes
+      them.
+    - **Mask appliers** (:data:`UNIVERSE_MASK_APPLIERS`) land at the TS→XS
+      boundary of each path — after SIGNAL or FORECAST steps by design.
+
+    Their real placement law is Contract C — "the mask precedes the first
+    population op on every path" — enforced by the XS_BEFORE_UNIVERSE_MASK
+    taint walk, a path-sensitive rule the linear phase index cannot express.
+    Exempt steps are treated exactly like SLOT_OP: never checked, never
+    advancing the phase cursor. Shared by the write-time pass 7
+    (``dsl/validator.py``) and the runtime Layer C validator
+    (``pipeline/validator.py``) so the two surfaces cannot disagree.
+    """
+    if name in UNIVERSE_MASK_APPLIERS:
+        return True
+    return (
+        category is StepCategory.UNIVERSE_FILTER
+        and (population_scope or {}).get("kind") == "population_universe"
+    )
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # TYPE TRANSITION GRAPH
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -321,8 +636,10 @@ TYPE_TRANSITIONS: dict[str, dict[StepCategory, list[str]]] = {
         # ExtractSeries is a signal transform because it starts a signal branch,
         # but its truthful input is the upstream OHLCV dictionary.
         StepCategory.SIGNAL_TRANSFORM: ["SignalSeries"],
-        StepCategory.UNIVERSE_FILTER: ["SignalSeries", "OHLCVDict"],
-        StepCategory.INDICATOR: ["SignalSeries"],
+        StepCategory.UNIVERSE_FILTER: ["SignalSeries", "OHLCVDict", "BinarySignal"],
+        # Indicators may emit a BinarySignal subtype (e.g. SuperTrend/Ichimoku
+        # regime signals), not just a generic SignalSeries.
+        StepCategory.INDICATOR: ["SignalSeries", "BinarySignal"],
         # ConstantForecast accepts OHLCVDict directly as an index/basket entry point.
         StepCategory.FORECAST_MAPPER: ["ForecastSeries"],
         StepCategory.POSITION_SIZER: ["WeightSeries", "SignalSeries"],
@@ -354,7 +671,7 @@ TYPE_TRANSITIONS: dict[str, dict[StepCategory, list[str]]] = {
         # 1-D series.
         StepCategory.REGIME_DETECTOR: ["GlobalSeries"],
         StepCategory.FORECAST_MAPPER: ["ForecastSeries"],
-        StepCategory.UNIVERSE_FILTER: ["SignalSeries"],
+        StepCategory.UNIVERSE_FILTER: ["SignalSeries", "BinarySignal"],
         StepCategory.POSITION_SIZER: ["WeightSeries"],
         StepCategory.POSITION_MANAGER: ["BinarySignal", "WeightSeries", "SignalSeries"],
         StepCategory.REPORTER: ["SignalSeries"],
@@ -380,7 +697,9 @@ TYPE_TRANSITIONS: dict[str, dict[StepCategory, list[str]]] = {
     },
     # === After Parallel — current is dict[str, Any] (branch results) ===
     "dict": {
-        StepCategory.SIGNAL_COMPOSER: ["SignalSeries"],
+        # Signal composers may emit a BinarySignal subtype (e.g. And/Or/Mask
+        # combiners), not just a generic SignalSeries.
+        StepCategory.SIGNAL_COMPOSER: ["SignalSeries", "BinarySignal"],
         StepCategory.FORECAST_COMPOSER: ["ForecastSeries", "WeightSeries"],
         StepCategory.POSITION_SIZER: ["WeightSeries"],
         StepCategory.POSITION_MANAGER: ["BinarySignal", "WeightSeries", "SignalSeries"],
@@ -543,6 +862,11 @@ def param_display_type(pinfo) -> str:
     targets = _param_target_types(pinfo)
     if len(targets) == 1:
         t = targets[0]
+    if get_origin(t) is Literal:
+        # Optional[Literal[...]] — a None-sentinel enum param (e.g.
+        # SignalResampler v2's target_timeframe): still "enum"; None marks
+        # omission and rides the separate `required`/`default` fields.
+        return "enum"
     return getattr(t, "__name__", str(t))
 
 
@@ -567,6 +891,14 @@ __all__ = [
     "TypeFlowEntry",
     "ValidationIssue",
     "ValidationResult",
+    "DomainRef",
+    "ClockRef",
+    "TypeRef",
+    "Span",
+    "ProvenanceHop",
+    "ValidOption",
+    "SuggestedEdit",
+    "StagingNote",
     "TYPE_TRANSITIONS",
     "ANNOTATED_SEMANTIC_NAMES",
     "PHASE_INDEX",
@@ -578,6 +910,8 @@ __all__ = [
     "param_accepts_numeric",
     "_param_target_types",
     "TIMEFRAME_MINUTES",
+    "MINUTES_TO_TOKEN",
+    "render_clock",
     "timeframe_to_minutes",
     "parse_bar_offset_minutes",
     "validate_resample_config",

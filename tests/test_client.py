@@ -22,10 +22,83 @@ def client(config):
 
 
 class TestAuth:
-    def test_requires_api_key(self):
-        client = KeelClient(config=KeelConfig(api_key=None))
-        with pytest.raises(AuthError, match="Not authenticated"):
-            client.get("/v1/me")
+    """The client-level auth precheck (``KeelClient._require_auth``).
+
+    The ANONYMOUS instant-start contract is owned end-to-end by
+    ``tests/test_anon.py::TestInstantStart``: that a CLI-surface caller with no
+    credentials auto-mints a workspace, proceeds, swaps in the granted token and
+    prints the notice; plus the ``KEEL_ANON_AUTO=0`` opt-out, the non-CLI
+    surface, the credentials-already-exist, and the grant-failure branches. This
+    class is scoped to what remains unique to the client — WHICH methods run the
+    precheck, and that the precheck is a purely local guard.
+
+    Note the assertions match ``keel_auth_login``, not ``Not authenticated``.
+    Both AuthError messages in ``_require_auth`` begin "Not authenticated", so
+    the looser pattern could not tell the plain refusal apart from the
+    "anonymous start was unavailable" one — which is exactly how the previous
+    version of this test stayed green locally (prod rate-limited the grant with
+    a 429) while failing on CI (fresh runner IP, grant succeeded, nothing
+    raised).
+    """
+
+    @pytest.fixture(autouse=True)
+    def _sdk_surface(self, monkeypatch):
+        """Pin the bare-SDK surface — the one where anonymous instant start does
+        NOT apply, so the precheck must refuse. Declared explicitly rather than
+        inherited from the conftest default so cross-file surface leakage can
+        never silently re-target this class at the anonymous branch."""
+        import keel.surface
+
+        monkeypatch.setattr(keel.surface, "_SURFACE", "sdk")
+
+    def test_unauthenticated_refuses_without_issuing_a_request(self):
+        """The precheck is local: it raises before any HTTP is attempted."""
+        client = KeelClient(config=KeelConfig(api_key=None, api_url="https://api.test.io"))
+        try:
+            with respx.mock:
+                with pytest.raises(AuthError, match="keel_auth_login"):
+                    client.get("/v1/me")
+                assert respx.calls.call_count == 0
+        finally:
+            client.close()
+
+    @pytest.mark.parametrize(
+        "call",
+        [
+            lambda c: c.get("/v1/me"),
+            lambda c: c.post("/v1/backtests", json={}),
+            lambda c: c.patch("/v1/strategies/str_1", json={}),
+            lambda c: c.put("/v1/strategies/str_1", json={}),
+            lambda c: c.delete("/v1/live/dep_1"),
+        ],
+        ids=["get", "post", "patch", "put", "delete"],
+    )
+    def test_auth_precheck_guards_every_authenticated_verb(self, call):
+        """Every credentialed verb prechecks — a new verb that forgets
+        ``_require_auth`` would otherwise reach the network unauthenticated."""
+        client = KeelClient(config=KeelConfig(api_key=None, api_url="https://api.test.io"))
+        try:
+            with respx.mock:
+                with pytest.raises(AuthError, match="keel_auth_login"):
+                    call(client)
+                assert respx.calls.call_count == 0
+        finally:
+            client.close()
+
+    @respx.mock
+    def test_get_public_bypasses_the_auth_precheck(self):
+        """``get_public`` is the documented exception: share endpoints under
+        ``/s/...`` resolve with no credentials and no Authorization header."""
+        route = respx.get("https://api.test.io/s/shr_1").mock(
+            return_value=httpx.Response(200, json={"strategy": "public"})
+        )
+        client = KeelClient(config=KeelConfig(api_key=None, api_url="https://api.test.io"))
+        try:
+            assert client.get_public("/s/shr_1") == {"strategy": "public"}
+        finally:
+            client.close()
+        assert route.called
+        assert "authorization" not in route.calls.last.request.headers
 
     @respx.mock
     def test_sends_auth_header(self, client):

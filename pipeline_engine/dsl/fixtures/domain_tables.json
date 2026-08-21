@@ -1,0 +1,1153 @@
+{
+  "domain_aliases": {
+    "Binary": {
+      "set": [
+        -1.0,
+        0.0,
+        1.0
+      ]
+    },
+    "Flag": {
+      "set": [
+        1.0
+      ]
+    },
+    "Mask": {
+      "set": [
+        0.0,
+        1.0
+      ]
+    }
+  },
+  "identity_aliases": {
+    "CappedForecast": "ForecastSeries",
+    "Forecast": "ForecastSeries",
+    "PositionLevel": "SignalSeries",
+    "RawSignal": "SignalSeries",
+    "RegimeLabel": "GlobalSeries",
+    "TargetWeights": "WeightSeries"
+  },
+  "base_order": {
+    "BinarySignal": [
+      "BinarySignal",
+      "DataFrame",
+      "SignalSeries"
+    ],
+    "DataFrame": [
+      "DataFrame"
+    ],
+    "ForecastSeries": [
+      "DataFrame",
+      "ForecastSeries",
+      "SignalSeries"
+    ],
+    "FundingFrame": [
+      "DataFrame",
+      "FundingFrame"
+    ],
+    "GlobalSeries": [
+      "GlobalSeries",
+      "Series"
+    ],
+    "InstrumentFrame": [
+      "DataFrame",
+      "InstrumentFrame"
+    ],
+    "NoneType": [
+      "NoneType"
+    ],
+    "NormalizedSignal": [
+      "DataFrame",
+      "NormalizedSignal",
+      "SignalSeries"
+    ],
+    "OHLCVDict": [
+      "OHLCVDict",
+      "dict"
+    ],
+    "OrderSeries": [
+      "DataFrame",
+      "OrderSeries"
+    ],
+    "PriceFrame": [
+      "DataFrame",
+      "PriceFrame"
+    ],
+    "RankSignal": [
+      "DataFrame",
+      "RankSignal",
+      "SignalSeries"
+    ],
+    "SentimentFrame": [
+      "DataFrame",
+      "SentimentFrame"
+    ],
+    "Series": [
+      "Series"
+    ],
+    "SignalSeries": [
+      "DataFrame",
+      "SignalSeries"
+    ],
+    "StreamSeries": [
+      "DataFrame",
+      "SignalSeries",
+      "StreamSeries"
+    ],
+    "TemporalOffset": [
+      "TemporalOffset",
+      "str"
+    ],
+    "WeightSeries": [
+      "DataFrame",
+      "WeightSeries"
+    ],
+    "bool": [
+      "bool",
+      "int"
+    ],
+    "dict": [
+      "dict"
+    ],
+    "float": [
+      "float"
+    ],
+    "int": [
+      "int"
+    ],
+    "list": [
+      "list"
+    ],
+    "str": [
+      "str"
+    ]
+  },
+  "base_refinements": {
+    "BinarySignal": {
+      "parent": "SignalSeries",
+      "dom": {
+        "set": [
+          -1.0,
+          0.0,
+          1.0
+        ]
+      },
+      "tier": "hard",
+      "exp": {
+        "base": "SignalSeries",
+        "domain": {
+          "set": [
+            -1.0,
+            0.0,
+            1.0
+          ]
+        }
+      }
+    },
+    "ForecastSeries": {
+      "parent": "SignalSeries",
+      "dom": {
+        "interval": [
+          -20.0,
+          20.0
+        ]
+      },
+      "tier": "soft",
+      "exp": {
+        "base": "SignalSeries",
+        "domain": {
+          "interval": [
+            -20.0,
+            20.0
+          ]
+        }
+      }
+    },
+    "NormalizedSignal": {
+      "parent": "SignalSeries",
+      "dom": {
+        "interval": [
+          -1.0,
+          1.0
+        ]
+      },
+      "tier": "soft",
+      "exp": {
+        "base": "SignalSeries",
+        "domain": {
+          "interval": [
+            -1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    "RankSignal": {
+      "parent": "SignalSeries",
+      "dom": {
+        "interval": [
+          0.0,
+          1.0
+        ]
+      },
+      "tier": "soft",
+      "exp": {
+        "base": "SignalSeries",
+        "domain": {
+          "interval": [
+            0.0,
+            1.0
+          ]
+        }
+      }
+    }
+  },
+  "clocked_bases": [
+    "BinarySignal",
+    "DataFrame",
+    "ForecastSeries",
+    "FundingFrame",
+    "GlobalSeries",
+    "InstrumentFrame",
+    "NormalizedSignal",
+    "OHLCVDict",
+    "OrderSeries",
+    "PriceFrame",
+    "RankSignal",
+    "SentimentFrame",
+    "Series",
+    "SignalSeries",
+    "StreamSeries",
+    "WeightSeries"
+  ],
+  "subsumption_vectors": [
+    {
+      "left": "top",
+      "right": "top",
+      "mode": "leq",
+      "verdict": true
+    },
+    {
+      "left": "top",
+      "right": {
+        "set": [
+          0.0,
+          1.0
+        ]
+      },
+      "mode": "leq",
+      "verdict": false
+    },
+    {
+      "left": "top",
+      "right": {
+        "set": [
+          -1.0,
+          0.0,
+          1.0
+        ]
+      },
+      "mode": "leq",
+      "verdict": false
+    },
+    {
+      "left": "top",
+      "right": {
+        "set": [
+          1.0
+        ]
+      },
+      "mode": "leq",
+      "verdict": false
+    },
+    {
+      "left": "top",
+      "right": {
+        "set": [
+          0.5
+        ]
+      },
+      "mode": "leq",
+      "verdict": false
+    },
+    {
+      "left": "top",
+      "right": {
+        "interval": [
+          -1.0,
+          1.0
+        ]
+      },
+      "mode": "leq",
+      "verdict": false
+    },
+    {
+      "left": "top",
+      "right": {
+        "interval": [
+          -20.0,
+          20.0
+        ]
+      },
+      "mode": "leq",
+      "verdict": false
+    },
+    {
+      "left": "top",
+      "right": {
+        "interval": [
+          0.0,
+          1.0
+        ]
+      },
+      "mode": "leq",
+      "verdict": false
+    },
+    {
+      "left": {
+        "set": [
+          0.0,
+          1.0
+        ]
+      },
+      "right": "top",
+      "mode": "leq",
+      "verdict": true
+    },
+    {
+      "left": {
+        "set": [
+          0.0,
+          1.0
+        ]
+      },
+      "right": {
+        "set": [
+          0.0,
+          1.0
+        ]
+      },
+      "mode": "leq",
+      "verdict": true
+    },
+    {
+      "left": {
+        "set": [
+          0.0,
+          1.0
+        ]
+      },
+      "right": {
+        "set": [
+          -1.0,
+          0.0,
+          1.0
+        ]
+      },
+      "mode": "leq",
+      "verdict": true
+    },
+    {
+      "left": {
+        "set": [
+          0.0,
+          1.0
+        ]
+      },
+      "right": {
+        "set": [
+          1.0
+        ]
+      },
+      "mode": "leq",
+      "verdict": false
+    },
+    {
+      "left": {
+        "set": [
+          0.0,
+          1.0
+        ]
+      },
+      "right": {
+        "set": [
+          0.5
+        ]
+      },
+      "mode": "leq",
+      "verdict": false
+    },
+    {
+      "left": {
+        "set": [
+          0.0,
+          1.0
+        ]
+      },
+      "right": {
+        "interval": [
+          -1.0,
+          1.0
+        ]
+      },
+      "mode": "leq",
+      "verdict": true
+    },
+    {
+      "left": {
+        "set": [
+          0.0,
+          1.0
+        ]
+      },
+      "right": {
+        "interval": [
+          -20.0,
+          20.0
+        ]
+      },
+      "mode": "leq",
+      "verdict": true
+    },
+    {
+      "left": {
+        "set": [
+          0.0,
+          1.0
+        ]
+      },
+      "right": {
+        "interval": [
+          0.0,
+          1.0
+        ]
+      },
+      "mode": "leq",
+      "verdict": true
+    },
+    {
+      "left": {
+        "set": [
+          -1.0,
+          0.0,
+          1.0
+        ]
+      },
+      "right": "top",
+      "mode": "leq",
+      "verdict": true
+    },
+    {
+      "left": {
+        "set": [
+          -1.0,
+          0.0,
+          1.0
+        ]
+      },
+      "right": {
+        "set": [
+          0.0,
+          1.0
+        ]
+      },
+      "mode": "leq",
+      "verdict": false
+    },
+    {
+      "left": {
+        "set": [
+          -1.0,
+          0.0,
+          1.0
+        ]
+      },
+      "right": {
+        "set": [
+          -1.0,
+          0.0,
+          1.0
+        ]
+      },
+      "mode": "leq",
+      "verdict": true
+    },
+    {
+      "left": {
+        "set": [
+          -1.0,
+          0.0,
+          1.0
+        ]
+      },
+      "right": {
+        "set": [
+          1.0
+        ]
+      },
+      "mode": "leq",
+      "verdict": false
+    },
+    {
+      "left": {
+        "set": [
+          -1.0,
+          0.0,
+          1.0
+        ]
+      },
+      "right": {
+        "set": [
+          0.5
+        ]
+      },
+      "mode": "leq",
+      "verdict": false
+    },
+    {
+      "left": {
+        "set": [
+          -1.0,
+          0.0,
+          1.0
+        ]
+      },
+      "right": {
+        "interval": [
+          -1.0,
+          1.0
+        ]
+      },
+      "mode": "leq",
+      "verdict": true
+    },
+    {
+      "left": {
+        "set": [
+          -1.0,
+          0.0,
+          1.0
+        ]
+      },
+      "right": {
+        "interval": [
+          -20.0,
+          20.0
+        ]
+      },
+      "mode": "leq",
+      "verdict": true
+    },
+    {
+      "left": {
+        "set": [
+          -1.0,
+          0.0,
+          1.0
+        ]
+      },
+      "right": {
+        "interval": [
+          0.0,
+          1.0
+        ]
+      },
+      "mode": "leq",
+      "verdict": false
+    },
+    {
+      "left": {
+        "set": [
+          1.0
+        ]
+      },
+      "right": "top",
+      "mode": "leq",
+      "verdict": true
+    },
+    {
+      "left": {
+        "set": [
+          1.0
+        ]
+      },
+      "right": {
+        "set": [
+          0.0,
+          1.0
+        ]
+      },
+      "mode": "leq",
+      "verdict": true
+    },
+    {
+      "left": {
+        "set": [
+          1.0
+        ]
+      },
+      "right": {
+        "set": [
+          -1.0,
+          0.0,
+          1.0
+        ]
+      },
+      "mode": "leq",
+      "verdict": true
+    },
+    {
+      "left": {
+        "set": [
+          1.0
+        ]
+      },
+      "right": {
+        "set": [
+          1.0
+        ]
+      },
+      "mode": "leq",
+      "verdict": true
+    },
+    {
+      "left": {
+        "set": [
+          1.0
+        ]
+      },
+      "right": {
+        "set": [
+          0.5
+        ]
+      },
+      "mode": "leq",
+      "verdict": false
+    },
+    {
+      "left": {
+        "set": [
+          1.0
+        ]
+      },
+      "right": {
+        "interval": [
+          -1.0,
+          1.0
+        ]
+      },
+      "mode": "leq",
+      "verdict": true
+    },
+    {
+      "left": {
+        "set": [
+          1.0
+        ]
+      },
+      "right": {
+        "interval": [
+          -20.0,
+          20.0
+        ]
+      },
+      "mode": "leq",
+      "verdict": true
+    },
+    {
+      "left": {
+        "set": [
+          1.0
+        ]
+      },
+      "right": {
+        "interval": [
+          0.0,
+          1.0
+        ]
+      },
+      "mode": "leq",
+      "verdict": true
+    },
+    {
+      "left": {
+        "set": [
+          0.5
+        ]
+      },
+      "right": "top",
+      "mode": "leq",
+      "verdict": true
+    },
+    {
+      "left": {
+        "set": [
+          0.5
+        ]
+      },
+      "right": {
+        "set": [
+          0.0,
+          1.0
+        ]
+      },
+      "mode": "leq",
+      "verdict": false
+    },
+    {
+      "left": {
+        "set": [
+          0.5
+        ]
+      },
+      "right": {
+        "set": [
+          -1.0,
+          0.0,
+          1.0
+        ]
+      },
+      "mode": "leq",
+      "verdict": false
+    },
+    {
+      "left": {
+        "set": [
+          0.5
+        ]
+      },
+      "right": {
+        "set": [
+          1.0
+        ]
+      },
+      "mode": "leq",
+      "verdict": false
+    },
+    {
+      "left": {
+        "set": [
+          0.5
+        ]
+      },
+      "right": {
+        "set": [
+          0.5
+        ]
+      },
+      "mode": "leq",
+      "verdict": true
+    },
+    {
+      "left": {
+        "set": [
+          0.5
+        ]
+      },
+      "right": {
+        "interval": [
+          -1.0,
+          1.0
+        ]
+      },
+      "mode": "leq",
+      "verdict": true
+    },
+    {
+      "left": {
+        "set": [
+          0.5
+        ]
+      },
+      "right": {
+        "interval": [
+          -20.0,
+          20.0
+        ]
+      },
+      "mode": "leq",
+      "verdict": true
+    },
+    {
+      "left": {
+        "set": [
+          0.5
+        ]
+      },
+      "right": {
+        "interval": [
+          0.0,
+          1.0
+        ]
+      },
+      "mode": "leq",
+      "verdict": true
+    },
+    {
+      "left": {
+        "interval": [
+          -1.0,
+          1.0
+        ]
+      },
+      "right": "top",
+      "mode": "leq",
+      "verdict": true
+    },
+    {
+      "left": {
+        "interval": [
+          -1.0,
+          1.0
+        ]
+      },
+      "right": {
+        "set": [
+          0.0,
+          1.0
+        ]
+      },
+      "mode": "leq",
+      "verdict": false
+    },
+    {
+      "left": {
+        "interval": [
+          -1.0,
+          1.0
+        ]
+      },
+      "right": {
+        "set": [
+          -1.0,
+          0.0,
+          1.0
+        ]
+      },
+      "mode": "leq",
+      "verdict": false
+    },
+    {
+      "left": {
+        "interval": [
+          -1.0,
+          1.0
+        ]
+      },
+      "right": {
+        "set": [
+          1.0
+        ]
+      },
+      "mode": "leq",
+      "verdict": false
+    },
+    {
+      "left": {
+        "interval": [
+          -1.0,
+          1.0
+        ]
+      },
+      "right": {
+        "set": [
+          0.5
+        ]
+      },
+      "mode": "leq",
+      "verdict": false
+    },
+    {
+      "left": {
+        "interval": [
+          -1.0,
+          1.0
+        ]
+      },
+      "right": {
+        "interval": [
+          -1.0,
+          1.0
+        ]
+      },
+      "mode": "leq",
+      "verdict": true
+    },
+    {
+      "left": {
+        "interval": [
+          -1.0,
+          1.0
+        ]
+      },
+      "right": {
+        "interval": [
+          -20.0,
+          20.0
+        ]
+      },
+      "mode": "leq",
+      "verdict": true
+    },
+    {
+      "left": {
+        "interval": [
+          -1.0,
+          1.0
+        ]
+      },
+      "right": {
+        "interval": [
+          0.0,
+          1.0
+        ]
+      },
+      "mode": "leq",
+      "verdict": false
+    },
+    {
+      "left": {
+        "interval": [
+          -20.0,
+          20.0
+        ]
+      },
+      "right": "top",
+      "mode": "leq",
+      "verdict": true
+    },
+    {
+      "left": {
+        "interval": [
+          -20.0,
+          20.0
+        ]
+      },
+      "right": {
+        "set": [
+          0.0,
+          1.0
+        ]
+      },
+      "mode": "leq",
+      "verdict": false
+    },
+    {
+      "left": {
+        "interval": [
+          -20.0,
+          20.0
+        ]
+      },
+      "right": {
+        "set": [
+          -1.0,
+          0.0,
+          1.0
+        ]
+      },
+      "mode": "leq",
+      "verdict": false
+    },
+    {
+      "left": {
+        "interval": [
+          -20.0,
+          20.0
+        ]
+      },
+      "right": {
+        "set": [
+          1.0
+        ]
+      },
+      "mode": "leq",
+      "verdict": false
+    },
+    {
+      "left": {
+        "interval": [
+          -20.0,
+          20.0
+        ]
+      },
+      "right": {
+        "set": [
+          0.5
+        ]
+      },
+      "mode": "leq",
+      "verdict": false
+    },
+    {
+      "left": {
+        "interval": [
+          -20.0,
+          20.0
+        ]
+      },
+      "right": {
+        "interval": [
+          -1.0,
+          1.0
+        ]
+      },
+      "mode": "leq",
+      "verdict": false
+    },
+    {
+      "left": {
+        "interval": [
+          -20.0,
+          20.0
+        ]
+      },
+      "right": {
+        "interval": [
+          -20.0,
+          20.0
+        ]
+      },
+      "mode": "leq",
+      "verdict": true
+    },
+    {
+      "left": {
+        "interval": [
+          -20.0,
+          20.0
+        ]
+      },
+      "right": {
+        "interval": [
+          0.0,
+          1.0
+        ]
+      },
+      "mode": "leq",
+      "verdict": false
+    },
+    {
+      "left": {
+        "interval": [
+          0.0,
+          1.0
+        ]
+      },
+      "right": "top",
+      "mode": "leq",
+      "verdict": true
+    },
+    {
+      "left": {
+        "interval": [
+          0.0,
+          1.0
+        ]
+      },
+      "right": {
+        "set": [
+          0.0,
+          1.0
+        ]
+      },
+      "mode": "leq",
+      "verdict": false
+    },
+    {
+      "left": {
+        "interval": [
+          0.0,
+          1.0
+        ]
+      },
+      "right": {
+        "set": [
+          -1.0,
+          0.0,
+          1.0
+        ]
+      },
+      "mode": "leq",
+      "verdict": false
+    },
+    {
+      "left": {
+        "interval": [
+          0.0,
+          1.0
+        ]
+      },
+      "right": {
+        "set": [
+          1.0
+        ]
+      },
+      "mode": "leq",
+      "verdict": false
+    },
+    {
+      "left": {
+        "interval": [
+          0.0,
+          1.0
+        ]
+      },
+      "right": {
+        "set": [
+          0.5
+        ]
+      },
+      "mode": "leq",
+      "verdict": false
+    },
+    {
+      "left": {
+        "interval": [
+          0.0,
+          1.0
+        ]
+      },
+      "right": {
+        "interval": [
+          -1.0,
+          1.0
+        ]
+      },
+      "mode": "leq",
+      "verdict": true
+    },
+    {
+      "left": {
+        "interval": [
+          0.0,
+          1.0
+        ]
+      },
+      "right": {
+        "interval": [
+          -20.0,
+          20.0
+        ]
+      },
+      "mode": "leq",
+      "verdict": true
+    },
+    {
+      "left": {
+        "interval": [
+          0.0,
+          1.0
+        ]
+      },
+      "right": {
+        "interval": [
+          0.0,
+          1.0
+        ]
+      },
+      "mode": "leq",
+      "verdict": true
+    }
+  ]
+}

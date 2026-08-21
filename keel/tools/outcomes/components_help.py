@@ -74,8 +74,96 @@ def _extract_pitfalls(detail: dict) -> list[str]:
     return pitfalls[:5]
 
 
+#: Plain-words legality condition per transfer direction
+#: (dsl-multi-timeframe-clocks spec 01 §5.1/§5.2, surfaced per spec 02 §9.2
+#: item 6). Sourced from the declared `clock_transfer`, NEVER regex-mined
+#: from the docstring.
+_CLOCK_LEGALITY: dict[str, str] = {
+    "synth": (
+        "Mints the entry clock — everything downstream inherits it until "
+        "another clock-changing component re-clocks the branch."
+    ),
+    "resample": (
+        "Legal only fine → coarse: the target period must be a whole "
+        "multiple of the input period. Aggregating 1h bars to 1d is fine; "
+        "asking for 5min out of 1h is an upsample and is rejected."
+    ),
+    "project": (
+        "Legal only coarse → fine: the input period must be a whole "
+        "multiple of the target period. Holds the last COMPLETED coarse "
+        "bar across the finer grid, so no future information leaks back."
+    ),
+    "keep": "Leaves the bar clock untouched — output is on the input's clock.",
+}
+
+#: The one thing every clock-changing component must say it does NOT do
+#: (R7-I13). Without it the predictable agent error is "I moved the branch
+#: to 4h, so the clock system will adjust my lookback".
+_CLOCK_NEVER = (
+    "Never rescales parameters: an integer lookback is a count of BARS on "
+    "whatever clock the branch is on (`ROC(period=6)` is 6 hours at 1h and "
+    "24 hours at 4h). Re-clocking a branch does not re-interpret it — "
+    "restate the window yourself."
+)
+
+
+def _clock_block(detail: dict) -> dict | None:
+    """The Clock block (spec 02 §9.2 item 6), or None for `keep` components.
+
+    Every field is read from the registration surface: `clock_transfer`
+    gives the direction and the parameter that names the target clock;
+    `declaration_refs` says whether that parameter is wired to `Globals`
+    (so it tracks the declaration) or must be passed explicitly.
+    """
+    from keel.data.registry import clock_direction_of
+
+    direction = clock_direction_of(detail)
+    if direction == "keep":
+        return None
+
+    transfer = detail.get("clock_transfer") or {}
+    src = transfer.get("src")
+    decl_refs = detail.get("declaration_refs") or {}
+    optional_refs = detail.get("optional_declaration_refs") or {}
+
+    if src and src in decl_refs:
+        clock_source = (
+            f"`{src}` is declaration-backed — bound to `{decl_refs[src]}`, "
+            f"so it tracks the declaration and cannot drift."
+        )
+    elif src and src in optional_refs:
+        clock_source = (
+            f"`{src}` is explicit; it may optionally be wired to `{optional_refs[src]}` instead."
+        )
+    elif src:
+        clock_source = f"`{src}` is explicit — you pass the target clock."
+    else:
+        clock_source = "The target clock is fixed by the component."
+
+    block = {
+        "direction": direction,
+        "clock_source": clock_source,
+        "legality": _CLOCK_LEGALITY[direction],
+        "never": _CLOCK_NEVER,
+    }
+    if transfer.get("off"):
+        block["bar_offset"] = (
+            f"Grid phase comes from `{transfer['off']}` "
+            f"(`{optional_refs.get(transfer['off'], 'globals.bar_offset')}`)."
+        )
+    return block
+
+
 def _shape_detail(detail: dict) -> dict:
     """Project the bundled registry record into the outcome shape."""
+    clock = _clock_block(detail)
+    if clock is not None:
+        return {**_shape_detail_base(detail), "clock": clock}
+    return _shape_detail_base(detail)
+
+
+def _shape_detail_base(detail: dict) -> dict:
+    """The clock-independent part of the outcome shape."""
     return {
         "name": detail.get("name"),
         "category": detail.get("category"),
@@ -163,16 +251,21 @@ COMPONENTS_COMPOSE_HELP = register(
         required_action="component.read",
         cli_path=("components", "compose-help"),
         toolset="read-only",
+        # grounded-in: tool_usage.md:27 (single-component detail is the
+        # right call for a lone edit); collaboration.md §7 (read the full
+        # param list incl. slot params before wiring a component in).
         description=(
-            "Fetch the component schema/detail contract for ONE known "
-            "pipeline component: parameter list, type signature, slot "
-            "reads/writes, examples, and common pitfalls. Call this once "
-            "you know the component name (use `keel_components_search` "
-            "first to discover candidates). Use "
-            "`keel_components_detail_batch` instead when comparing or "
-            "planning several components. Output is the source of truth "
-            "the agent uses when authoring a `ComponentRef(...)` in a "
-            "strategy. "
+            "Fetch the full schema/detail contract for ONE known pipeline "
+            "component: parameter list, type signature, slot reads/writes, "
+            "examples, and common pitfalls. Call this once discovery has "
+            "narrowed to a single component you're about to wire — use "
+            "`keel_components_search` first to find candidates, and "
+            "`keel_components_detail_batch` when you're verifying SEVERAL "
+            "at once. The returned contract is the source of truth for "
+            "authoring that component's `ComponentRef(...)`: read the exact "
+            "parameter names, types, and slot reads/writes here so the DSL "
+            "you pass to `keel_strategy_compose` fits on the first try, not "
+            "after a dry-run bounce. "
             "Do NOT use to discover components — use `keel_components_search`. "
             "Do NOT use to look up DSL syntax topics — call `keel_help`."
         ),

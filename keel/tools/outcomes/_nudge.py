@@ -96,6 +96,19 @@ def good_result_nudge(
             f"You can view this strategy in the Keel app: {overview_url}"
         )
 
+    # Spec 09 CL-1/CL-2: while anonymous, no deploy or app link — the
+    # future account will not own this strategy's URLs. The nudge points
+    # at sign-in instead (the claim carries the work across).
+    from ._handoff import _is_anon_session
+
+    if _is_anon_session():
+        return (
+            f"This backtest clears Keel's good-result bar{qualifier}. "
+            "Taking it live starts with signing in — run `keel auth login`; "
+            "your strategies and backtests come with you automatically — "
+            "or do nothing: nothing goes live without your explicit approval."
+        )
+
     # Full/CLI surface: prefer the signed deploy-intent deep link
     # (standalone handoff flow, server-computed sizing prefill).
     from ._handoff import mint_deploy_intent

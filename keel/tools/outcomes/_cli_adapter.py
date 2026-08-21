@@ -307,11 +307,12 @@ def _requires_cli_confirmation(tool: OutcomeTool, args: dict) -> bool:
     """Return whether this concrete CLI call needs explicit confirmation."""
     if not tool.confirm_in_cli:
         return False
-    # `keel live deploy` is destructive as a tool, but the default CLI
-    # call is a preview-only staging step. Require confirmation only for
-    # the actual deploy (`--no-preview` / preview=False).
-    if tool.name == "keel_live_deploy" and args.get("preview", True) is True:
-        return False
+    # `keel live deploy` defaults to a browser handoff (a link-out, not a
+    # destructive action). Only the explicit power-user in-terminal deploy
+    # (`--direct --no-preview`) writes live capital and needs confirmation;
+    # the default handoff and the `--direct` preview step do not.
+    if tool.name == "keel_live_deploy":
+        return bool(args.get("direct")) and args.get("preview", True) is False
     return True
 
 
@@ -365,7 +366,10 @@ def _render(result: OutcomeResult, fmt: str) -> None:
         # today). hero_url + share_url are the LAST lines on stdout
         # so they're easy to click — Vercel/Sentry pattern per spec §5.
         for k, v in envelope.items():
-            if k in {"hero_url", "share_url", "resource_uri"}:
+            # url_line duplicates hero_url/share_url, which already
+            # print as the LAST clickable lines below — skip the field
+            # form in human mode (structured formats keep it).
+            if k in {"hero_url", "share_url", "resource_uri", "url_line"}:
                 continue
             if isinstance(v, (dict, list)):
                 v = json.dumps(v, indent=2)
@@ -376,6 +380,14 @@ def _render(result: OutcomeResult, fmt: str) -> None:
             click.echo(envelope["hero_url"])
         if envelope.get("share_url"):
             click.echo(envelope["share_url"])
+        if (
+            envelope.get("url_line")
+            and not envelope.get("hero_url")
+            and not envelope.get("share_url")
+        ):
+            # Handler-supplied link line (e.g. a preview whose only
+            # link is a handoff URL) — still ends the output clickable.
+            click.echo(envelope["url_line"])
     else:
         emit(envelope, _output_fmt(fmt))
 
@@ -389,6 +401,7 @@ _GROUP_HELP: dict[tuple[str, ...], str] = {
     ("accounts",): "Read Hyperliquid trading accounts attached to your org.",
     ("share",): "Publish strategies and backtests at public usekeel.io/share URLs.",
     ("audit",): "Inspect agent / tool call history.",
+    ("library",): "Browse and fork verified Keel Library entries.",
     ("strategy", "memory"): "Read and append per-strategy notes (cross-conversation memory).",
 }
 

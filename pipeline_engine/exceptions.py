@@ -15,6 +15,15 @@ from __future__ import annotations
 from typing import Any
 
 
+#: Envelope key names RESERVED against a StructuredError subclass's free-form
+#: ``fields`` kwargs (dsl-type-system spec 05 §3.4 F16b). The compile-tier
+#: ``to_dict()`` superset stamps these; a colliding ``fields`` name is refused
+#: at construction so the envelope keys can never be shadowed by payload data.
+_ENVELOPE_KEYS = frozenset(
+    {"tier", "severity", "recoverable", "expected", "actual", "path", "provenance"}
+)
+
+
 class FrameworkError(Exception):
     """Base exception for all framework errors."""
 
@@ -43,9 +52,36 @@ class StructuredError(Exception):
     Spec 03's error minting (schema/opaque/fingerprint codes in T4/T5,
     verify-boundary codes in T9) subclasses this base instead of a plain
     ``CompileError``-with-message.
+
+    Typed-envelope superset (dsl-type-system spec 05 §3.4, R6-REQ7 — the
+    compile tier of the one issue envelope): ``to_dict()`` additively gains
+    the always-present envelope keys ``tier="compile"``, ``severity="error"``
+    and ``recoverable``, plus ``expected``/``actual``/``path``/``provenance``
+    WHERE the boundary carries them. The legacy ``code``/``remediation``/
+    ``detail``/free-form ``fields`` keys are byte-stable (the drop-None
+    behavior on ``fields`` is preserved), so no existing consumer breaks — the
+    mapping is a strict superset. Envelope key names are reserved against
+    ``fields`` (``_ENVELOPE_KEYS``), enforced at construction. ``recoverable``
+    defaults to ``False``: an engine-boundary/compile failure is not
+    author-recoverable from the editing surface (it needs a re-fetch,
+    recompile, or pin upgrade — platform intervention).
     """
 
+    #: Envelope tier for the engine boundary (spec 05 §3.1 #6). Class-level so
+    #: it is introspectable and a subclass may override; every StructuredError
+    #: is a compile-tier mint today.
+    tier: str = "compile"
+    #: Envelope #15 (spec 05 §3.1): compile-boundary errors are not recoverable
+    #: from the authoring surface by default; a subclass may set True.
+    recoverable: bool = False
+
     def __init__(self, *, code: str, remediation: str, detail: str = "", **fields: Any):
+        collision = set(fields) & _ENVELOPE_KEYS
+        if collision:
+            raise ValueError(
+                f"StructuredError fields collide with reserved envelope keys "
+                f"{sorted(collision)} (spec 05 §3.4) — rename the field."
+            )
         self.code = code
         self.remediation = remediation
         self.detail = detail
@@ -60,11 +96,26 @@ class StructuredError(Exception):
         return f"{self.remediation} {tail}"
 
     def to_dict(self) -> dict[str, Any]:
-        """Machine-readable payload (spec 01 §2.1 — never string-parse errors)."""
+        """Machine-readable payload (spec 01 §2.1 — never string-parse errors).
+
+        The legacy keys come first (byte-stable), then the envelope superset
+        (spec 05 §3.4). Envelope keys are written LAST so payload ``fields`` can
+        never shadow them (belt-and-braces with the ``__init__`` reserved-key
+        guard).
+        """
         out: dict[str, Any] = {"code": self.code, "remediation": self.remediation}
         if self.detail:
             out["detail"] = self.detail
         out.update(self.fields)
+        # ── Envelope superset (spec 05 §3.4) — always-present at the compile
+        # tier; the type fields ride only where the boundary has them.
+        out["tier"] = self.tier
+        out["severity"] = "error"
+        out["recoverable"] = self.recoverable
+        for _key in ("expected", "actual", "path", "provenance"):
+            _val = getattr(self, _key, None)
+            if _val is not None:
+                out[_key] = _val
         return out
 
 

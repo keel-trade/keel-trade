@@ -6,6 +6,7 @@
 Data → Indicator → Normalize → ForecastScaler → ForecastCapper → ForecastWeightNormalizer → WeightSeries. Signal values carry conviction — stronger signals get larger positions. When combining multiple signals, add CrossSectionalZScore before ForecastScaler to put them on comparable scales. For single signals, ForecastScaler handles scaling directly. ForecastWeightNormalizer is the default sizer — it normalizes total leverage to target_leverage (default 1.0).
 
 **Vol-targeted sizing** (upgrade): Replace ForecastWeightNormalizer with `VolTargetWeightConverter → LeverageCap(max_leverage=1.0)`. This gives lower-vol assets larger positions (equal risk contribution) while keeping total leverage capped. VolTargetWeightConverter sizes per-asset independently, so always follow with LeverageCap. The pattern using a Parallel branch:
+
 ```
 { 'signal': [ROC, ForecastScaler, ForecastCapper], 'vol': [ReturnVolatility, Store('vol')] }
 → Extract('signal') → VolTargetWeightConverter(return_vol_slot='vol') → LeverageCap(max_leverage=1.0)
@@ -21,6 +22,7 @@ Stateful (entry + exit): Build entry and exit signals independently (often in Pa
 Entry signal: Normalize → ThresholdCross(upper=2, lower=-2) → Store('entries')
 
 Exit mechanisms (choose one or combine with Parallel + MaskOr for OR logic):
+
 - Signal reversion: SignalReversionExit(exit_threshold=0.5) → exits when |signal| returns to neutral zone. Use in Parallel with entry from same normalized signal. Works with exit_mode='scalar'.
 - Trailing stop: TrailingStopExit(entry_slot, ohlcv_slot, atr_multiplier=2.0) → ATR-based, resets per trade, long+short aware
 - Stop loss: MaxDrawdownStopLoss(entry_slot, ohlcv_slot, drawdown_threshold=0.05) → fixed % loss from entry
@@ -30,6 +32,8 @@ Exit mechanisms (choose one or combine with Parallel + MaskOr for OR logic):
 
 All exit components output 1.0 for exit and use exit_mode='scalar' with PSM. Slot-reading components (TrailingStopExit, MaxDrawdownStopLoss, TakeProfitExit) read entry signals and OHLCV from slots — no Load() needed before them.
 
+**Exit semantics — bar-close weight mechanics, not resting orders**: all exits evaluate at bar close and zero the weight — Keel places no resting stop/TP orders on the exchange. Price can trade through a stop/take-profit level intra-bar; the exit executes at the close of the bar that triggers it. When a user frames exits in per-trade order terms (Pine-style SL/TP, R-multiples), state this semantics up front.
+
 Position state: PositionStateMachine(entry_slot='entries', exit_slot='exits', exit_mode='scalar') → holds until exit fires
 
 Multiple signals may feed into entry (e.g., 2-3 indicators combined or gated) and different signals or conditions into exit (e.g., trailing stop OR time-based via Parallel + MaskOr).
@@ -37,6 +41,7 @@ Multiple signals may feed into entry (e.g., 2-3 indicators combined or gated) an
 Direction: Default to **long-only** for trend-following entry/exit strategies (`ThresholdCross(mode='long_only')`). Crypto has structural long bias and long-only is simpler to reason about. Suggest adding shorts as a follow-up improvement. For mean reversion, symmetric (both sides) is fine. For trend, prefer trailing stop only (no TakeProfitExit) — let winners run.
 
 **Position sizing for Path 2** (after PSM or ThresholdCross):
+
 - Default: `EqualWeightSizer()` — splits target_leverage evenly across active positions. Add `max_weight=0.3` to cap per-position concentration when position count varies.
 - Mixed-vol universe (e.g., BTC + altcoins + memes): suggest `VolWeightSizer(vol_slot='vol')` for equal risk contribution. Requires `ReturnVolatility() → Store('vol')` upstream. Also supports `max_weight`.
 - Risk-aware trend: `RiskBudgetSizer(vol_slot='vol', risk_per_position=0.02)` — fixed vol budget per trade.
@@ -48,6 +53,7 @@ Filters and confirmations are independent of the signal → compute in Parallel 
 **Scaling entries (DCA / pyramiding / laddered)**: A variant of Path 2 where positions accumulate across multiple independent triggers instead of being binary in/out. Use ScalingPositionManager instead of PositionStateMachine. It outputs integer position levels {0, 1, 2, 3} instead of binary {-1, 0, +1}.
 
 Important: most multi-signal strategies are NOT scaling strategies. The distinction:
+
 - "Enter when RSI AND MACD agree" → ONE combined entry signal (ApplyMask or MaskAnd) → PSM. The user wants a single gated entry, not accumulation.
 - "Enter at RSI 30, add more at 20, add more at 10" → THREE independent entry levels → ScalingPositionManager. The user wants to accumulate position as conviction deepens.
 - "Exit on stop loss OR take profit" → ONE combined exit signal (MaskOr) → PSM. This is OR-logic combining, not partial exits.
@@ -58,6 +64,7 @@ Default to PositionStateMachine. Only use ScalingPositionManager when the user e
 Trigger words for scaling: 'DCA', 'dollar cost average', 'pyramid', 'add to position', 'scale in', 'scale out', 'ladder', 'laddered entries', 'partial exit', 'accumulate', 'buy more if it drops further', 'multiple entry levels', 'average down', 'average in'.
 
 Two entry modes:
+
 - Multi-slot (laddered): `ScalingPositionManager(entry_slots=['e1', 'e2', 'e3'], exit_slots='exits')` — each slot independently controls one level. Use when each level has its own trigger condition.
 - Single-slot (DCA/pyramiding): `ScalingPositionManager(entry_slots='entries', exit_slots='exits', max_entries=3)` — each re-trigger of the entry signal adds a level.
 
@@ -73,4 +80,3 @@ Data → Indicator → TopNAssetSelector → SelectionToSignalConverter(hold_per
 
 **Path 4 — Direct Allocation**:
 Data → Indicator → EqualWeightAllocator or RiskParityAllocator → WeightSeries. Skips the forecast stage entirely. Simple but effective for factor tilts.
-

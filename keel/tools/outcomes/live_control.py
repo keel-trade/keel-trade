@@ -4,14 +4,23 @@ Per spec §4 #14: the destructive control surface for live deployments.
 One tool, one `action` enum, one positional `deployment_id`. Always
 routes through host confirmation via `destructiveHint=true`.
 
+Scope (D7, 2026-07-19): every action here operates on an EXISTING
+deployment the human already deployed and authorized in the web app —
+this is operating a live deployment, not going live. Going live with a
+NEW strategy is a WEB handoff (`keel_live_deploy`), never an in-terminal
+write. So the lifecycle control below stays a direct action on all
+surfaces; `trigger` (an off-schedule rebalance on an already-authorized
+deployment) is the borderline case and is flagged for founder review.
+
 Routes used (verified against the API live router):
   - pause   → POST   /v1/live/{id}/pause
   - resume  → POST   /v1/live/{id}/resume
   - stop    → DELETE /v1/live/{id}
   - trigger → POST   /v1/live/{id}/trigger
 
-Do NOT use to deploy a new strategy — call `keel_live_deploy` instead.
-Do NOT use to read state — call `keel_live_monitor` instead.
+Do NOT use to go live / deploy a new strategy — call `keel_live_deploy`
+(it hands off to the web deploy flow). Do NOT use to read state — call
+`keel_live_monitor` instead.
 """
 
 from __future__ import annotations
@@ -42,6 +51,7 @@ _NEW_STATE: dict[str, str] = {
 def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
     deployment_id = (args.get("deployment_id") or "").strip()
     action = (args.get("action") or "").strip()
+    override = bool(args.get("override") or False)
 
     if not deployment_id:
         raise KeelError(
@@ -58,6 +68,18 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
                 "Each maps to a specific live-deployment state transition."
             ),
         )
+    if override and action != "trigger":
+        # A-3 (2026-08-10): `override` re-runs a bar that already has a run
+        # (the API mints a trigger_override_id past the idempotent dedup);
+        # it means nothing on lifecycle actions, and silently accepting it
+        # there would teach callers a flag that does nothing.
+        raise ValidationError(
+            "`override` is only meaningful with action='trigger'.",
+            suggestion=(
+                "Drop `override`, or use action='trigger' to force a re-run "
+                "of a bar that already has a run."
+            ),
+        )
 
     # Second lock — `stop` and `trigger` mutate live state; require
     # local arming. `pause` and `resume` are arming-gated too because
@@ -68,6 +90,8 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
 
     method, suffix = _ACTIONS[action]
     path = f"/v1/live/{deployment_id}{suffix}"
+    if override:
+        path = f"{path}?override=true"
 
     client = ctx.get_client()
     try:
@@ -94,7 +118,11 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
 
         retry_call = {
             "tool": "keel_live_control",
-            "args": {"deployment_id": deployment_id, "action": action},
+            "args": {
+                "deployment_id": deployment_id,
+                "action": action,
+                **({"override": True} if override else {}),
+            },
         }
         handoff = maybe_quota_handoff(e, blocked_action="live_control", retry_call=retry_call)
         if handoff is None:
@@ -124,12 +152,23 @@ LIVE_CONTROL = register(
         required_action="runner.pause",
         cli_path=("live", "control"),
         toolset="live-write",
+        # grounded-in: live_control.py D7 scope note (:7-13 — every action
+        # operates on an EXISTING deployment the human already authorized in
+        # the web app; going live with a NEW strategy is a web handoff, never
+        # an in-terminal write) + _ACTIONS/_NEW_STATE table (per-action
+        # lifecycle effect).
         description=(
-            "Pause, resume, stop, or trigger a manual rebalance on a live deployment. "
-            "Always routes through host confirmation via `destructiveHint=true` — "
-            "`stop` ends the deployment, `pause`/`resume` toggle the schedule, "
-            "`trigger` forces an immediate rebalance off-schedule. "
-            "Do NOT use to deploy a new strategy — call `keel_live_deploy`. "
+            "Control an EXISTING live deployment that the human already deployed and "
+            "authorized in the Keel web app: pause, resume, stop, or trigger a manual "
+            "rebalance. This operates a deployment that is already live — it does not "
+            "go live with a new strategy (that is a human step in the web app). "
+            "Always routes through host confirmation via `destructiveHint=true`: "
+            "`stop` ends the deployment, `pause`/`resume` toggle its schedule, "
+            "`trigger` forces one immediate off-schedule rebalance. Get the "
+            "`deployment_id` and current state from `keel_live_monitor` first. "
+            "Do NOT use to go live / deploy a NEW strategy — that is done by the human "
+            "in the Keel web app; call `keel_live_deploy`, which returns a handoff into "
+            "that web deploy flow. "
             "Do NOT use to read state — call `keel_live_monitor`."
         ),
         input_schema={
@@ -147,6 +186,18 @@ LIVE_CONTROL = register(
                         "Lifecycle action: 'pause' (halt schedule), 'resume' "
                         "(re-enable schedule), 'stop' (terminate deployment), "
                         "'trigger' (force one immediate rebalance)."
+                    ),
+                },
+                "override": {
+                    "type": "boolean",
+                    "description": (
+                        "With action='trigger' only: force a re-run of a bar "
+                        "that ALREADY has a run. Without it a re-trigger of an "
+                        "evaluated bar is an idempotent no-op (the run dedup "
+                        "wins); with it the API mints a trigger_override_id so "
+                        "the new run persists alongside the original. Loosens "
+                        "nothing else — authorization and LIVE status still "
+                        "apply."
                     ),
                 },
             },

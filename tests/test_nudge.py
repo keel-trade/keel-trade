@@ -158,7 +158,9 @@ def test_summarize_no_nudge_without_good_result():
     )
 
     assert "nudge" not in env
-    client.post.assert_not_called()
+    # No good result → no deploy-intent mint. (The render block's embed
+    # mint POST /v1/embeds is expected and unrelated to the nudge gate.)
+    assert all(c.args[0] != "/v1/live/deploy-intents" for c in client.post.call_args_list)
 
 
 # ─── Listed-profile surface (research/08) ────────────────────────────────

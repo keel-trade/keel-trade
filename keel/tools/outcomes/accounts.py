@@ -92,14 +92,19 @@ ACCOUNTS_LIST = register(
         required_action="account.read",
         cli_path=("accounts", "list"),
         toolset="read-only",
+        # grounded-in: accounts.py module docstring (spec §4 row 11 —
+        # read-only enumeration; authorizing a new account is a web-only
+        # EIP-712 signing flow) + _handler (list vs single-account detail on
+        # `account_id`).
         description=(
             "List your Hyperliquid accounts (id, label, wallet_address, "
             "status, account_mode, agent_address, expires_at, attached "
-            "strategy/deployment). Pass an `account_id` to fetch detail "
-            "for a single account. "
+            "strategy/deployment) — read-only enumeration to find the account "
+            "you need. Pass an `account_id` to fetch detail for a single "
+            "account; omit it to list them all. "
             "Do NOT use to authorize a new account — that's a web-only "
-            "flow that requires the user to sign an EIP-712 challenge "
-            "with their wallet. "
+            "flow where the user signs an EIP-712 challenge with their "
+            "wallet. "
             "Do NOT use to deploy to a live account — call "
             "`keel_live_deploy` with the chosen account_id."
         ),

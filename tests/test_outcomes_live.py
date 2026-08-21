@@ -14,6 +14,7 @@ import yaml
 from keel.errors import KeelError, ValidationError
 from keel.tools.outcomes import _bootstrap, get
 from keel.tools.outcomes._base import ToolContext
+from keel.tools.outcomes._handoff import HandoffRequired
 
 
 @pytest.fixture(autouse=True)
@@ -46,7 +47,7 @@ def test_live_deploy_preview_returns_preview_data(tmp_path, monkeypatch):
     tool = get("keel_live_deploy")
 
     result = tool.handler(
-        {"strategy_id": "strat_abc", "account_id": "acct_1", "preview": True},
+        {"strategy_id": "strat_abc", "account_id": "acct_1", "preview": True, "direct": True},
         _ctx(client),
     )
 
@@ -112,6 +113,7 @@ def test_live_deploy_actual_returns_deployment_id(tmp_path, monkeypatch):
             "strategy_id": "strat_abc",
             "account_id": "acct_1",
             "preview": True,
+            "direct": True,
             "schedule": "0 0 * * *",
         },
         _ctx(client),
@@ -128,6 +130,7 @@ def test_live_deploy_actual_returns_deployment_id(tmp_path, monkeypatch):
             "strategy_id": "strat_abc",
             "account_id": "acct_1",
             "preview": False,
+            "direct": True,
             "schedule": "0 0 * * *",
             "confirmation_token": token,
         },
@@ -165,6 +168,7 @@ def test_live_deploy_actual_requires_confirmation_token():
                 "strategy_id": "strat_abc",
                 "account_id": "acct_1",
                 "preview": False,
+                "direct": True,
             },
             _ctx(client),
         )
@@ -183,7 +187,7 @@ def test_live_deploy_confirmation_token_must_match_request(tmp_path, monkeypatch
     }
     tool = get("keel_live_deploy")
     token = tool.handler(
-        {"strategy_id": "strat_abc", "account_id": "acct_1", "preview": True},
+        {"strategy_id": "strat_abc", "account_id": "acct_1", "preview": True, "direct": True},
         _ctx(client),
     ).to_envelope()["confirmation_token"]
 
@@ -193,6 +197,7 @@ def test_live_deploy_confirmation_token_must_match_request(tmp_path, monkeypatch
                 "strategy_id": "strat_abc",
                 "account_id": "acct_2",
                 "preview": False,
+                "direct": True,
                 "confirmation_token": token,
             },
             _ctx(client),
@@ -216,7 +221,7 @@ def test_live_deploy_confirmation_token_expires(tmp_path, monkeypatch):
     }
     tool = get("keel_live_deploy")
     token = tool.handler(
-        {"strategy_id": "strat_abc", "account_id": "acct_1", "preview": True},
+        {"strategy_id": "strat_abc", "account_id": "acct_1", "preview": True, "direct": True},
         _ctx(client),
     ).to_envelope()["confirmation_token"]
 
@@ -231,6 +236,7 @@ def test_live_deploy_confirmation_token_expires(tmp_path, monkeypatch):
                 "strategy_id": "strat_abc",
                 "account_id": "acct_1",
                 "preview": False,
+                "direct": True,
                 "confirmation_token": token,
             },
             _ctx(client),
@@ -283,7 +289,7 @@ def test_live_deploy_preview_local_ahead_default_pushes_first(tmp_path, monkeypa
         env = (
             get("keel_live_deploy")
             .handler(
-                {"strategy_id": "strat_g", "account_id": "acct_1", "preview": True},
+                {"strategy_id": "strat_g", "account_id": "acct_1", "preview": True, "direct": True},
                 _ctx(client),
             )
             .to_envelope()
@@ -319,6 +325,7 @@ def test_live_deploy_preview_local_ahead_opt_out_raises(tmp_path, monkeypatch):
                     "strategy_id": "strat_g",
                     "account_id": "acct_1",
                     "preview": True,
+                    "direct": True,
                     "auto_push": False,
                 },
                 _ctx(client),
@@ -350,7 +357,7 @@ def test_live_deploy_preview_conflict_stops_never_forces(tmp_path, monkeypatch):
     ):
         with pytest.raises(KeelError) as exc:
             get("keel_live_deploy").handler(
-                {"strategy_id": "strat_g", "account_id": "acct_1", "preview": True},
+                {"strategy_id": "strat_g", "account_id": "acct_1", "preview": True, "direct": True},
                 _ctx(client),
             )
 
@@ -379,7 +386,7 @@ def test_live_deploy_confirm_stops_if_local_moved_after_preview(tmp_path, monkey
 
     # Clean at preview time (no workspace at all).
     token = tool.handler(
-        {"strategy_id": "strat_g", "account_id": "acct_1", "preview": True},
+        {"strategy_id": "strat_g", "account_id": "acct_1", "preview": True, "direct": True},
         _ctx(client),
     ).to_envelope()["confirmation_token"]
     client.post.reset_mock()
@@ -397,6 +404,7 @@ def test_live_deploy_confirm_stops_if_local_moved_after_preview(tmp_path, monkey
                     "strategy_id": "strat_g",
                     "account_id": "acct_1",
                     "preview": False,
+                    "direct": True,
                     "confirmation_token": token,
                 },
                 _ctx(client),
@@ -411,7 +419,17 @@ def test_live_deploy_confirm_stops_if_local_moved_after_preview(tmp_path, monkey
 
 
 def test_live_deploy_guard_noops_hosted(tmp_path, monkeypatch):
-    """Hosted mode: no caller filesystem — the guard must not touch keel.workspace."""
+    """Hosted mode: no caller filesystem — the guard must not touch keel.workspace.
+
+    The write-through guard used to be REACHED on a hosted surface and had to
+    no-op there. Since the hosted direct-deploy hardening (2db4a7b6,
+    2026-07-21) `direct=true` is refused BEFORE the guard runs, so the same
+    property now holds one layer earlier and strictly more strongly: hosted
+    never touches the caller filesystem AND never POSTs at all. The refusal
+    itself is owned by test_hosted_mode.py::
+    test_hosted_refuses_in_terminal_direct_deploy; what this test still pins is
+    that nothing on the hosted path reaches `keel.workspace`.
+    """
     from unittest.mock import patch
 
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
@@ -420,21 +438,196 @@ def test_live_deploy_guard_noops_hosted(tmp_path, monkeypatch):
     client = MagicMock()
     client.post.return_value = {"derived_schedule": "0 0 * * *"}
 
-    with patch("keel.workspace.get_workspace") as gw:
-        env = (
-            get("keel_live_deploy")
-            .handler(
-                {"strategy_id": "strat_g", "account_id": "acct_1", "preview": True},
-                _ctx(client),
-            )
-            .to_envelope()
+    with patch("keel.workspace.get_workspace") as gw, pytest.raises(KeelError) as exc:
+        get("keel_live_deploy").handler(
+            {"strategy_id": "strat_g", "account_id": "acct_1", "preview": True, "direct": True},
+            _ctx(client),
         )
 
+    assert exc.value.error_code == "direct_deploy_disabled"
     gw.assert_not_called()
-    assert "sync_note" not in env
-    assert client.post.call_args_list[0] == call(
-        "/v1/live/preview", json={"strategy_id": "strat_g"}
+    client.post.assert_not_called()
+
+
+# ─── keel_live_deploy DEFAULT = web handoff (D7, 2026-07-19) ─────────────
+
+
+def test_live_deploy_default_returns_web_handoff_not_a_deploy():
+    """Default (no `direct`): CLI/local go-live is a browser handoff — the
+    agent never enumerates accounts or POSTs /v1/live for the live action."""
+    client = MagicMock()
+    client.post.return_value = {
+        "handoff_url": "https://app.usekeel.io/deploy?intent=tokZ",
+        "intent_token": "tokZ",
+        "expires_at": "2026-07-19T01:00:00+00:00",
+        "suggested_config": {"sizing_usd": 500, "sizing_basis": {"max_drawdown_pct": 10.0}},
+    }
+    tool = get("keel_live_deploy")
+
+    with pytest.raises(HandoffRequired) as exc:
+        # account_id supplied, but the default path ignores it and hands off.
+        tool.handler({"strategy_id": "strat_abc", "account_id": "acct_1"}, _ctx(client))
+
+    env = exc.value.to_envelope()
+    assert env["code"] == "handoff_required"
+    assert env["blocked_action"] == "live_deploy"
+    assert env["action_url"] == "https://app.usekeel.io/deploy?intent=tokZ"
+    assert env["resume"]["token"] == "tokZ"
+    assert env["resume"]["verify_call"]["tool"] == "keel_live_deploy"
+    assert env["cost"]["suggested_sizing_usd"] == 500
+    # ONLY the deploy-intent mint happened — never POST /v1/live, never the
+    # /v1/live/preview call, and NO account enumeration.
+    client.post.assert_called_once_with(
+        "/v1/live/deploy-intents", json={"strategy_id": "strat_abc"}
     )
+    client.get.assert_not_called()
+
+
+def test_live_deploy_default_no_account_does_not_enumerate_accounts():
+    """No account_id, default path: still a web handoff — the org account
+    list is never fetched (no keel_accounts_list, no /v1/accounts)."""
+    client = MagicMock()
+    client.post.return_value = {
+        "handoff_url": "https://app.usekeel.io/deploy?intent=tokQ",
+        "intent_token": "tokQ",
+        "suggested_config": {"sizing_usd": None, "sizing_basis": None},
+    }
+    tool = get("keel_live_deploy")
+
+    with pytest.raises(HandoffRequired) as exc:
+        tool.handler({"strategy_id": "strat_abc"}, _ctx(client))
+
+    env = exc.value.to_envelope()
+    assert env["blocked_action"] == "live_deploy"
+    assert env["action_url"] == "https://app.usekeel.io/deploy?intent=tokQ"
+    client.get.assert_not_called()
+
+
+def test_live_deploy_default_mint_unavailable_falls_back_to_deploy_url():
+    """Mint yields no link (older API / missing scope) → the owned
+    /deploy/{id} entry path is the fallback; resume points at monitoring."""
+    client = MagicMock()
+    client.post.return_value = {}  # no handoff_url → mint returns None
+    tool = get("keel_live_deploy")
+
+    with pytest.raises(HandoffRequired) as exc:
+        tool.handler({"strategy_id": "strat_abc"}, _ctx(client))
+
+    env = exc.value.to_envelope()
+    assert env["action_url"] == "https://app.usekeel.io/deploy/strat_abc"
+    assert "token" not in env["resume"]
+    assert env["resume"]["verify_call"]["tool"] == "keel_live_monitor"
+
+
+def test_live_deploy_intent_poll_works_regardless_of_direct():
+    """The handoff-resume status poll (intent_token + preview) runs on the
+    default surface — it's how the agent observes handoff completion."""
+    client = MagicMock()
+    client.post.return_value = {
+        "status": "completed",
+        "strategy_id": "strat_abc",
+        "deployment_id": "dep_77",
+        "deployment_status": "LIVE",
+    }
+    tool = get("keel_live_deploy")
+
+    result = tool.handler({"strategy_id": "strat_abc", "intent_token": "tokP"}, _ctx(client))
+
+    env = result.to_envelope()
+    assert env["handoff_state"]["status"] == "completed"
+    assert env["hero_url"] == "https://app.usekeel.io/live/dep_77"
+    client.post.assert_called_once_with(
+        "/v1/live/deploy-intents/status", json={"intent_token": "tokP"}
+    )
+
+
+# ─── keel_live_deploy `direct` is a hidden, env-gated escape hatch ───────
+# (D28 2026-07-20, sdk-v0.7.0)
+
+
+def test_live_deploy_description_does_not_advertise_direct():
+    """The user-facing tool description must guide callers ONLY to the web
+    handoff — it must not mention or invite the `direct` escape hatch."""
+    tool = get("keel_live_deploy")
+    assert "direct" not in tool.description.lower()
+    # ...and it DOES route going-live to the web app handoff.
+    assert "action_url" in tool.description
+    assert "WEB APP" in tool.description
+
+
+def test_live_deploy_direct_without_env_opt_in_is_disabled(monkeypatch):
+    """`direct=true` alone (env gate NOT set) must NOT reach the in-terminal
+    deploy: it raises `direct_deploy_disabled` and never POSTs /v1/live —
+    so a model that merely guesses the param can't place real orders."""
+    monkeypatch.delenv("KEEL_ALLOW_DIRECT_DEPLOY", raising=False)
+    client = MagicMock()
+    tool = get("keel_live_deploy")
+
+    with pytest.raises(KeelError) as exc:
+        tool.handler(
+            {"strategy_id": "strat_abc", "account_id": "acct_1", "direct": True},
+            _ctx(client),
+        )
+
+    assert exc.value.error_code == "direct_deploy_disabled"
+    # The remediation points back to the web handoff + names the env gate.
+    assert "KEEL_ALLOW_DIRECT_DEPLOY" in (exc.value.suggestion or "")
+    # No live/preview call happened — the gate stops before any network I/O.
+    client.post.assert_not_called()
+    client.get.assert_not_called()
+
+
+def test_live_deploy_direct_with_env_opt_in_reaches_direct_path(tmp_path, monkeypatch):
+    """`direct=true` WITH KEEL_ALLOW_DIRECT_DEPLOY set still reaches the
+    legacy in-terminal preview path (headless/advanced use stays
+    functional)."""
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("KEEL_ALLOW_DIRECT_DEPLOY", "1")
+    client = MagicMock()
+    client.post.return_value = {
+        "derived_schedule": "0 */4 * * *",
+        "weights": [{"symbol": "HYPE", "weight": 1.0}],
+        "est_slippage": 3.2,
+        "est_fees": 1.1,
+    }
+    tool = get("keel_live_deploy")
+
+    result = tool.handler(
+        {"strategy_id": "strat_abc", "account_id": "acct_1", "preview": True, "direct": True},
+        _ctx(client),
+    )
+
+    # Reached the direct preview path: POST /v1/live/preview happened and a
+    # local confirmation_token was minted.
+    assert call("/v1/live/preview", json={"strategy_id": "strat_abc"}) in client.post.call_args_list
+    env = result.to_envelope()
+    assert env["confirmation_token"]
+
+
+def test_live_deploy_default_web_handoff_unaffected_by_env_opt_in():
+    """Even with the escape hatch armed, the DEFAULT (no `direct`) call is
+    still a web handoff — the env gate never changes the default path."""
+    # conftest's _arm_direct_deploy already sets KEEL_ALLOW_DIRECT_DEPLOY=1.
+    client = MagicMock()
+    client.post.return_value = {
+        "handoff_url": "https://app.usekeel.io/deploy?intent=tokZ",
+        "intent_token": "tokZ",
+        "suggested_config": {"sizing_usd": 500, "sizing_basis": None},
+    }
+    tool = get("keel_live_deploy")
+
+    with pytest.raises(HandoffRequired) as exc:
+        tool.handler({"strategy_id": "strat_abc", "account_id": "acct_1"}, _ctx(client))
+
+    env = exc.value.to_envelope()
+    assert env["code"] == "handoff_required"
+    assert env["action_url"] == "https://app.usekeel.io/deploy?intent=tokZ"
+    # Default path never POSTs /v1/live and never enumerates accounts.
+    client.post.assert_called_once_with(
+        "/v1/live/deploy-intents", json={"strategy_id": "strat_abc"}
+    )
+    client.get.assert_not_called()
 
 
 # ─── keel_live_monitor ──────────────────────────────────────────────────
@@ -475,6 +668,31 @@ def test_live_monitor_positions_view():
     assert env["hero_url"].endswith("?tab=positions")
     assert env["freshness"]["source"] == "hyperliquid_exchange"
     assert env["freshness"]["mode"] == "on_demand_exchange_query"
+
+
+def test_live_monitor_executions_returns_executing_snapshot_without_polling():
+    """EXECUTING is data, not a failure or a reason to wait for terminal state."""
+    client = MagicMock()
+    client.get.return_value = [
+        {
+            "execution_run_id": "exec_engine_123",
+            "execution_status": "EXECUTING",
+            "started_at": "2026-07-21T12:00:00Z",
+            "ended_at": None,
+        }
+    ]
+    tool = get("keel_live_monitor")
+
+    result = tool.handler(
+        {"deployment_id": "dep_42", "view": "executions", "limit": 25},
+        _ctx(client),
+    )
+
+    client.get.assert_called_once_with("/v1/live/dep_42/executions", limit=25)
+    env = result.to_envelope()
+    assert env["view"] == "executions"
+    assert env["data"][0]["execution_status"] == "EXECUTING"
+    assert env["data"][0]["ended_at"] is None
 
 
 def test_live_monitor_trades_view_with_filters():
@@ -647,7 +865,7 @@ def test_live_deploy_passes_through_remaining_when_present(tmp_path, monkeypatch
     ]
     tool = get("keel_live_deploy")
     token = tool.handler(
-        {"strategy_id": "strat_abc", "account_id": "acct_1", "preview": True},
+        {"strategy_id": "strat_abc", "account_id": "acct_1", "preview": True, "direct": True},
         _ctx(client),
     ).to_envelope()["confirmation_token"]
     env = tool.handler(
@@ -655,6 +873,7 @@ def test_live_deploy_passes_through_remaining_when_present(tmp_path, monkeypatch
             "strategy_id": "strat_abc",
             "account_id": "acct_1",
             "preview": False,
+            "direct": True,
             "confirmation_token": token,
         },
         _ctx(client),
@@ -679,7 +898,7 @@ def test_live_deploy_omits_remaining_when_absent(tmp_path, monkeypatch):
     ]
     tool = get("keel_live_deploy")
     token = tool.handler(
-        {"strategy_id": "strat_abc", "account_id": "acct_1", "preview": True},
+        {"strategy_id": "strat_abc", "account_id": "acct_1", "preview": True, "direct": True},
         _ctx(client),
     ).to_envelope()["confirmation_token"]
     env = tool.handler(
@@ -687,6 +906,7 @@ def test_live_deploy_omits_remaining_when_absent(tmp_path, monkeypatch):
             "strategy_id": "strat_abc",
             "account_id": "acct_1",
             "preview": False,
+            "direct": True,
             "confirmation_token": token,
         },
         _ctx(client),

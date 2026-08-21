@@ -158,6 +158,7 @@ class UniverseSpec:
     resolved: list[str] | None = None
     resolved_at: str | None = None
     groups: dict[str, list[str]] | None = None
+    max_leverages: dict[str, float] | None = None
     location: SourceLocation | None = None
 
 
@@ -219,14 +220,14 @@ EXECUTION_PARAM_META: dict[str, dict] = {
         "step": 0.01,
         "modes": ["buffered"],
         "required_for": ["buffered"],
-        "description": "Width of the no-trade buffer band. Fraction of target (relative) or portfolio value (absolute). Typical: 0.05-0.30.",
+        "description": "Width of the no-trade buffer band. Fraction of target (relative), portfolio value (absolute), or trailing mean |target weight| (reference). Typical: 0.05-0.30.",
     },
     "buffer_mode": {
         "type": "select",
         "default": "relative",
-        "options": ["relative", "absolute"],
+        "options": ["relative", "absolute", "reference"],
         "modes": ["buffered"],
-        "description": "How the buffer band is computed. relative: fraction of target position size. absolute: fraction of portfolio value.",
+        "description": "How the buffer band is computed. relative: fraction of target position size. absolute: fraction of portfolio value. reference: fraction of the asset's trailing 30-day mean |target weight| — proportional tolerance that does not pinch to zero as a signal decays.",
     },
     "rebalance_method": {
         "type": "select",

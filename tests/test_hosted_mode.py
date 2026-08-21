@@ -229,3 +229,28 @@ def test_adapter_local_mode_unchanged(monkeypatch):
     assert payload["ok"] is True
     assert seen["injected"] is None
     assert seen["lazy_key"] == "local-user-token"
+
+
+# ---------------------------------------------------------------------------
+# Hosted surface never places real orders (live_deploy direct-path guard)
+# ---------------------------------------------------------------------------
+
+
+def test_hosted_refuses_in_terminal_direct_deploy(monkeypatch):
+    """Hardening 2026-07-21: even with KEEL_ALLOW_DIRECT_DEPLOY armed AND
+    direct=True, a HOSTED surface must never reach the real-order path —
+    is_hosted() refuses structurally, not merely env-gated. The sole hosted
+    endpoint runs profile=listed (where keel_live_deploy isn't registered);
+    this guard covers a pod misconfigured with profile=full. Env is armed
+    here so the ONLY thing forcing the refusal is is_hosted()."""
+    from unittest.mock import MagicMock
+
+    from keel.errors import KeelError
+    from keel.tools.outcomes.live_deploy import _handler
+
+    monkeypatch.setenv("KEEL_EXECUTION_MODE", "hosted")
+    monkeypatch.setenv("KEEL_ALLOW_DIRECT_DEPLOY", "1")
+
+    with pytest.raises(KeelError) as exc_info:
+        _handler({"strategy_id": "str_test1234567", "direct": True}, MagicMock())
+    assert exc_info.value.error_code == "direct_deploy_disabled"

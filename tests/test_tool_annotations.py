@@ -32,6 +32,8 @@ EXPECTED_HINTS: dict[str, tuple[bool, bool]] = {
     "keel_components_search": (True, False),
     "keel_doctor": (True, False),
     "keel_help": (True, False),
+    "keel_library_get": (True, False),
+    "keel_library_list": (True, False),
     "keel_live_monitor": (True, False),
     "keel_open_in_app": (True, False),  # navigation link builder — no API call
     "keel_ownership_status": (True, False),
@@ -48,6 +50,7 @@ EXPECTED_HINTS: dict[str, tuple[bool, bool]] = {
     "keel_auth_login": (False, False),
     "keel_backtest_run": (False, False),
     "keel_feedback": (False, False),  # appends a feedback row; never fails, never gates
+    "keel_library_fork": (False, False),  # creates a strategy — same class as keel_strategy_fork
     "keel_strategy_checkout": (False, False),
     "keel_strategy_compose": (False, False),
     "keel_strategy_fork": (False, False),
@@ -66,13 +69,13 @@ EXPECTED_HINTS: dict[str, tuple[bool, bool]] = {
 
 
 def test_catalog_size_matches_expectations():
-    """37 tools today. A new tool must be added to EXPECTED_HINTS (and
+    """40 tools today. A new tool must be added to EXPECTED_HINTS (and
     a removed one taken out) — that diff is the review event."""
     assert set(OUTCOMES) == set(EXPECTED_HINTS), (
         f"catalog drift — unclassified: {sorted(set(OUTCOMES) - set(EXPECTED_HINTS))}, "
         f"stale entries: {sorted(set(EXPECTED_HINTS) - set(OUTCOMES))}"
     )
-    assert len(OUTCOMES) == 37
+    assert len(OUTCOMES) == 40
 
 
 @pytest.mark.parametrize("name", sorted(EXPECTED_HINTS))

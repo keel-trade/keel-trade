@@ -171,7 +171,7 @@ def test_live_deploy_scope_wall_returns_handoff_envelope(tmp_path, monkeypatch):
 
     with pytest.raises(HandoffRequired) as exc:
         get("keel_live_deploy").handler(
-            {"strategy_id": "strat_s", "account_id": "acct_1", "preview": True},
+            {"strategy_id": "strat_s", "account_id": "acct_1", "preview": True, "direct": True},
             _ctx(client),
         )
 
@@ -198,7 +198,7 @@ def test_live_deploy_quota_cap_returns_billing_handoff(tmp_path, monkeypatch):
 
     with pytest.raises(HandoffRequired) as exc:
         get("keel_live_deploy").handler(
-            {"strategy_id": "strat_s", "account_id": "acct_1", "preview": True},
+            {"strategy_id": "strat_s", "account_id": "acct_1", "preview": True, "direct": True},
             _ctx(client),
         )
 
@@ -232,7 +232,7 @@ def test_live_deploy_no_account_id_with_empty_org_returns_handoff():
     }
 
     with pytest.raises(HandoffRequired) as exc:
-        get("keel_live_deploy").handler({"strategy_id": "strat_u"}, _ctx(client))
+        get("keel_live_deploy").handler({"strategy_id": "strat_u", "direct": True}, _ctx(client))
 
     env = exc.value.to_envelope()
     _assert_valid_handoff_envelope(env)
@@ -274,7 +274,7 @@ def test_live_deploy_no_account_id_but_accounts_exist_keeps_usage_error():
     client.get.return_value = {"data": [{"account_id": "acct_1"}], "pagination": {}}
 
     with pytest.raises(KeelError) as exc:
-        get("keel_live_deploy").handler({"strategy_id": "strat_u"}, _ctx(client))
+        get("keel_live_deploy").handler({"strategy_id": "strat_u", "direct": True}, _ctx(client))
     assert exc.value.error_code == "missing_account_id"
     assert not isinstance(exc.value, HandoffRequired)
 
@@ -296,7 +296,7 @@ def test_live_deploy_account_not_found_at_deploy_returns_handoff(tmp_path, monke
     ]
     tool = get("keel_live_deploy")
     token = tool.handler(
-        {"strategy_id": "strat_u", "account_id": "acct_gone", "preview": True},
+        {"strategy_id": "strat_u", "account_id": "acct_gone", "preview": True, "direct": True},
         _ctx(client),
     ).to_envelope()["confirmation_token"]
 
@@ -306,6 +306,7 @@ def test_live_deploy_account_not_found_at_deploy_returns_handoff(tmp_path, monke
                 "strategy_id": "strat_u",
                 "account_id": "acct_gone",
                 "preview": False,
+                "direct": True,
                 "confirmation_token": token,
             },
             _ctx(client),
@@ -335,7 +336,7 @@ def test_live_deploy_strategy_not_found_stays_plain_not_found(tmp_path, monkeypa
     ]
     tool = get("keel_live_deploy")
     token = tool.handler(
-        {"strategy_id": "strat_x", "account_id": "acct_1", "preview": True},
+        {"strategy_id": "strat_x", "account_id": "acct_1", "preview": True, "direct": True},
         _ctx(client),
     ).to_envelope()["confirmation_token"]
     with pytest.raises(NotFoundError) as exc:
@@ -344,6 +345,7 @@ def test_live_deploy_strategy_not_found_stays_plain_not_found(tmp_path, monkeypa
                 "strategy_id": "strat_x",
                 "account_id": "acct_1",
                 "preview": False,
+                "direct": True,
                 "confirmation_token": token,
             },
             _ctx(client),
@@ -420,7 +422,7 @@ def test_listed_profile_preview_carries_no_handoff_url(tmp_path, monkeypatch):
     env = (
         get("keel_live_deploy")
         .handler(
-            {"strategy_id": "strat_l", "account_id": "acct_1", "preview": True},
+            {"strategy_id": "strat_l", "account_id": "acct_1", "preview": True, "direct": True},
             _ctx(client),
         )
         .to_envelope()

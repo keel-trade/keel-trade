@@ -64,6 +64,16 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
     if include_ownership_hint:
         body.update(ownership_envelope_fields(fetch_ownership_projection(ctx, strategy_id)))
 
+    # Card + per-surface render hints (spec 06 R2/R3) — render-only.
+    from ._render import card_render_block
+
+    body["render"] = card_render_block(
+        "strategy",
+        fallback_url=f"{ctx.app_url}/strategies/{strategy_id}",
+        ctx=ctx,
+        embed_id=strategy_id,
+    )
+
     return OutcomeResult(
         run_id=strategy_id,
         hero_url=f"{ctx.app_url}/strategies/{strategy_id}",
@@ -79,11 +89,19 @@ STRATEGY_GET = register(
         required_action="strategy.read",
         cli_path=("strategy", "get"),
         toolset="read-only",
+        # grounded-in: tool_usage.md:8 (state analysis — what does the current
+        # pipeline produce, is the change compatible with its structure);
+        # collaboration.md §4/§7 (plan the change from the real types/slots,
+        # not memory); context-architecture-design Part F (search → get → fork).
         description=(
-            "Fetch one strategy by id. Returns metadata by default; pass "
-            "`include_source=true` to also fetch the DSL source at a given "
+            "Fetch one strategy by id — metadata by default; pass "
+            "`include_source=true` to also read the DSL source at a given "
             "`version` (default HEAD), and `include_versions=true` to list "
-            "every commit. "
+            "every commit. Use this to READ the actual pipeline before you "
+            "adapt it: fetch the source first so you plan the edit from the "
+            "real component wiring and types, not from memory of what the "
+            "strategy 'probably' does. Pair with `keel_strategy_search` (to "
+            "find the id) and `keel_strategy_fork` (to iterate on a copy). "
             "Do NOT use to enumerate strategies — call `keel_strategy_search`. "
             "Do NOT use to mutate the strategy — call `keel_strategy_compose`."
         ),

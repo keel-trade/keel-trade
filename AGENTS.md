@@ -10,6 +10,26 @@ This file is the package README and agent instruction entry point. Keep it
 short, current, and operational. Do not add command inventories unless they are
 checked against the outcome registry.
 
+## Choosing a Surface
+
+This package is the CLI + local MCP surface. Keel also runs as a hosted
+remote MCP — one endpoint `https://mcp.usekeel.io/mcp` serving a 23-tool
+research/backtest/read surface (paste the URL now; the one-click directory
+listing is coming) — and as a web app. Going live is a handoff into the web
+app. Per-surface runbook: https://usekeel.io/agents
+
+<!-- surface-routing:begin -->
+<!-- GENERATED from shared/surface-routing.json — edit there, then run
+     python packages/keel-trade/keel-sdk/scripts/check_surface_routing.py --write -->
+| You are… | Default path (shown first) | Also works |
+| --- | --- | --- |
+| Using Claude/ChatGPT on web or phone | Hosted endpoint — paste the URL (directory one-click coming) | CLI + local MCP |
+| Working in Claude Code / Cursor / terminal | `pipx install keel-trade` (CLI + local MCP) | hosted endpoint |
+| Going live with a strategy | Keel web app (connect account, review sizing, go live) | reads on every surface |
+| Building your own agent/scripts | SDK + API key | CLI |
+| Just browsing/running strategies | Web app + library | hosted endpoint |
+<!-- surface-routing:end -->
+
 ## Install
 
 ```bash

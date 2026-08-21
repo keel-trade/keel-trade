@@ -258,13 +258,23 @@ STRATEGY_DIFF = register(
         required_action="strategy.read",
         cli_path=("strategy", "diff"),
         toolset="read-only",
+        # grounded-in: collaboration.md §4 (iterate, one change at a time —
+        # confirm you changed ONLY what you intended); component_versioning.md
+        # (note when a component version changed); tool_usage.md:8 (state
+        # analysis — what actually differs between two versions).
         description=(
-            "Compute the structural diff between two strategy sources or two "
-            "remote strategy versions. With `strategy_id` set, both refs are "
-            "interpreted as commit/tag refs on that strategy. Without "
-            "`strategy_id`, both refs are interpreted as local file paths. "
+            "Compute the structural diff between two strategy versions or two "
+            "sources: added, removed, and modified steps, per-parameter "
+            "changes (such as `ROC.period 20→42`), reordering, and component "
+            "version changes, plus a one-line summary. With `strategy_id` set, "
+            "both refs are commit/tag refs on that strategy (find them via "
+            "`keel_strategy_log`); without it, both refs are local file paths. "
+            "Use it to confirm an iteration changed ONLY what you intended — "
+            "one change at a time — or to see exactly what moved between two "
+            "commits before restoring or forking. "
             "Do NOT use to fetch the actual source — call `keel_strategy_get`. "
-            "Do NOT use to merge or update — call `keel_strategy_compose`."
+            "Do NOT use to merge or apply a change — call "
+            "`keel_strategy_compose`."
         ),
         input_schema={
             "type": "object",

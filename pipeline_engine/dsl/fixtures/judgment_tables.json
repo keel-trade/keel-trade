@@ -1,0 +1,692 @@
+{
+  "flow_config": {
+    "extract-projection": "post",
+    "scheme-synthesis": "post",
+    "composer-record-reach": "post"
+  },
+  "step_kinds": {
+    "component": [
+      {
+        "id": "J-STEP.unresolved-signature",
+        "judgment": "J-STEP",
+        "mode": "checking",
+        "relation_mode": null,
+        "premise": "signature-resolved",
+        "emit_kwargs": {},
+        "on_fail_recovery": {
+          "type": "any"
+        }
+      },
+      {
+        "id": "J-STEP.input-check",
+        "judgment": "J-STEP",
+        "mode": "checking",
+        "relation_mode": "strict",
+        "premise": "input-satisfies",
+        "on_fail": {
+          "code": "TYPE_MISMATCH"
+        },
+        "emit_kwargs": {
+          "location": "location",
+          "suggestion": "suggestion-bridge",
+          "context": "context",
+          "step": "step",
+          "expected": "expected",
+          "actual": "actual",
+          "path": "path"
+        },
+        "skip_when": [
+          "any-frontier",
+          "record-strict-skip"
+        ]
+      },
+      {
+        "id": "J-STEP.carrier-fallback",
+        "judgment": "J-STEP",
+        "mode": "checking",
+        "relation_mode": "strict",
+        "premise": "base-compatible",
+        "on_fail": {
+          "code": "TYPE_MISMATCH"
+        },
+        "emit_kwargs": {
+          "location": "location",
+          "suggestion": "suggestion-bridge",
+          "context": "context",
+          "step": "step",
+          "expected": "expected",
+          "actual": "actual",
+          "path": "path"
+        },
+        "staged": {
+          "pre": "base-passes",
+          "post": "base-error",
+          "staged_by": "carrier-fallback-retirement"
+        }
+      },
+      {
+        "id": "J-STEP.transition-advisory",
+        "judgment": "J-STEP",
+        "mode": "checking",
+        "relation_mode": "transition",
+        "premise": "category-plausible",
+        "on_fail": {
+          "code": "TRANSITION_OUTPUT_MISMATCH"
+        },
+        "emit_kwargs": {
+          "location": "location",
+          "step": "step",
+          "category": "category",
+          "output": "output",
+          "prev_output": "prev-output",
+          "expected_outputs": "expected-outputs"
+        }
+      },
+      {
+        "id": "J-STEP.synthesize",
+        "judgment": "J-INST",
+        "mode": "synthesis",
+        "relation_mode": "strict",
+        "premise": "bound-satisfies",
+        "on_fail": {
+          "code": "TYPE_MISMATCH"
+        },
+        "emit_kwargs": {
+          "location": "location",
+          "context": "context",
+          "step": "step",
+          "expected": "expected",
+          "actual": "actual",
+          "path": "path"
+        },
+        "staged": {
+          "pre": "declared-output",
+          "post": "inst-lit",
+          "staged_by": "scheme-synthesis"
+        }
+      },
+      {
+        "id": "J-PARAM.type-match",
+        "judgment": "J-PARAM",
+        "mode": "checking",
+        "relation_mode": null,
+        "premise": "literal-type-matches",
+        "on_fail": {
+          "code": "PARAM_TYPE_MISMATCH"
+        },
+        "emit_kwargs": {
+          "location": "location",
+          "param": "param",
+          "component": "component",
+          "expected": "expected",
+          "actual": "actual"
+        }
+      },
+      {
+        "id": "J-PARAM.type-check-skipped",
+        "judgment": "J-PARAM",
+        "mode": "checking",
+        "relation_mode": null,
+        "premise": "literal-type-known",
+        "on_fail": {
+          "code": "PARAM_TYPE_CHECK_SKIPPED"
+        },
+        "emit_kwargs": {
+          "location": "location",
+          "param": "param",
+          "component": "component",
+          "type": "param-type"
+        },
+        "skip_when": [
+          "variable-ref"
+        ]
+      },
+      {
+        "id": "J-PARAM.finite",
+        "judgment": "J-PARAM",
+        "mode": "checking",
+        "relation_mode": null,
+        "premise": "literal-finite",
+        "on_fail": {
+          "code": "PARAM_INVALID_VALUE"
+        },
+        "emit_kwargs": {
+          "location": "location",
+          "suggestion": "suggestion-template:param-nonfinite-fix",
+          "detail": "detail-template:param-nonfinite-detail"
+        }
+      },
+      {
+        "id": "J-PARAM.range",
+        "judgment": "J-PARAM",
+        "mode": "checking",
+        "relation_mode": null,
+        "premise": "literal-in-domain",
+        "on_fail": {
+          "code": "PARAM_OUT_OF_RANGE"
+        },
+        "emit_kwargs": {
+          "location": "location",
+          "suggestion": "suggestion-template:param-range-fix",
+          "detail": "detail-template:param-range-detail"
+        }
+      },
+      {
+        "id": "J-PARAM.option",
+        "judgment": "J-PARAM",
+        "mode": "checking",
+        "relation_mode": null,
+        "premise": "literal-in-domain",
+        "on_fail": {
+          "code": "PARAM_INVALID_OPTION"
+        },
+        "emit_kwargs": {
+          "location": "location",
+          "param": "param",
+          "component": "component",
+          "value": "value",
+          "options": "options"
+        }
+      }
+    ],
+    "composer": [
+      {
+        "id": "J-COMPOSER.key-member",
+        "judgment": "J-COMPOSER",
+        "mode": "checking",
+        "relation_mode": null,
+        "premise": "composer-key-member",
+        "on_fail": {
+          "code": "COMPOSER_KEY_MISMATCH"
+        },
+        "emit_kwargs": {
+          "location": "location",
+          "composer": "component",
+          "param": "param",
+          "extra": "extra-keys-sorted",
+          "branches": "branches-sorted"
+        },
+        "staged": {
+          "pre": "adjacency-only",
+          "post": "flow-wide",
+          "staged_by": "composer-record-reach"
+        }
+      },
+      {
+        "id": "J-COMPOSER.field-check",
+        "judgment": "J-COMPOSER",
+        "mode": "checking",
+        "relation_mode": "strict",
+        "premise": "field-satisfies",
+        "on_fail": {
+          "code": "COMPOSER_INPUT_TYPE_MISMATCH"
+        },
+        "emit_kwargs": {
+          "location": "location",
+          "suggestion": "suggestion-template:composer-field-fix",
+          "detail": "detail-template:composer-field-detail"
+        },
+        "staged": {
+          "pre": "adjacency-only",
+          "post": "flow-wide",
+          "staged_by": "composer-record-reach"
+        }
+      },
+      {
+        "id": "J-COMPOSER.dict-expected",
+        "judgment": "J-COMPOSER",
+        "mode": "checking",
+        "relation_mode": null,
+        "premise": "current-is-record",
+        "on_fail": {
+          "code": "DICT_INPUT_EXPECTED"
+        },
+        "emit_kwargs": {
+          "location": "location",
+          "suggestion": "suggestion-template:parallel-before-composer",
+          "step": "detail-template:composer-step-display",
+          "actual": "actual"
+        }
+      }
+    ],
+    "slot_store": [
+      {
+        "id": "J-STORE.pass-through",
+        "judgment": "J-STORE",
+        "mode": "synthesis",
+        "relation_mode": null,
+        "premise": "signature-resolved",
+        "emit_kwargs": {}
+      }
+    ],
+    "slot_store_value": [
+      {
+        "id": "J-STOREVALUE.literal",
+        "judgment": "J-STOREVALUE",
+        "mode": "synthesis",
+        "relation_mode": null,
+        "premise": "literal-type-known",
+        "emit_kwargs": {},
+        "skip_when": [
+          "value-kind:int-float",
+          "value-kind:str",
+          "nonetype-sentinel"
+        ]
+      }
+    ],
+    "slot_load": [
+      {
+        "id": "J-LOAD.slot-present",
+        "judgment": "J-LOAD",
+        "mode": "synthesis",
+        "relation_mode": null,
+        "premise": "slot-in-sigma",
+        "on_fail": {
+          "code": "SLOT_NOT_FOUND"
+        },
+        "emit_kwargs": {
+          "location": "location",
+          "slot": "slot"
+        },
+        "on_fail_recovery": {
+          "type": "unchanged"
+        }
+      },
+      {
+        "id": "J-SLOTREAD.ref-present",
+        "judgment": "J-SLOTREAD",
+        "mode": "checking",
+        "relation_mode": null,
+        "premise": "slot-ref-in-sigma",
+        "on_fail": {
+          "code": "SLOT_REF_NOT_FOUND"
+        },
+        "emit_kwargs": {
+          "location": "location",
+          "component": "component",
+          "param": "param",
+          "slot": "slot"
+        }
+      },
+      {
+        "id": "J-SLOTREAD.type-check",
+        "judgment": "J-SLOTREAD",
+        "mode": "checking",
+        "relation_mode": "slot",
+        "premise": "slot-in-sigma",
+        "on_fail": {
+          "code": "SLOT_TYPE_MISMATCH"
+        },
+        "emit_kwargs": {
+          "location": "location",
+          "component": "component",
+          "param": "param",
+          "expected": "expected",
+          "slot": "slot",
+          "stored": "stored",
+          "path": "path",
+          "provenance": "provenance"
+        },
+        "skip_when": [
+          "nonetype-sentinel"
+        ]
+      },
+      {
+        "id": "J-SLOTREAD.sib-narrowing",
+        "judgment": "J-SLOTREAD",
+        "mode": "checking",
+        "relation_mode": "slot",
+        "premise": "base-compatible",
+        "on_fail": {
+          "code": "SLOT_TYPE_MISMATCH"
+        },
+        "emit_kwargs": {
+          "location": "location",
+          "component": "component",
+          "param": "param",
+          "expected": "expected",
+          "slot": "slot",
+          "stored": "stored",
+          "path": "path",
+          "provenance": "provenance"
+        },
+        "staged": {
+          "pre": "lenient-accept",
+          "post": "base-error",
+          "staged_by": "d4-slot-sib-narrowing"
+        }
+      }
+    ],
+    "slot_extract": [
+      {
+        "id": "J-PROJ.record-ness",
+        "judgment": "J-PROJ",
+        "mode": "checking",
+        "relation_mode": null,
+        "premise": "current-is-record",
+        "on_fail": {
+          "code": "DICT_INPUT_EXPECTED",
+          "severity_context": "extract"
+        },
+        "emit_kwargs": {
+          "location": "location",
+          "step": "detail-template:extract-step-display",
+          "actual": "actual"
+        },
+        "on_fail_recovery": {
+          "type": "any"
+        }
+      },
+      {
+        "id": "J-PROJ.key-member",
+        "judgment": "J-PROJ",
+        "mode": "checking",
+        "relation_mode": null,
+        "premise": "key-in-record",
+        "on_fail": {
+          "code": "EXTRACT_MISSING_KEY"
+        },
+        "emit_kwargs": {
+          "location": "location",
+          "key": "key",
+          "branches": "branches-sorted"
+        },
+        "on_fail_recovery": {
+          "type": "any"
+        },
+        "staged": {
+          "pre": "adjacency-only",
+          "post": "flow-wide",
+          "staged_by": "composer-record-reach"
+        }
+      },
+      {
+        "id": "J-PROJ.project",
+        "judgment": "J-PROJ",
+        "mode": "synthesis",
+        "relation_mode": null,
+        "premise": "key-in-record",
+        "emit_kwargs": {},
+        "staged": {
+          "pre": "any-projection",
+          "post": "matched-field",
+          "staged_by": "extract-projection"
+        }
+      }
+    ],
+    "parallel": [
+      {
+        "id": "J-REC.empty-parallel",
+        "judgment": "J-REC",
+        "mode": "checking",
+        "relation_mode": null,
+        "premise": "branches-nonempty",
+        "on_fail": {
+          "code": "EMPTY_PARALLEL"
+        },
+        "emit_kwargs": {
+          "location": "location",
+          "step": "step"
+        }
+      },
+      {
+        "id": "J-REC.formation",
+        "judgment": "J-REC",
+        "mode": "synthesis",
+        "relation_mode": null,
+        "premise": "signature-resolved",
+        "emit_kwargs": {}
+      },
+      {
+        "id": "J-REC.consumption",
+        "judgment": "J-REC",
+        "mode": "checking",
+        "relation_mode": null,
+        "premise": "record-consumed",
+        "on_fail": {
+          "code": "DICT_NOT_CONSUMED"
+        },
+        "emit_kwargs": {
+          "location": "location",
+          "step": "step"
+        },
+        "skip_when": [
+          "record-consumption-exempt"
+        ]
+      }
+    ],
+    "nested_pipeline": [
+      {
+        "id": "J-PIPE.nested",
+        "judgment": "J-PIPE",
+        "mode": "synthesis",
+        "relation_mode": null,
+        "premise": "signature-resolved",
+        "emit_kwargs": {}
+      }
+    ],
+    "variable_ref": [
+      {
+        "id": "J-STEP.variable-ref-skip",
+        "judgment": "J-STEP",
+        "mode": "synthesis",
+        "relation_mode": null,
+        "premise": "signature-resolved",
+        "emit_kwargs": {},
+        "skip_when": [
+          "variable-ref"
+        ]
+      }
+    ]
+  },
+  "exemptions": [
+    {
+      "id": "X.any-frontier",
+      "judgment": "J-STEP",
+      "mode": "checking",
+      "relation_mode": "strict",
+      "premise": "input-satisfies",
+      "emit_kwargs": {},
+      "skip_when": [
+        "any-frontier"
+      ]
+    },
+    {
+      "id": "X.unresolvable-binding",
+      "judgment": "J-INST",
+      "mode": "synthesis",
+      "relation_mode": null,
+      "premise": "bound-satisfies",
+      "emit_kwargs": {},
+      "skip_when": [
+        "unresolvable-binding"
+      ]
+    },
+    {
+      "id": "X.slot-unused-lint",
+      "judgment": "J-SLOTREAD",
+      "mode": "checking",
+      "relation_mode": null,
+      "premise": "slot-used",
+      "on_fail": {
+        "code": "SLOT_UNUSED"
+      },
+      "emit_kwargs": {
+        "location": "location",
+        "slot": "slot"
+      }
+    }
+  ],
+  "clock": {
+    "transfers": {
+      "AlignToFrequency": {
+        "op": "project",
+        "src": "frequency"
+      },
+      "FundingDataLoader": {
+        "op": "synth",
+        "src": "interval"
+      },
+      "PriceDataLoader": {
+        "op": "synth",
+        "src": "timeframe"
+      },
+      "RealizedVolatility": {
+        "op": "coarsen",
+        "src": "target_timeframe",
+        "off": "bar_offset"
+      },
+      "SignalProjector": {
+        "op": "project",
+        "src": "target_timeframe"
+      },
+      "SignalResampler": {
+        "op": "coarsen",
+        "src": "target_timeframe",
+        "off": "bar_offset"
+      },
+      "SignalTimeframeConverter": {
+        "op": "project",
+        "src": "target_timeframe"
+      },
+      "TargetSignalProjector": {
+        "op": "project",
+        "src": "target_timeframe"
+      },
+      "TargetSignalResampler": {
+        "op": "coarsen",
+        "src": "target_timeframe",
+        "off": "bar_offset"
+      },
+      "TargetTimeframeResampler": {
+        "op": "coarsen",
+        "src": "target_timeframe",
+        "off": "bar_offset"
+      },
+      "TimeframeResampler": {
+        "op": "coarsen",
+        "src": "target_timeframe",
+        "off": "bar_offset"
+      }
+    },
+    "rows": [
+      {
+        "id": "J-COARSEN.offset-too-large",
+        "judgment": "J-COARSEN",
+        "on_fail": {
+          "code": "BAR_OFFSET_TOO_LARGE"
+        },
+        "staged_by": "clock-transform-rebase",
+        "recovery": "declared-target"
+      },
+      {
+        "id": "J-COARSEN.direction",
+        "judgment": "J-COARSEN",
+        "on_fail": {
+          "code": "UPSAMPLE_NOT_SUPPORTED"
+        },
+        "staged_by": "clock-transform-rebase",
+        "recovery": "declared-target"
+      },
+      {
+        "id": "J-COARSEN.offset-same-tf",
+        "judgment": "J-COARSEN",
+        "on_fail": {
+          "code": "BAR_OFFSET_AT_SAME_TF"
+        },
+        "staged_by": "clock-transform-rebase",
+        "recovery": "declared-target"
+      },
+      {
+        "id": "J-COARSEN.harmonic",
+        "judgment": "J-COARSEN",
+        "on_fail": {
+          "code": "CLOCK_NOT_HARMONIC"
+        },
+        "staged_by": null,
+        "recovery": "declared-target"
+      },
+      {
+        "id": "J-COARSEN.offset-multiple",
+        "judgment": "J-COARSEN",
+        "on_fail": {
+          "code": "BAR_OFFSET_NOT_MULTIPLE"
+        },
+        "staged_by": "clock-transform-rebase",
+        "recovery": "declared-target"
+      },
+      {
+        "id": "J-PROJECT.input-unclocked",
+        "judgment": "J-PROJECT",
+        "on_fail": {
+          "code": "PROJECT_INPUT_UNCLOCKED"
+        },
+        "staged_by": null,
+        "recovery": "unchanged"
+      },
+      {
+        "id": "J-PROJECT.direction",
+        "judgment": "J-PROJECT",
+        "on_fail": {
+          "code": "PROJECT_WRONG_DIRECTION"
+        },
+        "staged_by": null,
+        "recovery": "declared-target"
+      },
+      {
+        "id": "J-PROJECT.harmonic",
+        "judgment": "J-PROJECT",
+        "on_fail": {
+          "code": "CLOCK_NOT_HARMONIC"
+        },
+        "staged_by": null,
+        "recovery": "declared-target"
+      },
+      {
+        "id": "J-TRANSFORM.noop",
+        "judgment": "J-TRANSFORM",
+        "on_fail": {
+          "code": "RESAMPLER_NOOP"
+        },
+        "staged_by": "clock-transform-rebase",
+        "recovery": "none"
+      },
+      {
+        "id": "J-CLKUNIFORM.consumer",
+        "judgment": "J-CLKUNIFORM",
+        "on_fail": {
+          "code": "CLOCK_MISMATCH"
+        },
+        "staged_by": null,
+        "recovery": "kappa-exec-or-clockless"
+      },
+      {
+        "id": "J-SLOTREAD.clock",
+        "judgment": "J-SLOTREAD",
+        "on_fail": {
+          "code": "CLOCK_MISMATCH"
+        },
+        "staged_by": null,
+        "recovery": "none"
+      },
+      {
+        "id": "J-PIPE.terminal-clock",
+        "judgment": "J-PIPE",
+        "on_fail": {
+          "code": "TERMINAL_CLOCK_MISMATCH"
+        },
+        "staged_by": null,
+        "recovery": "terminal"
+      },
+      {
+        "id": "J-GLOBALS.exec-wf",
+        "judgment": "J-GLOBALS",
+        "on_fail": {
+          "code": "BAR_OFFSET_TOO_LARGE"
+        },
+        "staged_by": "clock-transform-rebase",
+        "recovery": "none"
+      }
+    ]
+  }
+}

@@ -22,6 +22,24 @@ class KeelConfig:
     refresh_token: str | None = None
     token_expires_at: datetime | None = None
     client_name: str | None = None
+    # Anonymous claim-later tier (spec 05 R4): set when the stored tokens
+    # came from POST /v1/auth/anonymous. `keel auth login` reads it to
+    # offer/execute the claim; cleared on claim or logout.
+    anon_org_id: str | None = None
+    # Spec 09 CL-3c: the anon org's GC instant (grant response
+    # `org_expires_at`) + the last time the <48h expiry notice printed.
+    anon_org_expires_at: datetime | None = None
+    anon_expiry_notice_at: datetime | None = None
+    # Spec 09 CL-9: org context for post-claim continuation. When set,
+    # KeelClient sends `X-Org-Id` so requests act on the claimed org even
+    # though the OAuth tokens were org-bound before the claim. Set only by
+    # a successful claim; cleared on logout and at each new login. NOT an
+    # org switcher — no user-facing command writes it.
+    active_org_id: str | None = None
+    # Spec 09 CL-8: deferred existing-account claim material (anon org id,
+    # anon refresh token, api_url, counts, org expiry, declined flag).
+    # Same file/permission class that held the anon credentials pre-login.
+    pending_claim: dict | None = None
 
 
 def _parse_expires_at(raw: object) -> datetime | None:
@@ -68,6 +86,12 @@ def load_config() -> KeelConfig:
             config.refresh_token = data.get("refresh_token", config.refresh_token)
             config.token_expires_at = _parse_expires_at(data.get("token_expires_at"))
             config.client_name = data.get("client_name", config.client_name)
+            config.anon_org_id = data.get("anon_org_id", config.anon_org_id)
+            config.anon_org_expires_at = _parse_expires_at(data.get("anon_org_expires_at"))
+            config.anon_expiry_notice_at = _parse_expires_at(data.get("anon_expiry_notice_at"))
+            config.active_org_id = data.get("active_org_id", config.active_org_id)
+            raw_pending = data.get("pending_claim")
+            config.pending_claim = raw_pending if isinstance(raw_pending, dict) else None
         except Exception:  # noqa: BLE001, S110 — corrupt/absent config falls back to defaults
             pass  # Corrupt config — use defaults
 
@@ -99,4 +123,16 @@ def save_config(config: KeelConfig) -> None:
         data["token_expires_at"] = expires.isoformat()
     if config.client_name:
         data["client_name"] = config.client_name
+    if config.anon_org_id:
+        data["anon_org_id"] = config.anon_org_id
+    for dt_field in ("anon_org_expires_at", "anon_expiry_notice_at"):
+        value = getattr(config, dt_field)
+        if value:
+            if value.tzinfo is None:
+                value = value.replace(tzinfo=timezone.utc)
+            data[dt_field] = value.isoformat()
+    if config.active_org_id:
+        data["active_org_id"] = config.active_org_id
+    if config.pending_claim:
+        data["pending_claim"] = config.pending_claim
     CONFIG_FILE.write_text(yaml.dump(data, default_flow_style=False))

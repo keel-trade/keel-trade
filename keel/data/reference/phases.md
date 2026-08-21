@@ -52,7 +52,8 @@ remain the same broad type.
 
 ```python
 TimeframeResampler(target_timeframe="1d", source_timeframe="15min")
-SignalResampleTransform(target_timeframe="1d", method="mean")
+SignalResampler(target_timeframe="1d", method="mean")   # fine -> coarse
+TargetSignalProjector()                                 # coarse -> fine (to Globals)
 AssetAligner(reference_slot="ohlcv_1d")
 ```
 

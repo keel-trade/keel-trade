@@ -9,11 +9,15 @@ round-trips of `keel_components_compose_help`.
 from __future__ import annotations
 
 import json
+from unittest.mock import patch
 
+import httpx
 import pytest
+import respx
 from click.testing import CliRunner
 
 from keel.cli.main import cli
+from keel.errors import NotFoundError
 from keel.tools.outcomes import OUTCOMES, _bootstrap
 from keel.tools.outcomes._base import ToolContext
 
@@ -27,6 +31,29 @@ runner = CliRunner()
 @pytest.fixture(autouse=True)
 def _bootstrap_outcomes():
     _bootstrap()
+
+
+@pytest.fixture(autouse=True)
+def _no_component_api():
+    """Pin the bundled registry as the data source for this file.
+
+    `components_help._detail_via_api` opportunistically tries
+    `GET /v1/components/{name}` (the Phase-2C endpoint that doesn't exist
+    yet) and swallows every failure. Left alone in a CLI test that is
+    `_isolate_user_config`-ed into having no credentials, that probe hit
+    the PRODUCTION API and minted a real anonymous org per invocation.
+    Stub it with the miss it will get in reality so the batch resolves
+    from `keel/data/registry.json` — which is what these tests assert.
+
+    Patched at `_request`, not `get`, so `KeelClient._require_auth` still
+    runs for real — the stream-discipline test below depends on the
+    genuine auth branch.
+    """
+    with patch(
+        "keel.client.KeelClient._request",
+        side_effect=NotFoundError("no /v1/components endpoint in this deployment"),
+    ):
+        yield
 
 
 def _ctx():
@@ -136,7 +163,7 @@ def test_cli_describe_batch_accepts_positional_variadic_names():
         ["components", "describe-batch", "ROC", "EWMA", "ForecastScaler", "--format", "json"],
     )
     assert result.exit_code == 0, result.output
-    data = json.loads(result.output)
+    data = json.loads(result.stdout)
     assert data["found"] == 3
     assert set(data["components"].keys()) == {"ROC", "EWMA", "ForecastScaler"}
 
@@ -149,7 +176,7 @@ def test_cli_describe_batch_partial_failure_returns_success_exit():
         ["components", "describe-batch", "ROC", "TotallyMadeUp", "--format", "json"],
     )
     assert result.exit_code == 0, result.output
-    data = json.loads(result.output)
+    data = json.loads(result.stdout)
     assert data["found"] == 1
     assert data["missing"] == 1
     assert "error" in data["components"]["TotallyMadeUp"]
@@ -160,3 +187,39 @@ def test_cli_describe_batch_zero_args_errors_cleanly():
     result = runner.invoke(cli, ["components", "describe-batch", "--format", "json"])
     # Click 'argument required' OR our usage_error envelope
     assert result.exit_code != 0
+
+
+def test_cli_json_payload_is_stdout_only_notices_go_to_stderr(monkeypatch):
+    """`--format json` puts ONLY the payload on stdout (spec: `output.emit`
+    writes stdout, `emit_error` + notices write stderr).
+
+    Regression, sdk-test run 30684... : the two CLI tests above parsed
+    `result.output`, which on Click ≥8.2 interleaves stderr into stdout.
+    When the CLI happened to print the anonymous instant-start notice
+    ("Running anonymously — …") the parse died with
+    `JSONDecodeError: Extra data` — and whether it printed depended on
+    whether a previous test had already left credentials behind. That is
+    an order-dependent flake, so pin the stream discipline directly.
+    """
+    monkeypatch.delenv("KEEL_ANON_AUTO", raising=False)  # arm instant start
+    grant = {
+        "access_token": "eyJanon.access.token",
+        "refresh_token": "krt_anon_refresh",
+        "token_type": "Bearer",
+        "expires_in": 3600,
+        "org_id": "org_anon_1",
+        "notice": "Running anonymously — run `keel auth login` to keep your work.",
+    }
+    with respx.mock(assert_all_called=False) as api:
+        api.post("https://api.usekeel.io/v1/auth/anonymous").mock(
+            return_value=httpx.Response(201, json=grant)
+        )
+        result = runner.invoke(
+            cli, ["components", "describe-batch", "ROC", "--format", "json"]
+        )
+
+    assert result.exit_code == 0, result.output
+    # The notice went out — and it is NOT on the machine-readable stream.
+    assert "Running anonymously" in result.stderr
+    assert "Running anonymously" not in result.stdout
+    assert json.loads(result.stdout)["components"]["ROC"]["name"] == "ROC"

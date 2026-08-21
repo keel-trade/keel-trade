@@ -35,6 +35,17 @@ Prefer single-component detectors over composites for simplicity and robustness.
 → RegimeWeightedBlender(signal_a_key, signal_b_key, regime_key, ...)
 ```
 
+**One clock at the blend.** Every branch must arrive on the timeframe
+`Globals(target_timeframe=...)` declares before it is combined — a blender or
+combiner rejects inputs on different clocks (`CLOCK_MISMATCH`). Get each
+branch there at its data step, not after computing: aggregate raw data up
+with `TargetSignalResampler()` / `TargetTimeframeResampler()`, and place a
+coarser computed signal back down with `TargetSignalProjector()`. A regime on
+a slower clock than execution is the normal case and is fine — project it
+down. A branch whose data is FINER than the declared clock (e.g. hourly
+funding under a 1d declaration) must be resampled up before the indicator;
+no projector can fix it afterward.
+
 ## Minimal Example
 
 ```python

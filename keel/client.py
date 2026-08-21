@@ -43,10 +43,39 @@ class KeelClient:
         from keel.surface import current_surface
 
         headers["x-keel-surface"] = current_surface()
+        # Spec 09 CL-9: post-claim org context. OAuth tokens are org-bound
+        # at mint (pre-claim), so after a claim the client targets the
+        # claimed org explicitly via the API's existing X-Org-Id mechanism
+        # (membership was granted by the re-own). Only ever set by a
+        # successful claim; never in hosted mode (bound configs carry none).
+        if self._config.active_org_id:
+            headers["X-Org-Id"] = self._config.active_org_id
         return headers
 
     def _require_auth(self) -> None:
         if not self._config.api_key:
+            # CLI instant start (spec 05 R4): with NO stored credentials,
+            # the first command needing auth mints an anonymous workspace
+            # and proceeds — never when credentials exist (this branch only
+            # runs when api_key is absent), never in hosted mode (hosted
+            # config resolution raised long before this point).
+            from keel.anon import anon_auto_enabled, anonymous_start
+
+            if anon_auto_enabled():
+                try:
+                    updated = anonymous_start(api_url=self._config.api_url)
+                except AuthError as anon_err:
+                    raise AuthError(
+                        "Not authenticated, and anonymous start was "
+                        f"unavailable: {anon_err} "
+                        "Run `keel auth login` (browser) or `keel auth login "
+                        "--key <token>` for CI/SSH/Codespaces.",
+                        suggestion="Run `keel auth login`.",
+                        docs_url="https://app.usekeel.io/settings?tab=api-keys",
+                    ) from anon_err
+                self._config = updated
+                self._client.headers["Authorization"] = f"Bearer {updated.api_key}"
+                return
             raise AuthError(
                 "Not authenticated. "
                 "From an MCP agent: call the `keel_auth_login` tool — it opens "

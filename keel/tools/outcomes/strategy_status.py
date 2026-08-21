@@ -125,20 +125,22 @@ STRATEGY_STATUS = register(
         cli_path=("strategy", "status"),
         toolset="backtest",
         local_only=True,  # compares the local working copy against server HEAD
+        # grounded-in: sync-contract (spec 08 R3 — behind = one instruction,
+        # pull; R4 — diverged needs explicit resolution); collaboration.md §6
+        # (backtest runs against server HEAD — push local edits first).
         description=(
             "Compare a local workspace's strategy.py against the server's "
-            "current HEAD. The 'git status' of the sync model. Returns one "
-            "of: `clean` (in sync), `ahead` (local has uncommitted changes — "
-            "push first), `behind` (server moved, pull to catch up), "
-            "`diverged` (both moved — needs explicit resolution). "
-            "By default also returns the last 5 commits in `recent_commits` "
-            "so the agent has 'what just happened' context alongside sync "
-            "state (set `include_recent=False` for hot polling loops). "
-            "Call this BEFORE `keel_backtest_run` — backtests use server "
-            "HEAD, so unpushed local changes won't be tested. Also call "
-            "after coming back from the web editor (someone else may have "
-            "edited). Auto-detects the strategy from the current workspace "
-            "if `strategy_id` is omitted. "
+            "current HEAD — the 'git status' of the sync model. Returns one "
+            "of: `clean` (in sync), `ahead` (local has uncommitted edits — "
+            "push first), `behind` (server moved — pull to catch up), "
+            "`diverged` (both moved — needs explicit resolution). By default "
+            "also returns the last 5 commits in `recent_commits` for 'what "
+            "just happened' context (set `include_recent=False` for hot "
+            "polling loops). Call this BEFORE `keel_backtest_run` — backtests "
+            "use server HEAD, so unpushed local changes won't be tested — and "
+            "after coming back from the web editor, where someone else may "
+            "have edited. Auto-detects the strategy from the current "
+            "workspace when `strategy_id` is omitted. "
             "Do NOT use to list ALL workspaces — call `keel_strategy_workspaces`. "
             "Do NOT use to inspect full history — call `keel_strategy_log`."
         ),

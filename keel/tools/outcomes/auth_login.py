@@ -32,12 +32,12 @@ from ._base import OutcomeResult, OutcomeTool, ToolContext
 
 
 def _login_summary(info: dict) -> dict:
-    """Mirror the v0.4.1 CLI login summary so CLI + MCP agree."""
+    """Mirror the CLI login summary so CLI + MCP agree."""
     principal = info.get("principal") or {}
     org = info.get("org") or {}
     scopes = info.get("credential_scopes") or []
     is_live = "runner.*" in scopes
-    return {
+    summary = {
         "authenticated": True,
         "principal_id": principal.get("id"),
         "org_id": org.get("id"),
@@ -52,6 +52,19 @@ def _login_summary(info: dict) -> dict:
             "keel_strategy_compose       # dry-run first, then save",
         ],
     }
+    # Spec 09: what moved (CL-4) or what awaits the user's decision (CL-8).
+    if info.get("claimed_anon_org"):
+        summary["claimed_anon_org"] = info["claimed_anon_org"]
+    if info.get("pending_claim"):
+        summary["pending_claim"] = info["pending_claim"]
+        summary["pending_claim_instruction"] = (
+            "This account already has strategies. Ask the user whether to "
+            "attach the anonymous workspace's work to it, then call "
+            "keel_auth_login again with attach_anonymous_work=true or false "
+            "— that resolves the pending claim without re-opening the "
+            "browser."
+        )
+    return summary
 
 
 def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
@@ -59,11 +72,28 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
 
     scope = args.get("scope", "base")
     api_url = args.get("api_url")
+    attach = args.get("attach_anonymous_work")
+
+    # Spec 09 CL-8: with a deferred claim pending and an explicit decision,
+    # resolve it directly — no browser flow.
+    if attach is not None:
+        from keel.anon import is_anon, resolve_pending_claim
+        from keel.config import load_config
+
+        if load_config().pending_claim and not is_anon():
+            result = resolve_pending_claim(bool(attach), quiet=True) or {}
+            return OutcomeResult(
+                run_id=None,
+                hero_url=f"{ctx.app_url}/settings",
+                share_url=None,
+                extra={"pending_claim_resolved": True, **result},
+            )
 
     info = browser_login(
         api_url=api_url,
         include_live=(scope == "live"),
         auth_surface="mcp",
+        attach_decision=attach,
     )
     return OutcomeResult(
         run_id=None,
@@ -81,21 +111,32 @@ AUTH_LOGIN = register(
         toolset="always",
         local_only=True,  # opens the user's browser + writes ~/.keel/config.yaml; hosted auth is the client's OAuth flow
         mcp_only=True,
+        # grounded-in: keel/auth.py:45-46,101-135 (post-login the prior
+        # anonymous grant is auto-claimed into the new account, best-effort);
+        # config.py:25-27 (anon claim-later tier); auth_login.py docstring
+        # (loopback flow, when-to-call, headless caveat).
         description=(
             "Run the OAuth 2.1 + PKCE browser-loopback login flow against Keel "
-            "and persist tokens to ~/.keel/config.yaml so subsequent tool calls "
-            "are authenticated. Opens the user's browser; waits up to 5 minutes "
-            "for them to complete sign-in. Call this when `keel_status` returns "
-            "`authenticated: false`, or whenever another tool's error envelope "
-            "points here as the next-action. "
-            "Optional `scope='live'` pre-checks the live-trading consent box. "
-            "Optional `api_url=...` targets a non-default Keel deployment (e.g. "
-            "staging). "
-            "Returns the same concise summary as the CLI's `keel auth login`. "
+            "and persist tokens to ~/.keel/config.yaml so subsequent tool "
+            "calls are authenticated. Opens the user's browser and waits up "
+            "to 5 minutes for sign-in. Call this when `keel_status` returns "
+            "`authenticated: false`, or whenever another tool's error "
+            "envelope points here as the next action. If the current session "
+            "was an anonymous grant, its workspace is auto-claimed into the "
+            "signed-in account (best-effort — a failed claim degrades to a "
+            "notice, never a failed login). Optional `scope='live'` pre-checks "
+            "the live-trading consent box; optional `api_url=...` targets a "
+            "non-default Keel deployment such as staging. Returns the same "
+            "concise summary as the CLI's `keel auth login`. "
             "Do NOT use to refresh an existing session (the client refreshes "
             "transparently). Do NOT use for headless environments (CI, SSH "
             "without browser forwarding) — there the user should run "
-            "`keel auth login --key <token>` from their terminal instead."
+            "`keel auth login --key <token>` from their terminal instead. "
+            "If the result carries `pending_claim`, the signed-in account "
+            "already has strategies: ask the user whether to attach the "
+            "anonymous workspace, then call this tool again with "
+            "`attach_anonymous_work` true/false — that resolves the pending "
+            "claim without re-opening the browser."
         ),
         input_schema={
             "type": "object",
@@ -115,6 +156,17 @@ AUTH_LOGIN = register(
                         "Override Keel API URL (e.g. a self-hosted instance "
                         "or staging). Default reads from ~/.keel/config.yaml "
                         "or env KEEL_API_URL."
+                    ),
+                },
+                "attach_anonymous_work": {
+                    "type": "boolean",
+                    "description": (
+                        "Spec 09 CL-8: the user's decision on attaching the "
+                        "anonymous workspace to an account that already has "
+                        "strategies. Pass true/false ONLY after asking the "
+                        "user; with a pending claim stored, this resolves it "
+                        "without re-running the browser flow. Omit on a "
+                        "first login — fresh accounts claim automatically."
                     ),
                 },
             },

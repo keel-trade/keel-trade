@@ -6,11 +6,16 @@ live-trading write surface explicitly. Default =
 The MCP adapter consults this when registering tools; tools whose
 toolset isn't in the active set don't appear in `tools/list`.
 
-Server profiles (spec 01 R3 — two registrations of one image):
+Server profiles (spec 01 R3; D1 2026-07-19 — ONE hosted endpoint):
 
-* ``full`` (default; unlisted endpoint) — no additional restriction on
-  top of KEEL_TOOLSETS + the hosted local_only exclusion.
-* ``listed`` (directory registration) — the tool surface is EXACTLY
+* ``full`` (default) — the CLI + local ``keel mcp serve`` surface: no
+  additional restriction on top of KEEL_TOOLSETS + the hosted
+  local_only exclusion. This is NOT a hosted endpoint. Since the D1
+  cutover there is no separate "full" hosted registration; live-write
+  and local-file tools live on the local/CLI surface only.
+* ``listed`` — THE single hosted profile. The one ``mcp.usekeel.io``
+  registration serves BOTH the paste-URL custom connector AND the
+  directory listing; its tool surface is EXACTLY
   :data:`LISTED_PROFILE_TOOLS`, independent of ``KEEL_TOOLSETS``. The
   directory-reviewed surface must be deterministic: an env typo must
   never widen (or quietly vary) what a listed connector exposes, so
@@ -50,9 +55,16 @@ _VALID_PROFILES = ("full", "listed")
 LISTED_CLIENT_ENV = "KEEL_LISTED_CLIENT"
 _VALID_LISTED_CLIENTS = ("chatgpt", "claude")
 
-# The directory-listable research/backtest/read surface (spec 01 R3).
-# EXCLUDED by construction: keel_live_deploy, keel_live_control,
-# keel_strategy_delete, every local_only tool, and anything with
+# THE single hosted profile's tool surface (spec 01 R3; D1 2026-07-19).
+# This one allow-list is what `mcp.usekeel.io` serves to BOTH the
+# paste-URL custom connector and the directory listing — there is no
+# separate "full" hosted endpoint. Read / research / backtest / share
+# tools only.
+# EXCLUDED by construction (stay CLI/local-only): keel_live_deploy +
+# keel_live_control (live-write), keel_strategy_delete (destructive),
+# keel_strategy_restore (destructive-adjacent), keel_accounts_list
+# (account / wallet work belongs in the web), keel_audit_list_last
+# (activity exposure), every local_only tool, and anything with
 # money-movement parameter semantics. Additions require a matching
 # policy-scan pass (tests/test_policy_scan.py).
 LISTED_PROFILE_TOOLS: frozenset[str] = frozenset(
@@ -74,9 +86,21 @@ LISTED_PROFILE_TOOLS: frozenset[str] = frozenset(
         "keel_backtest_run",
         "keel_backtest_summarize",
         "keel_backtest_watch",
+        # library — verified entries: read + fork (founder ruling
+        # 2026-08-21: all three on the hosted surface; fork follows the
+        # keel_strategy_fork precedent — same strategy.create class, no
+        # money/live semantics; policy-scan sweep applies as to every
+        # listed tool)
+        "keel_library_list",
+        "keel_library_get",
+        "keel_library_fork",
         # strategy read / history / fork / memory
         "keel_strategy_get",
         "keel_strategy_log",
+        # read-only version/source diff (D1 2026-07-19: the one benign
+        # read wrongly excluded before — no money/wallet params, no
+        # forbidden verbs; policy-scan green)
+        "keel_strategy_diff",
         "keel_strategy_search",
         "keel_strategy_fork",
         "keel_strategy_memory_read",

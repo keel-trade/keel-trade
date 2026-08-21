@@ -125,16 +125,20 @@ STRATEGY_LOG = register(
         required_action="strategy.read",
         cli_path=("strategy", "log"),
         toolset="read-only",
+        # grounded-in: sync-contract (spec 08) — server HEAD is the canonical
+        # source of truth; the log is the 'git log' over that timeline;
+        # collaboration.md §4 (find the ref to diff/restore against when
+        # iterating).
         description=(
-            "Show commit history for a strategy — sequence number, commit "
-            "id, parent, source hash, message, timestamp, tags, and "
-            "surface attribution (`modified_via`, e.g. 'modified via "
-            "claude.ai, 2h ago' — which surface/client made each commit). "
-            "The 'git log' of the sync model over the server's canonical "
-            "history (server HEAD is the source of truth). "
-            "Reverse-chronological (newest first). Use to audit changes, "
-            "find commits to restore/diff, "
-            "or see what's moved since you last checked out. "
+            "Show a strategy's commit history — the 'git log' of the sync "
+            "model over the server's canonical timeline, where server HEAD is "
+            "the source of truth. Each entry carries sequence number, commit "
+            "id, parent, source hash, message, timestamp, tags, and surface "
+            "attribution (`modified_via` — which client made each commit, "
+            "such as 'modified via claude.ai, 2h ago'). Reverse-chronological, "
+            "newest first. Use it to audit how a strategy evolved, find the "
+            "ref to restore or diff against, or see what's moved since you "
+            "last looked. "
             "Do NOT use to fetch source for one commit — that's a future "
             "`keel://strategy/{id}/versions/{ref}/source` resource. Do NOT "
             "use to see what changed STRUCTURALLY between two versions — "
@@ -165,18 +169,20 @@ STRATEGY_LOG = register(
             "openWorldHint": False,
         },
         handler=_handler,
-        # Listed-profile copy (spec 01 R3): must not route to tools
-        # absent from the listed surface (keel_strategy_diff).
+        # Listed-profile copy (spec 01 R3): policy-clean, routes only to
+        # tools on the listed surface. keel_strategy_diff is now listed
+        # (D1 2026-07-19), so the structural-compare route points there.
         listed_description=(
-            "Show commit history for a strategy — sequence number, commit "
-            "id, parent, source hash, message, timestamp, and tags. The "
-            "'git log' of the sync model. Reverse-chronological (newest "
-            "first). Use to audit changes, find commits to restore, or see "
-            "what's moved since you last looked. "
+            "Show a strategy's commit history — the 'git log' of the sync "
+            "model. Each entry carries sequence number, commit id, parent, "
+            "source hash, message, timestamp, and tags. Reverse-chronological, "
+            "newest first. Use it to audit how a strategy evolved, find the "
+            "ref to restore or diff against, or see what's moved since you "
+            "last looked. "
             "Do NOT use to fetch source for one commit — that's a future "
             "`keel://strategy/{id}/versions/{ref}/source` resource. "
-            "Do NOT use to compare two versions structurally — fetch each "
-            "with `keel_strategy_get` and compare. "
+            "Do NOT use to compare two versions structurally — call "
+            "`keel_strategy_diff`. "
             "Default `limit=50`; max 200 (server-enforced)."
         ),
     )

@@ -6,8 +6,10 @@ on import. The CLI adapter renders them as Click commands; the MCP
 adapter registers them as FastMCP tools.
 
 See `_base.py` for the `OutcomeTool` shape and `projects/agent-v2/
-03-ideal-experience-spec.md` §4 for the canonical inventory of 14
-primary + 8 auxiliary tools.
+03-ideal-experience-spec.md` §4 for the original tool inventory. The
+live registry (`OUTCOMES`, populated by `_bootstrap()`) is the canonical
+tool count — never hardcode a number here; docs are drift-gated against
+it by `scripts/check_agent_surface_docs.py`.
 """
 
 from __future__ import annotations
@@ -73,6 +75,7 @@ def _bootstrap() -> None:
         components_search,
         doctor,
         feedback,
+        library,
         live_control,
         live_deploy,
         live_monitor,

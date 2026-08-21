@@ -1,7 +1,7 @@
 [
   {
     "name": "strategy_components_search",
-    "description": "Search components by input type, output type, category, sub-category, keyword, or natural language query. Supports semantic search.",
+    "description": "Search components by input type, output type, category, sub-category, keyword, clock direction, or natural language query. Supports semantic search. Keel re-clocks in one direction \u2014 resample raw data fine \u2192 coarse, project signals coarse \u2192 fine. Filter by `clock_direction` for the operator in the direction you want.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -24,6 +24,16 @@
         "output_type": {
           "type": "string",
           "description": "Filter by output type name"
+        },
+        "clock_direction": {
+          "type": "string",
+          "enum": [
+            "keep",
+            "synth",
+            "resample",
+            "project"
+          ],
+          "description": "Filter by how the component moves the bar clock"
         },
         "query": {
           "type": "string",

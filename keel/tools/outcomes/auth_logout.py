@@ -51,17 +51,21 @@ AUTH_LOGOUT = register(
         toolset="always",
         local_only=True,  # wipes ~/.keel/config.yaml; hosted sessions are revoked client-side
         mcp_only=True,
+        # grounded-in: auth_logout.py docstring + keel/auth.py clear_credentials
+        # (wipes tokens, preserves api_url so the next login targets the same
+        # deployment); spec 05 (session lifecycle — switch accounts via
+        # logout → login).
         description=(
             "Clear stored Keel credentials from ~/.keel/config.yaml so the "
-            "next tool call is unauthenticated. Use to sign the user out, "
-            "or to switch accounts (logout → keel_auth_login). Wipes "
+            "next tool call is unauthenticated — use it to sign the user out, "
+            "or to switch accounts (logout → `keel_auth_login`). Wipes the "
             "api_key, refresh_token, token_expires_at, and client_name; "
-            "preserves api_url so the next login targets the same "
-            "deployment. Safe to call when already logged out (idempotent). "
-            "Do NOT use to recover from a transient auth error — the "
-            "client refreshes tokens transparently on 401; only run logout "
-            "if the user explicitly asks, or if `keel_auth_login` is "
-            "needed to switch identity."
+            "preserves api_url so the next login targets the same deployment. "
+            "Idempotent — safe to call when already logged out. "
+            "Do NOT use to recover from a transient auth error — the client "
+            "refreshes tokens transparently on 401; only log out when the "
+            "user explicitly asks, or to switch identity before "
+            "`keel_auth_login`."
         ),
         input_schema={
             "type": "object",

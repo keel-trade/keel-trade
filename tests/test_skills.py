@@ -197,7 +197,7 @@ class TestCLI:
         assert result.exit_code == 0, result.output
         import json as _json
 
-        rows = _json.loads(result.output)
+        rows = _json.loads(result.stdout)
         assert len(rows) == 8
         assert {r["name"] for r in rows} == set(EXPECTED_SKILLS)
         for row in rows:
@@ -214,7 +214,7 @@ class TestCLI:
         assert result.exit_code == 0, result.output
         import json as _json
 
-        body = _json.loads(result.output)
+        body = _json.loads(result.stdout)
         assert body["name"] == "strategy-creation"
         content = body["content"]
         # Frontmatter

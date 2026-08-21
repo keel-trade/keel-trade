@@ -12,6 +12,8 @@ Every strategy has Globals(...) and Universe(...) declarations above the Pipelin
 
 **Valid market values**: `"perp"` (perpetual futures — this is the Hyperliquid perp market, the default and most common), `"spot"` (spot markets). There is NO `"hl_perp"` market type — when users say "HL perps", "Hyperliquid perps", or "Hyperliquid perpetuals", use `market="perp"`. The platform trades exclusively on Hyperliquid, so `"perp"` already means Hyperliquid perpetual futures.
 
+**Symbol truth**: `universe_instruments` is the ground truth for what trades on Hyperliquid — it lists every market, including delisted ones with their status. Check it (pass `symbols=[...]` for specific symbols) before asserting a symbol trades on the venue or writing any symbol into `symbols=[...]` that you have not seen in a resolver or instruments result this session. Assets without a Hyperliquid listing (e.g. gold/XAU, equities, most FX) do not exist on the venue no matter how common they are elsewhere — the tool's `not_found` list is the proof either way.
+
 **Volume filtering**: `top_volume` universes are already filtered to the highest-volume assets on the exchange. Do NOT suggest adding `RollingVolumeUniverseMask` to a `top_volume` universe — these assets already meet liquidity thresholds by definition. Only suggest volume filtering when the user has a `manual` universe with potentially illiquid assets, or when they explicitly ask for volume-based filtering.
 
 **Groups**: For multi-group strategies (e.g., 'long DeFi, short L1'):

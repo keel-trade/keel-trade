@@ -104,17 +104,20 @@ STRATEGY_WORKSPACES = register(
         cli_path=("strategy", "workspaces"),
         toolset="read-only",
         local_only=True,  # lists local checkouts under ~/.keel/workspace
+        # grounded-in: strategy_workspaces.py docstring (pure filesystem
+        # enumeration of local checkouts); spec 08 sync contract (per-workspace
+        # sync state is a separate call — keel_strategy_status).
         description=(
-            "List all locally checked-out strategy workspaces. Each entry has "
-            "the strategy id, name, sync metadata (source hash, last "
-            "checkout time, sequence at checkout). No server call — pure "
-            "filesystem read of `~/.keel/workspace/` (and any project-local "
-            "`.keel/workspace.yaml`-scoped workspaces). "
-            "Use when you've lost track of what's been checked out, or to "
-            "enumerate WIP across strategies. "
+            "List every locally checked-out strategy workspace — strategy id, "
+            "name, and sync metadata (source hash, checkout time, sequence at "
+            "checkout). Pure filesystem read of `~/.keel/workspace/` (plus any "
+            "project-local `.keel/workspace.yaml`-scoped workspaces); no "
+            "server call. Use it when you've lost track of what's checked "
+            "out, or to enumerate work-in-progress across strategies before "
+            "pushing or cleaning up. "
             "Do NOT use to list strategies on the server — call "
-            "`keel_strategy_search`. Do NOT use to check sync state of one "
-            "workspace — call `keel_strategy_status`."
+            "`keel_strategy_search`. Do NOT use to check the sync state of "
+            "one workspace — call `keel_strategy_status`."
         ),
         input_schema={"type": "object", "properties": {}, "required": []},
         annotations={

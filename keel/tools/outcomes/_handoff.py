@@ -54,6 +54,8 @@ from ._toolsets import is_listed_profile
 
 __all__ = [
     "HandoffRequired",
+    "anon_signin_handoff",
+    "deploy_web_handoff",
     "live_scope_handoff",
     "maybe_quota_handoff",
     "mint_deploy_intent",
@@ -113,7 +115,7 @@ class HandoffRequired(KeelError):
         *,
         blocked_action: str,
         reason: str,
-        action_url: str,
+        action_url: str | None,
         talking_points: list[str],
         resume: dict[str, Any],
         limit_details: dict[str, Any] | None = None,
@@ -126,8 +128,11 @@ class HandoffRequired(KeelError):
             raise ValueError("HandoffRequired requires a non-empty blocked_action")
         if not reason or not isinstance(reason, str):
             raise ValueError("HandoffRequired requires a non-empty reason")
-        if not action_url or not isinstance(action_url, str):
-            raise ValueError("HandoffRequired requires a non-empty action_url")
+        # Spec 09 CL-1: `None` is legal (anonymous walls have no URL to act
+        # at — the action is `keel_auth_login`); an EMPTY STRING is still a
+        # programming error. Every non-anon wall keeps passing a real URL.
+        if action_url is not None and (not action_url or not isinstance(action_url, str)):
+            raise ValueError("HandoffRequired action_url must be a non-empty string or None")
         try:
             validate_talking_points(talking_points)
         except ValueError as e:
@@ -149,7 +154,8 @@ class HandoffRequired(KeelError):
         envelope["blocked_action"] = self.blocked_action
         envelope["reason"] = self.reason
         envelope["required_actor"] = "human"
-        envelope["action_url"] = self.action_url
+        if self.action_url is not None:
+            envelope["action_url"] = self.action_url
         if self.limit_details is not None:
             envelope["limit_details"] = self.limit_details
         if self.cost is not None:
@@ -157,6 +163,87 @@ class HandoffRequired(KeelError):
         envelope["talking_points"] = list(self.talking_points)
         envelope["resume"] = dict(self.resume)
         return envelope
+
+
+# ─── Anonymous walls (spec 09 CL-1/CL-2) ────────────────────────────────
+
+
+ANON_SIGNIN_TALKING_POINT = (
+    "Sign in with `keel auth login` — your strategies and backtests come with you automatically."
+)
+
+
+def _is_anon_session() -> bool:
+    """True when the local session runs on an anonymous grant.
+
+    Hosted mode is never anonymous (OAuth-gated); any config-read failure
+    reads as not-anon so walls degrade to their normal shape rather than
+    blocking on claim-flow state.
+    """
+    from keel.hosting import is_hosted
+
+    if is_hosted():
+        return False
+    try:
+        from keel.anon import is_anon
+
+        return is_anon()
+    except Exception:  # noqa: BLE001 — never let claim-state reads break a wall
+        return False
+
+
+def anon_signin_handoff(
+    *,
+    blocked_action: str,
+    reason: str,
+    context_point: str,
+    retry_call: dict[str, Any],
+    limit_details: dict[str, Any] | None = None,
+) -> HandoffRequired:
+    """The ONE anonymous wall shape (spec 09 CL-1): claim-before-handoff.
+
+    While anonymous, every human-required wall resolves to signing in —
+    no deploy links, no billing links, no app URLs that reference
+    anon-org resources (CL-2: the future account will not own them, so
+    any such URL is a post-signup dead-end). `action_url` is omitted; the
+    resume is `keel_auth_login`, after which the claim runs automatically
+    and the original call is retried under the signed-in account (where
+    the NORMAL wall, with its real URLs, takes over if still applicable).
+    """
+    talking_points = [
+        context_point,
+        ANON_SIGNIN_TALKING_POINT,
+        (
+            "Doing nothing is also fine — the anonymous workspace keeps "
+            "working until it expires, and nothing deploys or changes "
+            "without your explicit approval."
+        ),
+    ]
+    return HandoffRequired(
+        reason,
+        blocked_action=blocked_action,
+        reason=reason,
+        action_url=None,
+        talking_points=talking_points,
+        resume={
+            "verify_call": {
+                "tool": "keel_auth_login",
+                "args": {},
+                "reason": (
+                    "Opens the browser sign-in; the anonymous workspace is "
+                    "claimed into the account automatically. Then retry "
+                    f"`{retry_call.get('tool', blocked_action)}` — it runs "
+                    "under the signed-in account."
+                ),
+                "then_retry": retry_call,
+            }
+        },
+        limit_details=limit_details,
+        suggestion=(
+            "Ask the user to sign in (`keel_auth_login`); their anonymous "
+            "work transfers automatically, then re-run the blocked call."
+        ),
+    )
 
 
 # ─── Deploy-intent minting (spec 03 R2 client half) ─────────────────────
@@ -181,6 +268,11 @@ def mint_deploy_intent(ctx: ToolContext, strategy_id: str) -> dict[str, Any] | N
       rejects any extra field with a 422).
     """
     if is_listed_profile():
+        return None
+    if _is_anon_session():
+        # Spec 09 CL-2 belt: no deploy-intent links while anonymous — the
+        # anon branch in every wall builder returns before minting, and
+        # this guard keeps any future caller from re-opening the dead-end.
         return None
     try:
         resp = ctx.get_client().post("/v1/live/deploy-intents", json={"strategy_id": strategy_id})
@@ -242,6 +334,34 @@ def maybe_quota_handoff(
     parsed = _quota_details(e)
     if parsed is None:
         return None
+
+    if _is_anon_session():
+        # Spec 09 CL-1: anon quota walls are SIGNUP framing, never billing —
+        # the anon plan cannot reach billing, and signing in moves the work
+        # to the free plan. The exact server numbers still ride along.
+        unit_label_anon = parsed.get("unit_label") or parsed.get("unit")
+        return anon_signin_handoff(
+            blocked_action=blocked_action,
+            reason=(
+                f"The anonymous workspace's {unit_label_anon} allowance is "
+                "used up — more capacity needs a signed-in account."
+            ),
+            context_point=(
+                f"The anonymous workspace includes a small {unit_label_anon} "
+                "allowance; signing in moves your work to the free plan and "
+                "its larger limits."
+            ),
+            retry_call=retry_call,
+            limit_details={
+                "unit": parsed.get("unit"),
+                "unit_label": unit_label_anon,
+                **{
+                    k: parsed[k]
+                    for k in ("kind", "limit", "current", "need")
+                    if parsed.get(k) is not None
+                },
+            },
+        )
 
     unit_label = parsed.get("unit_label") or parsed.get("unit")
     billing_url = parsed.get("billing_url") or (e.docs_url or "")
@@ -320,6 +440,22 @@ def live_scope_handoff(
     HostedAuthError precedent), so the verify_call is the retry itself
     with the client re-auth named in its reason.
     """
+    if _is_anon_session():
+        # Spec 09 CL-1: an anon token can never gain the live scope — the
+        # wall is sign-in, not scope re-consent.
+        return anon_signin_handoff(
+            blocked_action=blocked_action,
+            reason=(
+                "Live-trading actions need a signed-in account — anonymous "
+                "sessions cannot hold the live-trading consent."
+            ),
+            context_point=(
+                "Going live starts with signing in; live actions always "
+                "carry an explicit human consent step."
+            ),
+            retry_call=retry_call,
+        )
+
     from keel.hosting import is_hosted
 
     hosted = is_hosted()
@@ -381,6 +517,125 @@ def live_scope_handoff(
     )
 
 
+def deploy_web_handoff(
+    *,
+    strategy_id: str,
+    ctx: ToolContext,
+    blocked_action: str = "live_deploy",
+    detail: str | None = None,
+) -> HandoffRequired:
+    """Going live is a WEB handoff on every surface (D7, 2026-07-19).
+
+    The authenticated Keel web app is the sole account/live surface:
+    selecting or connecting a Hyperliquid account, reviewing the
+    server-computed sizing, accepting the risk, and going live are human
+    steps the agent never performs in the terminal. This is the DEFAULT
+    result of ``keel_live_deploy`` on the CLI and local MCP — the same
+    loop the hosted profile already uses (spec 03 R2/R4): the agent hands
+    the user a link into the standalone deploy flow instead of
+    enumerating accounts or POSTing ``/v1/live`` itself.
+
+    A minted deploy-intent deep link is used when available (prefilled
+    with the server-computed sizing + a pollable token); otherwise the
+    owned ``/deploy/{strategy_id}`` entry path is the fallback (same flow,
+    no prefill token). Sizing is ALWAYS server-computed from the
+    backtest's drawdown — never agent-supplied.
+    """
+    if _is_anon_session():
+        # Spec 09 CL-1/CL-2: while anonymous, going live starts with the
+        # claim — no deploy URL exists that the user's future account will
+        # own, so handing one out is a post-signup dead-end.
+        return anon_signin_handoff(
+            blocked_action=blocked_action,
+            reason=(
+                "Going live requires a signed-in account — this anonymous workspace cannot deploy."
+            ),
+            context_point=(
+                "Deploying to a live account is done by you in the Keel web "
+                "app after signing in; the agent never places the orders."
+            ),
+            retry_call={"tool": "keel_live_deploy", "args": {"strategy_id": strategy_id}},
+        )
+
+    intent = mint_deploy_intent(ctx, strategy_id)
+    if intent:
+        action_url = intent["handoff_url"]
+    else:
+        action_url = f"{ctx.app_url}/deploy/{strategy_id}"
+
+    if intent and intent.get("intent_token"):
+        # Round-trip resumption (spec 03 R6): the verify_call IS the poll —
+        # `keel_live_deploy` with the intent token (preview phase) reads
+        # the handoff's server-side status; 'completed' carries the
+        # deployment_id, no browser return needed.
+        resume: dict[str, Any] = {
+            "token": intent["intent_token"],
+            "verify_call": {
+                "tool": "keel_live_deploy",
+                "args": {"strategy_id": strategy_id, "intent_token": intent["intent_token"]},
+                "reason": (
+                    "Polls this handoff's server-side status: returns "
+                    "handoff_state.status == 'completed' with the "
+                    "deployment_id once the human finishes at action_url "
+                    "(pending while they work; an expired link explains how "
+                    "to mint a fresh one)."
+                ),
+            },
+        }
+    else:
+        # No pollable token — completion is still observable via monitoring
+        # (a read that stays on every surface).
+        resume = {
+            "verify_call": {
+                "tool": "keel_live_monitor",
+                "args": {},
+                "reason": (
+                    "After the human completes the deploy in the web app, the "
+                    "running deployment shows up here (portfolio summary); "
+                    "pass its deployment_id to inspect one deployment."
+                ),
+            }
+        }
+
+    reason_text = (
+        "Going live is completed by you in the Keel web app — selecting or "
+        "connecting the account, reviewing the sizing, and accepting the "
+        "risk are human steps the agent does not perform in the terminal."
+    )
+    talking_points = [
+        (
+            "Deploying to a live account is done by you in the Keel web app: "
+            "the link opens a flow to pick or connect a Hyperliquid account, "
+            "review the sizing, and confirm — the agent does not place the "
+            "orders."
+        ),
+        (
+            "Any sizing suggestion shown is computed from the backtest's max "
+            "drawdown; losses up to at least that drawdown should be expected "
+            "at any size."
+        ),
+        (
+            "Doing nothing is also fine — nothing is deployed and no funds "
+            "move; the strategy and its backtests stay saved."
+        ),
+    ]
+    return HandoffRequired(
+        detail or reason_text,
+        blocked_action=blocked_action,
+        reason=reason_text,
+        action_url=action_url,
+        talking_points=talking_points,
+        resume=resume,
+        cost=_intent_cost(intent),
+        suggestion=(
+            "Send the user to action_url to select/connect an account, "
+            "review the sizing, and go live in the Keel web app; then run "
+            "resume.verify_call to observe the running deployment (no "
+            "browser return needed)."
+        ),
+    )
+
+
 def unlinked_account_handoff(
     *,
     blocked_action: str,
@@ -397,6 +652,24 @@ def unlinked_account_handoff(
     deploy; when minting isn't possible the owned ``/deploy/{strategy_id}``
     entry path is the fallback (same flow, no prefill token).
     """
+    if _is_anon_session():
+        # Spec 09 CL-1/CL-2: account linking presumes an account. While
+        # anonymous the wall is sign-in; the normal linking wall takes over
+        # on retry under the signed-in account.
+        return anon_signin_handoff(
+            blocked_action=blocked_action,
+            reason=(
+                "Linking a Hyperliquid account requires a signed-in Keel "
+                "account — this workspace is anonymous."
+            ),
+            context_point=(
+                "Going live needs a linked Hyperliquid account, which is set "
+                "up in the Keel web app after signing in (two wallet "
+                "signatures, done by you)."
+            ),
+            retry_call={"tool": "keel_live_deploy", "args": {"strategy_id": strategy_id}},
+        )
+
     intent = mint_deploy_intent(ctx, strategy_id)
     if intent:
         action_url = intent["handoff_url"]

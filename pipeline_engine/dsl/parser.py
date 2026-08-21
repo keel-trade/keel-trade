@@ -569,6 +569,7 @@ _VALID_UNIVERSE_KEYS = {
     "resolved",
     "resolved_at",
     "groups",
+    "max_leverages",
 }
 
 
@@ -666,6 +667,7 @@ def _parse_universe_call(node: ast.Call, factory_names: set[str]) -> UniverseSpe
         resolved=kwargs.get("resolved"),
         resolved_at=kwargs.get("resolved_at"),
         groups=kwargs.get("groups"),
+        max_leverages=kwargs.get("max_leverages"),
         location=_loc(node, "universe"),
     )
 

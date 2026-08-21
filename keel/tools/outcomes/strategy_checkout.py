@@ -104,17 +104,21 @@ STRATEGY_CHECKOUT = register(
         cli_path=("strategy", "checkout"),
         toolset="backtest",
         local_only=True,  # writes a workspace under ~/.keel — meaningless on a shared hosted server
+        # grounded-in: sync-contract (spec 08) — server HEAD is the single
+        # source of truth, the checkout is a disposable working copy, runnable
+        # actions write local edits through by default; collaboration.md §4
+        # (iterate through version history, not raw rewrites).
         description=(
             "Pull a platform strategy into a local workspace so you can edit, "
             "validate, and version-control it. Server HEAD stays the single "
             "source of truth — the checkout is a WORKING COPY (disposable, "
             "always reconcilable); runnable actions (backtest/deploy) resolve "
             "server commits and write through local edits by default. Writes "
-            "`strategy.py` + "
-            "`.keel-meta.json` to the workspace dir (defaults to "
-            "`~/.keel/workspace/<id>/`; project-local when cwd has "
-            "`.keel/workspace.yaml`). Subsequent edits are local until "
-            "`keel_strategy_push` commits them back. "
+            "`strategy.py` + `.keel-meta.json` to the workspace dir (defaults "
+            "to `~/.keel/workspace/<id>/`; project-local when cwd has "
+            "`.keel/workspace.yaml`). Subsequent edits stay local until "
+            "`keel_strategy_push` commits them back — check "
+            "`keel_strategy_status` for the local-vs-server delta any time. "
             "Use this BEFORE iterating on an existing strategy — even small "
             "edits should go through checkout → edit → push, NOT raw "
             "`keel_strategy_compose` calls that bypass version history. "

@@ -65,14 +65,19 @@ STRATEGY_DISCARD = register(
         cli_path=("strategy", "discard"),
         toolset="backtest",
         local_only=True,  # deletes local workspace files
+        # grounded-in: strategy_discard.py docstring (local-only removal,
+        # server strategy untouched); spec 08 sync contract (reset a diverged
+        # workspace by re-checking out fresh, not manual merge).
         description=(
-            "Remove a local workspace (the checked-out strategy.py + "
-            "`.keel-meta.json`). Server-side strategy is unchanged. Use for "
-            "cleaning up after you're done iterating, or to reset a diverged "
-            "workspace by re-checking out fresh. "
+            "Remove a local workspace — the checked-out `strategy.py` + "
+            "`.keel-meta.json`. Local-only: the server-side strategy is "
+            "untouched and still available via `keel_strategy_get` or "
+            "`keel_strategy_checkout`. Use it to clean up after you're done "
+            "iterating, or to reset a diverged workspace by re-checking out "
+            "fresh (a clean re-checkout beats a manual merge). "
             "Do NOT use to delete a strategy on the platform — call "
-            "`keel_strategy_delete` (which is destructive + irreversible). "
-            "This tool only touches local filesystem state."
+            "`keel_strategy_delete` (destructive + irreversible). This tool "
+            "only touches local filesystem state."
         ),
         input_schema={
             "type": "object",

@@ -125,14 +125,23 @@ STRATEGY_SEARCH = register(
         required_action="strategy.read",
         cli_path=("strategy", "search"),
         toolset="read-only",
+        # grounded-in: context-architecture-design Part F (existing strategy:
+        # search → get → fork to iterate on a copy); collaboration.md §4
+        # (iterate on an existing strategy, don't rewrite); tool_usage.md:8
+        # (state analysis — inspect the current pipeline before changing it).
         description=(
-            "Search and list strategies in the current org. Optional filters: "
-            "`query` (name substring), `tag`, `owner`, `share_id`. "
-            "On CLI (TTY) calls with no filters, also includes locally "
-            "checked-out workspaces. "
+            "Search and list strategies in the current org by `query` (name "
+            "substring), `tag`, `owner`, or `share_id` — the entry point when "
+            "the user wants to work on an EXISTING strategy rather than build "
+            "a new one. Find the strategy here, then `keel_strategy_get` (with "
+            "`include_source=true`) to inspect its actual pipeline before "
+            "proposing a change, and `keel_strategy_fork` to iterate on a copy "
+            "without touching the original. On CLI (TTY) calls with no "
+            "filters, also includes locally checked-out workspaces. "
             "Do NOT use to fetch a strategy's full source or version history — "
             "call `keel_strategy_get`. "
-            "Do NOT use to look up component metadata — call `keel_components_search`."
+            "Do NOT use to look up pipeline component metadata — call "
+            "`keel_components_search`."
         ),
         input_schema={
             "type": "object",

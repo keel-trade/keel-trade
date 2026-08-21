@@ -121,14 +121,20 @@ HELP = register(
         required_action="audit.read",
         cli_path=("help",),
         toolset="always",
+        # grounded-in: tool_usage.md:22-29 (Tool Usage Guide — dsl_reference
+        # vs composition_patterns vs strategy_examples are distinct docs to
+        # pull, not memory) + :39-47 (orient from the real surface, don't
+        # guess). Pull-on-demand pointer for the always-loaded description.
         description=(
-            "Fetch a Keel knowledge document by topic name. Used when a host "
-            "doesn't browse MCP resources well. Reference topics mirror "
-            "`keel://dsl/reference/<topic>`; knowledge topics mirror "
-            "`keel://knowledge/<section>`. "
-            "Call with no `topic` to list every bundled topic — handy when the "
-            "user asks a general 'how does X work?' question and you want to "
-            "pick the right doc instead of guessing. "
+            "Fetch a Keel knowledge or DSL-reference document by topic name — "
+            "the way to pull depth on demand instead of reasoning about DSL "
+            "syntax, phases, or composition rules from memory. Reference "
+            "topics mirror `keel://dsl/reference/<topic>`; knowledge topics "
+            "mirror `keel://knowledge/<section>`. Call with no `topic` first "
+            "to list every bundled topic, then fetch the one that fits — handy "
+            "when a host doesn't browse MCP resources well, or when the user "
+            "asks a general 'how does X work?' and you want the authoritative "
+            "doc rather than a guess. "
             "Do NOT use to search components — call `keel_components_search`. "
             "Do NOT use to look up a specific component's params — call "
             "`keel_components_compose_help`."

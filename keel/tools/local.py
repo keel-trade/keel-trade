@@ -51,6 +51,7 @@ from __future__ import annotations
 
 import importlib
 import inspect
+import logging
 from functools import lru_cache
 from typing import Any, Callable
 
@@ -72,6 +73,9 @@ from keel.data.registry import (
 from keel.data.registry import (
     search_components as _search,
 )
+
+
+_LOGGER = logging.getLogger(__name__)
 
 
 def _ensure_registry():
@@ -530,16 +534,24 @@ def universe_set(
     the source (which `deploy` and `backtest_submit` require), call
     `universe_resolve(source)` on the returned source. The web editor does
     both in one step; CLI / agent flows chain the two calls.
+
+    Like `universe_resolve`, the rewrite is a SURGICAL SPAN EDIT of the
+    `Universe(...)` statement only (twin of the rich
+    `pipeline_engine.mcp.tools.universe_set`) — comments and formatting
+    elsewhere in the file survive byte-exact. `reformatted: True` in the
+    result means the equivalence net failed and the file was re-emitted
+    canonically instead.
     """
     _ensure_registry()
 
     from pipeline_engine.dsl import parse_strategy
+    from pipeline_engine.dsl.edits import EditError, replace_declaration
     from pipeline_engine.dsl.emitter import spec_to_dsl
     from pipeline_engine.dsl.spec import UniverseSpec
 
     parsed = parse_strategy(source)
 
-    parsed.universe = UniverseSpec(
+    new_universe = UniverseSpec(
         mode=mode,
         market=market,
         symbols=symbols or [],
@@ -551,8 +563,27 @@ def universe_set(
         volume_quartiles=volume_quartiles or [],
     )
 
-    new_source = spec_to_dsl(parsed)
-    return {"source": new_source, "universe": _universe_to_dict(parsed.universe)}
+    try:
+        new_source = replace_declaration(source, "universe", new_universe)
+        reformatted = False
+    except EditError:
+        _LOGGER.warning(
+            "universe_set: span edit failed; falling back to canonical re-emission "
+            "(comments and formatting outside Universe(...) will be lost)",
+            exc_info=True,
+        )
+        new_source = None
+        reformatted = True
+
+    parsed.universe = new_universe
+    if new_source is None:
+        new_source = spec_to_dsl(parsed)
+
+    return {
+        "source": new_source,
+        "universe": _universe_to_dict(parsed.universe),
+        "reformatted": reformatted,
+    }
 
 
 def universe_resolve(source: str) -> dict[str, Any]:
@@ -567,6 +598,22 @@ def universe_resolve(source: str) -> dict[str, Any]:
     `deploy` and `backtest_submit` endpoints will refuse strategies that have
     no resolved list, so call this between `universe_set` and submit).
 
+    EVERY declared selector is forwarded to the resolver — `mode`, `market`,
+    `symbols`, `categories`, `top_n`, `exclusions`, `inclusions`, `lookback`,
+    `volume_quartiles` — plus the current `resolved` list as
+    `current_resolved` so the API can return a diff. Dropping any of them
+    would silently resolve on the server default (e.g. a declared
+    `lookback="90d"` ranking on 7 days of volume) — the exact silent-fallback
+    class the repo's lessons file forbids.
+
+    The updated source is produced by SURGICAL SPAN EDITS over the existing
+    `Universe(...)` call (twin of `pipeline_engine.mcp.tools.universe_resolve`
+    and the chat-api agent path): only the `resolved` / `resolved_at` /
+    `max_leverages` argument spans change, so comments, headers, formatting
+    and statement order survive byte-exact. If the span edit's
+    spec-equivalence net fails, the fallback to whole-file canonical emission
+    is LOUD — logged, and flagged as ``reformatted: True`` in the result.
+
     Args:
         source: The strategy DSL source string.
 
@@ -576,6 +623,11 @@ def universe_resolve(source: str) -> dict[str, Any]:
           - resolved: list[str] of asset symbols
           - resolved_at: ISO-8601 UTC timestamp
           - count: len(resolved)
+          - reformatted: True only when the span edit failed and the whole
+            file was re-emitted canonically (comments lost)
+          - max_leverages: per-asset venue max leverage, when the API
+            returns it (omitted otherwise)
+          - diff: {"added": [...], "removed": [...]}, when the API returns it
 
     Raises:
         ValueError: source has no Universe declaration.
@@ -584,6 +636,7 @@ def universe_resolve(source: str) -> dict[str, Any]:
     _ensure_registry()
 
     from pipeline_engine.dsl import parse_strategy
+    from pipeline_engine.dsl.edits import EditError, set_decl_arg
     from pipeline_engine.dsl.emitter import spec_to_dsl
 
     parsed = parse_strategy(source)
@@ -607,6 +660,12 @@ def universe_resolve(source: str) -> dict[str, Any]:
         body["exclusions"] = list(u.exclusions)
     if u.inclusions:
         body["inclusions"] = list(u.inclusions)
+    if u.lookback:
+        body["lookback"] = u.lookback
+    if u.volume_quartiles:
+        body["volume_quartiles"] = list(u.volume_quartiles)
+    if u.resolved:
+        body["current_resolved"] = list(u.resolved)
 
     # Lazy import — only this tool actually needs the HTTP client. Keeps the
     # rest of the offline tools surface zero-network at import time.
@@ -615,16 +674,72 @@ def universe_resolve(source: str) -> dict[str, Any]:
     client = KeelClient()
     result = client.post("/v1/universe/resolve", json=body)
 
-    parsed.universe.resolved = list(result["resolved"])
-    parsed.universe.resolved_at = result["resolved_at"]
-    new_source = spec_to_dsl(parsed)
+    resolved = list(result["resolved"])
+    resolved_at = result["resolved_at"]
+    # Venue metadata rides the same resolution: ResolveUniverseResponse
+    # carries the per-symbol maxLeverage map (audit BLOCKER 2's proper fix).
+    # Bake it only when present and non-empty — older servers omit the field
+    # and this path must keep working against them. Never fabricate a map.
+    raw_leverages = result.get("max_leverages")
+    max_leverages = dict(raw_leverages) if raw_leverages else None
 
-    return {
+    parsed.universe.resolved = resolved
+    parsed.universe.resolved_at = resolved_at
+    if max_leverages is not None:
+        parsed.universe.max_leverages = max_leverages
+
+    # Under-fill honesty (cohort Lane U, `universe-resolve-topn-underfill`):
+    # when the venue's qualifying pool is smaller than the declared top_n, a
+    # resolve that writes back only `resolved` leaves top_n=200/resolved=177
+    # in the source and the STALE_UNIVERSE gate then fails every submit with
+    # a remediation (re-resolve) that reproduces the same state forever.
+    # Write top_n down to the achievable count and say so.
+    requested_top_n = result.get("requested_top_n")
+    underfilled = (
+        u.mode == "top_volume" and requested_top_n is not None and len(resolved) < requested_top_n
+    )
+    if underfilled:
+        parsed.universe.top_n = len(resolved)
+
+    try:
+        new_source = set_decl_arg(source, "universe", "resolved", resolved)
+        new_source = set_decl_arg(new_source, "universe", "resolved_at", resolved_at)
+        if max_leverages is not None:
+            new_source = set_decl_arg(new_source, "universe", "max_leverages", max_leverages)
+        if underfilled:
+            new_source = set_decl_arg(new_source, "universe", "top_n", len(resolved))
+        reformatted = False
+    except EditError:
+        _LOGGER.warning(
+            "universe_resolve: span edit failed; falling back to canonical re-emission "
+            "(comments and formatting outside Universe(...) will be lost)",
+            exc_info=True,
+        )
+        new_source = spec_to_dsl(parsed)
+        reformatted = True
+
+    out: dict[str, Any] = {
         "source": new_source,
-        "resolved": parsed.universe.resolved,
-        "resolved_at": parsed.universe.resolved_at,
-        "count": len(parsed.universe.resolved),
+        "resolved": resolved,
+        "resolved_at": resolved_at,
+        "count": len(resolved),
+        "reformatted": reformatted,
     }
+    if max_leverages is not None:
+        out["max_leverages"] = max_leverages
+    if result.get("diff"):
+        out["diff"] = result["diff"]
+    # Server-side listing advisories (unknown/delisted symbols, under-fill)
+    # pass through verbatim so the CLI/MCP caller can show them.
+    if result.get("warnings"):
+        out["warnings"] = list(result["warnings"])
+    if underfilled:
+        out["top_n_written_down"] = {
+            "requested": requested_top_n,
+            "achievable": len(resolved),
+            "reason": f"venue can supply {len(resolved)} of {requested_top_n} requested assets",
+        }
+    return out
 
 
 def universe_get(source: str) -> dict[str, Any]:
@@ -717,7 +832,13 @@ def universe_remove_group(source: str, name: str) -> dict[str, Any]:
 
 
 def _universe_to_dict(uni) -> dict[str, Any]:
-    """Convert UniverseSpec to a serializable dict."""
+    """Convert UniverseSpec to a serializable dict.
+
+    Every declared selector is reported — a reader that hides `lookback` /
+    `volume_quartiles` / `max_leverages` tells the caller the declaration
+    says less than it does, which is how those values get dropped on the
+    next rewrite (v16 staging audit §6.1).
+    """
     d: dict[str, Any] = {"mode": uni.mode, "market": uni.market}
     if uni.symbols:
         d["symbols"] = uni.symbols
@@ -729,10 +850,16 @@ def _universe_to_dict(uni) -> dict[str, Any]:
         d["exclusions"] = uni.exclusions
     if uni.inclusions:
         d["inclusions"] = uni.inclusions
+    if getattr(uni, "lookback", None):
+        d["lookback"] = uni.lookback
+    if getattr(uni, "volume_quartiles", None):
+        d["volume_quartiles"] = uni.volume_quartiles
     if getattr(uni, "resolved", None):
         d["resolved"] = uni.resolved
     if getattr(uni, "resolved_at", None):
         d["resolved_at"] = uni.resolved_at
+    if getattr(uni, "max_leverages", None):
+        d["max_leverages"] = uni.max_leverages
     if uni.groups:
         d["groups"] = uni.groups
     return d

@@ -49,7 +49,11 @@ def test_sdk_types_generation_requires_exactly_one_top_level_pandas_import(sourc
 
 @pytest.mark.parametrize(
     "relative_path",
-    ["validation_shared.py", "dsl/validator.py"],
+    # component_ranking.py: THE component-search scorer. `keel/data/registry.py`
+    # re-exports it and `pipeline_engine.mcp.tools` imports it directly, so a
+    # bundled copy that drifts from upstream is two rankings again — exactly
+    # what dsl-mtf-clocks spec 02 §9.2 item 3 forbids (R-25 finding S7).
+    ["validation_shared.py", "dsl/validator.py", "component_ranking.py"],
 )
 def test_sdk_bundled_validation_modules_match_upstream(relative_path):
     sdk_root = Path(__file__).resolve().parents[1]
@@ -229,6 +233,37 @@ class TestTemplates:
             get_template("nonexistent")
 
 
+# The owner side of this parity check is `pipeline_engine.mcp.schemas`, which
+# exists ONLY in `libs/` — the vendored SDK tree ships no `mcp/` package. Any
+# import of it executes `libs/pipeline_engine/__init__.py`, which reaches
+# `pipeline_engine.context` → `import pandas`. pandas is deliberately NOT an SDK
+# dependency (pyproject: click, pyyaml, httpx, pydantic, fastmcp), so the
+# subprocess below cannot run in the SDK-only venv the `sdk-test` workflow
+# builds — that lane's whole point is proving the published wheel works with
+# only its declared deps, and installing pandas there would destroy that signal.
+#
+# The parity property is NOT lost by skipping here: it is owned in CI by the
+# `regen-drift` job in .github/workflows/test.yml, which runs
+# `make regen && git diff --exit-code` inside the keel-runtime image (pandas +
+# TA-Lib present) on every push to main and every PR. `make regen` step 11 runs
+# `packages/keel-trade/keel-sdk/scripts/build_data.py`, which REWRITES
+# keel/data/tool_schemas.json from `build_tool_schemas()` (build_data.py:1021) —
+# so bundled-vs-owner drift fails that job byte-for-byte, more strictly than this
+# assertion. This test remains the fast local signal wherever the live engine is
+# importable (the conda dev env, the runtime image).
+#
+# The condition is an explicit enumeration, not a forgiving fallback: if the
+# owner chain ever grows a NEW non-SDK dependency, this test fails loudly in the
+# SDK lane rather than silently rotting, and the enumeration must be updated
+# deliberately.
+@pytest.mark.skipif(
+    importlib.util.find_spec("pandas") is None,
+    reason=(
+        "Owner-side build needs the live libs/pipeline_engine (pandas), which is "
+        "not an SDK dependency. Bundled-vs-owner parity is gated in CI by the "
+        "regen-drift job (make regen && git diff --exit-code)."
+    ),
+)
 def test_bundled_tool_schemas_match_build_data_owner():
     sdk_root = Path(__file__).resolve().parents[1]
     repo_root = sdk_root.parents[2]

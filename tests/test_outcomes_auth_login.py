@@ -16,12 +16,11 @@ from __future__ import annotations
 from unittest.mock import patch
 
 import pytest
-
-from keel.tools.outcomes._base import ToolContext
+from keel.tools.outcomes import OUTCOMES
 
 # Import for side-effect registration.
 from keel.tools.outcomes import auth_login as _auth_login_mod  # noqa: F401
-from keel.tools.outcomes import OUTCOMES
+from keel.tools.outcomes._base import ToolContext
 
 
 @pytest.fixture
@@ -59,6 +58,7 @@ def test_auth_login_default_scope_returns_base_tier(ctx):
         api_url=None,
         include_live=False,
         auth_surface="mcp",
+        attach_decision=None,
     )
     env = result.to_envelope()
     assert env["authenticated"] is True
@@ -88,6 +88,7 @@ def test_auth_login_with_live_scope_marks_tier_live(ctx):
         api_url=None,
         include_live=True,
         auth_surface="mcp",
+        attach_decision=None,
     )
     env = result.to_envelope()
     assert env["tier"] == "live"
@@ -105,6 +106,7 @@ def test_auth_login_passes_api_url_through(ctx):
         api_url="https://staging-api.example.com",
         include_live=False,
         auth_surface="mcp",
+        attach_decision=None,
     )
 
 

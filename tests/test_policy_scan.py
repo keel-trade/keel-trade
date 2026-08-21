@@ -56,7 +56,9 @@ EXPLICITLY_EXCLUDED_TOOLS = frozenset(
         "keel_strategy_delete",
         "keel_accounts_list",
         "keel_audit_list_last",
-        "keel_strategy_diff",
+        # keel_strategy_diff moved ONTO the listed profile (D1 2026-07-19):
+        # a read-only version/source diff with no money/wallet params and
+        # no forbidden verbs — it belongs on the single hosted surface.
         "keel_strategy_restore",
         # local-only (spec 01 R2) — absent hosted-side anyway
         "keel_strategy_checkout",
@@ -271,3 +273,90 @@ def test_listed_prompts_exclude_deploy_workflow(listed_surface):
 
     leaked = prompt_names & LISTED_EXCLUDED_SKILLS
     assert not leaked, f"excluded skills leaked into listed prompts: {sorted(leaked)}"
+
+
+# ─── Widget-card surface (spec 06 R2 — same deployment config) ──────────
+
+
+@pytest.fixture(scope="module")
+def listed_widget_surface():
+    """(ui_resources, tool_wire_metas) from a real listed+hosted server.
+
+    ``ui_resources`` maps each ``ui://`` URI to its served HTML text;
+    ``tool_wire_metas`` maps tool name → the ``_meta`` dict published
+    in tools/list.
+    """
+    import os
+
+    from keel.mcp.server import create_server
+
+    saved = {
+        k: os.environ.get(k)
+        for k in ("KEEL_SERVER_PROFILE", "KEEL_EXECUTION_MODE", "KEEL_TOOLSETS")
+    }
+    os.environ["KEEL_SERVER_PROFILE"] = "listed"
+    os.environ["KEEL_EXECUTION_MODE"] = "hosted"
+    os.environ.pop("KEEL_TOOLSETS", None)
+    try:
+        server = create_server()
+        resources = asyncio.run(server.list_resources())
+        ui_resources = {
+            str(r.uri): asyncio.run(r.read()).contents[0].content
+            for r in resources
+            if str(r.uri).startswith("ui://")
+        }
+        tools = asyncio.run(server.list_tools())
+        tool_wire_metas = {t.name: (t.to_mcp_tool().meta or {}) for t in tools}
+        return ui_resources, tool_wire_metas
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+
+
+def test_deploy_preflight_card_absent_on_listed_profile(listed_widget_surface):
+    """Spec 06 R2 acceptance: the deploy-preflight card must not exist
+    on the listed profile — not as a resource, and not referenced from
+    any listed tool's ``_meta`` (either dialect)."""
+    ui_resources, tool_wire_metas = listed_widget_surface
+    leaked = [uri for uri in ui_resources if "preflight" in uri]
+    assert not leaked, f"preflight card resource leaked into listed profile: {leaked}"
+    for name, meta in tool_wire_metas.items():
+        blob = str(meta)
+        assert "preflight" not in blob, f"{name}: listed _meta references the preflight card"
+
+
+def test_listed_card_surface_is_present_not_vacuous(listed_widget_surface):
+    """The absence proof must not pass because nothing registered: the
+    three listed-eligible cards ARE served (both dialects)."""
+    ui_resources, tool_wire_metas = listed_widget_surface
+    from keel.widgets import card_resource_uri, openai_card_resource_uri
+
+    for kind in ("backtest", "strategy", "live"):
+        assert card_resource_uri(kind) in ui_resources
+        assert openai_card_resource_uri(kind) in ui_resources
+    assert (
+        tool_wire_metas["keel_backtest_summarize"].get("ui", {}).get("resourceUri")
+        == card_resource_uri("backtest")
+    )
+
+
+def test_listed_card_html_passes_the_string_rules(listed_widget_surface):
+    """The card HTML is user-visible listing collateral (DP3: the cards
+    ARE the directory screenshots) — scan the SERVED listed-profile
+    card text with the same forbidden-term rules as tool copy.
+
+    Scope note: JS identifiers joined by underscores (e.g.
+    ``funding_attribution``, ``deployment_id``) do not trip the
+    word-boundary regex — underscores are word characters — so this
+    scans labels/comments/prose, exactly what a reviewer's scanner
+    sees."""
+    ui_resources, _ = listed_widget_surface
+    violations: list[str] = []
+    for uri, html in ui_resources.items():
+        hits = sorted({m.group(0).lower() for m in FORBIDDEN_TEXT_RE.finditer(html or "")})
+        if hits:
+            violations.append(f"{uri}: forbidden term(s) {hits}")
+    assert not violations, "\n".join(violations)

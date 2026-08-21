@@ -21,7 +21,7 @@ def _login_summary(info: dict) -> dict:
     org = info.get("org") or {}
     scopes = info.get("credential_scopes") or []
     is_live = "runner.*" in scopes
-    return {
+    summary = {
         "authenticated": True,
         "principal_id": principal.get("id"),
         "org_id": org.get("id"),
@@ -35,6 +35,18 @@ def _login_summary(info: dict) -> dict:
             "keel strategy checkout <id>              # pull existing strategy into local workspace",
         ],
     }
+    # Spec 09: surface the claim outcome so the user sees what moved (CL-4)
+    # or what is waiting on their decision (CL-8).
+    if info.get("claimed_anon_org"):
+        summary["claimed_anon_org"] = info["claimed_anon_org"]
+    if info.get("pending_claim"):
+        pending = info["pending_claim"]
+        summary["pending_claim"] = pending
+        summary["next"].insert(
+            0,
+            "keel auth login --attach-anon            # attach your anonymous workspace to this account",
+        )
+    return summary
 
 
 @click.group()
@@ -58,12 +70,23 @@ def auth() -> None:
     "--api-url",
     help="Override Keel API URL (e.g. staging, self-hosted).",
 )
+@click.option(
+    "--attach-anon/--no-attach-anon",
+    "attach_anon",
+    default=None,
+    help=(
+        "Attach (or skip attaching) the anonymous workspace to the "
+        "signed-in account without prompting. With a deferred claim "
+        "pending, resolves it directly — no browser flow."
+    ),
+)
 @click.pass_context
 def login(
     ctx: click.Context,
     key: str | None,
     scope: str,
     api_url: str | None,
+    attach_anon: bool | None,
 ) -> None:
     """Log in to Keel.
 
@@ -72,6 +95,17 @@ def login(
     https://app.usekeel.io/settings?tab=api-keys.
     """
     from keel.auth import browser_login
+
+    # Spec 09 CL-8: a deferred claim resolves WITHOUT re-running OAuth when
+    # the flag is explicit and credentials already exist.
+    if attach_anon is not None:
+        from keel.anon import is_anon, resolve_pending_claim
+        from keel.config import load_config as _load_config
+
+        if _load_config().pending_claim and not is_anon():
+            result = resolve_pending_claim(attach_anon)
+            emit(result or {"pending_claim": None}, _get_format(ctx))
+            return
 
     # Explicit --key wins regardless of mode.
     if key:
@@ -88,8 +122,7 @@ def login(
                 {
                     "error": "usage_error",
                     "message": (
-                        "No API key on stdin. In agent mode, pipe the key in or "
-                        "pass --key <token>."
+                        "No API key on stdin. In agent mode, pipe the key in or pass --key <token>."
                     ),
                 },
                 _get_format(ctx),
@@ -100,10 +133,27 @@ def login(
         return
 
     # Interactive default: browser-OAuth loopback flow.
+    def _confirm_attach(counts):
+        # Spec 09 CL-8 TTY prompt, default Y. Only offered on a real
+        # terminal — non-TTY runs defer like MCP.
+        from keel.anon import _prompt_counts_line
+
+        return click.confirm(
+            f"You have {_prompt_counts_line(counts)} in this anonymous "
+            "workspace — attach them to your account?",
+            default=True,
+            err=True,
+        )
+
+    import sys as _sys
+
+    interactive = _sys.stdin.isatty() and _sys.stderr.isatty()
     try:
         info = browser_login(
             api_url=api_url,
             include_live=(scope == "live"),
+            attach_decision=attach_anon,
+            confirm_attach=_confirm_attach if (interactive and attach_anon is None) else None,
         )
         emit(_login_summary(info), _get_format(ctx))
     except KeelError as e:

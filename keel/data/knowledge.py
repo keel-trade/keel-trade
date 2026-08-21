@@ -49,3 +49,16 @@ def load_section(name: str) -> str:
             if f.name.endswith(".md")
         ]
         raise FileNotFoundError(f"Unknown section '{name}'. Available: {available}")
+
+
+def load_operating_core() -> str:
+    """The lean, always-on MCP operating core (bundled copy).
+
+    Reads the bundled ``operating_core.md`` — the byte-identical copy that
+    ``scripts/build_data.py`` ships from
+    ``libs/pipeline_engine/reference/system/operating_core.md``. This is the
+    thin-context distillation the MCP server embeds in its ``instructions=``
+    string; it is deliberately excluded from ``load_system_knowledge()`` so the
+    chat-api system prompt is unaffected.
+    """
+    return load_section("operating_core")

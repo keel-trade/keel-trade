@@ -618,5 +618,5 @@ def test_cli_strategy_search_renders_envelope(monkeypatch):
     # bootstrap import list excludes them; we accept either a successful run
     # or a clean "no such command" — what matters is no crash.
     if result.exit_code == 0:
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert data["share_url"] is None

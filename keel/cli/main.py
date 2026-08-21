@@ -23,7 +23,9 @@ from keel.cli.agent_mode import default_format
 try:
     _KEEL_VERSION = _pkg_version("keel-trade")
 except PackageNotFoundError:
-    _KEEL_VERSION = "0.0.0+unknown"
+    # Not pip-installed (unpacked .mcpb tree / source checkout): fall back
+    # to the package's own version constant (kept true by test_version.py).
+    from keel import __version__ as _KEEL_VERSION
 
 
 @click.group()
@@ -45,6 +47,15 @@ def cli(ctx: click.Context, fmt: str | None, dry_run: bool, verbose: bool) -> No
     from keel.surface import set_surface
 
     set_surface("cli")
+    # Spec 09 CL-3c: the <48h anon-workspace expiry notice — one stderr
+    # line, at most hourly, only while anonymous. Best-effort: a notice
+    # failure must never break a command.
+    try:
+        from keel.anon import maybe_print_expiry_notice
+
+        maybe_print_expiry_notice()
+    except Exception:  # noqa: BLE001, S110 — nudge only; commands never fail on it
+        pass
     ctx.ensure_object(dict)
     ctx.obj["format"] = fmt or default_format()
     ctx.obj["dry_run"] = dry_run
@@ -73,6 +84,7 @@ from keel.cli.commands.arm import arm  # noqa: E402
 from keel.cli.commands.auth import auth  # noqa: E402
 from keel.cli.commands.context import context  # noqa: E402
 from keel.cli.commands.mcp_cmd import mcp  # noqa: E402
+from keel.cli.commands.open_cmd import open_cmd  # noqa: E402
 from keel.cli.commands.project import project  # noqa: E402
 from keel.cli.commands.skills import skills  # noqa: E402
 from keel.cli.commands.universe import universe  # noqa: E402
@@ -85,3 +97,4 @@ cli.add_command(skills)
 cli.add_command(arm)
 cli.add_command(context)
 cli.add_command(project)
+cli.add_command(open_cmd)

@@ -136,6 +136,9 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
         else f"{ctx.app_url}/live?tab=portfolio"
     )
 
+    # Card + per-surface render hints (spec 06 R2/R3) — render-only.
+    from ._render import card_render_block
+
     return OutcomeResult(
         run_id=effective_id if effective_id != "all" else None,
         hero_url=hero_url,
@@ -144,6 +147,12 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
             "view": effective_view,
             "freshness": _freshness_for(effective_view),
             "data": data,
+            "render": card_render_block(
+                "live",
+                fallback_url=hero_url,
+                ctx=ctx,
+                embed_id=effective_id if effective_id != "all" else None,
+            ),
         },
     )
 
@@ -154,19 +163,29 @@ LIVE_MONITOR = register(
         required_action="runner.read",
         cli_path=("live", "monitor"),
         toolset="live-read",
+        # grounded-in: live_monitor.py module docstring (spec §4 #13 — one
+        # read-only tool, `view` enum replacing ~13 live_* reads) +
+        # _FRESHNESS (positions = on-demand exchange snapshot vs recorded
+        # backend state) + live_control.py D7 note (going live is a web
+        # handoff, this tool only observes).
         description=(
-            "Read live deployment state: overview, positions, equity, P&L, stats, "
-            "weights, weights-history, executions, orders, trades, funding events, "
-            "or portfolio summary. Selects the slice via the `view` enum so one tool "
-            "replaces ~13 separate live_* read endpoints. "
-            "DEFAULTS: when the user asks 'how are my live deployments doing' or "
-            "similar without naming one, just call with no args — returns the "
+            "Read-only observability for live deployments: overview, positions, "
+            "equity, P&L, stats, weights, weights-history, executions, orders, "
+            "trades, funding events, or portfolio summary — one `view` enum in "
+            "place of ~13 separate live_* read endpoints. This tool only "
+            "observes; it never changes a deployment, and going live with a "
+            "new strategy is a web-app step (`keel_live_deploy` hands off to "
+            "it), not something done here. "
+            "DEFAULTS: when the user asks 'how are my live deployments doing' "
+            "without naming one, just call with no args — returns the "
             "portfolio summary across all deployments. Pass `deployment_id` to "
             "drill into a single deployment. "
-            "Returns `freshness` metadata so agents can distinguish on-demand "
-            "exchange snapshots from recorded backend state; this tool is not a "
-            "real-time live-service stream. "
-            "Do NOT use to mutate state — call `keel_live_control` instead. "
+            "Read the returned `freshness` before interpreting the data: "
+            "`positions` is an on-demand exchange snapshot, while "
+            "portfolio/history views are recorded backend state that can lag "
+            "the web dashboard's live-service stream — this is not a real-time "
+            "tail. "
+            "Do NOT use to change deployment state — call `keel_live_control`. "
             "Do NOT use to deploy a new strategy — call `keel_live_deploy`."
         ),
         input_schema={
@@ -239,19 +258,21 @@ LIVE_MONITOR = register(
         listed_title="Monitor Running Strategies",
         listed_description=(
             "Read-only monitoring for strategies currently running on your "
-            "account. Choose a slice with the `view` parameter (overview, "
+            "account. Pick a slice with the `view` parameter (overview, "
             "positions, equity, pnl, stats, weights, portfolio, and more — "
-            "see the enum). "
+            "see the enum). This tool only observes; it never changes a "
+            "running strategy, and starting one is done in the Keel web app, "
+            "not here. "
             "DEFAULTS: when the user asks how their running strategies are "
             "doing without naming one, just call with no args — returns the "
             "portfolio summary across all of them. Pass `deployment_id` to "
             "drill into a single one. "
-            "Returns `freshness` metadata so agents can distinguish "
-            "on-demand exchange snapshots from recorded backend state; this "
-            "tool is not a real-time stream. "
-            "Do NOT use to change the state of a running strategy — this "
-            "tool only reads. Manage strategies in the Keel web app "
-            "(`keel_open_in_app` returns the link)."
+            "Read the returned `freshness` before interpreting the data: "
+            "`positions` is an on-demand exchange snapshot, while the other "
+            "views are recorded backend state, not a real-time stream. "
+            "Do NOT use to change a running strategy's state — this tool only "
+            "reads; manage strategies in the Keel web app (`keel_open_in_app` "
+            "returns the link)."
         ),
         listed_input_schema={
             "type": "object",

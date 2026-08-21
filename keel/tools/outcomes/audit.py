@@ -139,13 +139,17 @@ AUDIT_LIST_LAST = register(
         required_action="audit.read",
         cli_path=("audit", "list-last"),
         toolset="read-only",
+        # grounded-in: audit.py module docstring (spec §13.7 — read-only
+        # self-inspection feeding the recover-from-error skill) + tool_usage.md
+        # :36-37 (reason about what happened instead of blindly retrying).
         description=(
-            "Read the most recent N audit events for the current org. "
-            "Use this to inspect what the agent (or user) just did — "
-            "tool/action name, decision (permit/deny), and best-effort "
-            "args/result_ref metadata when the API recorded it. "
+            "Read the most recent N audit events for the current org — the "
+            "agent's own trail for self-debugging and recovery. Use it to see "
+            "what was just done (tool/action name, decision permit/deny, and "
+            "best-effort args/result_ref metadata when the API recorded it) — "
+            "e.g. to recover the run id of a backtest you lost track of. "
             "Do NOT assume `args` or `result_ref` is complete; empty values "
-            "mean the audit event did not include replay-safe metadata. "
+            "mean the event carried no replay-safe metadata. "
             "Do NOT use to mutate state — call the relevant outcome "
             "tool directly. "
             "Do NOT use to fetch full backtest results — read "

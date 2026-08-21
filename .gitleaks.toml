@@ -1,0 +1,11 @@
+# Gitleaks config for the keel-trade public mirror scan (sync G2 gate).
+# Extends the default ruleset; allowlists below suppress KNOWN false
+# positives only — never real credentials.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "DSL staged-change registry identifiers (StagedChange(key=...)) in the bundled validator catalog — kebab-case rule keys, not credentials"
+paths = ['''pipeline_engine/dsl/catalog\.py''']
+regexTarget = "line"
+regexes = ['''key="[a-z0-9][a-z0-9-]*",''']

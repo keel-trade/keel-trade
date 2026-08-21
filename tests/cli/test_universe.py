@@ -55,7 +55,7 @@ def test_get_universe():
             f.write(UNIVERSE_STRATEGY)
         result = runner.invoke(cli, ["--format", "json", "universe", "get", "strat.py"])
         assert result.exit_code == 0
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert data["universe"]["mode"] == "top_volume"
         assert data["universe"]["top_n"] == 30
 
@@ -66,7 +66,7 @@ def test_get_universe_has_market():
             f.write(UNIVERSE_STRATEGY)
         result = runner.invoke(cli, ["--format", "json", "universe", "get", "strat.py"])
         assert result.exit_code == 0
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert data["universe"]["market"] == "perp"
 
 
@@ -76,7 +76,7 @@ def test_get_universe_has_resolved():
             f.write(UNIVERSE_STRATEGY)
         result = runner.invoke(cli, ["--format", "json", "universe", "get", "strat.py"])
         assert result.exit_code == 0
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert "resolved" in data["universe"]
         assert "BTC" in data["universe"]["resolved"]
 
@@ -87,7 +87,7 @@ def test_get_universe_has_groups():
             f.write(UNIVERSE_STRATEGY)
         result = runner.invoke(cli, ["--format", "json", "universe", "get", "strat.py"])
         assert result.exit_code == 0
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert "groups" in data["universe"]
         assert "defi" in data["universe"]["groups"]
         assert "l1" in data["universe"]["groups"]
@@ -99,7 +99,7 @@ def test_get_universe_no_universe():
             f.write(NO_UNIVERSE_STRATEGY)
         result = runner.invoke(cli, ["--format", "json", "universe", "get", "strat.py"])
         assert result.exit_code == 0
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert data["universe"] is None
 
 
@@ -109,7 +109,7 @@ def test_get_universe_no_groups():
             f.write(NO_GROUPS_STRATEGY)
         result = runner.invoke(cli, ["--format", "json", "universe", "get", "strat.py"])
         assert result.exit_code == 0
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert data["universe"]["mode"] == "top_volume"
         assert "groups" not in data["universe"]
 
@@ -135,7 +135,7 @@ def test_set_universe():
             ],
         )
         assert result.exit_code == 0
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert "source" in data
 
 
@@ -152,7 +152,7 @@ def test_set_universe_returns_source():
             ],
         )
         assert result.exit_code == 0
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert "source" in data
 
 
@@ -169,7 +169,7 @@ def test_set_universe_mode_top_volume():
             ],
         )
         assert result.exit_code == 0
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert "source" in data
 
 
@@ -187,7 +187,7 @@ def test_set_universe_preserves_source():
             ],
         )
         assert result.exit_code == 0
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert "source" in data
         assert "Pipeline" in data["source"]
 
@@ -208,7 +208,7 @@ def test_add_group():
             ],
         )
         assert result.exit_code == 0
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert "source" in data
 
 
@@ -225,7 +225,7 @@ def test_add_group_returns_source():
             ],
         )
         assert result.exit_code == 0
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert "source" in data
 
 
@@ -285,7 +285,7 @@ def test_modify_group_add_symbol():
             ["--format", "json", "universe", "modify-group", "strat.py", "defi", "--add", "COMP"],
         )
         assert result.exit_code == 0
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert "source" in data
 
 
@@ -301,7 +301,7 @@ def test_modify_group_remove_symbol():
             ],
         )
         assert result.exit_code == 0
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert "source" in data
 
 
@@ -317,7 +317,7 @@ def test_modify_group_add_and_remove():
             ],
         )
         assert result.exit_code == 0
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert "source" in data
 
 
@@ -359,7 +359,7 @@ def test_remove_group_returns_valid():
             ["--format", "json", "universe", "remove-group", "strat.py", "defi"],
         )
         assert result.exit_code == 0
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert "source" in data
 
 
@@ -470,16 +470,22 @@ def test_resolve_no_universe_fails(monkeypatch):
         assert result.exit_code != 0
 
 
-def test_resolve_deprecated_flag_form_still_works():
+def test_resolve_deprecated_flag_form_still_works(monkeypatch):
     """Old `keel universe resolve --mode top_volume --top-n 50` form keeps working,
     with a deprecation warning on stderr. Back-compat for users on older docs."""
-    # No file argument → falls through to legacy path → uses real client.
-    # We can't fully test the API call here without a network, but we can
-    # confirm the deprecation warning fires and the path is taken.
+    # No file argument → falls through to the legacy client-side path.
+    # This used to run against the REAL client and let the request escape
+    # to production; stub it like every other test in this file so the
+    # legacy branch is exercised end-to-end with no egress.
+    monkeypatch.setattr("keel.client.KeelClient", _StubClient)
     result = runner.invoke(
         cli,
-        ["universe", "resolve", "--mode", "top_volume", "--top-n", "50"],
+        ["--format", "json", "universe", "resolve", "--mode", "top_volume", "--top-n", "50"],
     )
-    # Don't assert exit_code (it'll fail due to no auth in test env) — assert
-    # the deprecation warning is emitted before the network attempt.
-    assert "deprecated" in result.output.lower() or "deprecated" in (result.stderr or "").lower()
+    assert result.exit_code == 0, result.output
+    # The deprecation warning goes to stderr; the payload to stdout.
+    assert "deprecated" in result.stderr.lower()
+    assert json.loads(result.stdout)["count"] == 5
+    # Criteria came from the deprecated flags, not from a DSL source.
+    assert _StubClient.last_body["mode"] == "top_volume"
+    assert _StubClient.last_body["top_n"] == 50

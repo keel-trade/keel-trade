@@ -728,6 +728,102 @@ def test_backtest_summarize_returns_metrics(ctx):
     assert env["resource_uri"] == "keel://backtest/bt_sum/results"
 
 
+def test_backtest_summarize_carries_every_stored_metric_key(ctx):
+    """Drift guard (Q-0398 residue): the envelope must carry EVERY key the
+    worker stores — canonical keys in summary_metrics, everything verbatim
+    in metrics_raw. Pre-fix, the hand whitelist dropped 16 of 21 keys,
+    including the fee ratios shipped the same day they became invisible."""
+    # Prod-shaped worker dict: every db key in strategy_executor._STATS_KEYS
+    # plus the LL-15 warnings entry.
+    worker_metrics = {
+        "sharpe_ratio": 1.24,
+        "sharpe_ratio_active": 1.31,
+        "warmup_bars": 200,
+        "sortino_ratio": 1.9,
+        "calmar_ratio": 0.8,
+        "omega_ratio": 1.1,
+        "total_return": 42.5,
+        "max_drawdown": -18.3,
+        "win_rate": 51.2,
+        "profit_factor": 1.4,
+        "expectancy": 0.02,
+        "total_trades": 87,
+        "total_orders": 120,
+        "total_fees_paid": 55.1,
+        "fees_pct_of_initial": 13.3911,
+        "fees_pct_of_net_profit": 107.10,
+        "max_drawdown_duration": "12 days 04:00:00",
+        "end_value": 14250.0,
+        "wipeout_bar": None,
+        "wipeout_date": None,
+        "warnings": [
+            {
+                "code": "SYMBOL_DELISTED",
+                "message": "IP delisted 2026-06-29 — position exited at last listed bar",
+            }
+        ],
+    }
+    detail = {
+        "id": "bt_drift",
+        "status": "COMPLETED",
+        "strategy_id": "strat_q",
+        "metrics": worker_metrics,
+    }
+
+    def fake_get(path, **_kw):
+        if path == "/v1/backtests/bt_drift":
+            return detail
+        if path == "/v1/backtests/bt_drift/results":
+            return {}
+        raise AssertionError(f"unexpected GET {path}")
+
+    with patch("keel.client.KeelClient.get", side_effect=fake_get):
+        tool = OUTCOMES["keel_backtest_summarize"]
+        result = tool.handler({"backtest_id": "bt_drift"}, ctx)
+
+    env = result.to_envelope()
+    raw = env["metrics_raw"]
+    # Verbatim passthrough: 21/21 keys survive, values untouched.
+    assert raw == worker_metrics
+    assert raw["fees_pct_of_initial"] == 13.3911
+    assert raw["fees_pct_of_net_profit"] == 107.10
+    assert raw["warnings"][0]["code"] == "SYMBOL_DELISTED"
+
+
+def test_backtest_run_success_populates_metrics_raw(ctx):
+    """The run tool's docstring promised extra.metrics_raw; it must exist."""
+    submitted = {"id": "bt_raw", "status": "QUEUED"}
+    final = {
+        "id": "bt_raw",
+        "status": "COMPLETED",
+        "metrics": {"sharpe_ratio": 2.0, "fees_pct_of_initial": 1.5},
+    }
+    calls = {"n": 0}
+
+    def fake_get(path, **_kw):
+        if path == "/v1/backtests/bt_raw":
+            calls["n"] += 1
+            return final
+        raise AssertionError(f"unexpected GET {path}")
+
+    def fake_post(path, **_kw):
+        assert path == "/v1/backtests"
+        return submitted
+
+    with (
+        patch("keel.client.KeelClient.post", side_effect=fake_post),
+        patch("keel.client.KeelClient.get", side_effect=fake_get),
+    ):
+        tool = OUTCOMES["keel_backtest_run"]
+        result = tool.handler(
+            {"strategy_id": "strat_q", "commit_id": "c_1", "wait": True},
+            ctx,
+        )
+
+    env = result.to_envelope()
+    assert env["metrics_raw"] == final["metrics"]
+
+
 def test_backtest_summarize_404_raises_NotFoundError(ctx):
     """Missing backtest_id surfaces NotFoundError (exit_code=3)."""
     with patch(

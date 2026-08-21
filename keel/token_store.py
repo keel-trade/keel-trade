@@ -48,6 +48,9 @@ def store_oauth_tokens(
         config.client_name = client_name
     if api_url:
         config.api_url = api_url
+    # Spec 09 CL-9: a fresh login starts with a clean org context — the
+    # claim step re-sets it when it re-owns a workspace.
+    config.active_org_id = None
     save_config(config)
     return config
 
@@ -64,6 +67,13 @@ def clear_oauth_tokens() -> None:
     config.refresh_token = None
     config.token_expires_at = None
     config.client_name = None
+    config.anon_org_id = None
+    # Spec 09: logout clears the whole claim-flow state — expiry-notice
+    # stamps, org context, and any deferred claim material.
+    config.anon_org_expires_at = None
+    config.anon_expiry_notice_at = None
+    config.active_org_id = None
+    config.pending_claim = None
     save_config(config)
 
 

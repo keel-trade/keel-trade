@@ -64,6 +64,34 @@ Three properties drive the design:
 2. **Typed composition over freeform code.** Strategies are graphs of versioned components. Compile errors catch bugs at author time instead of in production.
 3. **Agents compose, the deterministic engine executes.** Claude / Cursor / Codex help you build the strategy. They are not in the trade loop.
 
+## Choose your surface
+
+`keel-trade` (this package) is the CLI + local MCP path. Keel is one product
+with several places to use it — pick by where you are:
+
+<!-- surface-routing:begin -->
+<!-- GENERATED from shared/surface-routing.json — edit there, then run
+     python packages/keel-trade/keel-sdk/scripts/check_surface_routing.py --write -->
+| You are… | Default path (shown first) | Also works |
+| --- | --- | --- |
+| Using Claude/ChatGPT on web or phone | Hosted endpoint — paste the URL (directory one-click coming) | CLI + local MCP |
+| Working in Claude Code / Cursor / terminal | `pipx install keel-trade` (CLI + local MCP) | hosted endpoint |
+| Going live with a strategy | Keel web app (connect account, review sizing, go live) | reads on every surface |
+| Building your own agent/scripts | SDK + API key | CLI |
+| Just browsing/running strategies | Web app + library | hosted endpoint |
+<!-- surface-routing:end -->
+
+- **Hosted endpoint** — the remote MCP at `https://mcp.usekeel.io/mcp`: one
+  23-tool research/backtest/read surface (compose, backtest, share, read-only
+  monitoring — no live-write, no local files). Paste the URL into any
+  remote-MCP client; the one-click directory listing is coming. Going live is
+  a handoff into the Keel web app.
+- **CLI + local MCP** — this package (install below).
+- **SDK + API key** — the [REST API](https://usekeel.io/docs/api-reference)
+  for building your own agents and scripts.
+
+Per-surface zero-to-first-backtest runbook: [usekeel.io/agents](https://usekeel.io/agents).
+
 ## Install
 
 ### Claude Desktop — one-click (MCPB)

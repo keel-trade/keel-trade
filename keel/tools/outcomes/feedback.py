@@ -95,12 +95,17 @@ FEEDBACK = register(
         required_action="audit.read",
         cli_path=("feedback",),
         toolset="always",
+        # grounded-in: feedback.py docstring (spec 02 R4 — never-fails
+        # contract, no flow gates on it) + tool_usage.md:36-37 (a tool
+        # erroring twice on the same root cause is exactly the friction to
+        # capture here rather than silently working around).
         description=(
             "Send product feedback about Keel to the team: friction, praise, "
-            "or bug reports from this session. File it at the END of a "
-            "session, and any time the same friction repeats — a tool "
-            "erroring twice, a confusing result, a missing capability. "
-            "Provide `goal` (what you were trying to accomplish), `kind` "
+            "or a bug report from this session. File it at the END of a "
+            "session, and any time the same friction repeats — a tool erroring "
+            "twice on the same root cause, a confusing result, a missing "
+            "capability — capture it here rather than silently working around "
+            "it. Provide `goal` (what you were trying to accomplish), `kind` "
             "(friction | praise | bug), and `text` (the feedback itself); "
             "optionally `severity` and `context_ref` (the id or tool name it "
             "concerns). This tool NEVER fails: delivery problems return "

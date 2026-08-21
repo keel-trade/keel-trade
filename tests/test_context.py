@@ -113,7 +113,7 @@ def test_cli_context_init_and_show(tmp_home, monkeypatch):
     assert show.exit_code == 0, show.output
     import json
 
-    payload = json.loads(show.output)
+    payload = json.loads(show.stdout)
     assert payload["layer"] == "user"
     assert payload["exists"] is True
     assert "## Identity" in payload["body"]
@@ -125,7 +125,7 @@ def test_cli_context_show_project_when_missing(tmp_home, monkeypatch):
     assert result.exit_code == 0
     import json
 
-    payload = json.loads(result.output)
+    payload = json.loads(result.stdout)
     assert payload["layer"] == "project"
     assert payload["exists"] is False
 

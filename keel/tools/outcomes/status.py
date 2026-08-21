@@ -30,6 +30,7 @@ def _workflow_routes(*, live_read_loaded: bool, live_write_loaded: bool) -> list
                 "Call keel_status first.",
                 "If authenticated=false, call keel_auth_login.",
                 "For strategy work, load the strategy-creation prompt before composing.",
+                "To start from a verified strategy instead of composing from scratch, see keel_library_list.",
             ],
         },
         {
@@ -158,6 +159,13 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
         live_write_loaded="live-write" in active,
     )
 
+    # Cross-surface routing hints (spec 07 R7): one-liners pointing a
+    # surface-mismatched ask at the right surface (charts → web app;
+    # file work → CLI; live management → full endpoint).
+    from ._surface_hints import surface_hints
+
+    body["surface_hints"] = surface_hints()
+
     # Best-effort live identity probe — handlers fail soft on auth.
     if config.api_key:
         try:
@@ -177,6 +185,39 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
                 "plan": org.get("plan"),
                 "tier": "live" if "runner.*" in scopes else "base",
             }
+
+            # Anonymous claim-later state (spec 05 R4): anon quota +
+            # expiry + claim instructions, numbers straight from the
+            # server (plan_status.remaining — never invented locally).
+            if org.get("plan") == "anon" or config.anon_org_id:
+                plan_status = me.get("plan_status") or {}
+                metadata = org.get("metadata") or {}
+                anon_meta = metadata.get("anon") or {}
+                body["anonymous"] = {
+                    "active": True,
+                    "org_expires_at": anon_meta.get("expires_at"),
+                    "remaining": plan_status.get("remaining"),
+                    "limits": plan_status.get("limits"),
+                    "claim": (
+                        "Run `keel auth login` to keep this work — the "
+                        "workspace (all strategies and backtests) transfers "
+                        "to your account automatically and stops expiring."
+                    ),
+                }
+                body.setdefault("next", []).append(
+                    "keel_auth_login   # claim this anonymous workspace before it expires"
+                )
+            # Spec 09 CL-8: a deferred claim awaiting the user's decision.
+            if config.pending_claim and not config.pending_claim.get("declined"):
+                from keel.anon import pending_claim_public
+
+                # Projection only — the stored record carries the anon
+                # refresh token, which never rides a tool result.
+                body["pending_claim"] = pending_claim_public(config.pending_claim)
+                body.setdefault("next", []).append(
+                    "keel_auth_login(attach_anonymous_work=true|false)   "
+                    "# resolve the deferred anonymous-workspace claim"
+                )
         except Exception as e:  # noqa: BLE001
             # Only suggest re-auth on an actual 401. Network blips, 5xx,
             # parse failures etc. should NOT contradict `authenticated:
@@ -295,12 +336,21 @@ STATUS = register(
         required_action="audit.read",
         cli_path=("status",),
         toolset="always",
+        # grounded-in: status.py _handler (workflow_routes first_session +
+        # entitlements/quota probe + surface_hints); tool_usage.md:39-47
+        # ("Don't Falsely Claim a Tool is Missing" — orient to the surface
+        # you actually have before reaching for a lower-level tool).
         description=(
-            "Report Keel CLI/MCP status: auth state, API URL, active toolsets, "
-            "and the list of MCP tools visible under the current `KEEL_TOOLSETS`. "
-            "Use as the first call when wiring up a new agent. "
+            "Report Keel CLI/MCP status in one call: auth state and identity, "
+            "API URL, the toolsets and MCP tools visible under the current "
+            "`KEEL_TOOLSETS`, remaining plan quota (backtest runs, compute "
+            "seconds, live slots), and cross-surface hints. Start here when "
+            "wiring up a new agent or when you're unsure what's authorized — "
+            "it orients you before you reach for a lower-level tool, and the "
+            "quota block lets you check headroom before a large backtest "
+            "sweep instead of hitting a limit mid-run. "
             "Do NOT use to enumerate strategies — call `keel_strategy_search`. "
-            "Do NOT use to diagnose errors — call `keel_doctor`."
+            "Do NOT use to diagnose an error — call `keel_doctor`."
         ),
         input_schema={"type": "object", "properties": {}, "required": []},
         annotations={

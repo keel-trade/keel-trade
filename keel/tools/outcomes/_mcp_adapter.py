@@ -377,6 +377,8 @@ def register_all(mcp_server: Any, outcomes: dict[str, OutcomeTool]) -> None:
     from fastmcp.tools.function_tool import FunctionTool
     from mcp.types import ToolAnnotations
 
+    from keel.widgets import tool_ui_meta
+
     toolsets = load_toolsets()
     for tool in outcomes.values():
         if not is_tool_loaded(tool.toolset, toolsets, local_only=tool.local_only, name=tool.name):
@@ -393,6 +395,9 @@ def register_all(mcp_server: Any, outcomes: dict[str, OutcomeTool]) -> None:
             name=tool.name,
             description=effective_description(tool),
             annotations=annotations,
+            # Card-backed tools advertise their MCP Apps widget +
+            # ChatGPT Apps SDK template (spec 06 R2); None for the rest.
+            meta=tool_ui_meta(tool.name),
         )
         tool_obj.parameters = _mcp_parameters_schema(tool)
         _wrap_fastmcp_validation_errors(tool_obj, tool)

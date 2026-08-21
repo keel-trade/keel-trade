@@ -164,12 +164,20 @@ SHARE_CREATE = register(
         required_action="sharing.create",
         cli_path=("share", "create"),
         toolset="share",
+        # grounded-in: share_create.py module docstring (spec §4 + §8 sharing
+        # model — the one tool that returns a non-null share_url; destructive
+        # for privacy, always host-confirmed); context-architecture-design
+        # (default app URLs are authenticated + private).
         description=(
             "Publish a strategy or a backtest result at a public "
-            "usekeel.io/share/<id> URL. THIS MAKES SELECTED DATA "
-            "WORLD-READABLE. Always routes through host confirmation. "
-            "The default surface returns authenticated app.usekeel.io URLs; "
-            "only call this when the user explicitly asks to share publicly. "
+            "usekeel.io/share/<id> URL. THIS MAKES THE SELECTED DATA "
+            "WORLD-READABLE and always routes through host confirmation, so "
+            "only call it when the user explicitly asks to share publicly — "
+            "the default app.usekeel.io links are already authenticated and "
+            "private. `target_id` auto-detects strategy (`str_*`) vs backtest "
+            "(`btr_*`) from the prefix; for a strategy, `permission='fork'` + "
+            "`include_source=true` lets a recipient fork it into their own "
+            "copy. "
             "Do NOT use to fetch an existing share URL — read the strategy "
             "or backtest resource instead."
         ),

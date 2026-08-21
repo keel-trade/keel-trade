@@ -4,6 +4,222 @@ All notable changes to `keel-trade` are documented here. Versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html), and the format
 loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.7.0] — 2026-08-21
+
+**Hosted MCP, anonymous instant start, the Keel Library on the agent
+surface, and a rebuilt validator.** The biggest release since the
+0.3.0 outcome-tool rebuild: Keel is now reachable without installing
+anything (hosted MCP at `mcp.usekeel.io`) and without an account (CLI
+anonymous instant start with auto-claim on login). The outcome surface
+grows from 34 to 40 tools, the bundled component catalog from 182 to
+190 components, and the DSL validator is re-founded on a judgment-table
+interpreter with a much richer issue envelope.
+
+Three threads run through this release. First, **zero-friction entry**:
+`https://mcp.usekeel.io` serves a curated hosted profile (26
+read / research / backtest / share tools — live-write, destructive, and
+filesystem-bound tools stay CLI/local-only), with per-request token
+forwarding so the hosted server holds no credentials of its own; on the
+CLI, the first command that needs auth silently mints an anonymous
+workspace and a later `keel auth login` claims it — strategies and
+backtests come with you automatically. Second, **agent-to-human
+handoffs**: every wall an agent can hit (quota, plan caps, live scope,
+unlinked accounts, go-live itself) now returns a structured
+`HandoffRequired` envelope with an action URL and a pollable resume, and
+go-live defaults to a web handoff instead of an in-terminal deploy.
+Third, **validator depth**: local validation (in
+`keel_strategy_compose` / `keel strategy compose` and the bundled
+validator) now runs the same judgment-table interpreter as
+the platform, emitting a 16-field `ValidationIssue` envelope, value-
+domain checks, factory-call cycle detection, and multi-timeframe clock
+inference — a strategy that validates clean now actually runs.
+
+As always, this changelog covers what ships in `pipx install
+keel-trade`, the `.mcpb` bundle, and the public `keel-trade/keel-trade`
+GitHub repo. Platform-backend changes ride their own release cadence.
+
+### Added
+
+- **Hosted MCP server profiles.** The server now runs in one of two
+  profiles: `full` (default — the local stdio surface: 38 tools active
+  out of the box, 40 with the `live-write` toolset opted in via
+  `KEEL_TOOLSETS`) and `listed` — the single hosted profile that
+  `mcp.usekeel.io` serves to both the paste-URL connector and directory
+  listings. The listed profile is a hard allow-list of 26 tools (read /
+  research / compose / backtest / share / library / read-only live
+  monitoring); `keel_live_deploy`, `keel_live_control`,
+  `keel_strategy_delete`, `keel_strategy_restore`,
+  `keel_accounts_list`, `keel_audit_list_last`, and all 8
+  filesystem-bound workspace tools are excluded by construction, and a
+  policy-scan test gates any addition. Hosted requests forward the
+  caller's token per-request — the hosted server stores nothing.
+- **CLI anonymous instant start + auto-claim** (`keel/anon.py`). The
+  first CLI command that needs auth with no stored credentials
+  auto-calls `POST /v1/auth/anonymous`, prints a one-line notice, and
+  proceeds. `keel auth login` detects the anonymous marker and claims
+  the workspace into the new account. `KEEL_ANON_AUTO=0` opts out (CI
+  environments that want a hard auth failure); `KEEL_ANON_AUTO=1`
+  forces it on for non-CLI local surfaces. Expiring anonymous grants
+  print an hourly-throttled stderr warning inside the final 48 h.
+- **Claim-before-handoff + existing-account claim confirm.** While
+  anonymous, every human-required wall (deploy, account linking, live
+  scope, quota, the good-result nudge) resolves to `keel_auth_login`
+  with "your strategies and backtests come with you automatically" —
+  never an app URL the future account won't own. Fresh/empty accounts
+  claim silently; an account that already has strategies confirms
+  first — CLI TTY prompt (default Y) with `--attach-anon` /
+  `--no-attach-anon` twins, MCP via re-calling `keel_auth_login` with
+  `attach_anonymous_work` (no re-OAuth). A successful claim pins the
+  claimed org so subsequent calls land where the work lives;
+  `keel_status` surfaces undecided pending claims.
+- **Keel Library on the agent surface** — three new outcome tools
+  (`keel_library_list`, `keel_library_get`, `keel_library_fork`) and
+  the matching `keel library` CLI commands. Browse the published
+  strategy library, read a verified entry, fork it into your own
+  workspace — all three available on the hosted listed profile.
+- **Shared handoff envelope + round-trip resumption.**
+  `HandoffRequired` rides the standard error envelope with
+  `blocked_action`, `reason`, `required_actor=human`, `action_url`,
+  exact API-sourced `limit_details`/`cost`, `talking_points`, and a
+  `resume` block (token or verify-call). Adopted by
+  `keel_backtest_run` (quota), `keel_strategy_compose` (plan caps),
+  `keel_live_deploy` (scope / unlinked account / go-live), and
+  `keel_live_control` (scope). Handoffs are resumable: a status-poll
+  `verify_call` confirms the human completed the action.
+- **`keel_open_in_app`** — navigation bridge that returns an
+  authenticated deep link into the web app for a strategy, backtest,
+  or deployment (the only app bridge on the hosted listed profile).
+- **`keel_feedback`** — never-fails feedback capture, available on
+  every profile in the `always` toolset.
+- **`keel_plan_status`** — read-only plan/quota facts with per-surface
+  `manage_url` rules. Backtest and deploy responses also surface
+  remaining quota when it drops below 20%.
+- **4-card widget bundle + `keel open`.** `keel/widgets/` ships four
+  self-contained result cards (strategy, backtest, live, deploy
+  preflight) rendered from tool responses, with per-surface render
+  hints and signed embed tokens minted in the render block. New
+  `keel open <kind> <id>` CLI command opens the matching app view.
+- **`.well-known` skills manifest + agent card.**
+  `scripts/build_skills_manifest.py` generates
+  `.well-known/skills/index.json` from the bundled skill registry
+  (Stripe-style, install/usage pointers for all 8 shipped skills) and
+  `.well-known/agent-card.json` states the product's honest envelope
+  (for / not-for), endpoints, and provenance. Both published on the
+  site and drift-gated against the bundle.
+- **Bundled component catalog regenerated — 182 → 190 components.**
+  Eight new: `RealizedVolatility` (frame-general per-target-bar RV
+  from finer bars), `CrossSectionalDemedian`, `VolFloorScale`,
+  `PortfolioMarginCap` (maintenance-margin cap on the proper
+  venue-metadata path), `SeasonedAssetMask`, `RollingUniverseMask`,
+  `SignalProjector`, and `TargetSignalProjector`. Existing components
+  upgraded: `AdverseVolCap` gains an absolute threshold mode and
+  bounded stale-carry gap semantics, `VolAttenuator` a relative
+  anchor, `ReturnVolatility` a multi-span blend, `LeverageCap` a
+  per-asset cap. The DSL adds the `Universe(max_leverages=...)`
+  declaration and `buffer_mode='reference'`.
+- **Multi-timeframe strategies in the DSL.** The clock system reaches
+  its terminal stage (GATE-2): the validator infers and checks
+  CARRY / TRANSFORM / MATCH clock transfer through resamplers,
+  projectors, and converters, and two new bundled reference notes teach
+  agents how to build multi-timeframe strategies.
+- Universe tooling parity: `universe_set` accepts `lookback`, and
+  `volume_quartiles` reaches CLI/MCP parity with the platform
+  resolver.
+
+### Changed
+
+- **The DSL validator runs on the judgment-table interpreter** — the
+  same table-driven engine the web editor executes, so parity is now
+  structural rather than test-enforced. Every issue is a 16-field
+  `ValidationIssue` envelope (code, severity, path, provenance,
+  expected/actual TypeRefs, recoverable data, suggestion) instead of
+  the old 5-field shape. New checks ship enabled: value-domain rules,
+  factory-call cycle detection (a recursive factory expansion is now a
+  validation error, not a hang), implicit slot-read existence checks
+  (a pipeline can no longer validate clean and die at runtime), and
+  recorded-resolution replay so component version bumps can't silently
+  move pinned traces. Several advisory checks (soft bounds, domain
+  refinement, slot-sibling narrowing, carrier fallback) surface as
+  WARNINGs.
+- **Component search ranks with one shared scorer** (the K15 chain) on
+  both the SDK/MCP surface and the platform, with ubiquity-weighted
+  name matching — "close price as signal" now ranks `ExtractSeries`
+  first instead of 11th — live semantic recall for conceptual queries,
+  and tokenized example search ("momentum strategy" went from 0 to 14
+  results).
+- **Go-live defaults to a web handoff.** `keel_live_deploy` returns a
+  `HandoffRequired` into the web deploy flow (server-computed sizing,
+  pollable resume) instead of enumerating accounts and POSTing a live
+  deployment from the terminal. In-terminal direct deploy remains
+  behind an explicit `direct=true` opt-in on CLI/local surfaces, and is
+  refused outright on hosted surfaces.
+- **MCP server instructions rebuilt from the knowledge corpus** — a
+  lean always-on operating core (role, discipline rules, two-step
+  discovery, routing) plus knowledge-grounded descriptions on every
+  tool, and titles/annotations on all tools. The connector now ships
+  the Keel mark as its icon.
+- Component version-lock surface collapsed to two tools:
+  `strategy_components_drift` / `strategy_components_upgrade`.
+  Version pins are enforced with structured errors.
+- Backtest configs are pre-validated client-side before submission.
+- Docs overhaul that ships with the package: AGENTS.md rebuilt
+  two-track (quick path + full runbook), `llms.txt`, a canonical
+  surface-routing table (which surface for which job, CI-drift-gated),
+  and regenerated tool references for the new tool set.
+
+### Fixed
+
+- **`serverInfo.version` now reports the keel-trade wheel version.**
+  It was reporting the FastMCP framework version (3.4.0), which is what
+  MCP connectors and directories display. The `.mcpb` bundle (which is
+  not pip-installed) additionally falls back to the package's own
+  version constant instead of `0.0.0`, pinned to `pyproject.toml` by a
+  new test.
+- **Backtest envelope carries every stored metric key.** The hand
+  whitelist surfaced 4 of ~21 stored metrics and the docstring-promised
+  `metrics_raw` was never written; the worker's metric dict now passes
+  through verbatim (Q-0415).
+- **`top_n` under-fill honesty.** Resolving a universe with `top_n`
+  larger than the venue's qualifying pool used to write back a resolved
+  set that immediately failed the `STALE_UNIVERSE` gate — with a
+  re-resolve remediation that reproduced the same state forever. Both
+  resolve twins now write `top_n` down to the achievable count and
+  report `top_n_written_down`; manual-mode unknown/delisted symbols get
+  advisory annotations (Q-0408).
+- Universe resolve forwards `lookback` and applies span edits instead
+  of destroying source headers; `lookback` is a typed enum
+  (`7d`/`30d`/`90d` — a bad value is a clean 422 naming the allowed
+  set), and the resolve response carries the per-symbol venue
+  leverage map, which the SDK bakes into the source.
+- The published SDK validator no longer breaks on a fresh install:
+  `tombstoned_options.json` ships in the bundle, a self-containment
+  guard keeps the bundle honest, and the bundled `pipeline_engine`
+  DSL subset is synced to the platform's (drift-gated).
+- Boolean signals are coerced to float and binary value-domains
+  guarded, instead of failing downstream arithmetic.
+- CLI reference pointed users at `app.usekeel.io/settings/accounts`, a
+  route that never existed — corrected to `/accounts` (Q-0216).
+- The SDK test suite no longer talks to production (it was minting
+  real anonymous orgs); tests run airlocked.
+
+### Compatibility
+
+- **`keel_live_deploy` behavior change:** the default is now a web
+  handoff, not a direct deployment. Existing automations that deploy
+  from the terminal must pass `direct=true` (CLI/local surfaces only —
+  hosted surfaces refuse direct deploy). `keel_live_control` on
+  existing authorized deployments is unchanged.
+- **Anonymous instant start** activates on the first CLI command that
+  needs auth when no credentials are stored. Set `KEEL_ANON_AUTO=0`
+  where a hard auth failure is preferred (CI).
+- The richer validator surfaces issues that older versions missed
+  (implicit slot reads, factory cycles, value domains). Compositions
+  that previously validated clean but failed at runtime now fail
+  validation — earlier and louder, same conditions.
+- The hosted listed profile is intentionally narrower than the local
+  surface. Live-write, destructive, account, audit, and workspace
+  tools require the local CLI/stdio install.
+
 ## [0.6.1] — 2026-06-16
 
 **Hotfix for 0.6.0.** The validator parity work in 0.6.0 introduced a

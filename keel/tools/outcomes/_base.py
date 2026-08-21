@@ -74,12 +74,22 @@ class OutcomeResult:
     def to_envelope(self) -> dict:
         """Serialize to the wire envelope. Drops None fields except
         `share_url`, which stays explicit (`null`) so callers see the
-        deliberate "this is private until you publish" signal."""
+        deliberate "this is private until you publish" signal.
+
+        `url_line` (spec 06 R2/R4): every result that carries a
+        canonical URL also carries it as one plain text line, so every
+        surface — widget or not — can show a clickable link without
+        parsing the envelope. Handlers with no hero/share URL may set
+        their own `url_line` via `extra` (e.g. a preview whose only
+        link is a handoff URL)."""
         envelope: dict = {"share_url": self.share_url}
         if self.run_id is not None:
             envelope["run_id"] = self.run_id
         if self.hero_url is not None:
             envelope["hero_url"] = self.hero_url
+        _canonical_url = self.hero_url or self.share_url
+        if _canonical_url is not None:
+            envelope["url_line"] = f"View in Keel: {_canonical_url}"
         if self.summary_metrics is not None:
             envelope["summary_metrics"] = self.summary_metrics
         if self.resource_uri is not None:

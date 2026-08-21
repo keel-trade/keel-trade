@@ -153,6 +153,6 @@ def test_arm_status_output_has_no_notional_cap(tmp_home):
     write_arm(account_id="acct_x")
     result = CliRunner().invoke(cli, ["--format", "json", "arm", "status"])
     assert result.exit_code == 0
-    payload = json.loads(result.output)
+    payload = json.loads(result.stdout)
     assert payload["accounts"] == ["acct_x"]
     assert "max_notional_usd" not in payload

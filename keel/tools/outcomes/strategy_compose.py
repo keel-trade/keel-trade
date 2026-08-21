@@ -307,12 +307,26 @@ STRATEGY_COMPOSE = register(
         required_action="strategy.create",
         cli_path=("strategy", "compose"),
         toolset="backtest",
+        # grounded-in: tool_usage.md:23-27 (compose only AFTER the required
+        # two-step discovery); reasoning_principles.md:3 + mistakes.md M-09
+        # (must reach WeightSeries; never persist/backtest incomplete);
+        # collaboration.md §4/§6 (iterate don't rewrite; never backtest
+        # incomplete); context-architecture-design §1.1(2) + strategy-creation
+        # skill + trading_domain.md:6,24 + universe_selection.md (DEFAULTS).
         description=(
             "Create or update a strategy from DSL source. With `dry_run=true`, "
             "validates + tries to compile without persisting — use this first "
             "to iterate cheaply. With `strategy_id` set, updates an existing "
             "strategy; otherwise creates a new one. Pass exactly one of "
             "`source` (DSL text) or `source_file` (path). "
+            "\n\n"
+            "Compose only AFTER the required two-step discovery: "
+            "`keel_components_search` each role and named concept, then "
+            "`keel_components_detail_batch` the full set you'll wire — so the "
+            "DSL is planned from real component types and slots, not memory. "
+            "The pipeline MUST reach WeightSeries (end with a normalizer) or "
+            "it's incomplete — never persist or backtest an incomplete "
+            "pipeline; fix what's missing first. "
             "\n\n"
             "FIRST-TIME COMPOSING in this session? Invoke the `strategy-creation` "
             "MCP prompt FIRST (see `prompts/list`). It auto-loads the full "
@@ -322,7 +336,15 @@ STRATEGY_COMPOSE = register(
             "same knowledge chat-api keeps always-on. Without it you're "
             "composing blind and will likely hit common mistakes the skill "
             "catalogs. For modifying an existing strategy, invoke "
-            "`strategy-fork-and-iterate` instead. "
+            "`strategy-fork-and-iterate` instead, and iterate — don't "
+            "rewrite: make the SMALLEST change that answers the request, one "
+            "at a time; never rearchitect a working strategy or add "
+            "unrequested signals without asking first. "
+            "\n\n"
+            "DEFAULTS: if the user gave no asset scope, default the Universe "
+            "to mode='top_volume', top_n=30, market='perp' and "
+            "target_timeframe='1d' — do not ask them to choose a universe or "
+            "timeframe first; state what you used. "
             "\n\n"
             "Server HEAD is the source of truth: updates commit directly to "
             "the server. If the strategy is also checked out locally on this "

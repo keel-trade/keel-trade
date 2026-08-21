@@ -317,6 +317,11 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
 
     # Success — populate summary_metrics + tearsheet URL.
     extra["tearsheet_url"] = hero_url
+    # The full worker metrics dict, verbatim (the docstring's promised
+    # escape hatch): the canonical list above is ordering/labeling only,
+    # so new stored keys are never silently dropped from the envelope.
+    if final.get("metrics"):
+        extra["metrics_raw"] = final["metrics"]
     if final.get("completed_at"):
         extra["completed_at"] = final["completed_at"]
     if final.get("execution_time") is not None:
@@ -346,6 +351,11 @@ BACKTEST_RUN = register(
         required_action="backtest.create",
         cli_path=("backtest", "run"),
         toolset="backtest",
+        # grounded-in: costs_and_fees.md:20-24 (realistic defaults =
+        # 4.5 bps taker + 4.5 bps slippage, ~9 bps round-trip);
+        # _DEFAULT_START_DATE (2024-08-15 = earliest cached HL data);
+        # context-architecture-design §1.1(1) (apply platform defaults
+        # without asking unless the user asks or you have a stated reason).
         description=(
             "Submit a backtest for a strategy over a date range. Returns "
             "`run_id` (= backtest_id), `status_url`, and — when `wait=true` "
@@ -354,11 +364,18 @@ BACKTEST_RUN = register(
             "max drawdown, …). On polling timeout the envelope still "
             "returns cleanly with `status` and `status_url` set. "
             "Each call queues a NEW run — this tool is non-idempotent. "
-            'DEFAULTS: when the user says "backtest X" without dates, just '
-            "run it — `start_date` defaults to 2024-08-15 (earliest cached "
-            "HL data) and `end_date` to today's UTC date. Mention the dates "
-            "used in your reply so the user can narrow them if they want. "
-            "Do NOT ask the user to pick a date range first. "
+            'DEFAULTS: when the user says "backtest X" without specifics, '
+            "just run it — do not interrogate them first. `start_date` "
+            "defaults to 2024-08-15 (earliest cached HL data), `end_date` "
+            "to today's UTC date, and `config` (starting capital, fees, "
+            "slippage, and other execution settings) to realistic platform "
+            "values (taker-realistic ~4.5 bps fees + ~4.5 bps slippage). "
+            "Always apply these platform defaults without asking; override "
+            "only when the user explicitly asks for a different window, "
+            "capital, or cost model, or you have a specific stated reason. "
+            "Mention the window (and any non-default config) you used so the "
+            "user can narrow it. Do NOT ask the user to pick a date range, "
+            "capital, or fees first. "
             "Pass `commit_id` to backtest a historical commit (find via "
             "`keel_strategy_log`); otherwise runs server HEAD. "
             "Write-through (server HEAD is the source of truth): if the "

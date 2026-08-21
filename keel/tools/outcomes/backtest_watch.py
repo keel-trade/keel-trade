@@ -159,12 +159,23 @@ BACKTEST_WATCH = register(
         required_action="backtest.read",
         cli_path=("backtest", "watch"),
         toolset="backtest",
+        # grounded-in: backtest_watch.py _handler (bounded: clamps interval
+        # 1-60s and timeout 0-600s, returns the latest snapshot even when
+        # non-terminal) + tool_usage.md:17 (once a result exists, reason
+        # about the mechanism — the hand-off to keel_backtest_summarize).
         description=(
-            "Poll an existing backtest until it reaches a terminal status or the "
-            "timeout elapses. Returns status, final metrics when available, "
-            "results_url when complete, and the stable tearsheet hero_url. "
-            "Do NOT use to start a new run - call `keel_backtest_run` first. "
-            "Do NOT build ad hoc polling loops around `keel_backtest_summarize`; "
+            "Poll an already-running backtest until it reaches a terminal "
+            "status (succeeded/failed/cancelled) or the timeout elapses — the "
+            "bounded way to wait on a run started by `keel_backtest_run`. Pass "
+            "the `run_id`; the watch clamps its own interval and timeout and "
+            "returns the latest snapshot even if the run is still going, so if "
+            "`terminal` is false just call it again. Returns status, final "
+            "metrics and results_url when complete, and the stable tearsheet "
+            "hero_url; once it succeeds, read and interpret the result with "
+            "`keel_backtest_summarize` (reason about the mechanism, not just "
+            "the number). "
+            "Do NOT use to start a new run — call `keel_backtest_run` first. "
+            "Do NOT hand-roll a polling loop around `keel_backtest_summarize`; "
             "use this bounded watch helper."
         ),
         input_schema={

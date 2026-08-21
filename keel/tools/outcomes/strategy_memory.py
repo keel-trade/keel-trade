@@ -97,9 +97,17 @@ STRATEGY_MEMORY_READ = register(
         required_action="strategy.read",
         cli_path=("strategy", "memory-read"),
         toolset="read-only",
+        # grounded-in: collaboration.md §5 (Explain the Why — the reasoning
+        # behind choices) + §4 (iterate on context you already established);
+        # tool_usage.md:17-18 (the principled reasoning worth persisting).
         description=(
-            "Read agent/user notes attached to a strategy. Returns the most "
-            "recent `limit` notes (default 10), newest first. "
+            "Read the agent/user notes attached to a strategy — the durable "
+            "context that outlives a single session. Returns the most recent "
+            "`limit` notes (default 10), newest first. Read this at the START "
+            "of working on an existing strategy to recover the reasoning "
+            "trail — why prior changes were made, the baseline metrics, the "
+            "known risks — so you build on that context instead of "
+            "re-deriving it. "
             "Do NOT use to fetch strategy source or metadata — call "
             "`keel_strategy_get`. "
             "Do NOT use to write notes — call `keel_strategy_memory_write`."
@@ -220,11 +228,21 @@ STRATEGY_MEMORY_WRITE = register(
         required_action="strategy.update",
         cli_path=("strategy", "memory-write"),
         toolset="backtest",
+        # grounded-in: collaboration.md §5 (Explain the Why — record the
+        # reasoning behind a choice) + §4 (the reasoning behind each
+        # iteration is the durable artifact).
         description=(
-            "Append an agent/user note to a strategy's memory. Defaults to "
-            "role='agent'; pass role='user' for human-authored notes. "
-            "Do NOT use to mutate strategy source — call `keel_strategy_compose`. "
-            "Do NOT use to read existing notes — call `keel_strategy_memory_read`."
+            "Append a durable note to a strategy's memory — the place to "
+            "capture WHY, not what. Record the reasoning behind a change, a "
+            "baseline metric, or a known risk so the next session, teammate, "
+            "or agent inherits the context instead of re-deriving it; a note "
+            "that explains a decision is worth far more than a transcript of "
+            "steps. Defaults to role='agent'; pass role='user' for "
+            "human-authored notes. "
+            "Do NOT use to mutate strategy source — call "
+            "`keel_strategy_compose`. "
+            "Do NOT use to read existing notes — call "
+            "`keel_strategy_memory_read`."
         ),
         input_schema={
             "type": "object",

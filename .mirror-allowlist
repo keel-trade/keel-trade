@@ -21,6 +21,10 @@
 # third-party-auditable.
 .mirror-allowlist
 .mirror-import-denylist
+# Gitleaks config for the G2 secret scan (auto-discovered at the staged-tree
+# root by `gitleaks dir`): default rules + scoped false-positive allowlists.
+# Published so the scan boundary is auditable alongside the allowlist.
+.gitleaks.toml
 # ── Repo meta (public-overlay + SDK root) ────────────────────────────────────
 .gitignore
 .github/ISSUE_TEMPLATE/config.yml
@@ -40,7 +44,22 @@ keel/data/knowledge/*.md
 keel/data/patterns/*.md
 keel/data/reference/*.md
 keel/skills/*.md
+# MCP-Apps card widget assets (client-rendered card JS/CSS/HTML templates).
+# Intentionally public: they ship in the PyPI wheel already, and DP2
+# (no client-side analytics — publicly verifiable in the mirror) REQUIRES
+# the widget source be mirrorable. Per-extension (not a bare dir wildcard)
+# so a new asset file class still reddens G1 loudly.
+keel/widgets/assets/*.js
+keel/widgets/assets/*.css
+keel/widgets/assets/*.html.tmpl
 pipeline_engine/*.py
+# Generated lookup tables the bundled validator READS at runtime (M4 clock
+# work made the DSL subset carry them). Same derivation as the already-public
+# registry.json/type_graph.json — public component registry in, tables out; no
+# secrets. Publishing the validator sources without the data they load would
+# ship a non-functional package. Per-extension, so a new data class still
+# reddens G1 loudly.
+pipeline_engine/dsl/fixtures/*.json
 scripts/*.py
 scripts/icon.png
 scripts/manifest.template.json

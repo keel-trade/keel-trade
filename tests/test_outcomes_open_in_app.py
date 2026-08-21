@@ -153,3 +153,24 @@ def test_policy_vetted_description():
     )
     assert TOOL.annotations["readOnlyHint"] is True
     assert TOOL.annotations["title"] == "Open in Keel App"
+
+
+# ─── Spec 09 review finding: anon sessions get no org-resource links ────
+
+
+def test_anon_session_blocks_org_resource_links(monkeypatch):
+    """While anonymous, strategy/backtest links dead-end at sign-in with a
+    wrong-account 404 — the tool points at the claim instead (CL-2)."""
+    monkeypatch.setattr("keel.tools.outcomes._handoff._is_anon_session", lambda: True)
+    for target in ("str_01ABC", "btr_01XYZ"):
+        with pytest.raises(KeelError) as exc:
+            _run({"id": target})
+        assert exc.value.error_code == "anon_no_app_link"
+        assert "keel_auth_login" in (exc.value.suggestion or "")
+
+
+def test_anon_session_share_links_still_work(monkeypatch):
+    """Public share pages are org-independent — anon sessions keep them."""
+    monkeypatch.setattr("keel.tools.outcomes._handoff._is_anon_session", lambda: True)
+    result = _run({"id": "shr_01PUB"})
+    assert result.hero_url == "https://usekeel.io/share/shr_01PUB"

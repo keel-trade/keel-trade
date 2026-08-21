@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{TITLE}}</title>
+    <style>
+      {{CSS}}
+    </style>
+  </head>
+  <body data-card="{{KIND}}">
+    <div id="root" class="keel-card" role="group" aria-label="{{TITLE}}">
+      <header class="card-head">
+        <span class="brand">Keel</span>
+        <span id="card-title" class="card-title">{{TITLE}}</span>
+      </header>
+      <div id="card-body" class="card-body">
+        <p class="muted">Loading&hellip;</p>
+      </div>
+      <!-- Non-negotiable fallback: the plain link row renders whether or
+           not the host delivers tool output (research/05 §1 reliability). -->
+      <p id="link-row" class="link-row" hidden></p>
+    </div>
+    <script>
+      {{ADAPTER_JS}}
+    </script>
+    <script>
+      {{CARD_JS}}
+    </script>
+  </body>
+</html>

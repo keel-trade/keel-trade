@@ -86,14 +86,22 @@ COMPONENTS_DETAIL_BATCH = register(
         required_action="component.read",
         cli_path=("components", "describe-batch"),
         toolset="read-only",
+        # grounded-in: tool_usage.md:23-27 (REQUIRED two-step discovery,
+        # new + iterative); collaboration.md:36-44 (batch-fetch ALL incl.
+        # standard components; plan from real type signatures/slots, not
+        # names or pattern memory).
         description=(
             "Fetch the full spec (schema, parameter list, examples, slot "
             "reads/writes, type signature) for SEVERAL components in one "
-            "call. The CANONICAL pre-composition step: after "
-            "`keel_components_search` surfaces candidates, batch-fetch "
-            "details for ALL components you plan to use BEFORE drafting "
-            "DSL — verifies input/output types, slot dependencies, and "
-            "parameter constraints in one round-trip. Prevents the "
+            "call. The CANONICAL second step of the REQUIRED two-step "
+            "discovery: after `keel_components_search` surfaces candidates, "
+            "batch-fetch details for ALL components you plan to wire — "
+            "search hits AND standard components (PriceDataLoader, "
+            "TargetTimeframeResampler, Store) — BEFORE drafting DSL. This "
+            "verifies input/output types, slot dependencies, and parameter "
+            "constraints in one round-trip, and applies to new strategies "
+            "AND every edit. Plan wiring from the real type signatures and "
+            "slot requirements, not names or pattern memory. Prevents the "
             "common 'wrong-shape component → dry-run fails → re-search → "
             "re-draft' loop. "
             "\n\n"

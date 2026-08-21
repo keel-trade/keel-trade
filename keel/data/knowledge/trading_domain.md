@@ -9,14 +9,17 @@
 
 If the user asks for an unsupported timeframe (e.g. 1min, 3min, 5min, 3d, 1w), explain that it's not supported and use the nearest supported value instead. For example: "5-minute bars aren't supported — the minimum is 15min. I'll use 15min instead."
 
-| Strategy type | Default | Acceptable range | Rationale |
-|---|---|---|---|
-| Trend / momentum | 1d | 8h–1d | Trends develop over days/weeks. Shorter bars add noise without signal. |
-| Mean reversion | 1d | 4h–1d | Reversions happen faster than trends. Intraday MR (4h–8h) is reasonable if requested. |
-| Carry / funding | 1d | 1d only | Funding rates are 8h events; daily aggregation is natural. |
-| Screen-select / rotation | 1d | 1d only | Rotation signals are multi-day by nature. |
+**No session/time-of-day filter exists** — strategies act on every bar of the chosen timeframe. There is no component to restrict trading to custom hours or weekdays; if a user asks for a session filter, say so plainly (the typed registry search proves the absence) rather than approximating with resamplers.
+
+| Strategy type            | Default | Acceptable range | Rationale                                                                             |
+| ------------------------ | ------- | ---------------- | ------------------------------------------------------------------------------------- |
+| Trend / momentum         | 1d      | 8h–1d            | Trends develop over days/weeks. Shorter bars add noise without signal.                |
+| Mean reversion           | 1d      | 4h–1d            | Reversions happen faster than trends. Intraday MR (4h–8h) is reasonable if requested. |
+| Carry / funding          | 1d      | 1d only          | Funding rates are 8h events; daily aggregation is natural.                            |
+| Screen-select / rotation | 1d      | 1d only          | Rotation signals are multi-day by nature.                                             |
 
 When to suggest a different timeframe (as a follow-up, not the initial build):
+
 - **Too few trades** → suggest trying 12h or 8h before lowering thresholds. More bars = more threshold-crossing opportunities. Say: "You could try `target_timeframe='12h'` for more signal granularity — this doubles the number of bars the strategy evaluates."
 - **Too many trades / high turnover** → suggest moving up to 1d if on a shorter timeframe.
 - **User says "intraday"** → use 4h (not 1h). True intraday (1h–2h) needs strong justification — costs dominate, signal-to-noise drops, and the strategy is more fragile.
@@ -26,11 +29,13 @@ When to suggest a different timeframe (as a follow-up, not the initial build):
 **Default to trend-following**: When the user doesn't specify trend vs mean reversion, build a trend-following strategy. Crypto has structural momentum bias — trend strategies are more robust by default. Mean reversion should only be used when explicitly requested ("mean reversion", "overbought/oversold", "fade", "reversal", "contrarian").
 
 **Oscillator polarity and NegateTransform**: Oscillators (RSI, Stochastic, WilliamsR, CMO) output HIGH = strong momentum / overbought, LOW = weak momentum / oversold. The interpretation depends on strategy type:
+
 - **Trend-following (default)**: Do NOT negate. High RSI = strong momentum → go long. Low RSI = weak momentum → go short. The raw polarity is correct.
 - **Mean reversion (explicit only)**: INVERT with NegateTransform so overbought → short (negative forecast), oversold → long (positive forecast). Use more extreme thresholds (±2.0 instead of ±1.5) to avoid trading noise. Without negation, a "mean reversion" RSI strategy actually buys overbought assets.
-Exception: TimeSeriesMeanReversionForecast and WingsTransform handle inversion internally.
+  Exception: TimeSeriesMeanReversionForecast and WingsTransform handle inversion internally.
 
 **Indicator-specific guidance**:
+
 - **RSI**: Trend → no negate, threshold ±1.5. MR → negate, threshold ±2.0. RSI is a momentum oscillator; in crypto, momentum persistence is strong.
 - **MACD**: Inherently a trend indicator (moving average crossover). Almost always used for trend confirmation or filtering, rarely inverted. As a filter: MACD histogram > 0 = bullish, < 0 = bearish. Use ThresholdCross(0.5, -0.5) on normalized MACD histogram.
 - **Funding rates**: Always negate for carry (positive funding = shorts get paid). NegateTransform is required. This is not trend vs MR — it's the carry trade convention.
@@ -38,22 +43,24 @@ Exception: TimeSeriesMeanReversionForecast and WingsTransform handle inversion i
 **Signal diversity > quantity**: Three uncorrelated Sharpe-0.5 signals beat three correlated Sharpe-1.0 signals. Prioritize different families (trend vs carry vs mean reversion) over parameter variants (EWMAC at 5 speeds). Lowest correlation pairs in crypto: trend vs carry, trend vs mean reversion, price-based vs funding-based.
 
 **Required component pairs** (always use together):
+
 - ForecastScaler + ForecastCapper (scale then cap)
 - TopNAssetSelector + SelectionToSignalConverter (select then manage exits)
 - VolatilityAdjustedPriceSeries + BreakoutDistance (vol-adjust then breakout)
 - AnalyticalFDMCombiner (combine + analytical FDM in one step, replaces ForecastCombiner + CorrelationEstimator + AnalyticalFDM)
 - Store + Load (matching slot names)
 
-**Stream data alignment**: Funding/OI data (1h) must be resampled to the target timeframe before mixing with price data. Standard pattern: `FundingDataLoader → TargetSignalResampler(method="mean")`. TargetSignalResampler reads target_timeframe from Globals and handles resampling + alignment automatically. Choose method by data type: "mean" for rates (funding), "last" for levels (OI), "sum" for flows. The Universe selector passes the same resolved universe to all data loaders, so assets already match — AssetAligner is NOT needed in the standard case. Old pattern (EWMATransform → SignalResampleTransform → AssetAligner) is unnecessary with Universe selection.
+**Stream data alignment**: Funding/OI data (1h) must be resampled to the target timeframe before mixing with price data. Standard pattern: `FundingDataLoader → TargetSignalResampler(method="mean")`. TargetSignalResampler reads target_timeframe from Globals and handles resampling + alignment automatically. Choose method by data type: "mean" for rates (funding), "last" for levels (OI), "sum" for flows. The Universe selector passes the same resolved universe to all data loaders, so assets already match — AssetAligner is NOT needed in the standard case. Old pattern (EWMATransform → an ad-hoc signal resample → AssetAligner) is unnecessary with Universe selection. When a branch genuinely runs on a coarser clock, resample it with SignalResampler(target_timeframe=..., method=...) and bring it back with TargetSignalProjector(): resampling goes fine → coarse (aggregation, has a method=); to go coarse → fine, project (forward-fill of the last COMPLETED bar, no method).
 
 **Multi-data shape alignment**: When Parallel branches use different data sources (price vs funding vs OI), use TargetSignalResampler in each branch to align timeframes. Assets already match because the Universe selector passes the same resolved list to all data loaders. AssetAligner is only needed when a component explicitly drops assets from the universe (VolumeUniverseReducer, GroupAssetFilter). In that case, Store the reduced OHLCV BEFORE the Parallel and use AssetAligner(reference_slot='ohlcv_1d') in other branches. Note: TopNAssetSelector does NOT change dimensions — it produces a mask, not a reduced universe.
 
 **Complexity ladder** — match pipeline complexity to intent:
+
 - Level 1 (single signal): 4-6 components, 2-4 params. Use ForecastWeightNormalizer for sizing.
 - Level 2 (dual signal blend): 8-12 components, 5-8 params. ForecastCombiner → ForecastWeightNormalizer.
 - Level 3 (multi-signal + vol targeting): 15-25 components. VolTargetWeightConverter → LeverageCap. For advanced portfolios: add IDM for diversification scaling.
 - Level 4 (regime-adaptive portfolio): 25-40 components, 15-20 params
-More than 25 free parameters almost certainly means overfitting. Suggest complexity ONE level at a time, not jumps.
+  More than 25 free parameters almost certainly means overfitting. Suggest complexity ONE level at a time, not jumps.
 
 **Regime models**: Prefer single-component detectors (FundingLevelRegime, RealizedVolatilityRegime) over composites. Prefer RegimeWeightedBlender (soft modulation) over RegimeGate (hard on/off). Regime conditioning enhances alpha — it does NOT replace it. Build and test base signal first. Value hierarchy: Alpha > Breadth > Conditioning > Risk Management.
 
@@ -71,14 +78,35 @@ More than 25 free parameters almost certainly means overfitting. Suggest complex
 
 **Position sizing for entry/exit strategies** (after PSM):
 
-| Sizer | Use when | Example |
-|-------|----------|---------|
-| `EqualWeightSizer(target_leverage=1.0)` | Default. Simple equal weight. | Most strategies start here |
-| `EqualWeightSizer(max_weight=0.3)` | Cap per-position concentration | Prevent 100% in 1 survivor |
-| `EqualWeightSizer(target_leverage=0.5)` | Conservative / reduce risk | Testing new strategies |
-| `FixedWeightSizer(weight_per_position=0.1)` | Fixed allocation per position | Known max position count |
-| `VolWeightSizer(vol_slot='vol')` | Equal risk contribution | Mixed-vol universe (BTC + memes) |
-| `RiskBudgetSizer(vol_slot='vol', risk_per_position=0.02)` | Fixed risk budget per trade | Trend strategies, risk-aware |
+| Sizer                                                     | Use when                       | Example                          |
+| --------------------------------------------------------- | ------------------------------ | -------------------------------- |
+| `EqualWeightSizer(target_leverage=1.0)`                   | Default. Simple equal weight.  | Most strategies start here       |
+| `EqualWeightSizer(max_weight=0.3)`                        | Cap per-position concentration | Prevent 100% in 1 survivor       |
+| `EqualWeightSizer(target_leverage=0.5)`                   | Conservative / reduce risk     | Testing new strategies           |
+| `FixedWeightSizer(weight_per_position=0.1)`               | Fixed allocation per position  | Known max position count         |
+| `VolWeightSizer(vol_slot='vol')`                          | Equal risk contribution        | Mixed-vol universe (BTC + memes) |
+| `RiskBudgetSizer(vol_slot='vol', risk_per_position=0.02)` | Fixed risk budget per trade    | Trend strategies, risk-aware     |
+
+### Leverage is a risk decision, not a dial
+
+When a user asks for high leverage ("make it 30x", "crank the leverage"),
+say what it costs them BEFORE you build it, in one sentence, then do what
+they asked. They are entitled to the strategy they want; they are also
+entitled to know that at 10x a 10% adverse move is a total loss, and that
+a backtest Sharpe says nothing about surviving a liquidation.
+
+Two things make this concrete rather than hand-wringing:
+
+- The mechanical caps are `LeverageCap(max_leverage=...)` at 20 and sizer
+  `target_leverage` at 5. A request above those is not "clamped to the
+  max" silently — say which cap bound it and to what, so the user knows
+  the number they asked for is not the number they got.
+- The venue's own per-symbol maximum is resolved into the strategy's
+  Universe declaration. A universe of low-cap perps often caps far below
+  the majors, so the effective ceiling may be well under the requested
+  figure for part of the book.
+
+Never talk someone out of it twice. One clear sentence, then build.
 
 Default: `EqualWeightSizer()`. Suggest `VolWeightSizer` as improvement for mixed-vol universes.
 `EqualWeightSizer` and `VolWeightSizer` support `max_weight` to cap per-position concentration (excess → cash).
@@ -87,4 +115,3 @@ Default: `EqualWeightSizer()`. Suggest `VolWeightSizer` as improvement for mixed
 For scaling strategies (ScalingPositionManager), `FixedWeightSizer` is the natural default — weight = level × weight_per_position. `EqualWeightSizer` also works: it counts total levels across assets for proportional weighting. Always pair with `LeverageCap` since gross leverage grows with position count and level.
 
 **Start simple, suggest improvements.** Default to the minimal viable pipeline for the user's intent. Normalization (CrossSectionalZScore), volatility standardization (VolatilityStandardizer), and forecast diversification (FDM) are valuable but should be suggested as follow-up improvements after the base pipeline works — not included by default in every initial build. A single-signal strategy that produces correct WeightSeries is more useful than a complex one with normalization issues.
-

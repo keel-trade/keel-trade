@@ -520,19 +520,25 @@ def test_state_model_contract_stated_in_agents_md():
 def test_workspace_family_descriptions_state_the_model():
     """An agent reading only tool descriptions must infer: server HEAD is
     the source of truth; the checkout is a working copy; write-through
-    defaults; conflicts stop."""
+    defaults; conflicts stop.
+
+    `keel_live_deploy` is intentionally NOT in these lists (D28,
+    sdk-v0.7.0): going live is a web-app handoff, and the in-terminal
+    write-through/direct path is a hidden env-gated escape hatch, so its
+    user-facing description guides ONLY to the web app and no longer
+    states the write-through model. `keel_backtest_run` keeps it — write-
+    through is on its normal, non-hidden path."""
     for tool in (
         "keel_strategy_checkout",
         "keel_strategy_push",
         "keel_strategy_compose",
         "keel_backtest_run",
-        "keel_live_deploy",
         "keel_strategy_log",
     ):
         assert "source of truth" in OUTCOMES[tool].description, tool
 
     assert "WORKING COPY" in OUTCOMES["keel_strategy_checkout"].description
-    for tool in ("keel_backtest_run", "keel_live_deploy"):
+    for tool in ("keel_backtest_run",):
         desc = OUTCOMES[tool].description
         assert "Write-through" in desc, tool
         assert "auto_push=False" in desc, tool

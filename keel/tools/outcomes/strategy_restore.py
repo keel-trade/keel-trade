@@ -105,19 +105,22 @@ STRATEGY_RESTORE = register(
         required_action="strategy.update",
         cli_path=("strategy", "restore"),
         toolset="backtest",
+        # grounded-in: strategy_restore.py docstring (git-revert semantics —
+        # forward commit, history preserved); spec 08 sync contract (after a
+        # server-side HEAD move, a checked-out workspace is 'behind' → pull);
+        # collaboration.md (recovery over destruction).
         description=(
-            "Restore a historical commit as the new HEAD. Server-side "
-            "operation: reads source from the named ref (sequence number, "
-            "commit_id, or tag), creates a new commit on HEAD with that "
-            "source. History is preserved — the restore shows up as a new "
-            "commit in `keel_strategy_log`. The 'git revert' (forward-revert) "
-            "of the sync model. "
-            "Use when an edit should be undone, OR when an older version "
-            "backtested better and you want to go back. Use "
-            "`keel_strategy_log` first to find the ref. After restore, "
-            "local workspace (if checked out) is 'behind' — run "
+            "Restore a historical commit as the new HEAD — the safe undo of "
+            "the sync model. Server-side: reads the source at the named ref "
+            "(sequence number, commit_id, or tag), then creates a NEW commit "
+            "on HEAD with that source, so history is preserved (the restore "
+            "itself shows up in `keel_strategy_log`) — the 'git revert' "
+            "rather than a destructive rewind. Use it when an edit should be "
+            "undone, or when an older version backtested better and you want "
+            "to go back; find the ref with `keel_strategy_log` first. After "
+            "restore, a checked-out local workspace is 'behind' — run "
             "`keel_strategy_pull` to catch up. "
-            "Do NOT use for forking into a new strategy — call "
+            "Do NOT use to fork into a new strategy — call "
             "`keel_strategy_fork`. Do NOT use to discard local edits — "
             "that's `keel_strategy_pull force=True` or `keel_strategy_discard`."
         ),

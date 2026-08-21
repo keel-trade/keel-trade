@@ -235,7 +235,7 @@ def test_actual_deploy_forwards_intent_token(tmp_path, monkeypatch):
     ]
     tool = get("keel_live_deploy")
     token = tool.handler(
-        {"strategy_id": "strat_d", "account_id": "acct_1", "preview": True},
+        {"strategy_id": "strat_d", "account_id": "acct_1", "preview": True, "direct": True},
         _ctx(client),
     ).to_envelope()["confirmation_token"]
 
@@ -244,6 +244,7 @@ def test_actual_deploy_forwards_intent_token(tmp_path, monkeypatch):
             "strategy_id": "strat_d",
             "account_id": "acct_1",
             "preview": False,
+            "direct": True,
             "confirmation_token": token,
             "intent_token": INTENT_TOKEN,
         },

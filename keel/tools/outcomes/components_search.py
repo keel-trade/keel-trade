@@ -48,8 +48,23 @@ _CATEGORIES: tuple[str, ...] = (
 )
 
 
+def _clock_direction_enum() -> tuple[str, ...]:
+    """The `clock_direction` vocabulary, read from the one definition.
+
+    Unlike `_CATEGORIES` above this is NOT restated here: importing
+    `keel.data.registry` costs nothing at tool-list time (the module only
+    loads JSON lazily), and a second copy of a four-word enum is a second
+    thing to forget to update.
+    """
+    from keel.data.registry import CLOCK_DIRECTIONS
+
+    return CLOCK_DIRECTIONS
+
+
 def _format_entry(comp: dict) -> dict:
     """Shape one registry record into the search-result entry."""
+    from keel.data.registry import clock_direction_of
+
     entry: dict[str, Any] = {
         "name": comp.get("name"),
         "category": comp.get("category"),
@@ -59,6 +74,9 @@ def _format_entry(comp: dict) -> dict:
     }
     if comp.get("sub_category"):
         entry["sub_category"] = comp["sub_category"]
+    direction = clock_direction_of(comp)
+    if direction != "keep":
+        entry["clock_direction"] = direction
     return entry
 
 
@@ -70,8 +88,11 @@ def _search_bundled(args: dict) -> list[dict]:
     they require traversing the type graph.
     """
     from keel.data.registry import (
+        CLOCK_DIRECTIONS,
+        clock_direction_of,
         get_components_after,
         get_components_before,
+        rank_components,
         search_components,
     )
 
@@ -85,6 +106,14 @@ def _search_bundled(args: dict) -> list[dict]:
             error_code="usage_error",
             exit_code=2,
             suggestion="Pass either `after` or `before`, not both.",
+        )
+
+    if args.get("clock_direction") and args["clock_direction"] not in CLOCK_DIRECTIONS:
+        raise KeelError(
+            f"Unknown clock_direction {args['clock_direction']!r}.",
+            error_code="usage_error",
+            exit_code=2,
+            suggestion=f"Pass one of {list(CLOCK_DIRECTIONS)}.",
         )
 
     # Type-flow scoping first — narrows the candidate pool, then we
@@ -120,6 +149,7 @@ def _search_bundled(args: dict) -> list[dict]:
         category = args.get("category")
         input_type = args.get("input_type")
         output_type = args.get("output_type")
+        direction = args.get("clock_direction")
         query = args.get("query")
 
         if category:
@@ -129,6 +159,8 @@ def _search_bundled(args: dict) -> list[dict]:
             results = [c for c in results if c.get("input_type") == input_type]
         if output_type:
             results = [c for c in results if c.get("output_type") == output_type]
+        if direction:
+            results = [c for c in results if clock_direction_of(c) == direction]
         if keyword:
             kw = keyword.lower()
             results = [
@@ -137,29 +169,16 @@ def _search_bundled(args: dict) -> list[dict]:
                 if kw in (c.get("name") or "").lower() or kw in (c.get("description") or "").lower()
             ]
         if query:
-            import re
-
-            q_tokens = set(re.findall(r"[a-z0-9]+", query.lower()))
-            scored = []
-            for c in results:
-                name_tokens = set(re.findall(r"[a-z0-9]+", (c.get("name") or "").lower()))
-                desc_tokens = set(re.findall(r"[a-z0-9]+", (c.get("description") or "").lower()))
-                cat_tokens = set(re.findall(r"[a-z0-9]+", (c.get("category") or "").lower()))
-                score = (
-                    len(q_tokens & name_tokens) * 3.0
-                    + len(q_tokens & cat_tokens) * 2.0
-                    + len(q_tokens & desc_tokens) * 1.0
-                )
-                if score > 0:
-                    scored.append((score, c))
-            scored.sort(key=lambda x: x[0], reverse=True)
-            results = [c for _, c in scored]
+            # THE one scorer (spec 02 §9.2 item 3) — this overlay used to
+            # carry a verbatim copy of the scoring block, which is exactly
+            # how two ranking paths drift.
+            results = rank_components(results, query)
 
         return [_format_entry(c) for c in results[:limit]]
 
     # No after/before — delegate the heavy lifting to the bundled helper.
     kwargs: dict[str, Any] = {"top_k": limit}
-    for key in ("keyword", "category", "input_type", "output_type", "query"):
+    for key in ("keyword", "category", "input_type", "output_type", "clock_direction", "query"):
         if args.get(key):
             kwargs[key] = args[key]
 
@@ -188,7 +207,15 @@ def _search_via_api(ctx: ToolContext, args: dict) -> list[dict] | None:
     """
     # Server-side support is `category`-only today. Defer to bundled
     # for anything richer.
-    unsupported_filters = {"keyword", "query", "input_type", "output_type", "after", "before"}
+    unsupported_filters = {
+        "keyword",
+        "query",
+        "input_type",
+        "output_type",
+        "clock_direction",
+        "after",
+        "before",
+    }
     if any(args.get(k) for k in unsupported_filters):
         return None
 
@@ -247,14 +274,38 @@ COMPONENTS_SEARCH = register(
         required_action="component.list",
         cli_path=("components", "search"),
         toolset="read-only",
+        # grounded-in: tool_usage.md:23-27 (REQUIRED two-step discovery,
+        # new + iterative); collaboration.md:36-44 (plan from real
+        # types/slots, not names or pattern memory); mistakes.md M-28
+        # (ALWAYS search a named domain concept BEFORE selecting; don't
+        # hand-roll it — a manual ConstantForecast is not a beta hedge).
         description=(
             "Search the Keel pipeline component catalog by keyword, "
-            "semantic query, category, input/output type, or position in "
-            "the pipeline (`after`/`before`). Returns compact entries "
-            "(name, category, description, input/output type) for the "
-            "agent to triage. "
-            "Do NOT use to fetch full param schemas of one component — "
-            "use `keel_components_compose_help`. "
+            "semantic query, category, input/output type, or pipeline "
+            "position (`after`/`before`) — the REQUIRED first step of the "
+            "two-step discovery every build turn starts with. "
+            "\n\n"
+            "Decompose the thesis into roles (universe, signal, entry/exit, "
+            "filter, sizing, normalize) and search each role — plus every "
+            "domain concept the user names (beta hedge, vol targeting, risk "
+            "parity, trailing stop, regime) — in natural language BEFORE "
+            "selecting anything. This holds for new strategies AND every "
+            "edit. When the user names a concept, ALWAYS search for it "
+            "rather than hand-rolling from memory: a manual "
+            "`ConstantForecast(-10)` is a static short, not the "
+            "`BetaHedgeAllocator` that was asked for. "
+            "\n\n"
+            "Keel re-clocks in one direction — resample raw data fine → "
+            "coarse, project signals coarse → fine. Filter by "
+            "`clock_direction` for the operator in the direction you want. "
+            "\n\n"
+            "Returns compact entries (name, category, description, "
+            "input/output type) to triage; feed the set you pick straight "
+            "into `keel_components_detail_batch` to verify types and slots "
+            "before drafting DSL. Do NOT plan a pipeline from names or "
+            "pattern memory alone — search is not optional. "
+            "Do NOT use to fetch the full schema of ONE component — use "
+            "`keel_components_compose_help`. "
             "Do NOT use to enumerate strategies — call `keel_strategy_search`."
         ),
         input_schema={
@@ -295,6 +346,21 @@ COMPONENTS_SEARCH = register(
                 "output_type": {
                     "type": "string",
                     "description": "Restrict to components producing this type (e.g. `ForecastSeries`).",
+                },
+                "clock_direction": {
+                    "type": "string",
+                    "enum": list(_clock_direction_enum()),
+                    "description": (
+                        "Restrict to components that change the bar clock in "
+                        "one direction. `resample` = fine → coarse "
+                        "aggregation of raw data (e.g. 1h OHLCV → 1d). "
+                        "`project` = coarse → fine, holding the last "
+                        "COMPLETED coarse bar across the finer grid (e.g. a "
+                        "1d regime signal driving 1h execution) — the only "
+                        "safe way to move a signal down. `synth` = a data "
+                        "loader minting the entry clock. `keep` = leaves the "
+                        "clock untouched (most components)."
+                    ),
                 },
                 "after": {
                     "type": "string",

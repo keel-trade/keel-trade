@@ -79,7 +79,58 @@ class ComponentSignature:
     content_hash: str | None = None
     version: int = 1
     status: str = "active"  # "active" | "deprecated"
+    #: A CONSTRAINED SHELL's redirect text (dsl-mtf-clocks spec 02 §8.2).
+    #: ``None`` for every runnable component. When set, this version exists
+    #: only to keep the name resolvable and its ``run()`` raises
+    #: unconditionally — the string names what to use instead, and the
+    #: validator turns it into an authoring-time ``COMPONENT_NOT_RUNNABLE``
+    #: error so "validates ⇒ runs" holds (audit S1: registering a shell
+    #: without this made new authoring validate GREEN onto a raise).
+    not_runnable: str | None = None
     changelog: dict[int, str] = field(default_factory=lambda: {1: "Initial release"})
+    # ── dsl-type-system normalized typing fields (spec 02 §3.4, T-M1b-3) ──
+    # Populated by BOTH registration paths (register_component and
+    # _register_slot_op_entry) from the §3.4 effective-transfer derivation,
+    # which runs ONCE, in the extractor. All values are JSON-native.
+    #
+    # type_relation / slot_write_transfer: the normalized DECLARED values
+    # (None when the component declares none — schemes and slot writes are
+    # "when applicable" fields).
+    # domain_transfer / input_domain / output_domain: EFFECTIVE values —
+    # always populated on every registered signature (the §3.4 ladder /
+    # domain defaults), so no validator ever re-implements the default
+    # ladder (R4-I5).
+    # record_tolerant: the spec 01 §5.4 record-tolerance waiver as data,
+    # two strengths (R-4/R20): "full" | "dict_only" | None.
+    # typing_declared: which declaration attributes the author explicitly
+    # wrote (sorted tuple; () = pure defaults) — artifact writers use it to
+    # serialize declaration-backed effective values (spec 02 §4.1 A1).
+    type_relation: dict[str, Any] | None = None
+    domain_transfer: dict[str, Any] | None = None
+    input_domain: Any | None = None
+    output_domain: Any | None = None
+    slot_write_transfer: dict[str, Any] | None = None
+    record_tolerant: str | None = None
+    typing_declared: tuple[str, ...] = ()
+    # ── dsl-multi-timeframe-clocks clock-transfer column (spec 01 §5.1) ──
+    # The component's declared clock transfer: {"op": "synth"|"coarsen"|
+    # "project", "src": <param-or-ref name>, "off"?: <param-or-ref name>}.
+    # None means the DEFAULT ``keep`` (κ_out = κ_in) — keep-by-omission, so
+    # only the transform-set members (spec 01 §8.1) carry a value. This is
+    # the registration surface the dsl clock facet reads (M4c re-sourced it
+    # from the former dsl-side table — spec 02 §8.1).
+    clock_transfer: dict[str, str] | None = None
+    # ── rolling-universe population-scope column (P2 group (b)) ──
+    # The component's declared cross-sectional population scope
+    # (projects/rolling-universe/05-population-scope-classification.md):
+    #   {"kind": "population_universe", "source": "input", "slots"?: [...]}
+    #   {"kind": "population_universe", "source": "slot",  "slots":  [...]}
+    #   {"kind": "population_fixed", "params": [...]}
+    # None means the DEFAULT ``per_column`` (output column i depends only on
+    # input column i) — scope-by-omission, exactly like clock_transfer's
+    # keep-by-omission, so only pooling components carry a value. The group
+    # (c) validator rules (XS_BEFORE_UNIVERSE_MASK et al.) read this surface.
+    population_scope: dict[str, Any] | None = None
 
     def accepts(self, output_type: type) -> bool:
         """Can this component accept the given output type?"""
@@ -205,20 +256,106 @@ def _resolve_type_name(name: str) -> type:
     )
 
 
+# Param-type display strings that deliberately resolve to ``Any`` — each is an
+# ENUMERATED special case whose enforcement rides a different mechanism, never
+# a silent fallback (dsl-type-system spec 02 §3.6, R1-I10; the
+# no-silent-fallbacks lesson):
+#
+# - "enum":   Literal-typed params. Acceptance is enforced through
+#             ``constraints.options`` (pass 5), not the type object.
+# - "Slot":   slot-reference params. Enforcement rides ``slot_reference`` /
+#             ``expected_slot_type``; the DSL-side value is a slot-name string.
+# - "CachePolicy": a registered component enum class (RT-7 vocabulary) that is
+#             not bundled in the SDK; acceptance rides ``constraints.options``.
+# - "Sequence" / "Union": legacy display spellings of bare typing generics
+#             (no ``__name__``-level builtin equivalent; type-unconstrained).
+_OPAQUE_PARAM_TYPE_STRINGS = frozenset({"enum", "Slot", "CachePolicy", "Sequence", "Union"})
+
+# Union-member spellings that are legal inside an "A | B" param-type string
+# but cannot be materialized as checkable type objects in the SDK: stdlib
+# dotted names, subscripted builtin generics, and monorepo component classes.
+# The whole union resolves to ``Any`` (type-unconstrained, matching the
+# pre-strict behavior exactly); an unknown member is a loud error.
+_OPAQUE_PARAM_MEMBER_RE = None  # compiled lazily below
+
+
+def _is_param_union_member(member: str) -> bool:
+    global _OPAQUE_PARAM_MEMBER_RE
+    if member in _BUILTIN_STD_TYPES or member == "None" or member in _OPAQUE_PARAM_TYPE_STRINGS:
+        return True
+    if _OPAQUE_PARAM_MEMBER_RE is None:
+        import re as _re
+
+        _OPAQUE_PARAM_MEMBER_RE = _re.compile(
+            r"(?:datetime\.datetime"  # stdlib dotted name
+            r"|(?:dict|list|tuple|set|frozenset)\[.+\]"  # subscripted builtin generic
+            r"|components\.[A-Za-z0-9_.]+)$"  # monorepo component class path
+        )
+    return bool(_OPAQUE_PARAM_MEMBER_RE.match(member))
+
+
 def _resolve_param_type(type_str: str) -> type:
-    """Resolve a parameter type string to a Python type."""
-    _BUILTIN_TYPES = {
-        "int": int,
-        "float": float,
-        "str": str,
-        "bool": bool,
-        "list": list,
-        "dict": dict,
-        "tuple": tuple,
-        "NoneType": type(None),
-        "Any": Any,
-    }
-    return _BUILTIN_TYPES.get(type_str, Any)
+    """Resolve a parameter type string to a Python type — strict resolution.
+
+    Every accepted spelling is explicitly enumerated (R1-I10; spec 02 §3.6):
+
+    1. ``Any`` → ``typing.Any``
+    2. builtin scalars/containers (``int``, ``float``, ``str``, ``bool``,
+       ``list``, ``dict``, ``tuple``, ``set``, ``frozenset``, ``bytes``,
+       ``None``/``NoneType``) → the builtin type
+    3. the enumerated opaque vocabulary (``enum``, ``Slot``, ``CachePolicy``,
+       ``Sequence``, ``Union``) → ``Any``, each with a documented reason
+       (see ``_OPAQUE_PARAM_TYPE_STRINGS``)
+    4. ``"A | B"`` unions whose every member is a builtin, ``None``, or an
+       enumerated opaque member spelling → ``Any`` (type-unconstrained;
+       per-member enforcement is future work — this exactly preserves the
+       pre-strict verdicts, which never enforced union param types)
+    5. **anything else raises ValueError loudly.**
+
+    Pre-2026-07-22 this function silently degraded every unknown string to
+    ``Any`` (``_BUILTIN_TYPES.get(type_str, Any)``), so a typo'd or
+    newly-invented param type spelling entered the SDK registry as an
+    unconstrained param with no error anywhere. Parsers and resolvers must
+    behave in one exact way and error otherwise. The SDK build
+    (``packages/keel-trade/keel-sdk/scripts/build_data.py``) runs every
+    emitted param-type string through this resolver so an unknown spelling
+    fails at BUILD time, never at SDK runtime.
+    """
+    if type_str == "Any":
+        return Any
+
+    if type_str in _BUILTIN_STD_TYPES:
+        return _BUILTIN_STD_TYPES[type_str]
+
+    if type_str in _OPAQUE_PARAM_TYPE_STRINGS:
+        return Any
+
+    if " | " in type_str:
+        members = [m.strip() for m in type_str.split(" | ")]
+        unknown = [m for m in members if not _is_param_union_member(m)]
+        if unknown:
+            raise ValueError(
+                f"Unknown member(s) {unknown!r} in param type string "
+                f"{type_str!r} — not a builtin, not 'None', and not an "
+                f"enumerated opaque member spelling. Add the spelling to the "
+                f"enumerated vocabulary in "
+                f"pipeline_engine/base/registry_types.py (_is_param_union_member) "
+                f"with its enforcement story, then rebuild the SDK data "
+                f"(PYTHONPATH=libs python packages/keel-trade/keel-sdk/scripts/"
+                f"build_data.py)."
+            )
+        return Any
+
+    raise ValueError(
+        f"Unknown param type string {type_str!r} — not 'Any', not a builtin, "
+        f"not in the enumerated opaque vocabulary "
+        f"({sorted(_OPAQUE_PARAM_TYPE_STRINGS)}), and not an 'A | B' union. "
+        f"No silent degrade-to-Any exists (R1-I10): add the spelling to the "
+        f"enumerated vocabulary in pipeline_engine/base/registry_types.py "
+        f"with its enforcement story, then rebuild the SDK data "
+        f"(PYTHONPATH=libs python packages/keel-trade/keel-sdk/scripts/"
+        f"build_data.py)."
+    )
 
 
 def load_registry_from_json(data: dict | str) -> None:
@@ -349,7 +486,22 @@ def load_registry_from_json(data: dict | str) -> None:
             optional_declaration_refs=comp.get("optional_declaration_refs") or {},
             version=version,
             status=status,
+            # Shell redirect (dsl-mtf-clocks spec 02 §8.2) — per-version, like
+            # the typing contracts: only the constrained version is unrunnable.
+            not_runnable=comp.get("not_runnable"),
             changelog=changelog,
+            # dsl-type-system A1 typing fields (spec 02 §4.1) — hydrated
+            # verbatim from the generated artifact; the SDK NEVER re-derives
+            # them (tokens-only, §3.6). Absent keys mean the artifact
+            # predates A1 or the field carries its default.
+            type_relation=comp.get("type_relation"),
+            domain_transfer=comp.get("domain_transfer"),
+            input_domain=comp.get("input_domain"),
+            output_domain=comp.get("output_domain"),
+            slot_write_transfer=comp.get("slot_write_transfer"),
+            record_tolerant=comp.get("record_tolerant"),
+            clock_transfer=comp.get("clock_transfer"),
+            population_scope=comp.get("population_scope"),
         )
 
         if name not in COMPONENT_REGISTRY:
@@ -405,7 +557,20 @@ def load_registry_from_json(data: dict | str) -> None:
                 or {},
                 version=ver_num,
                 status=comp.get("status", "active"),
+                not_runnable=ver_data.get("not_runnable"),
                 changelog={ver_num: ver_data.get("changelog_entry", f"v{ver_num}")},
+                # dsl-type-system A1 typing fields — per-version values only
+                # (never inherited from the latest entry: typing contracts
+                # are version-scoped, exactly like input/output types).
+                type_relation=ver_data.get("type_relation"),
+                domain_transfer=ver_data.get("domain_transfer"),
+                input_domain=ver_data.get("input_domain"),
+                output_domain=ver_data.get("output_domain"),
+                slot_write_transfer=ver_data.get("slot_write_transfer"),
+                record_tolerant=ver_data.get("record_tolerant"),
+                # Version-scoped, exactly like the typing contracts above.
+                clock_transfer=ver_data.get("clock_transfer"),
+                population_scope=ver_data.get("population_scope"),
             )
             COMPONENT_REGISTRY[name][ver_num] = ver_sig
 

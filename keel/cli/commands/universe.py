@@ -118,6 +118,12 @@ def set_universe(
         if volume_quartiles:
             kwargs["volume_quartiles"] = list(volume_quartiles)
         result = universe_set(**kwargs)
+        if result.get("reformatted"):
+            click.echo(
+                "warning: surgical span edit failed; the file was re-emitted "
+                "canonically and comments/formatting outside Universe(...) were lost.",
+                err=True,
+            )
         # Write back modified source to file/workspace
         if "source" in result:
             _write_back_if_workspace(file, result["source"])
@@ -259,6 +265,19 @@ def _client():
 @click.option("--top-n", type=int, default=None, help="DEPRECATED with --mode.")
 @click.option("--exclusions", multiple=True, help="DEPRECATED with --mode.")
 @click.option("--inclusions", multiple=True, help="DEPRECATED with --mode.")
+@click.option(
+    "--lookback",
+    type=click.Choice(["7d", "30d", "90d"]),
+    default=None,
+    help="DEPRECATED with --mode. Volume-ranking window (server default: 7d).",
+)
+@click.option(
+    "--volume-quartiles",
+    "volume_quartiles",
+    multiple=True,
+    type=click.Choice(["q1", "q2", "q3", "q4"]),
+    help="DEPRECATED with --mode. Volume quartile filter.",
+)
 @click.pass_context
 def resolve(
     ctx: click.Context,
@@ -270,6 +289,8 @@ def resolve(
     top_n: int | None,
     exclusions: tuple[str, ...],
     inclusions: tuple[str, ...],
+    lookback: str | None,
+    volume_quartiles: tuple[str, ...],
 ) -> None:
     """Resolve a strategy's universe and bake the asset list back into source.
 
@@ -278,7 +299,10 @@ def resolve(
     with `resolved=[...]` and `resolved_at=...` populated.
 
     The DSL source is the source of truth — no need to repeat `--mode`,
-    `--top-n` etc., they're already in the Universe(...) declaration.
+    `--top-n` etc., they're already in the Universe(...) declaration. Every
+    declared selector (including `lookback` and `volume_quartiles`) is sent
+    to the resolver, and only the `resolved` / `resolved_at` argument spans
+    are rewritten — your comments and formatting are preserved.
 
     Examples:
         keel universe resolve my_strategy.strategy   # read + write back
@@ -293,7 +317,15 @@ def resolve(
     # ─── Deprecated flag form ─────────────────────────────────────────
     # Detect old usage: --mode without a file. Keep working through 0.6.x.
     using_deprecated_flags = mode is not None or any(
-        (symbols, categories, exclusions, inclusions, top_n is not None)
+        (
+            symbols,
+            categories,
+            exclusions,
+            inclusions,
+            volume_quartiles,
+            top_n is not None,
+            lookback is not None,
+        )
     )
     if using_deprecated_flags and file is None:
         click.echo(
@@ -313,6 +345,10 @@ def resolve(
                 body["exclusions"] = list(exclusions)
             if inclusions:
                 body["inclusions"] = list(inclusions)
+            if lookback:
+                body["lookback"] = lookback
+            if volume_quartiles:
+                body["volume_quartiles"] = list(volume_quartiles)
             result = _client().post("/v1/universe/resolve", json=body)
             emit(result, _get_format(ctx))
         except KeelError as e:
@@ -343,18 +379,42 @@ def resolve(
         return
 
     # Write the resolved source back where it came from (file or workspace).
+    # `result["source"]` is a span edit of the original text — only the
+    # Universe(...) arguments changed; comments/headers survive byte-exact.
+    # `reformatted=True` means that net failed and the file was re-emitted
+    # canonically (comments lost), which we surface LOUDLY.
     new_source = result["source"]
+    reformatted = bool(result.get("reformatted"))
+    if reformatted:
+        click.echo(
+            "warning: surgical span edit failed; the file was re-emitted "
+            "canonically and comments/formatting outside Universe(...) were lost.",
+            err=True,
+        )
     wrote_back = _write_back_if_workspace(file or "-", new_source)
 
-    if wrote_back:
-        emit(
-            {
-                "resolved_count": result["count"],
-                "resolved_at": result["resolved_at"],
-                "wrote_back": True,
-            },
-            _get_format(ctx),
+    for note in result.get("warnings") or []:
+        click.echo(f"warning: {note}", err=True)
+    written_down = result.get("top_n_written_down")
+    if written_down:
+        click.echo(
+            f"warning: {written_down['reason']}; top_n written down to "
+            f"{written_down['achievable']}",
+            err=True,
         )
+
+    if wrote_back:
+        payload = {
+            "resolved_count": result["count"],
+            "resolved_at": result["resolved_at"],
+            "wrote_back": True,
+            "reformatted": reformatted,
+        }
+        if result.get("warnings"):
+            payload["warnings"] = result["warnings"]
+        if written_down:
+            payload["top_n_written_down"] = written_down
+        emit(payload, _get_format(ctx))
     else:
         # Piped input → print updated source to stdout
         click.echo(new_source)

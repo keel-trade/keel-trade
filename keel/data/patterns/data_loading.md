@@ -67,8 +67,11 @@ is unnecessary since mean already smooths hourly noise.
 
 AssetAligner is NOT needed in the standard case — Universe selector passes the same
 resolved universe to all data loaders, so assets already match. Use
-SignalResampleTransform only for multi-timeframe pipelines where the target differs
-from Globals.
+SignalResampler(target_timeframe=..., method=...) only for multi-timeframe pipelines
+where the coarse target differs from Globals — and TargetSignalProjector() (or
+SignalProjector(target_timeframe=...)) to place a coarse signal back on a finer
+execution grid. Resampling goes fine -> coarse (aggregation, has a method=); to go
+coarse -> fine, project (forward-fill of the last COMPLETED bar, no method).
 
 ## Universe Reduction Alignment (Advanced)
 

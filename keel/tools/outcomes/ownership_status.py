@@ -68,12 +68,22 @@ OWNERSHIP_STATUS = register(
         required_action="strategy.read",
         cli_path=("ownership", "status"),
         toolset="read-only",
+        # grounded-in: strategy_phases.md (the six-phase maturation arc —
+        # locate where a strategy sits, then pick the next move that fits;
+        # "Validating" = what makes it trustworthy) + ownership_status.py
+        # _handler fields (next_recommended_action / missing_evidence /
+        # live_readiness_blockers).
         description=(
-            "Fetch the first-session strategy ownership projection for one strategy. "
-            "Returns next_recommended_action, missing_evidence, and "
-            "live_readiness_blockers for agent guidance. Do NOT use this to run "
-            "a backtest or mutate strategy source; call `keel_backtest_run` or "
-            "`keel_strategy_compose` for those actions."
+            "Fetch the read-only first-session ownership projection for one "
+            "strategy — where it sits in its maturation arc and what to do "
+            "next. Returns `next_recommended_action`, `missing_evidence` (e.g. "
+            "strategy brief, baseline evidence, failure modes), and "
+            "`live_readiness_blockers` (no baseline, no diagnosis, no "
+            "readiness review) so you can steer the strategy toward being "
+            "understood and ready rather than guessing the next step. Read it, "
+            "then act with the build-loop tools. "
+            "Do NOT use to run a backtest or change strategy source — call "
+            "`keel_backtest_run` or `keel_strategy_compose` for those."
         ),
         input_schema={
             "type": "object",

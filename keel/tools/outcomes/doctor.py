@@ -112,6 +112,14 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
         }
     )
 
+    # Cross-surface routing hints (spec 07 R7): the doctor is where
+    # agents land when a surface-mismatched ask fails (file ops on the
+    # hosted server, chart asks in a terminal) — point across in one
+    # line. Included on both the success and failure payloads.
+    from ._surface_hints import surface_hints
+
+    hints = surface_hints()
+
     all_ok = all(c["ok"] for c in checks)
     if not all_ok:
         # Surface a non-zero exit so CI / `keel doctor && deploy`
@@ -123,14 +131,14 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
             error_code="diagnostics_failed",
             exit_code=1,
             suggestion="See the `checks` field in the output below for per-check details.",
-            input={"checks": checks},
+            input={"checks": checks, "surface_hints": hints},
         )
 
     return OutcomeResult(
         run_id=None,
         hero_url=None,
         share_url=None,
-        extra={"checks": checks, "all_ok": True},
+        extra={"checks": checks, "all_ok": True, "surface_hints": hints},
     )
 
 
@@ -140,10 +148,20 @@ DOCTOR = register(
         required_action="audit.read",
         cli_path=("doctor",),
         toolset="always",
+        # grounded-in: tool_usage.md:36-37 ("Retrying After a Tool Error" —
+        # same error twice with the same root cause → stop and reason, don't
+        # slide parameters); doctor.py docstring (spec §13.3 non-zero exit on
+        # any failed check so `keel doctor && …` gates cleanly).
         description=(
-            "Diagnose the Keel CLI/MCP installation: auth, API reachability, "
-            "and active toolsets. Call this when a tool returns an unexpected "
-            "error or when wiring up for the first time. "
+            "Diagnose the Keel CLI/MCP installation in one read-only pass: "
+            "auth, API reachability, and the active tool surface. Reach for "
+            "this when a tool fails in a way that looks environmental — auth "
+            "rejected, API unreachable, an expected tool missing — instead of "
+            "retrying the same call: a tool that errors twice with the same "
+            "root cause won't fix itself on a third try, so read its "
+            "structured error, then run `keel_doctor` to confirm setup before "
+            "changing tactics. Exits non-zero when any check fails, so "
+            "`keel doctor && …` gates cleanly in scripts. "
             "Do NOT use to enumerate strategies or accounts — call `keel_strategy_search` "
             "or `keel_accounts_list` instead."
         ),
@@ -159,9 +177,14 @@ DOCTOR = register(
         # Listed-profile copy (spec 01 R3): must not route to tools
         # absent from the listed surface (keel_accounts_list).
         listed_description=(
-            "Diagnose the Keel MCP connection: auth, API reachability, and "
-            "the active tool surface. Call this when a tool returns an "
-            "unexpected error or when wiring up for the first time. "
+            "Diagnose the Keel MCP connection in one read-only pass: auth, "
+            "API reachability, and the active tool surface. Reach for this "
+            "when a tool fails in a way that looks environmental — auth "
+            "rejected, API unreachable, an expected tool missing — instead of "
+            "retrying the same call: a tool that errors twice with the same "
+            "root cause won't fix itself on a third try, so read its "
+            "structured error, then run `keel_doctor` to confirm setup before "
+            "changing tactics. "
             "Do NOT use to enumerate strategies — call "
             "`keel_strategy_search` instead."
         ),

@@ -14,6 +14,15 @@ from __future__ import annotations
 import json
 
 from fastmcp import FastMCP
+from mcp.types import Icon
+
+from keel.data.knowledge import load_operating_core
+from keel.mcp._branding import (
+    KEEL_ICON_DATA_URI,
+    KEEL_ICON_MIME,
+    KEEL_ICON_SIZES,
+    KEEL_WEBSITE_URL,
+)
 
 
 def create_server() -> FastMCP:
@@ -23,6 +32,7 @@ def create_server() -> FastMCP:
     inline below.
     """
 
+    from keel.hosting import is_hosted
     from keel.tools.outcomes import OUTCOMES
     from keel.tools.outcomes import _bootstrap as _outcomes_bootstrap
     from keel.tools.outcomes._mcp_adapter import register_all as _outcomes_mcp_register
@@ -32,13 +42,54 @@ def create_server() -> FastMCP:
     live_write_loaded = "live-write" in active_toolsets
 
     instructions = (
-        LISTED_INSTRUCTIONS if is_listed_profile() else _full_instructions(live_write_loaded)
+        LISTED_INSTRUCTIONS
+        if is_listed_profile()
+        else _full_instructions(live_write_loaded, hosted=is_hosted())
     )
 
-    mcp = FastMCP(name="keel", instructions=instructions)
+    # serverInfo.version = the published keel-trade wheel version (not the
+    # FastMCP framework version FastMCP would otherwise report) — this is the
+    # product version connectors/directories show.
+    try:
+        from importlib.metadata import PackageNotFoundError
+        from importlib.metadata import version as _pkg_version
+
+        _keel_version = _pkg_version("keel-trade")
+    except PackageNotFoundError:
+        # Not pip-installed (the .mcpb bundle runs from an unpacked tree):
+        # fall back to the package's own version constant so directories
+        # never display 0.0.0.
+        from keel import __version__ as _keel_version
+
+    mcp = FastMCP(
+        name="keel",
+        version=_keel_version,
+        instructions=instructions,
+        website_url=KEEL_WEBSITE_URL,
+        # serverInfo.icons — the Keel mark, embedded so it ships in the wheel.
+        # Surfaced by Cursor / Claude Desktop connector UIs (claude.ai custom
+        # connectors do not render it yet, but the field is correct).
+        icons=[
+            Icon(
+                src=KEEL_ICON_DATA_URI,
+                mimeType=KEEL_ICON_MIME,
+                sizes=KEEL_ICON_SIZES,
+            )
+        ],
+    )
 
     _outcomes_bootstrap()
     _outcomes_mcp_register(mcp, OUTCOMES)
+
+    # ── Widget cards (spec 06 R2) ───────────────────────────────────
+    # One bundle, four cards (backtest / strategy glass-box / live /
+    # deploy-preflight), registered as `ui://keel/cards/*` resources in
+    # both MCP Apps and ChatGPT Apps SDK dialects. Gated by the same
+    # profile/toolset machinery as the owning tools — the preflight
+    # card exists only where keel_live_deploy does (never listed).
+    from keel.widgets import register_card_resources
+
+    register_card_resources(mcp)
 
     # ── Resources (spec §4 — lazy on demand, no startup token cost) ─────
     # All resources prefer live API fetches; the components catalog +
@@ -336,96 +387,97 @@ def create_server() -> FastMCP:
 
 # ── Server instructions, per profile (spec 01 R3) ─────────────────────
 #
+# The strategy-behavior knowledge (ethos, build discipline, required
+# two-step discovery, iterate-don't-rewrite, routing, and the pull-deeper
+# pointer) is NOT hand-written here any more — it is the corpus-distilled
+# operating core (`operating_core.md`, loaded via `load_operating_core()`).
+# LISTED_INSTRUCTIONS and `_full_instructions()` are THIN wrappers: the
+# core + MCP-surface plumbing + only the profile-specific plumbing that
+# legitimately differs (auth, write-through state model, live-write
+# opt-in, cross-surface hints). The core is authored policy-clean and
+# references only listed tools, so it rides both profiles safely.
+#
 # LISTED (directory registration): policy-vetted copy — no deploy/fund/
 # trade verbs, no routing to tools absent from the listed surface
-# (research/08 string rules; gate: tests/test_policy_scan.py).
-LISTED_INSTRUCTIONS = (
-    "Keel is a quantitative crypto research platform for Hyperliquid "
-    "strategy development: compose strategies in the Keel DSL, run "
-    "backtests on real market history, and review the results. The "
-    "agent surface is a workflow-shaped set of outcome tools (call by "
-    "canonical `keel_*` name; see `tools/list` for the active set). "
-    "Start with `keel_status` to check auth + visible tools. "
-    "\n\n"
-    "WORKFLOW ROUTES — prefer these paths over ad-hoc tool picking. "
-    "RESEARCH: decompose thesis → `keel_components_search` → "
-    "`keel_components_detail_batch` for every planned component → "
-    "`keel_strategy_compose(dry_run=true)` → save with "
-    "`keel_strategy_compose` → `keel_backtest_run` → "
-    "`keel_backtest_summarize`. "
-    "EXISTING STRATEGY: `keel_strategy_search` or `keel_strategy_get` → "
-    "`keel_strategy_fork` to iterate on a copy → backtest the fork. "
-    "MONITORING: `keel_live_monitor` gives read-only state for "
-    "strategies already running on the user's account. "
-    "WEB APP: `keel_open_in_app` returns a link to view and manage a "
-    "strategy in the Keel web app — offer it whenever the user wants "
-    "to see or act on results outside this chat. "
-    "DEBUG: read the structured error envelope first; use "
-    "`recover-from-error` and `keel_doctor`. "
-    "FEEDBACK: at the END of a session — and whenever the same friction "
-    "repeats (a tool erroring twice, a confusing result, a missing "
-    "capability) — file it with `keel_feedback` (kind: friction | praise "
-    "| bug). It never fails and nothing waits on it. "
-    "\n\n"
-    "SKILLS — load deep workflow guidance BEFORE composing or "
-    "iterating: see `prompts/list` (`strategy-creation`, "
-    "`strategy-fork-and-iterate`, `backtest-and-analyze`, "
-    "`component-discovery`, `portfolio-review`, `overfit-check`, "
-    "`recover-from-error`). INVOKE `strategy-creation` BEFORE the "
-    "first `keel_strategy_compose` in any session. "
-    "\n\n"
-    "KNOWLEDGE RESOURCES — individual sections available as MCP "
-    "resources at `keel://knowledge/{section}`; latest backtest "
-    "pointers at `keel://backtest/latest`. See `resources/list`."
-    "\n\n"
+# (research/08 string rules; gate: tests/test_policy_scan.py). Live /
+# account / go-live verbs appear ONLY in the full-only branches below,
+# never in the listed path.
+
+# MCP-surface mechanics — how to drive the tool surface. Policy-clean and
+# listed-tool-only, so it is shared verbatim by both profiles.
+_MCP_SURFACE = (
+    "The agent surface is a workflow-shaped set of outcome tools — call "
+    "each by its canonical `keel_*` name (see `tools/list` for the active "
+    "set). Start with `keel_status`. Deep-knowledge sections are "
+    "pull-on-demand MCP resources at `keel://knowledge/{section}`; guided "
+    "workflows load as skills — see `prompts/list`. File friction (a tool "
+    "erroring twice, a confusing result, a missing capability) with "
+    "`keel_feedback`; it never fails and nothing waits on it."
+)
+
+# Server-authoritative state, policy-clean phrasing (listed profile).
+_STATE_MODEL_LISTED = (
     "STATE MODEL — strategy state lives on the Keel server: every tool "
     "call reads and writes the server's canonical version (one linear "
     "history), and `keel_strategy_log` shows which surface made each "
     "change."
 )
 
+# Listed cross-surface hint — CORRECT routing: acting on a strategy beyond
+# chat is a web-app handoff (`keel_open_in_app`), file/workspace work is
+# the CLI. There is ONE hosted endpoint (mcp.usekeel.io serves this same
+# listed surface), so there is no "full endpoint" to route live management
+# to — the old copy claiming that was stale/false. Policy-vetted copy
+# (research/08 string rules; gated by tests/test_policy_scan.py). NOTE:
+# the package name "keel-trade" cannot appear here — the word-boundary
+# scan reads its "trade" segment as a verb hit.
+_LISTED_SURFACE = (
+    "SURFACE — this connector carries research, backtests, and read-only "
+    "monitoring. To act on a strategy beyond chat, `keel_open_in_app` "
+    "opens it in the Keel web app; file and workspace work uses the Keel "
+    "CLI. Per-surface guide: https://usekeel.io/agents"
+)
 
-def _full_instructions(live_write_loaded: bool) -> str:
-    """Instructions for the full (unlisted endpoint / local) profile."""
-    return (
-        "Keel is a quantitative crypto trading platform for Hyperliquid. "
-        "The agent surface is a workflow-shaped set of outcome tools "
-        "(call by canonical `keel_*` name; see `tools/list` for the "
-        "active set under `KEEL_TOOLSETS`). "
-        "Start with `keel_status` to check auth + visible tools. "
-        "Auth: when `keel_status` returns `authenticated: false`, OR when "
+
+def _listed_instructions() -> str:
+    """Thin listed-profile wrapper: operating core + surface plumbing.
+
+    Every part is policy-clean and references only listed tools, so the
+    composed string passes tests/test_policy_scan.py by construction.
+    """
+    return "\n\n".join(
+        [
+            load_operating_core().rstrip(),
+            _MCP_SURFACE,
+            _STATE_MODEL_LISTED,
+            _LISTED_SURFACE,
+        ]
+    )
+
+
+LISTED_INSTRUCTIONS = _listed_instructions()
+
+
+def _full_instructions(live_write_loaded: bool, *, hosted: bool = False) -> str:
+    """Instructions for the full (unlisted endpoint / local) profile.
+
+    Thin wrapper: the operating core (strategy behavior) + MCP-surface
+    plumbing + the full-only plumbing blocks (auth, write-through state
+    model, live read/write, skills) + the cross-surface hint. ``hosted``
+    selects the hosted-server hint (spec 07 R7): the hosted endpoint is
+    file-free, so file/workspace asks route to the CLI; local servers get
+    the charts → web-app hint.
+    """
+    auth_block = (
+        "AUTH — when `keel_status` returns `authenticated: false`, OR when "
         "any tool's error envelope sets `suggested_next_action.tool` to "
         "`keel_auth_login`, call `keel_auth_login` directly — it opens the "
         "user's browser, captures the OAuth redirect, and persists tokens. "
-        "Optional `scope='live'` pre-checks live-trading consent. "
-        "\n\n"
-        "WORKFLOW ROUTES — prefer these paths over ad-hoc tool picking. "
-        "FIRST SESSION: `keel_status` → `keel_auth_login` if needed → "
-        "`prompts/list` and load `strategy-creation` before strategy work. "
-        "RESEARCH: decompose thesis → `keel_components_search` → "
-        "`keel_components_detail_batch` for every planned component → "
-        "`keel_strategy_compose(dry_run=true)` → save with "
-        "`keel_strategy_compose` → `keel_backtest_run` → "
-        "`keel_backtest_summarize`. "
-        "EXISTING STRATEGY: `strategy-fork-and-iterate` prompt → "
-        "`keel_strategy_search` or `keel_strategy_get` → checkout/status/push "
-        "when doing local file edits → backtest server HEAD. "
-        "DEBUG: read the structured error envelope first; use "
-        "`recover-from-error`, `keel_doctor`, and `keel_audit_list_last`. "
-        "FEEDBACK: at the END of a session — and whenever the same friction "
-        "repeats (a tool erroring twice, a confusing result, a missing "
-        "capability) — file it with `keel_feedback` (kind: friction | praise "
-        "| bug). It never fails and nothing waits on it. "
-        "LIVE READ: `keel_live_monitor` is visible by default for existing "
-        "deployments. Read `keel_live_monitor.freshness` before interpreting "
-        "live data; positions are exchange snapshots, while portfolio/history "
-        "views are recorded backend state. "
-        "LIVE WRITE: deploy/control tools require explicit user request and "
-        "`live-write` toolset opt-in. Load `deploy-and-monitor`, call "
-        "`keel_accounts_list`, preview with `keel_live_deploy`, show the "
-        "preview, then deploy only with the returned `confirmation_token` plus "
-        "host/CLI confirmation and local arming. "
-        "\n\n"
+        "Optional `scope='live'` pre-checks live-trading consent. First "
+        "session: `keel_status` → `keel_auth_login` if needed → load the "
+        "`strategy-creation` skill before strategy work."
+    )
+    state_model_full = (
         "STATE MODEL — server HEAD is the single source of truth: "
         "backtests, deploys, and shares always resolve a server commit, "
         "never a local file. Local checkouts are working copies that WRITE "
@@ -440,43 +492,71 @@ def _full_instructions(live_write_loaded: bool) -> str:
         "`pull_force` | manual merge via `keel_strategy_diff` | pin "
         "`commit_id` — never auto-merged, never force-pushed. Commits carry "
         "surface attribution: `keel_strategy_log` shows 'modified via "
-        "claude.ai, 2h ago'. "
-        "\n\n"
+        "claude.ai, 2h ago'."
+    )
+    live_block = (
+        "LIVE READ — `keel_live_monitor` is visible by default for existing "
+        "deployments. Read `keel_live_monitor.freshness` before interpreting "
+        "live data; positions are exchange snapshots, while portfolio/history "
+        "views are recorded backend state. "
+        "LIVE WRITE — deploy/control tools require explicit user request and "
+        "`live-write` toolset opt-in. Load `deploy-and-monitor`, call "
+        "`keel_accounts_list`, preview with `keel_live_deploy`, show the "
+        "preview, then deploy only with the returned `confirmation_token` plus "
+        "host/CLI confirmation and local arming."
+    )
+    skills_block = (
         "SKILLS — load deep workflow guidance BEFORE composing or iterating. "
         "This server exposes 8 MCP prompts under the `keel-skill` tag (see "
         "`prompts/list`): `strategy-creation`, `strategy-fork-and-iterate`, "
         "`backtest-and-analyze`, `component-discovery`, `deploy-and-monitor`, "
         "`portfolio-review`, `overfit-check`, `recover-from-error`. Each "
-        "auto-loads the matching knowledge sections inline (e.g. "
-        "`strategy-creation` loads reasoning_principles + composition_mechanics "
-        "+ dsl_syntax + mistakes + tool_usage + universe_selection + "
-        "pipeline_system — the same knowledge chat-api keeps always-on). "
-        "INVOKE `strategy-creation` BEFORE the first `keel_strategy_compose` "
-        "in any session — without it you're composing blind. Same rule for "
-        "`backtest-and-analyze` before `keel_backtest_run`, and "
-        "`recover-from-error` when a tool keeps failing. The skill body "
-        "tells you which other tools to call and in what order. "
-        "\n\n"
-        "KNOWLEDGE RESOURCES — individual sections also available as MCP "
-        "resources at `keel://knowledge/{section}` (e.g. "
-        "`keel://knowledge/tool_usage`, `keel://knowledge/mistakes`, "
-        "`keel://knowledge/strategy_paths`) for direct fetch without "
-        "invoking a full skill. Latest backtest resources "
-        "(`keel://backtest/latest` and "
-        "`keel://strategy/{strategy_id}/backtest/latest`) provide a compact "
-        "last-run pointer without making agents build ad-hoc list loops. "
-        "See `resources/list` for the full set."
-        + (
-            ""
-            if live_write_loaded
-            else "\n\n"
+        "auto-loads the matching knowledge sections inline (the same knowledge "
+        "chat-api keeps always-on). INVOKE `strategy-creation` BEFORE the "
+        "first `keel_strategy_compose`; `backtest-and-analyze` before "
+        "`keel_backtest_run`; `recover-from-error` when a tool keeps failing. "
+        "DEBUG: read the structured error envelope first; use "
+        "`recover-from-error`, `keel_doctor`, and `keel_audit_list_last`."
+    )
+    surface_hint = (
+        (
+            "SURFACE — this hosted server is file-free: workspace tools "
+            "(checkout/push/pull/status/discard/workspaces) and "
+            "`keel_auth_login` are not registered here; authentication is "
+            "your MCP client's OAuth flow. For file-based work, install "
+            "the CLI (`pipx install keel-trade`). For charts and visual "
+            "review, `keel_open_in_app` returns the canonical web-app "
+            "URL. Per-surface guide: https://usekeel.io/agents"
+        )
+        if hosted
+        else (
+            "SURFACE — for charts and visual review, run `keel open "
+            "backtest <id>` (CLI) or call `keel_open_in_app` for the "
+            "canonical web-app URL. Live management from chat without a "
+            "local install: the hosted endpoint "
+            "https://mcp.usekeel.io/mcp. Per-surface guide: "
+            "https://usekeel.io/agents"
+        )
+    )
+
+    parts = [
+        load_operating_core().rstrip(),
+        _MCP_SURFACE,
+        auth_block,
+        state_model_full,
+        live_block,
+        skills_block,
+    ]
+    if not live_write_loaded:
+        parts.append(
             "Live write tools (deploy/control) are NOT loaded under the default "
             "toolset. Set "
             "`KEEL_TOOLSETS=read-only,backtest,share,live-read,live-write` "
             "to opt in. `live` remains a deprecated alias for both live-read "
             "and live-write."
         )
-    )
+    parts.append(surface_hint)
+    return "\n\n".join(parts)
 
 
 # Skills excluded from the listed-profile prompt surface — their bodies

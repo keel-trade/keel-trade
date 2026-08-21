@@ -85,21 +85,26 @@ STRATEGY_PUSH = register(
         cli_path=("strategy", "push"),
         toolset="backtest",
         local_only=True,  # reads the local workspace working copy
+        # grounded-in: sync-contract (spec 08) — server HEAD is the source of
+        # truth, pushing is how local edits become runnable; conflict-safe by
+        # expected_source_hash; collaboration.md §6 (validate before, backtest
+        # runs against server HEAD).
         description=(
             "Commit local strategy.py changes back to the platform as a new "
-            "version. The 'git push' of the sync model — server HEAD is the "
-            "source of truth, and pushing is how local edits become runnable. "
-            "Reads the local "
-            "working copy, validates, sends to the API, creates a new commit. "
-            "Conflict-safe by default (uses `expected_source_hash` against "
-            "what the server had at last checkout/pull). Pass `force=True` "
-            "to override conflict detection (overwrites concurrent edits — "
-            "use sparingly). If `strategy_id` is omitted, auto-detects from "
-            "the current workspace directory. "
-            "Use AFTER editing strategy.py locally, BEFORE running a backtest — "
-            "backtest runs against server HEAD, so unpushed local changes "
-            "won't be tested. Include a commit `message` so the version "
-            "history is readable (`keel_strategy_log` shows messages)."
+            "version — the 'git push' of the sync model. Server HEAD is the "
+            "source of truth, and pushing is how local edits become runnable: "
+            "it reads the local working copy, validates it, and creates a new "
+            "commit (new HEAD). Conflict-safe by default (sends "
+            "`expected_source_hash` against what the server had at last "
+            "checkout/pull); pass `force=True` only when you've verified no "
+            "concurrent work — it overwrites the server HEAD. Auto-detects "
+            "`strategy_id` from the current workspace when omitted. Push AFTER "
+            "editing strategy.py, BEFORE running a backtest — backtests run "
+            "against server HEAD, so unpushed local changes won't be tested; "
+            "include a commit `message` so `keel_strategy_log` stays readable. "
+            "Do NOT use to CREATE a new strategy from scratch — call "
+            "`keel_strategy_compose`. Do NOT use to publish a strategy "
+            "publicly — call `keel_share_create`."
         ),
         input_schema={
             "type": "object",

@@ -1,0 +1,212 @@
+{
+  "type_transitions": {
+    "None": {
+      "data_loader": [
+        "OHLCVDict",
+        "StreamSeries"
+      ]
+    },
+    "OHLCVDict": {
+      "data_transform": [
+        "OHLCVDict",
+        "SignalSeries"
+      ],
+      "signal_transform": [
+        "SignalSeries"
+      ],
+      "universe_filter": [
+        "SignalSeries",
+        "OHLCVDict",
+        "BinarySignal"
+      ],
+      "indicator": [
+        "SignalSeries",
+        "BinarySignal"
+      ],
+      "forecast_mapper": [
+        "ForecastSeries"
+      ],
+      "position_sizer": [
+        "WeightSeries",
+        "SignalSeries"
+      ]
+    },
+    "StreamSeries": {
+      "data_transform": [
+        "StreamSeries",
+        "SignalSeries"
+      ],
+      "signal_transform": [
+        "SignalSeries",
+        "NormalizedSignal",
+        "StreamSeries"
+      ],
+      "regime_detector": [
+        "GlobalSeries"
+      ],
+      "indicator": [
+        "SignalSeries"
+      ]
+    },
+    "SignalSeries": {
+      "data_transform": [
+        "SignalSeries"
+      ],
+      "indicator": [
+        "SignalSeries"
+      ],
+      "signal_transform": [
+        "NormalizedSignal",
+        "BinarySignal",
+        "RankSignal",
+        "SignalSeries"
+      ],
+      "regime_detector": [
+        "GlobalSeries"
+      ],
+      "forecast_mapper": [
+        "ForecastSeries"
+      ],
+      "universe_filter": [
+        "SignalSeries",
+        "BinarySignal"
+      ],
+      "position_sizer": [
+        "WeightSeries"
+      ],
+      "position_manager": [
+        "BinarySignal",
+        "WeightSeries",
+        "SignalSeries"
+      ],
+      "reporter": [
+        "SignalSeries"
+      ]
+    },
+    "NormalizedSignal": {
+      "signal_transform": [
+        "NormalizedSignal",
+        "BinarySignal",
+        "RankSignal",
+        "SignalSeries"
+      ],
+      "forecast_mapper": [
+        "ForecastSeries"
+      ]
+    },
+    "BinarySignal": {
+      "signal_transform": [
+        "BinarySignal"
+      ],
+      "forecast_mapper": [
+        "ForecastSeries"
+      ],
+      "position_sizer": [
+        "WeightSeries"
+      ],
+      "position_manager": [
+        "BinarySignal",
+        "WeightSeries",
+        "SignalSeries"
+      ]
+    },
+    "RankSignal": {
+      "signal_transform": [
+        "NormalizedSignal",
+        "RankSignal",
+        "BinarySignal"
+      ],
+      "forecast_mapper": [
+        "ForecastSeries"
+      ]
+    },
+    "dict": {
+      "signal_composer": [
+        "SignalSeries",
+        "BinarySignal"
+      ],
+      "forecast_composer": [
+        "ForecastSeries",
+        "WeightSeries"
+      ],
+      "position_sizer": [
+        "WeightSeries"
+      ],
+      "position_manager": [
+        "BinarySignal",
+        "WeightSeries",
+        "SignalSeries"
+      ]
+    },
+    "ForecastSeries": {
+      "signal_transform": [
+        "ForecastSeries",
+        "SignalSeries"
+      ],
+      "forecast_composer": [
+        "ForecastSeries"
+      ],
+      "forecast_mapper": [
+        "ForecastSeries"
+      ],
+      "position_sizer": [
+        "WeightSeries"
+      ],
+      "reporter": [
+        "ForecastSeries"
+      ]
+    },
+    "WeightSeries": {
+      "position_sizer": [
+        "WeightSeries"
+      ],
+      "risk_manager": [
+        "WeightSeries"
+      ],
+      "position_manager": [
+        "WeightSeries"
+      ],
+      "executor": [
+        "OrderSeries"
+      ]
+    },
+    "OrderSeries": {
+      "reporter": [
+        "OrderSeries"
+      ]
+    },
+    "GlobalSeries": {
+      "reporter": [
+        "GlobalSeries"
+      ]
+    }
+  },
+  "phase_index": {
+    "data_loader": 0,
+    "data_transform": 0,
+    "universe_filter": 1,
+    "indicator": 2,
+    "signal_transform": 2,
+    "signal_composer": 2,
+    "regime_detector": 2,
+    "forecast_mapper": 3,
+    "forecast_composer": 3,
+    "position_sizer": 4,
+    "risk_manager": 4,
+    "position_manager": 4,
+    "executor": 5,
+    "reporter": 5
+  },
+  "timeframe_minutes": {
+    "15min": 15,
+    "30min": 30,
+    "1h": 60,
+    "2h": 120,
+    "3h": 180,
+    "4h": 240,
+    "6h": 360,
+    "8h": 480,
+    "12h": 720,
+    "1d": 1440
+  }
+}

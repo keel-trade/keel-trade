@@ -1,23 +1,48 @@
-"""`keel_live_deploy` — preview + deploy a strategy to a live account.
+"""`keel_live_deploy` — go live with a strategy (web handoff).
 
-Per spec §4 #12: the canonical destructive tool with confirmation.
+Per spec 03 R2/R4 + the D7 founder decision (2026-07-19): going live is
+a WEB handoff on every surface. The authenticated Keel web app is the
+sole account/live surface, so the behavior on the CLI and local MCP is
+to return a handoff (`code=handoff_required`) whose `action_url` opens
+the standalone deploy flow (select/connect account, review the
+server-computed sizing, accept risk, go live). The agent does NOT
+enumerate accounts or POST `/v1/live` for the live action — the same
+loop hosted MCP already uses. Reads (`keel_live_monitor`, `keel_status`)
+stay on every surface.
 
-Two-call dance:
-  1. First call with `preview=true` (default) → `POST /v1/live/preview`
-     returns derived schedule + estimated slippage/fees + a
-     short-lived local `confirmation_token`. The agent presents this to
-     the user.
-  2. Second call with `preview=false` + the same `confirmation_token`
-     validates the local preview record and then calls `POST /v1/live`,
-     returning the deployment id and authenticated dashboard URL.
+Handoff resume (spec 03 R6): calling with `intent_token` and
+`preview=true` is a pure status poll of `POST
+/v1/live/deploy-intents/status` — it returns `handoff_state`
+(pending|completed|expired) so the agent observes the human completing
+the deploy without a browser return.
 
-Do NOT use without first calling `keel_accounts_list` to pick
-`account_id`. Do NOT use to update an already-deployed strategy's
-config — use `keel_live_control`.
+Advanced/headless escape hatch (D28 2026-07-20, sdk-v0.7.0 —
+deliberately NOT surfaced in the tool description): the legacy
+in-terminal preview → confirm → `POST /v1/live` path is retained for
+advanced/headless operators only. It PLACES REAL ORDERS, so it is doubly
+hidden:
+  * The tool description guides callers ONLY to the web handoff and never
+    mentions `direct` — a model reading the surface reaches for the web
+    app, never the terminal.
+  * The `direct=true` param stays accepted but is inert unless the
+    operator has explicitly set `KEEL_ALLOW_DIRECT_DEPLOY` in the
+    environment. A model that merely GUESSES `direct=true` therefore
+    cannot reach a real-order path — the env gate raises
+    `direct_deploy_disabled` and points back to the web handoff.
+When enabled by BOTH the flag AND the env opt-in:
+  1. `direct=true, preview=true` → `POST /v1/live/preview` returns
+     derived schedule + estimated slippage/fees + a short-lived local
+     `confirmation_token`.
+  2. `direct=true, preview=false` + the same `confirmation_token`
+     validates the local preview record and then calls `POST /v1/live`.
+Under `direct`: first call `keel_accounts_list` to pick `account_id`;
+do NOT use to update an already-deployed strategy's config — use
+`keel_live_control`.
 """
 
 from __future__ import annotations
 
+import os
 import secrets
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -29,6 +54,28 @@ from keel.errors import EntitlementError, KeelError, NotFoundError
 
 from . import register
 from ._base import OutcomeResult, OutcomeTool, ToolContext
+
+
+# Env opt-in that arms the in-terminal direct-deploy escape hatch (D28,
+# sdk-v0.7.0). Going live is a web handoff on every surface; the legacy
+# `direct=true` path stays FUNCTIONAL but is inert unless the operator
+# sets this so a model that guesses the param can never place real orders.
+DIRECT_DEPLOY_ENV = "KEEL_ALLOW_DIRECT_DEPLOY"
+_DIRECT_DEPLOY_TRUTHY = frozenset({"1", "true", "yes", "on"})
+
+
+def _direct_deploy_enabled() -> bool:
+    """True only when the operator has explicitly opted into the
+    in-terminal direct-deploy escape hatch via the environment.
+
+    The web-app handoff is the go-live path on every surface (D7). The
+    legacy in-terminal preview → confirm → ``POST /v1/live`` path is kept
+    for advanced/headless operators, but it is gated behind this env
+    opt-in so a caller that merely passes ``direct=true`` (e.g. a model
+    guessing the param) lands on the web handoff, never a real-order
+    path. Only a deliberate operator export flips it on.
+    """
+    return os.environ.get(DIRECT_DEPLOY_ENV, "").strip().lower() in _DIRECT_DEPLOY_TRUTHY
 
 
 def _live_wall_handoff(e: EntitlementError, *, blocked_action: str, strategy_id: str, ctx):
@@ -376,6 +423,7 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
     schedule = _schedule_value(args.get("schedule"))
     confirmation_token = (args.get("confirmation_token") or "").strip() or None
     intent_token = (args.get("intent_token") or "").strip() or None
+    direct = bool(args.get("direct", False))
 
     if not strategy_id:
         raise KeelError(
@@ -387,11 +435,68 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
 
     # ── Handoff status poll (spec 03 R6) ──────────────────────────────
     # `intent_token` + preview phase = the resume path of a handoff
-    # envelope: a pure status read. Runs BEFORE the account check —
-    # the whole point of the handoff is that no account is linked yet.
+    # envelope: a pure status read. Runs BEFORE both the default handoff
+    # and the direct path — the whole point of the handoff is that no
+    # account is linked yet, and it works on every surface.
     if preview and intent_token:
         return _poll_intent_status(intent_token, strategy_id=strategy_id, ctx=ctx)
 
+    # ── DEFAULT: going live is a WEB handoff (D7, 2026-07-19) ──────────
+    # The authenticated web app is the sole account/live surface. On the
+    # CLI and local MCP the agent does NOT enumerate accounts or run an
+    # in-terminal deploy for the live action — it hands the user into the
+    # web deploy flow (select/connect account, review server-computed
+    # sizing, accept risk, go live), the same loop hosted MCP already
+    # uses. Reads (`keel_live_monitor`, `keel_status`) stay on every
+    # surface. The in-terminal preview→confirm→deploy path is a hidden
+    # advanced/headless escape hatch, doubly gated below.
+    if not direct:
+        from ._handoff import deploy_web_handoff
+
+        raise deploy_web_handoff(
+            blocked_action="live_deploy",
+            strategy_id=strategy_id,
+            ctx=ctx,
+        )
+
+    # ── Advanced/headless escape hatch: env gate (D28, sdk-v0.7.0) ─────
+    # `direct=true` alone is NOT enough. The in-terminal
+    # preview→confirm→POST /v1/live path (real orders) is inert unless
+    # the operator has explicitly set KEEL_ALLOW_DIRECT_DEPLOY — AND it is
+    # refused outright on any hosted surface regardless of that env. The
+    # sole hosted endpoint runs profile=listed (where this tool isn't even
+    # registered), but a hosted pod misconfigured with profile=full must
+    # STILL never place real orders from a shared, multi-tenant surface;
+    # is_hosted() makes the escape hatch structurally impossible there,
+    # not merely env-gated (review hardening 2026-07-21). This ensures a
+    # model that GUESSES `direct=true` cannot reach a real-order path — it
+    # gets a clear error routing it back to the web handoff (the normal
+    # go-live path), never a live trade. Only a deliberate operator opts
+    # in. Placed AFTER the default-handoff branch so the default (no
+    # `direct`) behavior is completely unchanged, and after the
+    # intent-token status poll (above) so handoff resume is unaffected.
+    from keel.hosting import is_hosted
+
+    if is_hosted() or not _direct_deploy_enabled():
+        raise KeelError(
+            "In-terminal direct deploy is disabled. Going live is done in "
+            "the Keel web app — call `keel_live_deploy` WITHOUT `direct` to "
+            "get the browser handoff.",
+            error_code="direct_deploy_disabled",
+            exit_code=2,
+            suggestion=(
+                "The normal way to go live is the web handoff — omit `direct` "
+                "and open the returned `action_url`. Only advanced/headless "
+                f"operators use the in-terminal deploy: set {DIRECT_DEPLOY_ENV}"
+                "=1 in the environment to arm it, then retry with `direct=true`."
+            ),
+        )
+
+    # ── Armed in-terminal direct deploy (`direct=True` + env opt-in) ───
+    # Everything below is the legacy preview→confirm→POST /v1/live dance,
+    # reachable only when the caller explicitly asks for it AND the
+    # operator has armed the env gate. The reviewed default is the browser
+    # handoff above.
     if not account_id:
         # No account_id given. If the org genuinely has NO linked account,
         # this is not an agent usage error — it's the human account-linking
@@ -506,6 +611,18 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
                 "expires_at": intent.get("expires_at"),
                 "suggested_config": intent.get("suggested_config"),
             }
+
+        # Deploy-preflight card (spec 06 R2 — full/unlisted profile
+        # only; this tool never registers on the listed profile and the
+        # policy scan proves the card's absence there). Render-only:
+        # the card shows the server-computed sizing + estimates already
+        # in this envelope. The preview has no hero_url, so the plain
+        # URL fallback line (non-negotiable, R2) is set explicitly.
+        from ._render import card_render_block
+
+        _preflight_fallback = extra.get("handoff_url") or f"{ctx.app_url}/strategies/{strategy_id}"
+        extra["render"] = card_render_block("preflight", fallback_url=_preflight_fallback, ctx=ctx)
+        extra["url_line"] = f"View in Keel: {_preflight_fallback}"
         return OutcomeResult(
             run_id=None,
             hero_url=None,
@@ -607,24 +724,24 @@ LIVE_DEPLOY = register(
         required_action="runner.create",
         cli_path=("live", "deploy"),
         toolset="live-write",
+        # grounded-in: specs/03-golive-handoff-mobile.md (deploy = web-app
+        # handoff; server-computed sizing) + collaboration.md (human authorizes)
         description=(
-            "Deploy a strategy to a live Hyperliquid account. THIS WILL PLACE REAL ORDERS. "
-            "First call returns a preview (derived schedule, estimated slippage/fees) + a "
-            "short-lived local confirmation_token. Second call with `preview=false` and "
-            "that confirmation_token actually deploys. The host also gates the destructive "
-            "action via `destructiveHint=true`. "
-            "Write-through (server HEAD is the source of truth): if the strategy is "
-            "checked out locally with unpushed edits, the preview pushes them first "
-            "(set `auto_push=False` to opt out) so the deploy never references a "
-            "strategy whose local copy is silently ahead; true conflicts stop with "
-            "recovery options. "
-            "Do NOT use without first calling `keel_accounts_list` to pick `account_id`. "
-            "Do NOT use to update an already-deployed strategy's config — use "
-            "`keel_live_control`. "
+            "Go live with a strategy. Deploying to a live Hyperliquid account is done "
+            "by the human in the Keel WEB APP — selecting or connecting an account, "
+            "reviewing the server-computed sizing, accepting the risk, and going live. "
+            "This tool does NOT place orders or enumerate accounts: it "
+            "returns a handoff (`code=handoff_required`) whose `action_url` opens that "
+            "web deploy flow, plus a `resume` you can poll to observe completion. Send "
+            "the user to `action_url` to go live; do not try to do it in the terminal. "
+            "Reads stay here: use `keel_live_monitor` / `keel_status` to watch a "
+            "running deployment. "
             "Handoff resume: calling with `intent_token` (from a handoff envelope's "
             "`resume.token`) and preview=true is a pure status poll — it returns "
             "`handoff_state` (pending|completed|expired) so the agent observes the "
-            "human completing the handoff flow without a browser return."
+            "human completing the deploy flow without a browser return. "
+            "Do NOT use to update an already-deployed strategy's config — "
+            "use `keel_live_control`."
         ),
         input_schema={
             "type": "object",
@@ -648,12 +765,27 @@ LIVE_DEPLOY = register(
                         "envelope instead of an error."
                     ),
                 },
+                "direct": {
+                    "type": "boolean",
+                    "default": False,
+                    "description": (
+                        "Advanced/headless escape hatch — NOT the normal way to go "
+                        "live. Leave this unset: the tool returns a browser handoff "
+                        "into the web deploy flow (open the returned `action_url`) and "
+                        "never places orders. The in-terminal path this enables places "
+                        "real orders and is inert unless the operator has set "
+                        f"`{DIRECT_DEPLOY_ENV}=1` in the environment; without it, "
+                        "passing true errors (`direct_deploy_disabled`) and points "
+                        "back to the web handoff."
+                    ),
+                },
                 "preview": {
                     "type": "boolean",
                     "default": True,
                     "description": (
-                        "If true (default), return preview + confirmation_token only. "
-                        "If false, require `confirmation_token` and actually deploy."
+                        "Only used with `direct=true`. If true (default), return "
+                        "preview + confirmation_token only. If false, require "
+                        "`confirmation_token` and actually deploy."
                     ),
                 },
                 "confirmation_token": {
