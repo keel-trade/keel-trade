@@ -277,7 +277,10 @@ def _validation_error_envelope(tool: OutcomeTool, raw_error: Exception) -> dict:
     details = []
     try:
         # Pydantic ValidationError exposes machine-readable details.
-        errors = raw_error.errors()  # type: ignore[attr-defined]
+        # fastmcp's re-raised ValidationError has no .errors() but chains
+        # the pydantic original via __cause__ — read through the chain.
+        source = raw_error if hasattr(raw_error, "errors") else raw_error.__cause__
+        errors = source.errors()  # type: ignore[union-attr]
     except Exception:  # noqa: BLE001 — pydantic detail extraction best-effort → empty details on failure
         errors = []
 
@@ -333,12 +336,24 @@ def _wrap_fastmcp_validation_errors(tool_obj: Any, outcome: OutcomeTool) -> None
     """
     from pydantic import ValidationError
 
+    # fastmcp >= 3.4.1 catches the pydantic ValidationError inside
+    # FunctionTool.run and re-raises its OWN fastmcp.exceptions.ValidationError
+    # (chained via __cause__), so catching only pydantic's class lets the
+    # framework error leak raw to the agent. Catch both, explicitly.
+    _validation_errors: tuple[type[Exception], ...]
+    try:
+        from fastmcp.exceptions import ValidationError as _FastMCPValidationError
+
+        _validation_errors = (ValidationError, _FastMCPValidationError)
+    except ImportError:
+        _validation_errors = (ValidationError,)
+
     original_run = tool_obj.run
 
     async def run_with_keel_validation(arguments: dict[str, Any]):
         try:
             return await original_run(arguments)
-        except ValidationError as e:
+        except _validation_errors as e:
             return tool_obj.convert_result(
                 json.dumps(_validation_error_envelope(outcome, e), default=str)
             )
