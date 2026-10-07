@@ -1,4 +1,13 @@
-"""Good-result deploy nudge — spec 03 R3(a) (agent-first-build M3.3).
+"""The full-profile `deploy:` line — what is left of the good-result nudge.
+
+Agent-surface-cleanup spec 02 §2.4 retired the nudge: every profile now
+carries the `good_result:` FACT line (`_backtest_view.good_result_line`),
+and this module keeps ONLY the full-profile deploy-intent link and its
+anonymous-session variant, served as the envelope's `deploy` field
+(`_mcp_adapter` renders it as `deploy:` on the full profile only). The
+listed arm returns None. The history below is kept for the full profile.
+
+Good-result deploy nudge — spec 03 R3(a) (agent-first-build M3.3).
 
 When a backtest carries the durable ``metrics.good_result`` marker
 (written by the backtest worker exactly when the spec-02 gate fires:
@@ -32,9 +41,10 @@ from typing import Any
 
 from ._base import ToolContext
 from ._toolsets import is_listed_profile
+from .open_in_app import app_url_for
 
 
-__all__ = ["good_result_nudge"]
+__all__ = ["deploy_line", "good_result_nudge"]
 
 
 def _fmt_num(value: Any, digits: int) -> str | None:
@@ -86,15 +96,14 @@ def good_result_nudge(
 
     numbers = _numbers_fragment(metrics, good)
     qualifier = f" ({numbers})" if numbers else ""
-    overview_url = f"{ctx.app_url}/strategies/{strategy_id}"
+    overview_url = app_url_for("strategy", strategy_id, ctx)
 
     if is_listed_profile():
-        # Navigation-only language (research/08) — the overview page is
-        # where the user proceeds under their own steam.
-        return (
-            f"This backtest clears Keel's good-result bar{qualifier}. "
-            f"You can view this strategy in the Keel app: {overview_url}"
-        )
+        # Retired on the listed profile (agent-surface-cleanup spec 02
+        # §2.4 #7): the `good_result:` fact line — the marker's own numbers
+        # and thresholds — replaced this sentence, and its app-link half
+        # went with it (`url_line` already carries the link).
+        return None
 
     # Spec 09 CL-1/CL-2: while anonymous, no deploy or app link — the
     # future account will not own this strategy's URLs. The nudge points
@@ -120,3 +129,8 @@ def good_result_nudge(
         f"Taking it live is a human step — review and deploy at {url} — "
         f"or do nothing: nothing goes live without your explicit approval."
     )
+
+
+#: The envelope field the full-profile line rides (`_mcp_adapter` renders it
+#: as `deploy:`). The name `good_result_nudge` stays for its callers.
+deploy_line = good_result_nudge

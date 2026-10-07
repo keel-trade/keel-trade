@@ -18,6 +18,7 @@ from keel.errors import KeelError, NotFoundError
 
 from . import register
 from ._base import OutcomeResult, OutcomeTool, ToolContext
+from ._surface_hints import tool_ref
 
 
 def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
@@ -41,7 +42,7 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
     except NotFoundError:
         raise NotFoundError(
             f"Strategy not found: {strategy_id}",
-            suggestion="Run `keel strategy search` to list available strategies.",
+            suggestion=f"{tool_ref('keel_strategy_search')} lists the available strategies.",
         )
     except KeelError:
         raise
@@ -51,8 +52,8 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
             suggestion=(
                 "If the strategy has an active live deployment or queued "
                 "backtest, the server rejects delete. Stop the deployment "
-                "(`keel_live_stop`) and wait for in-flight backtests, then "
-                "retry. Otherwise run `keel_doctor`."
+                "(`keel_live_control` with action='stop') and wait for "
+                "in-flight backtests, then retry. Otherwise run `keel_connection_check`."
             ),
         )
 
@@ -72,9 +73,9 @@ STRATEGY_DELETE = register(
         required_action="strategy.delete",
         cli_path=("strategy", "delete"),
         toolset="backtest",
-        # grounded-in: collaboration.md:130 (recovery is a change operation —
-        # search/restore first, don't delete; deleting silently drops work);
-        # tool_usage.md (prefer recovery over destruction).
+        # grounded-in: system/chat/collaboration.md:86 (recovery is a change
+        # operation — search/restore first, don't delete; deleting silently
+        # drops work).
         description=(
             "Hard-delete a strategy on the platform — IRREVERSIBLE. Once "
             "deleted, the strategy_id can't be reused and its entire version "
@@ -106,7 +107,7 @@ STRATEGY_DELETE = register(
             "readOnlyHint": False,
             "destructiveHint": True,
             "idempotentHint": False,
-            "openWorldHint": True,
+            "openWorldHint": False,
         },
         handler=_handler,
         confirm_in_cli=True,

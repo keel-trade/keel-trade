@@ -29,6 +29,7 @@ from pipeline_engine.dsl.spec import (
     UniverseSpec,
     VariableAssignment,
     VariableRef,
+    dollar_volume_floor_to_emit,
 )
 
 
@@ -265,16 +266,33 @@ class GraphFactoryParam:
 
 @dataclass
 class GraphFactoryDef:
+    """A factory (or promoted pipeline variable) in the browser graph model.
+
+    ``bodyName`` (Q-2516) is the ``name=`` the SOURCE declared on the body
+    ``Pipeline([...])``, verbatim, or ``None`` when it declared none (absent
+    on the wire). The one rule both writers follow: a body keeps a name
+    only if the source declared one; otherwise it is emitted with no name
+    and the resolver's automatic naming applies (a parameterised call is
+    named ``<factory>_<k>=<v>…``, an unnamed variable body or no-arg call
+    after its variable or factory). Before, every body was named after its factory, which collapses a
+    parameterised factory's per-call names into one, so an unedited visual
+    save changed the canonical hash and minted a version.
+    """
+
     name: str
     params: list[GraphFactoryParam]
     body: list[GraphBlock]
+    bodyName: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        data: dict[str, Any] = {
             "name": self.name,
             "params": [param.to_dict() for param in self.params],
             "body": [block.to_dict() for block in self.body],
         }
+        if self.bodyName is not None:
+            data["bodyName"] = self.bodyName
+        return data
 
     @staticmethod
     def from_dict(data: dict[str, Any]) -> "GraphFactoryDef":
@@ -291,7 +309,10 @@ class GraphFactoryDef:
         body = [GraphBlock.from_dict(b) for b in body_raw if isinstance(b, dict)]
         if len(body) != len(body_raw):
             raise ValueError(f"Factory '{name}' has invalid body block entries")
-        return GraphFactoryDef(name=name, params=params, body=body)
+        body_name = data.get("bodyName")
+        if body_name is not None and (not isinstance(body_name, str) or not body_name):
+            raise ValueError(f"Factory '{name}' has an invalid 'bodyName'")
+        return GraphFactoryDef(name=name, params=params, body=body, bodyName=body_name)
 
 
 @dataclass
@@ -457,7 +478,7 @@ def graph_to_spec(graph: GraphModel | dict[str, Any]) -> StrategyFile:
                     params=params,
                     body=PipelineSpec(
                         steps=body_steps,
-                        name=factory.name,
+                        name=factory.bodyName,
                         location=_loc(f"factory[{factory.name}]", lc),
                     ),
                     location=_loc(f"factory[{factory.name}]", lc),
@@ -470,7 +491,7 @@ def graph_to_spec(graph: GraphModel | dict[str, Any]) -> StrategyFile:
                     name=factory.name,
                     value=PipelineSpec(
                         steps=body_steps,
-                        name=factory.name,
+                        name=factory.bodyName,
                         location=_loc(f"factory[{factory.name}]", lc),
                     ),
                     location=_loc(f"factory[{factory.name}]", lc),
@@ -567,6 +588,8 @@ def graph_to_spec(graph: GraphModel | dict[str, Any]) -> StrategyFile:
             inclusions=model.universe.get("inclusions"),
             lookback=model.universe.get("lookback"),
             volume_quartiles=model.universe.get("volume_quartiles"),
+            min_trailing_dollar_volume=model.universe.get("min_trailing_dollar_volume"),
+            min_trailing_notional_proxy=model.universe.get("min_trailing_notional_proxy"),
             resolved=model.universe.get("resolved"),
             resolved_at=model.universe.get("resolved_at"),
             groups=model.universe.get("groups"),
@@ -699,6 +722,7 @@ def spec_to_graph(spec: StrategyFile) -> GraphModel:
                     for param in factory.params
                 ],
                 body=_steps_to_graph_blocks(factory.body.steps, factory.name),
+                bodyName=factory.body.name,
             )
         )
 
@@ -713,6 +737,7 @@ def spec_to_graph(spec: StrategyFile) -> GraphModel:
                     name=var.name,
                     params=[],
                     body=_steps_to_graph_blocks(var.value.steps, var.name),
+                    bodyName=var.value.name,
                 )
             )
         else:
@@ -753,6 +778,11 @@ def spec_to_graph(spec: StrategyFile) -> GraphModel:
             "inclusions",
             "lookback",
             "volume_quartiles",
+            # Both floor names, AS DECLARED: a graph represents the source
+            # (the editor's validator must still see a deprecated alias to
+            # warn on it). The DSL printer below is the writer that renames.
+            "min_trailing_dollar_volume",
+            "min_trailing_notional_proxy",
             "resolved",
             "resolved_at",
             "groups",
@@ -920,11 +950,19 @@ def spec_to_dsl(spec: StrategyFile, registry: dict | None = None) -> str:
             "inclusions",
             "lookback",
             "volume_quartiles",
+            "min_trailing_dollar_volume",
             "resolved",
             "resolved_at",
             "groups",
             "max_leverages",
         ):
+            if attr == "min_trailing_dollar_volume":
+                # The floor, under its current name even when it was declared
+                # through the deprecated alias (DV6b — the printer is a
+                # writer); both names are printed only when both were declared.
+                for name, floor in dollar_volume_floor_to_emit(spec.universe):
+                    universe_args.append(f"{name}={_emit_value(floor)}")
+                continue
             val = getattr(spec.universe, attr)
             if val is not None:
                 universe_args.append(f"{attr}={_emit_value(val)}")

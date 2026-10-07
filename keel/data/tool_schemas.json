@@ -244,7 +244,7 @@
       "properties": {
         "topic": {
           "type": "string",
-          "description": "Reference topic",
+          "description": "Reference topic, knowledge section, rule:<CODE>, or rules",
           "enum": [
             "phases",
             "types",
@@ -471,7 +471,7 @@
   },
   {
     "name": "strategy_components_upgrade_by_id",
-    "description": "Upgrade component versions for a saved strategy and persist the upgraded lock as a new commit (by ID).",
+    "description": "Move a saved strategy's outdated component pins (the named ones, or all) to their latest versions where the bump alone keeps it valid, and save them as a new commit only if the result validates; pins that need a recomposition are left and listed in skipped_breaking (by ID).",
     "inputSchema": {
       "type": "object",
       "properties": {

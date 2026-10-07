@@ -1,0 +1,15 @@
+{
+  "code": "backtest_not_comparable",
+  "message": "v7 has not completed (still running when checked).",
+  "what_was_expected": "Two to eight completed backtest runs.",
+  "example": {
+    "run_ids": ["btr_9f2a41c8", "btr_2d70aa31"]
+  },
+  "suggested_next_action": {
+    "tool": "keel_backtest_watch",
+    "args": {
+      "run_id": "btr_5c1108ef"
+    },
+    "reason": "Wait for the run to finish, then compare."
+  }
+}

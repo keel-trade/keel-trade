@@ -16,6 +16,12 @@ that consumes these rows is T-M2b-3; this module and its writer are M2b.
 
 from __future__ import annotations
 
+# The position layer's binding rows (spec 03-R18): owned by
+# ``pipeline_engine.binding`` (the one scope machine both the static walk and
+# the runtime lift execute) and re-exported here so the A3 artifact carries
+# them as data in its ``binding`` block.
+from pipeline_engine.binding import BINDING_ROWS, binding_table
+
 
 # ── Closed vocabularies (spec 03 §2.3) — the test enumerates against these ───
 JUDGMENTS = (
@@ -89,6 +95,11 @@ EMIT_TERMS = (
     "extra-keys-sorted",  # composer dict-param keys minus branch names, sorted
     "param-type",  # the declared (non-isinstance-checkable) param type
     "suggestion-bridge",  # the dynamic insert-a-converter suggestion (TYPE_MISMATCH)
+    # The transition advisory's site-selected fix (agent-surface-cleanup spec
+    # 04 §2.3(a)): the long-only bridge when a signal_transform leaves the
+    # binary carrier, the catalog template otherwise. Recorded for
+    # faithfulness, not dispatch.
+    "transition-binary-bridge",
     # Envelope machine channels (spec 05 §3.1 #7/#11, §3.3) — the typed
     # judgments populate these at the subsumption-relation type edges: ``path``
     # is the machine step path (``"/".join(path)`` == spec 04's trace node id)
@@ -127,15 +138,121 @@ EMIT_TEMPLATES: dict[str, str | dict[str, str]] = {
             "{expected_display}, but branch '{branch}' outputs '{actual}'."
         ),
     },
+    # The J-SLOTREAD.ref-present fix family (Q-1696, W4 §4.1). The DIAGNOSIS
+    # is right in both shapes; the FIX is not. Inside a Parallel branch the
+    # catalog's default ("Add Store(...) before this component") creates a
+    # SECOND writer of one slot name, which is a runtime SlotOverwriteError —
+    # the branch snapshot (spec 01 §6.3) is what makes the sibling's Store
+    # invisible, and moving it above the block is the only repair. Which
+    # member renders is decided by the walk: it knows the branch it is in and
+    # the {slot -> branch} map of the enclosing Parallel's stores.
+    "slot-ref-fix": {
+        "sibling": (
+            "Slot '{slot}' is stored in sibling branch '{other}'; branches "
+            'cannot see each other. Move Store("{slot}") (and the steps that '
+            "produce it) BEFORE the Parallel, so both branches read one "
+            "writer — adding a second Store(\"{slot}\") inside '{branch}' is a "
+            "runtime SlotOverwriteError."
+        ),
+        "none": 'Add Store("{slot}") before this component.',
+        # A VOLATILITY slot (the `_VOL_SLOT_PARAMS` family). Its declared type
+        # is plain SignalSeries, so `Store("{slot}")` of ANY signal validates
+        # and the sizer then divides by the wrong number — the fix names the
+        # producer every reader's docstring documents. Rendered byte-for-byte
+        # by the TS engine (interpreter.ts slotRefFix).
+        # The inserted steps hand the OHLCV back with Store/Load around the
+        # producer: ReturnVolatility's OUTPUT flows on, so a bare
+        # `ReturnVolatility() -> Store(...)` after the loader feeds the next
+        # step a volatility series (TYPE_MISMATCH). Followed literally —
+        # the four steps pasted directly after PriceDataLoader() — the text
+        # validates (accept_vol_slot_from_return_volatility is that shape).
+        "none-vol": (
+            "'{component}' reads a return-volatility series from slot '{slot}'. "
+            "Insert these four steps directly after PriceDataLoader(): "
+            'Store("ohlcv"), ReturnVolatility(), Store("{slot}"), Load("ohlcv") '
+            "— the Load hands the OHLCV back to the steps that follow. A "
+            'Store("{slot}") of any other signal validates but sizes by the '
+            "wrong number."
+        ),
+    },
     "param-nonfinite-fix": "Change {param} to a finite number.",
     "param-nonfinite-detail": (
         "Parameter '{param}' of '{component}' has invalid value {value!r}. "
         "Infinity and NaN are not allowed."
     ),
-    "param-range-fix": "Change {param} to a value in range [{min}, {max}].",
+    # The TYPE_MISMATCH bridge family (Q-1696). The catalog declares no
+    # suggestion_template for TYPE_MISMATCH because the fix is computed at
+    # the site ("the write-time suggestion is computed dynamically"); the
+    # STRINGS are still table data, exactly like every other family here.
+    # Which member renders is decided by the walk from the two carrier types
+    # and the previous step's category — never by prose in engine code.
+    "bridge-category": (
+        "Insert a {category} between '{prev}' and '{step}' — it turns "
+        "{actual} into {expected}. Options: {examples}."
+    ),
+    "bridge-two-hop": (
+        "Reach {expected} in two steps from {actual}: a {category_1} "
+        "({examples_1}) then a {category_2} ({examples_2})."
+    ),
+    # Globals-first (agent-surface-cleanup review 06 §3.2 #3): the loader
+    # takes its clock from Globals(target_timeframe=...), so the fix never
+    # teaches a per-loader `timeframe=` literal. The TS engine renders this
+    # exact string at its head-of-pipeline TYPE_MISMATCH site
+    # (engine/interpreter.ts BRIDGE_LOADER_SUGGESTION) — pinned byte-for-byte
+    # by TYPE_MISMATCH/reject_no_loader_at_head in both harnesses.
+    "bridge-loader": (
+        "Start the pipeline with a data loader — PriceDataLoader() for price "
+        "data or FundingDataLoader() for funding; each reads its clock from "
+        "Globals(target_timeframe=...)."
+    ),
+    "bridge-reorder": (
+        "'{prev}' sizes positions and belongs AFTER '{step}': move '{prev}' "
+        "to follow '{step}' (signal → {step} → sizer)."
+    ),
+    "bridge-none": (
+        "No registered component turns {actual} into {expected}; restructure "
+        "the branch (store the {actual} in a slot and read it where it is "
+        "needed)."
+    ),
+    # VALUE_DOMAIN_MISMATCH on a universe-mask applier fed a 0/1 FILTER mask
+    # (agent-surface-cleanup review 06 §3.2 #3, the M-20 "two mask systems"
+    # fact). The catalog template tells the author to threshold the value —
+    # and the producer usually IS a threshold filter. The fix is the OTHER
+    # mask system. Consumer-only on purpose: the TS engine has no producer
+    # provenance, and it renders this string byte-for-byte
+    # (engine/interpreter.ts FILTER_MASK_APPLIER_SUGGESTION).
+    "domain-filter-mask-applier": (
+        "'{consumer}' applies a 1.0/NaN UNIVERSE mask (which assets are "
+        "tradable); a 0/1 FILTER mask (when to trade) goes through ApplyMask "
+        'instead: {{"signal": [...], "filter": [...]}} -> '
+        'ApplyMask(score_signal="signal", filter_signal="filter").'
+    ),
+    # TRANSITION_OUTPUT_MISMATCH when a signal_transform turns the binary
+    # carrier into something else (agent-surface-cleanup spec 04 §2.3(a),
+    # verbatim). The TS engine renders this string byte-for-byte
+    # (engine/interpreter.ts transitionBinaryBridge) — pinned by
+    # TRANSITION_OUTPUT_MISMATCH/reject_binary_clipped_to_long_only.
+    "transition-binary-bridge": (
+        "For long/cash from a {{-1, 0, +1}} signal, ThresholdCross(upper=0.5, "
+        "mode='long_only') maps it to {{0, +1}} and stays BinarySignal; "
+        "'{step}' turns it into a SignalSeries here."
+    ),
+    # {range} is validation_shared.range_phrase() over the HARD bounds
+    # (Q-2242): "in range [2, 100]" / "in range (0, 0.5]" when both bounds
+    # exist, "greater than 0" / "no less than 0" / "less than 1" /
+    # "no greater than 1" when only one does. TS rules/range-phrase.ts
+    # renders the same phrase.
+    "param-range-fix": "Change {param} to a value {range}.",
     "param-range-detail": {
         "below-min": "Parameter '{param}' of '{component}' value {value} below minimum {min}.",
         "above-max": "Parameter '{param}' of '{component}' value {value} above maximum {max}.",
+        # Exclusive-bound shapes (Q-2242): the bound itself is outside.
+        "below-min-exclusive": (
+            "Parameter '{param}' of '{component}' value {value} must be greater than {min}."
+        ),
+        "above-max-exclusive": (
+            "Parameter '{param}' of '{component}' value {value} must be less than {max}."
+        ),
     },
 }
 
@@ -160,8 +277,18 @@ SKIP_TOKENS = (
 )
 RECOVERY_TYPES = ("any", "unchanged")
 
-# The three flow-shape STAGED_CHANGES ids — the ONLY flow_config keys (§2.3).
-FLOW_CONFIG_KEYS = ("extract-projection", "scheme-synthesis", "composer-record-reach")
+# The flow-shape STAGED_CHANGES ids — the ONLY flow_config keys (§2.3).
+# soft-unproven-silence: the claims-model unproven-soft row retirement
+# (spec 09 §3.4; consulted at both engines' domain-emission gates).
+# role-survival: D-1 (ledger Q-0543) — soft refined names survive `norm` as
+# ROLES, which is what makes the role judgment's information exist at all.
+FLOW_CONFIG_KEYS = (
+    "extract-projection",
+    "scheme-synthesis",
+    "composer-record-reach",
+    "soft-unproven-silence",
+    "role-survival",
+)
 
 
 def emit_term_ok(term: str) -> bool:
@@ -244,6 +371,7 @@ STEP_KIND_ROWS: dict[str, list[dict]] = {
                 "output": "output",
                 "prev_output": "prev-output",
                 "expected_outputs": "expected-outputs",
+                "suggestion": "transition-binary-bridge",
             },
         },
         # Synthesis shape (staged flow key scheme-synthesis): pre = declared
@@ -448,6 +576,9 @@ STEP_KIND_ROWS: dict[str, list[dict]] = {
                 "component": "component",
                 "param": "param",
                 "slot": "slot",
+                # Context-selected fix (W4 §4.1): `sibling` when the slot is
+                # stored in a sibling Parallel branch, `none` otherwise.
+                "suggestion": "suggestion-template:slot-ref-fix",
             },
         },
         {
@@ -768,14 +899,7 @@ SITE_CENSUS: tuple[dict, ...] = (
         "lane": "A",
         "judgment": "J-COMPOSER",
     },
-    # ── pass 7: 1 lane-B ─────────────────────────────────────────────────
-    {
-        "code": "PHASE_ORDER_VIOLATION",
-        "pass": "7",
-        "site": "ordering",
-        "lane": "B",
-        "judgment": None,
-    },
+    # ── pass 7: retired 2026-08-26 (PHASE_ORDER_VIOLATION → reserved) ────
     # ── pass 8: 4 lane-A ─────────────────────────────────────────────────
     {"code": "SLOT_NOT_FOUND", "pass": "8", "site": "load", "lane": "A", "judgment": "J-LOAD"},
     {
@@ -932,6 +1056,7 @@ def clock_transfers() -> dict[str, dict]:
 #: the shared row family over both transform ops (the κ_out = κ_in noop row
 #: fires at coarsen AND project sites).
 CLOCK_JUDGMENTS = (
+    "J-SYNTH",
     "J-COARSEN",
     "J-PROJECT",
     "J-TRANSFORM",
@@ -1030,6 +1155,47 @@ CLOCK_ROWS: tuple[dict, ...] = (
         "staged_by": "clock-transform-rebase",
         "recovery": "none",
     },
+    # The synth-site rows (new-data-loaders spec 05 §3 / §2b): a clock-SOURCE
+    # loader that consumes Globals.bar_offset in-loader, or serves below its
+    # native floor. The two offset rows are NEW pass-6 sites of re-based
+    # codes (row-level staged_by under the PROMOTED clock-transform-rebase
+    # key, exactly like the coarsen rows); the floor row's code rides its
+    # own severity-ramp key. Recovery is the declared served clock so the
+    # terminal premise never double-fires.
+    # J-SYNTH.unbound (Q-1510, spec 05 D2's write-time half): the synth src
+    # param resolves to nothing — no literal, a globals.target_timeframe ref
+    # with no such Globals, no string default. Checked FIRST at the site (a
+    # loader with no timeframe has no floor or offset to judge); recovery is
+    # none: the output stays clock-less, exactly the R-8 outcome, and the
+    # code is the only thing that distinguishes it from a VariableRef src.
+    {
+        "id": "J-SYNTH.unbound",
+        "judgment": "J-SYNTH",
+        "on_fail": {"code": "LOADER_TIMEFRAME_UNBOUND"},
+        "staged_by": None,
+        "recovery": "none",
+    },
+    {
+        "id": "J-SYNTH.floor",
+        "judgment": "J-SYNTH",
+        "on_fail": {"code": "LOADER_FINER_THAN_NATIVE"},
+        "staged_by": None,
+        "recovery": "declared-target",
+    },
+    {
+        "id": "J-SYNTH.offset-same-tf",
+        "judgment": "J-SYNTH",
+        "on_fail": {"code": "BAR_OFFSET_AT_SAME_TF"},
+        "staged_by": "clock-transform-rebase",
+        "recovery": "declared-target",
+    },
+    {
+        "id": "J-SYNTH.offset-multiple",
+        "judgment": "J-SYNTH",
+        "on_fail": {"code": "BAR_OFFSET_NOT_MULTIPLE"},
+        "staged_by": "clock-transform-rebase",
+        "recovery": "declared-target",
+    },
     {
         "id": "J-CLKUNIFORM.consumer",
         "judgment": "J-CLKUNIFORM",
@@ -1096,10 +1262,15 @@ def build_judgment_table(flow_config: dict[str, str]) -> dict:
             "transfers": {k: dict(transfers[k]) for k in sorted(transfers)},
             "rows": [dict(r) for r in CLOCK_ROWS],
         },
+        # The position layer (spec 03-R18, AC-5): vocabulary, rule categories,
+        # the binding rows in check order and every message shape. The TS
+        # engine reads the closed vocabularies from here, never restates them.
+        "binding": binding_table(),
     }
 
 
 __all__ = [
+    "BINDING_ROWS",
     "CLOCK_JUDGMENTS",
     "CLOCK_RECOVERY_TOKENS",
     "CLOCK_ROWS",

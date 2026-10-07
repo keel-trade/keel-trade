@@ -43,7 +43,7 @@ keel/data/*.json
 keel/data/knowledge/*.md
 keel/data/patterns/*.md
 keel/data/reference/*.md
-keel/skills/*.md
+keel/skills/*/SKILL.md
 # MCP-Apps card widget assets (client-rendered card JS/CSS/HTML templates).
 # Intentionally public: they ship in the PyPI wheel already, and DP2
 # (no client-side analytics — publicly verifiable in the mirror) REQUIRES
@@ -53,6 +53,14 @@ keel/widgets/assets/*.js
 keel/widgets/assets/*.css
 keel/widgets/assets/*.html.tmpl
 pipeline_engine/*.py
+# The clock alphabet (libs/timeframes), vendored verbatim into the SDK by
+# build_data.py since 9051d97d0 and shipped in the wheel (pyproject
+# `packages = [..., "timeframes"]`): the bundled validator re-exports
+# TIMEFRAME_MINUTES from it, so the wheel is already public with it and the
+# mirror would otherwise publish an importable pipeline_engine that dies on
+# `from timeframes import ...`. Stdlib-only, no secrets. Per-extension, so a
+# new file class under it still reddens G1 loudly.
+timeframes/*.py
 # Generated lookup tables the bundled validator READS at runtime (M4 clock
 # work made the DSL subset carry them). Same derivation as the already-public
 # registry.json/type_graph.json — public component registry in, tables out; no
@@ -63,4 +71,31 @@ pipeline_engine/dsl/fixtures/*.json
 scripts/*.py
 scripts/icon.png
 scripts/manifest.template.json
+# The MCP-Apps card preview harness (Q-1505): a dev script beside the card
+# assets it renders, published with them for the same DP2 reason (per-file,
+# not a bare *.mjs glob, so a new script class still reddens G1 loudly).
+scripts/card_preview.mjs
+# Its shared host context (Q-1718): card_preview.mjs imports it, so the
+# published preview script cannot run without it.
+scripts/card_host_context.mjs
 tests/*.py
+# Card fixtures (mcp-strategy-view M2.5): the graph JSON the strategy-card
+# tests render — including the real HRP pipeline that is the acceptance case
+# for the branch packer and the block budget. Published with the tests that
+# load them; per-directory, so a new fixture class still reddens G1 loudly.
+tests/fixtures/cards/*.json
+# The strategy card's rendering guard: the card's contract is a rendered
+# DOM (block budget, collapsed parallel, marks), so its assertions live in
+# a Playwright script beside the fixtures it drives. Published with the
+# test that runs it; per-directory, so a new script class reddens G1.
+tests/fixtures/cards/*.mjs
+# The channel contract's recorded envelopes (agent-surface-cleanup spec 02
+# §2.3: the listed server's own results, presigned URLs redacted) and the
+# window display-parity fixture shared with keel-app (spec 03 guard 12).
+# Published with the tests that load them; per-file-class, so a new fixture
+# class still reddens G1.
+tests/fixtures/channels/*.json
+tests/fixtures/window-parity.fixture.json
+# Recorded tool-result payloads (spec 02 §2.3) the channel-budget replay guard
+# reads; staging identity ids are scrubbed to same-length placeholders.
+tests/fixtures/payloads/*.json

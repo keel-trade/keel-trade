@@ -1,0 +1,20 @@
+{
+  "run_id": "btr_01HZSPARSE",
+  "hero_url": "https://app.usekeel.io/backtests/btr_01HZXK9Q/tearsheet",
+  "url_line": "View in Keel: https://app.usekeel.io/backtests/btr_01HZXK9Q/tearsheet",
+  "status": "completed",
+  "strategy_id": "str_01HZXJ4M",
+  "strategy_name": null,
+  "period": {
+    "start_date": "2026-06-01",
+    "end_date": "2026-09-12"
+  },
+  "summary_metrics": {
+    "total_return_pct": -8.4,
+    "total_trades": 3
+  },
+  "render": {
+    "card": "backtest",
+    "fallback_url": "https://app.usekeel.io/backtests/btr_01HZXK9Q/tearsheet"
+  }
+}

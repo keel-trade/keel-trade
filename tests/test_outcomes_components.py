@@ -8,7 +8,6 @@ the bundled registry — no API or mocking required.
 from __future__ import annotations
 
 import pytest
-
 from keel.errors import NotFoundError
 from keel.tools.outcomes import OUTCOMES, _bootstrap
 from keel.tools.outcomes._base import ToolContext
@@ -40,8 +39,7 @@ def test_components_search_with_keyword_returns_results():
     assert len(results) > 0
     # At least one result should mention momentum in name or description.
     assert any(
-        "momentum" in (r.get("name", "") + " " + r.get("description", "")).lower()
-        for r in results
+        "momentum" in (r.get("name", "") + " " + r.get("description", "")).lower() for r in results
     )
     assert env["total"] == len(results)
     assert env["limit"] == 20
@@ -69,16 +67,24 @@ def test_components_search_falls_back_to_bundled_when_api_lacks_filter(monkeypat
     skipped (returns None) and bundled search — which implements every
     filter correctly — runs instead.
     """
-    from keel.tools.outcomes._base import ToolContext
     from unittest.mock import MagicMock
+
+    from keel.tools.outcomes._base import ToolContext
 
     tool = OUTCOMES["keel_components_search"]
     fake_client = MagicMock()
     # Simulate the API returning ALL 182 (no filter support); if our
     # guard works, this should never be called.
-    fake_client.get.return_value = [{"name": f"FakeComp{i}", "description": "n/a",
-                                      "category": "cat", "input_type": "Any",
-                                      "output_type": "Any"} for i in range(182)]
+    fake_client.get.return_value = [
+        {
+            "name": f"FakeComp{i}",
+            "description": "n/a",
+            "category": "cat",
+            "input_type": "Any",
+            "output_type": "Any",
+        }
+        for i in range(182)
+    ]
     ctx = ToolContext(api_client=fake_client, is_tty=False)
 
     out = tool.handler({"query": "momentum"}, ctx)
@@ -94,16 +100,22 @@ def test_components_search_falls_back_to_bundled_when_api_lacks_filter(monkeypat
 def test_components_search_uses_api_when_only_category(monkeypatch):
     """The category-only path IS supported by the API — verify the handler
     uses it (avoids the bundled search round-trip when not needed)."""
-    from keel.tools.outcomes._base import ToolContext
     from unittest.mock import MagicMock
+
+    from keel.tools.outcomes._base import ToolContext
 
     tool = OUTCOMES["keel_components_search"]
     fake_client = MagicMock()
     # Match the API's PaginatedResponse-less shape for the components
     # endpoint (list_components returns a bare list, not paginated).
     fake_client.get.return_value = [
-        {"name": "ROC", "description": "rate of change", "category": "indicator",
-         "input_type": "OHLCVDict", "output_type": "SignalSeries"},
+        {
+            "name": "ROC",
+            "description": "rate of change",
+            "category": "indicator",
+            "input_type": "OHLCVDict",
+            "output_type": "SignalSeries",
+        },
     ]
     ctx = ToolContext(api_client=fake_client, is_tty=False)
 
@@ -133,7 +145,7 @@ def test_components_search_with_after_filter():
 
 
 def test_components_compose_help_returns_schema():
-    tool = OUTCOMES["keel_components_compose_help"]
+    tool = OUTCOMES["keel_components_get"]
     out = tool.handler({"name": "AD"}, _ctx())
     env = out.to_envelope()
     assert env["share_url"] is None
@@ -149,14 +161,14 @@ def test_components_compose_help_returns_schema():
 
 
 def test_components_compose_help_description_explains_component_detail_role():
-    desc = OUTCOMES["keel_components_compose_help"].description
-    assert "schema/detail contract for ONE known" in desc
-    assert "keel_components_detail_batch" in desc
+    desc = OUTCOMES["keel_components_get"].description
+    assert "full contract for ONE known" in desc
+    assert "keel_components_get_many" in desc
     assert "ComponentRef" in desc
-    assert "Do NOT use to discover components" in desc
+    assert "Discovering components is `keel_components_search`" in desc
 
 
 def test_components_compose_help_unknown_name_raises_NotFoundError():
-    tool = OUTCOMES["keel_components_compose_help"]
+    tool = OUTCOMES["keel_components_get"]
     with pytest.raises(NotFoundError):
         tool.handler({"name": "DefinitelyNotAComponent_XYZ"}, _ctx())

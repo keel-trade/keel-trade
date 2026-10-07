@@ -1,0 +1,17 @@
+{
+  "_meta": {
+    "fastmcp": {
+      "wrap_result": true
+    }
+  },
+  "content": [
+    {
+      "type": "text",
+      "text": "**Keel** \u00b7 signed in as User (user_000000000000000000000000000)'s Org \u00b7 free plan\n113 of 120 backtest runs and 1,420 of 1,500 backtest compute seconds and 20 of 20 ai messages left this week; they reset Mon 28 Sep 00:00 UTC. 0 of 0 eval runs and 1 of 1 live strategies max left. Quota is per org and shared across the web app, the CLI and other chats.\nThis connector: research and backtests; live monitoring read-only; live actions in the Keel web app.\nView in Keel: https://staging-app00.example.invalid/strategies\n"
+    }
+  ],
+  "structuredContent": {
+    "result": "{\"share_url\": null, \"hero_url\": \"https://staging-app00.example.invalid/strategies\", \"url_line\": \"View in Keel: https://staging-app00.example.invalid/strategies\", \"authenticated\": true, \"app_url\": \"https://staging-app00.example.invalid\", \"profile\": \"listed\", \"capabilities\": {\"research\": true, \"backtest\": true, \"monitor\": \"read-only\", \"live_actions\": \"web app\"}, \"live_monitoring_allowed\": true, \"live_trading_allowed\": false, \"identity\": {\"principal_id\": \"prn_00000000000000000000000000\", \"org_id\": \"org_00000000000000000000000000\", \"org_name\": \"User (user_000000000000000000000000000)'s Org\", \"plan\": \"free\", \"tier\": \"base\"}, \"entitlements\": {\"summary\": [{\"unit\": \"backtest_runs\", \"granted\": 120, \"spent\": 7, \"available\": 113, \"consumed_by\": [\"MCP tool calls (keel_backtest_run)\", \"CLI (keel backtest run)\", \"web app backtest UI\"], \"period\": \"weekly\", \"resets_at\": \"2026-09-28T00:00:00Z\", \"reserved\": 0}, {\"unit\": \"backtest_compute_seconds\", \"granted\": 1500, \"spent\": 80, \"available\": 1420, \"consumed_by\": [\"MCP tool calls (keel_backtest_run)\", \"CLI (keel backtest run)\", \"web app backtest UI\"], \"period\": \"weekly\", \"resets_at\": \"2026-09-28T00:00:00Z\", \"reserved\": 0}, {\"unit\": \"eval_runs\", \"granted\": 0, \"spent\": 0, \"available\": 0, \"consumed_by\": [\"agent evaluation runs (internal/admin)\"], \"reserved\": 0}, {\"unit\": \"ai_messages\", \"granted\": 20, \"spent\": 0, \"available\": 20, \"consumed_by\": [\"in-app chat at app.usekeel.io/chat ONLY\"], \"period\": \"weekly\", \"resets_at\": \"2026-09-28T00:00:00Z\", \"reserved\": 0, \"note\": \"NOT consumed by MCP/CLI/SDK tool calls. Conversation tokens used by an agent host driving Keel via MCP are billed by that host's LLM provider, NOT by Keel.\"}, {\"unit\": \"live_strategies_max\", \"granted\": 1, \"spent\": 0, \"available\": 1, \"consumed_by\": [\"MCP (live-write toolset)\", \"CLI\", \"web app live strategies\"], \"reserved\": 0}]}, \"view\": {\"kind\": \"status\", \"size\": \"receipt\", \"object\": \"org_00000000000000000000000000\", \"at\": \"2026-09-23T23:26:17.081Z\", \"seq\": 4, \"markdown\": \"**Keel** \\u00b7 signed in as User (user_000000000000000000000000000)'s Org \\u00b7 free plan\\n113 of 120 backtest runs and 1,420 of 1,500 backtest compute seconds and 20 of 20 ai messages left this week; they reset Mon 28 Sep 00:00 UTC. 0 of 0 eval runs and 1 of 1 live strategies max left. Quota is per org and shared across the web app, the CLI and other chats.\\nThis connector: research and backtests; live monitoring read-only; live actions in the Keel web app.\\nView in Keel: https://staging-app00.example.invalid/strategies\\n\"}}"
+  },
+  "isError": false
+}

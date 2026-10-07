@@ -121,18 +121,23 @@ def test_share_create_strategy_returns_share_url(ctx):
             return me_payload
         raise AssertionError(f"unexpected GET {path}")
 
-    with patch("keel.client.KeelClient.post", return_value=create_payload) as mock_post, \
-            patch("keel.client.KeelClient.get", side_effect=fake_get):
+    with (
+        patch("keel.client.KeelClient.post", return_value=create_payload) as mock_post,
+        patch("keel.client.KeelClient.get", side_effect=fake_get),
+    ):
         tool = OUTCOMES["keel_share_create"]
         result = tool.handler({"target_id": "str_xyz"}, ctx)
 
     mock_post.assert_called_once()
     assert mock_post.call_args.args[0] == "/v1/strategies/str_xyz/share-links"
     body = mock_post.call_args.kwargs["json"]
-    assert body["permission"] == "view"
+    # Q-2255: the strict route derives `permission` from `include_source`
+    # (hidden ⇒ view); the SDK never sends it, and sends nothing else.
+    assert "permission" not in body
     assert body["include_source"] is False
     # We auto-pin latest backtest so the share card has metrics.
     assert body["pin_latest_backtest"] is True
+    assert set(body) == {"include_source", "pin_latest_backtest"}
 
     env = result.to_envelope()
     assert env["run_id"] == "shr_abc123"
@@ -159,12 +164,12 @@ def test_share_create_backtest_target_type_inferred(ctx):
         # No referral code -> share_url shouldn't carry ?ref=
         return {}
 
-    with patch("keel.client.KeelClient.post", return_value=create_payload) as mock_post, \
-            patch("keel.client.KeelClient.get", side_effect=fake_get):
+    with (
+        patch("keel.client.KeelClient.post", return_value=create_payload) as mock_post,
+        patch("keel.client.KeelClient.get", side_effect=fake_get),
+    ):
         tool = OUTCOMES["keel_share_create"]
-        result = tool.handler(
-            {"target_id": "btr_run789", "include_source": True}, ctx
-        )
+        result = tool.handler({"target_id": "btr_run789", "include_source": True}, ctx)
 
     mock_post.assert_called_once()
     assert mock_post.call_args.args[0] == "/v1/backtests/btr_run789/share-link"
@@ -187,12 +192,12 @@ def test_share_create_target_type_override(ctx):
         "permission": "view",
     }
 
-    with patch("keel.client.KeelClient.post", return_value=create_payload) as mock_post, \
-            patch("keel.client.KeelClient.get", return_value={}):
+    with (
+        patch("keel.client.KeelClient.post", return_value=create_payload) as mock_post,
+        patch("keel.client.KeelClient.get", return_value={}),
+    ):
         tool = OUTCOMES["keel_share_create"]
-        result = tool.handler(
-            {"target_id": "custom_id_99", "target_type": "backtest"}, ctx
-        )
+        result = tool.handler({"target_id": "custom_id_99", "target_type": "backtest"}, ctx)
 
     # Explicit override should route to /v1/backtests/{id}/share-link
     assert mock_post.call_args.args[0] == "/v1/backtests/custom_id_99/share-link"

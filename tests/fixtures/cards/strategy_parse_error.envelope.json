@@ -1,0 +1,54 @@
+{
+  "compile_error": "Parse error: probe",
+  "compiled": false,
+  "dry_run": true,
+  "share_url": null,
+  "validation": {
+    "errors": [
+      {
+        "code": "PARSE_ERROR",
+        "location": {
+          "col": 0,
+          "line": 3
+        },
+        "message": "Parse error at line 3, col 0: Unknown Execution parameter 'buffer'. Available: ['buffer_mode', 'buffer_threshold', 'min_trade_size', 'on_change_tolerance', 'rebalance', 'rebalance_method']",
+        "severity": "error"
+      }
+    ],
+    "ok": false,
+    "warnings": []
+  },
+  "view": {
+    "categories": {},
+    "change": null,
+    "error": "Parse error at line 3, col 0: Unknown Execution parameter 'buffer'. Available: ['buffer_mode', 'buffer_threshold', 'min_trade_size', 'on_change_tolerance', 'rebalance', 'rebalance_method']",
+    "evidence": null,
+    "header": {
+      "clock": null,
+      "execution": null,
+      "factories": [],
+      "universe": null
+    },
+    "kind": "strategy",
+    "markdown": "**BTC beater** \u00b7 Preview \u00b7 1 error \u2014 did not parse\nParse error at line 3, col 0: Unknown Execution parameter 'buffer'. Available: ['buffer_mode', 'buffer_threshold', 'min_trade_size', 'on_change_tolerance', 'rebalance', 'rebalance_method']\nChecked as far as the parse (PARSE_ERROR); component checks run once the source parses.\n",
+    "name": "BTC beater",
+    "parse_error": true,
+    "size": "receipt",
+    "source": {
+      "lines": 10,
+      "text": "Globals(target_timeframe='1d', bar_offset='12h')\nUniverse(mode='top_volume', top_n=30, market='perp')\nExecution(rebalance='buffered', buffer=0.2)\nPipeline([\n    PriceDataLoader(),\n    ROC(period=20),\n    ForecastScaler(avg_abs_target=10.0),\n    ForecastCapper(limit=20.0),\n    ForecastWeightNormalizer(target_leverage=1.0),\n], name='btc_beater')",
+      "truncated": false
+    },
+    "status": "PREVIEW",
+    "status_text": null,
+    "structure": {
+      "blocks": []
+    },
+    "validation": {
+      "errors": 1,
+      "ok": false,
+      "warnings": 0
+    },
+    "version": null
+  }
+}

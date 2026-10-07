@@ -3,6 +3,7 @@
     "frequency": [
       {
         "admitted": [
+          "5min",
           "15min",
           "30min",
           "1h",
@@ -16,7 +17,7 @@
         ],
         "prior_admitted": null,
         "reason": "not a platform timeframe \u2014 pandas builds the grid anyway, off the execution clock's alphabet",
-        "replacement": "frequency= one of ['15min', '30min', '1h', '2h', '3h', '4h', '6h', '8h', '12h', '1d']",
+        "replacement": "frequency= one of ['5min', '15min', '30min', '1h', '2h', '3h', '4h', '6h', '8h', '12h', '1d']",
         "retired_at": 2,
         "version": 1
       }
@@ -61,7 +62,17 @@
   "FundingDataLoader": {
     "interval": [
       {
-        "admitted": [
+        "admitted": [],
+        "prior_admitted": null,
+        "reason": "interval keyed the ingested hourly partition, not a served grain (Q-1496) \u2014 timeframe is the served grain",
+        "replacement": "timeframe='1h' to keep the hourly series, or omit timeframe to follow Globals.target_timeframe",
+        "retired_at": 2,
+        "version": 1
+      },
+      {
+        "admitted": [],
+        "prior_admitted": [
+          "5min",
           "15min",
           "30min",
           "1h",
@@ -73,9 +84,50 @@
           "12h",
           "1d"
         ],
-        "prior_admitted": null,
-        "reason": "not a platform timeframe \u2014 'interval' keys the funding cache partition, so an unknown value loads nothing",
-        "replacement": "interval= one of ['15min', '30min', '1h', '2h', '3h', '4h', '6h', '8h', '12h', '1d']",
+        "reason": "interval keyed the ingested hourly partition, not a served grain (Q-1496) \u2014 timeframe is the served grain",
+        "replacement": "timeframe='1h' to keep the hourly series, or omit timeframe to follow Globals.target_timeframe",
+        "retired_at": 3,
+        "version": 2
+      }
+    ]
+  },
+  "OpenInterestLoader": {
+    "interval": [
+      {
+        "admitted": [],
+        "prior_admitted": [
+          "1h"
+        ],
+        "reason": "interval keyed the ingested hourly partition, not a served grain (Q-1496) \u2014 timeframe is the served grain",
+        "replacement": "timeframe='1h' to keep the hourly series, or omit timeframe to follow Globals.target_timeframe",
+        "retired_at": 2,
+        "version": 1
+      }
+    ]
+  },
+  "PredictedFundingLoader": {
+    "interval": [
+      {
+        "admitted": [],
+        "prior_admitted": [
+          "1h"
+        ],
+        "reason": "interval keyed the ingested hourly partition, not a served grain (Q-1496) \u2014 timeframe is the served grain",
+        "replacement": "timeframe='1h' to keep the hourly series, or omit timeframe to follow Globals.target_timeframe",
+        "retired_at": 2,
+        "version": 1
+      }
+    ]
+  },
+  "PremiumLoader": {
+    "interval": [
+      {
+        "admitted": [],
+        "prior_admitted": [
+          "1h"
+        ],
+        "reason": "interval keyed the ingested hourly partition, not a served grain (Q-1496) \u2014 timeframe is the served grain",
+        "replacement": "timeframe='1h' to keep the hourly series, or omit timeframe to follow Globals.target_timeframe",
         "retired_at": 2,
         "version": 1
       }
@@ -85,6 +137,7 @@
     "target_timeframe": [
       {
         "admitted": [
+          "5min",
           "15min",
           "30min",
           "1h",
@@ -98,7 +151,7 @@
         ],
         "prior_admitted": null,
         "reason": "not a platform timeframe \u2014 v1 forwarded it to pandas ('5min' produced a 91.5%-NaN frame)",
-        "replacement": "target_timeframe= one of ['15min', '30min', '1h', '2h', '3h', '4h', '6h', '8h', '12h', '1d']",
+        "replacement": "target_timeframe= one of ['5min', '15min', '30min', '1h', '2h', '3h', '4h', '6h', '8h', '12h', '1d']",
         "retired_at": 2,
         "version": 1
       }
@@ -130,6 +183,7 @@
     "target_timeframe": [
       {
         "admitted": [
+          "5min",
           "15min",
           "30min",
           "1h",
@@ -153,6 +207,7 @@
     "target_timeframe": [
       {
         "admitted": [
+          "5min",
           "15min",
           "30min",
           "1h",
@@ -166,7 +221,43 @@
         ],
         "prior_admitted": null,
         "reason": "not a platform timeframe \u2014 v1 raises 'Unknown timeframe' at run time",
-        "replacement": "target_timeframe= one of ['15min', '30min', '1h', '2h', '3h', '4h', '6h', '8h', '12h', '1d']",
+        "replacement": "target_timeframe= one of ['5min', '15min', '30min', '1h', '2h', '3h', '4h', '6h', '8h', '12h', '1d']",
+        "retired_at": 2,
+        "version": 1
+      }
+    ]
+  },
+  "VolumeUniverseReducer": {
+    "volume_column": [
+      {
+        "admitted": [],
+        "prior_admitted": null,
+        "reason": "Scores on traded dollar volume (pv_sum; 15m capture volume x close before 2025-03-23) read from a required DollarVolumeLoader slot, dollar_volume_slot, instead of volume_column x close; volume_column removed (dollar-volume DV4); v1 frozen in versions/universe_reducers_v1.py",
+        "replacement": "a call without 'volume_column' (the parameter was retired at v2)",
+        "retired_at": 2,
+        "version": 1
+      }
+    ]
+  },
+  "VolumeUniverseReducerAny": {
+    "volume_column": [
+      {
+        "admitted": [],
+        "prior_admitted": null,
+        "reason": "Scores on traded dollar volume (pv_sum; 15m capture volume x close before 2025-03-23) read from a required DollarVolumeLoader slot, dollar_volume_slot, instead of volume_column x close; volume_column removed (dollar-volume DV4); v1 frozen in versions/universe_reducers_v1.py",
+        "replacement": "a call without 'volume_column' (the parameter was retired at v2)",
+        "retired_at": 2,
+        "version": 1
+      }
+    ]
+  },
+  "VolumeWeightedMultiplier": {
+    "ohlcv_slot": [
+      {
+        "admitted": [],
+        "prior_admitted": null,
+        "reason": "Ranks traded dollar volume (pv_sum; 15m capture volume x close before 2025-03-23) read from a required DollarVolumeLoader slot, dollar_volume_slot, instead of close x volume from ohlcv_slot (removed) (dollar-volume DV4); v1 frozen in versions/volume_weighted_multiplier_v1.py",
+        "replacement": "a call without 'ohlcv_slot' (the parameter was retired at v2)",
         "retired_at": 2,
         "version": 1
       }

@@ -1,4 +1,10 @@
-"""`keel_doctor` — diagnose auth/api/cache/registry/mcp issues.
+"""`keel_connection_check` — diagnose auth/api/registry/mcp issues.
+
+Renamed from `keel_doctor` on 2026-10-01 (Q-2080): "doctor" is a metaphor
+OpenAI's name scan could not read. The old name is a callable alias
+(`_toolsets.TOOL_ALIASES`). On a HOSTED server the checks name no internal
+URL, no raw exception text and no local remedy (`keel auth login`,
+`KEEL_API_KEY`): the caller holds a connector, not a shell.
 
 Per spec §13.3: read-only, idempotent. Returns a structured snapshot
 the agent can use to decide its next step when something's wrong.
@@ -19,8 +25,10 @@ from ._base import OutcomeResult, OutcomeTool, ToolContext
 
 def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
     from keel.config import load_config
+    from keel.hosting import is_hosted
 
     config = load_config()
+    hosted = is_hosted()
 
     checks: list[dict[str, Any]] = []
 
@@ -36,25 +44,38 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
             # surface the real values now.
             org = me.get("org") or {}
             principal = me.get("principal") or {}
-            checks.append(
-                {
-                    "name": "auth",
-                    "ok": True,
-                    "detail": {
-                        "principal_id": principal.get("id"),
-                        "org_id": org.get("id"),
-                        "org_name": org.get("name"),
-                        "plan": org.get("plan"),
-                    },
+            detail: dict[str, Any] = {
+                "org_name": org.get("name"),
+                "plan": org.get("plan"),
+            }
+            from ._toolsets import is_listed_profile
+
+            if not is_listed_profile():
+                # Internal identifiers stay off the listed surface (Q-2268:
+                # OpenAI's review asks for no internal account ids in a
+                # result); the CLI and local server keep them for support.
+                detail = {
+                    "principal_id": principal.get("id"),
+                    "org_id": org.get("id"),
+                    **detail,
                 }
-            )
+            checks.append({"name": "auth", "ok": True, "detail": detail})
         except Exception as e:  # noqa: BLE001
             checks.append(
                 {
                     "name": "auth",
                     "ok": False,
-                    "detail": f"Failed identity probe: {e}",
-                    "suggestion": "Re-run `keel auth login` or set KEEL_API_KEY.",
+                    # Bounded on the hosted server: no raw exception text.
+                    "detail": (
+                        "The signed-in identity could not be read."
+                        if hosted
+                        else f"Failed identity probe: {e}"
+                    ),
+                    "suggestion": (
+                        "Reconnect this connector in the client to sign in again."
+                        if hosted
+                        else "Re-run `keel auth login` or set KEEL_API_KEY."
+                    ),
                 }
             )
     else:
@@ -62,8 +83,12 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
             {
                 "name": "auth",
                 "ok": False,
-                "detail": "No API key configured.",
-                "suggestion": "Run `keel auth login` or set KEEL_API_KEY in the environment.",
+                "detail": "Not signed in." if hosted else "No API key configured.",
+                "suggestion": (
+                    "Reconnect this connector in the client to sign in."
+                    if hosted
+                    else "Run `keel auth login` or set KEEL_API_KEY in the environment."
+                ),
             }
         )
 
@@ -81,14 +106,30 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
         else:
             # Cheap GET to verify connectivity + token freshness
             client.get("/v1/me")
-            checks.append({"name": "api", "ok": True, "detail": config.api_url})
+            # The hosted server's `api_url` is the pod's in-cluster address
+            # (Q-1744) — plumbing, never served; the user's address is the app.
+            checks.append(
+                {
+                    "name": "api",
+                    "ok": True,
+                    "detail": "Keel API reachable" if hosted else config.api_url,
+                }
+            )
     except Exception as e:  # noqa: BLE001
         checks.append(
             {
                 "name": "api",
                 "ok": False,
-                "detail": f"Could not reach {config.api_url}: {e}",
-                "suggestion": "Check network and API key validity.",
+                "detail": (
+                    "The Keel API could not be reached from this server."
+                    if hosted
+                    else f"Could not reach {config.api_url}: {e}"
+                ),
+                "suggestion": (
+                    "Retry shortly; a report for a human is keel_feedback."
+                    if hosted
+                    else "Check network and API key validity."
+                ),
             }
         )
 
@@ -144,30 +185,27 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
 
 DOCTOR = register(
     OutcomeTool(
-        name="keel_doctor",
+        name="keel_connection_check",
         required_action="audit.read",
         cli_path=("doctor",),
         toolset="always",
-        # grounded-in: tool_usage.md:36-37 ("Retrying After a Tool Error" —
+        # grounded-in: system/chat/tool_usage.md:27-29 ("Retrying After a Tool Error" —
         # same error twice with the same root cause → stop and reason, don't
         # slide parameters); doctor.py docstring (spec §13.3 non-zero exit on
         # any failed check so `keel doctor && …` gates cleanly).
         description=(
-            "Diagnose the Keel CLI/MCP installation in one read-only pass: "
-            "auth, API reachability, and the active tool surface. Reach for "
-            "this when a tool fails in a way that looks environmental — auth "
-            "rejected, API unreachable, an expected tool missing — instead of "
-            "retrying the same call: a tool that errors twice with the same "
-            "root cause won't fix itself on a third try, so read its "
-            "structured error, then run `keel_doctor` to confirm setup before "
-            "changing tactics. Exits non-zero when any check fails, so "
-            "`keel doctor && …` gates cleanly in scripts. "
-            "Do NOT use to enumerate strategies or accounts — call `keel_strategy_search` "
-            "or `keel_accounts_list` instead."
+            "Check the connection to Keel from the Keel CLI/MCP installation when a call "
+            "fails for an environmental reason — identity and quota are "
+            "`keel_account_status`. One pass over sign-in, API reachability and the tool "
+            "surface this server loads, returned as a `checks` list (name, ok, detail) in "
+            "JSON text in `result`; a tool's own structured error names its cause "
+            "instead. A call failing twice on one root cause is a setup question rather "
+            "than a retry, and a report for a human is `keel_feedback`. Exits non-zero "
+            "when any check fails, so `keel doctor && …` gates cleanly in scripts."
         ),
         input_schema={"type": "object", "properties": {}, "required": []},
         annotations={
-            "title": "Diagnose Keel Setup",
+            "title": "Check Connection",
             "readOnlyHint": True,
             "destructiveHint": False,
             "idempotentHint": True,
@@ -177,16 +215,11 @@ DOCTOR = register(
         # Listed-profile copy (spec 01 R3): must not route to tools
         # absent from the listed surface (keel_accounts_list).
         listed_description=(
-            "Diagnose the Keel MCP connection in one read-only pass: auth, "
-            "API reachability, and the active tool surface. Reach for this "
-            "when a tool fails in a way that looks environmental — auth "
-            "rejected, API unreachable, an expected tool missing — instead of "
-            "retrying the same call: a tool that errors twice with the same "
-            "root cause won't fix itself on a third try, so read its "
-            "structured error, then run `keel_doctor` to confirm setup before "
-            "changing tactics. "
-            "Do NOT use to enumerate strategies — call "
-            "`keel_strategy_search` instead."
+            "Check this connection to Keel when a call fails for an environmental reason — "
+            "identity and quota are `keel_account_status`. One pass over sign-in, API "
+            "reachability and the tool surface this server loads, returned as a `checks` "
+            "list (name, ok, detail). A call failing twice on one "
+            "root cause is a setup question, and a report for a human is `keel_feedback`."
         ),
     )
 )

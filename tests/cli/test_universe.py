@@ -129,7 +129,7 @@ def test_set_universe():
         result = runner.invoke(
             cli,
             [
-                "--format", "json", "universe", "set", "strat.py",
+                "--format", "json", "universe", "set", "strat.py", "--no-resolve",
                 "--mode", "manual",
                 "--symbols", "BTC", "--symbols", "ETH",
             ],
@@ -146,7 +146,7 @@ def test_set_universe_returns_source():
         result = runner.invoke(
             cli,
             [
-                "--format", "json", "universe", "set", "strat.py",
+                "--format", "json", "universe", "set", "strat.py", "--no-resolve",
                 "--mode", "manual",
                 "--symbols", "BTC", "--symbols", "ETH",
             ],
@@ -163,7 +163,7 @@ def test_set_universe_mode_top_volume():
         result = runner.invoke(
             cli,
             [
-                "--format", "json", "universe", "set", "strat.py",
+                "--format", "json", "universe", "set", "strat.py", "--no-resolve",
                 "--mode", "top_volume",
                 "--top-n", "20",
             ],
@@ -181,7 +181,7 @@ def test_set_universe_preserves_source():
         result = runner.invoke(
             cli,
             [
-                "--format", "json", "universe", "set", "strat.py",
+                "--format", "json", "universe", "set", "strat.py", "--no-resolve",
                 "--mode", "manual",
                 "--symbols", "BTC",
             ],
@@ -489,3 +489,40 @@ def test_resolve_deprecated_flag_form_still_works(monkeypatch):
     # Criteria came from the deprecated flags, not from a DSL source.
     assert _StubClient.last_body["mode"] == "top_volume"
     assert _StubClient.last_body["top_n"] == 50
+
+
+def test_set_universe_resolves_in_the_same_call_by_default(monkeypatch):
+    """Q-2283 (spec 03 U2): `keel universe set` resolves by default — the file
+    gets the baked list and the output carries the server's note."""
+    note = (
+        "Resolved 1 of 2 symbols: BTC. Dropped xyz:AAPL — listed on Hyperliquid "
+        "(HIP-3); Keel does not support HIP-3 markets yet — support is coming soon."
+    )
+
+    class _StubClient:
+        def post(self, path, json):
+            assert path == "/v1/universe/resolve"
+            return {
+                "resolved": ["BTC"],
+                "resolved_at": "2026-10-03T00:00:00+00:00",
+                "count": 1,
+                "resolution_note": note,
+                "dropped": ["xyz:AAPL"],
+            }
+
+    monkeypatch.setattr("keel.client.KeelClient", _StubClient)
+    with runner.isolated_filesystem():
+        with open("strat.py", "w") as f:
+            f.write(NO_GROUPS_STRATEGY)
+        result = runner.invoke(
+            cli,
+            [
+                "--format", "json", "universe", "set", "strat.py",
+                "--mode", "manual",
+                "--symbols", "BTC", "--symbols", "xyz:AAPL",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        data = json.loads(result.stdout)
+        assert data["resolved"] == ["BTC"]
+        assert data["resolution_note"] == note

@@ -21,6 +21,7 @@ from keel.errors import KeelError
 from . import register
 from ._base import OutcomeResult, OutcomeTool, ToolContext
 from ._ownership import fetch_ownership_projection, ownership_envelope_fields
+from .open_in_app import app_url_for
 
 
 def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
@@ -35,7 +36,6 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
         recent_n = int(args.get("recent_commits", 5))
     except (TypeError, ValueError):
         recent_n = 5
-    recent_n = max(0, min(recent_n, 20))
     if not include_recent:
         recent_n = 0
 
@@ -90,7 +90,7 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
             "HEAD (LOSES local edits), OR (b) `keel_strategy_diff` to "
             "compare and merge manually in the local file, then push, OR "
             "(c) pin an explicit `commit_id` on the blocked action (find "
-            "one via `keel_strategy_log`).",
+            "one via `keel_strategy_history`).",
         ]
 
     body: dict[str, Any] = {
@@ -106,11 +106,11 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
     }
     if result.get("recent_commits") is not None:
         body["recent_commits"] = result["recent_commits"]
-    if resolved_id and not args.get("no_ownership_hint", False):
+    if resolved_id and not args.get("skip_readiness", False):
         body.update(ownership_envelope_fields(fetch_ownership_projection(ctx, resolved_id)))
     return OutcomeResult(
         run_id=resolved_id,
-        hero_url=f"{ctx.app_url}/strategies/{resolved_id}"
+        hero_url=app_url_for("strategy", resolved_id, ctx)
         if resolved_id
         else f"{ctx.app_url}/strategies",
         share_url=None,
@@ -126,7 +126,7 @@ STRATEGY_STATUS = register(
         toolset="backtest",
         local_only=True,  # compares the local working copy against server HEAD
         # grounded-in: sync-contract (spec 08 R3 — behind = one instruction,
-        # pull; R4 — diverged needs explicit resolution); collaboration.md §6
+        # pull; R4 — diverged needs explicit resolution); system/chat/collaboration.md §6
         # (backtest runs against server HEAD — push local edits first).
         description=(
             "Compare a local workspace's strategy.py against the server's "
@@ -142,7 +142,7 @@ STRATEGY_STATUS = register(
             "have edited. Auto-detects the strategy from the current "
             "workspace when `strategy_id` is omitted. "
             "Do NOT use to list ALL workspaces — call `keel_strategy_workspaces`. "
-            "Do NOT use to inspect full history — call `keel_strategy_log`."
+            "Do NOT use to inspect full history — call `keel_strategy_history`."
         ),
         input_schema={
             "type": "object",
@@ -166,15 +166,16 @@ STRATEGY_STATUS = register(
                 "recent_commits": {
                     "type": "integer",
                     "default": 5,
+                    "minimum": 0,
+                    "maximum": 20,
                     "description": (
-                        "How many recent commits to include when "
-                        "`include_recent=True`. Clamped to 0..20."
+                        "How many recent commits to include when `include_recent=True` (0-20)."
                     ),
                 },
-                "no_ownership_hint": {
+                "skip_readiness": {
                     "type": "boolean",
                     "default": False,
-                    "description": "Omit first-session ownership guidance fields.",
+                    "description": "Leave the first-session ownership fields (next step, missing evidence) out of the result.",
                 },
             },
         },
@@ -183,7 +184,7 @@ STRATEGY_STATUS = register(
             "readOnlyHint": True,
             "destructiveHint": False,
             "idempotentHint": True,
-            "openWorldHint": True,
+            "openWorldHint": False,
         },
         handler=_handler,
     )

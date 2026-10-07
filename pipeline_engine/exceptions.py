@@ -437,6 +437,82 @@ class CacheError(FrameworkError):
     pass
 
 
+class CacheOnlyMiss(CacheError):
+    """A ``CachePolicy.CACHE_ONLY`` load found symbols the cache layers do not
+    hold inside the SEALED region — and, by the policy's definition, did not
+    fetch them from the database.
+
+    Subclasses :class:`CacheError` so every existing ``except CacheError`` /
+    ``"CACHE_ONLY" in str(exc)`` handler keeps working unchanged; what it
+    adds is the STRUCTURE a caller needs to narrate the miss against a data
+    source's own declaration (the backtest-worker, Q-1252: which coins, at
+    which cache family/rung, over which window, the bar store could not
+    serve). ``symbols`` are the missing symbols in the loader's own order;
+    ``keys`` their cache keys (``family:token:timeframe``); ``start``/``end``
+    the window the load was judged on (``end`` AFTER any sealed-boundary
+    clamp); ``loader`` the loader class name.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        symbols: list[str],
+        keys: list[str],
+        start,
+        end,
+        loader: str,
+        kind: str = "miss",
+        bounds: dict[str, tuple] | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.symbols = list(symbols)
+        self.keys = list(keys)
+        self.start = start
+        self.end = end
+        self.loader = loader
+        #: Which shape of refusal this is, so a narrator can pick the right
+        #: user-facing text without parsing ``message``: ``"miss"`` (the
+        #: store holds no sealed rows for these symbols where it should —
+        #: an interior hole, a frame short of the seal with no seal to
+        #: vouch for it, a coin the chain owns nothing for), ``"beyond_seal"``
+        #: (the whole window lies above the sealed boundary), or
+        #: ``"nothing_in_window"`` (every requested symbol is absent from the
+        #: window by the store's own authority — none listed or all delisted).
+        self.kind = kind
+        #: What the cache layers DO hold for each missing symbol, when known:
+        #: ``{symbol: (first_bar, last_bar)}`` from the served frame's real
+        #: bars (and the series' first-bar authority where it reaches
+        #: earlier). Lets a narrator tell the user the span the platform
+        #: holds instead of promising that a retry will change anything
+        #: (Q-1334). Empty for a symbol nothing was cached for.
+        self.bounds = dict(bounds or {})
+
+
+class DataDependencyError(CacheError):
+    """A data dependency could not be REACHED — not "there was no data" (Q-1068).
+
+    The distinction this class exists to make: a load that returns nothing
+    because the database answered and had nothing is a DATA fact, and a load
+    that returns nothing because no query ever reached the database is an
+    INFRASTRUCTURE fact. Before this class the second was narrated as the
+    first — ``Systemic data failure: 50/50 symbols have no data`` for a dead
+    port-forward — which sends the reader to listing dates and cache warming
+    while the actual fault is a connection.
+
+    Subclasses :class:`CacheError` deliberately: every existing
+    ``except CacheError`` handler keeps working unchanged (this is a
+    narration change, not a behaviour change), while a caller that wants to
+    tell the two apart now can.
+
+    Always raised with ``from`` the underlying exception, so the pool timeout
+    / refused connection / cancelled query is in the traceback rather than
+    summarised away.
+    """
+
+    pass
+
+
 class PipelineValidationError(FrameworkError):
     """Error during pipeline construction/validation."""
 
@@ -557,6 +633,7 @@ __all__ = [
     "SpecVerificationError",
     "PipelineError",
     "CacheError",
+    "DataDependencyError",
     "ComponentExecutionError",
     "PipelineValidationError",
     "SlotNotFoundError",

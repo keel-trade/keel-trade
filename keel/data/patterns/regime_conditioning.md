@@ -19,66 +19,72 @@ Use only when a signal truly fails in certain regimes (rare).
 
 - **FundingLevelRegime** (lookback=20): Detects funding rate regime (high/low/neutral).
   Handles polarity internally — no NegateTransform needed.
-- **RealizedVolatilityRegime** (window=30): Detects vol regime (high/low).
-- **ADXRegime** (period=14, threshold=25): Detects trending vs ranging.
+- **RealizedVolatilityRegime** (lookback=20): Detects vol regime (high/low).
+  Emits ANNUALIZED vol, so its thresholds are absolute: `1.0` means 100%
+  annualized vol. From v2 it annualizes off the declared
+  `Globals(target_timeframe)`, so a threshold picked on one clock keeps its
+  meaning on another (v1 hardcoded `sqrt(365)` and read 9.80x low at 15min).
+  It reads the bars in its slot, so those must be on the declared clock — to
+  measure vol from FINER bars, use `RealizedVolatility` instead.
+- **MarketTrendRegimeFilter** (fast_period, slow_period): market-wide trend state.
+- The slot-reading detectors (`RealizedVolatilityRegime`,
+  `AveragePairwiseCorrelationRegime`, `CrossSectionalDispersionRegime`) read
+  OHLCV from a slot and take a SignalSeries as their flow input: in their
+  branch, `ExtractSeries(series_name="close")` goes first.
 
 Prefer single-component detectors over composites for simplicity and robustness.
 
 ## Pattern Structure
 
-```
+```python fragment
 {
     "signal_a": [...],    # First signal branch (e.g., trend)
     "signal_b": [...],    # Second signal branch (e.g., carry)
     "regime": [...],      # Regime detector branch
 }
-→ RegimeWeightedBlender(signal_a_key, signal_b_key, regime_key, ...)
+→ RegimeWeightedBlender(signal_a_key="signal_a", signal_b_key="signal_b", regime_key="regime")
 ```
 
 **One clock at the blend.** Every branch must arrive on the timeframe
 `Globals(target_timeframe=...)` declares before it is combined — a blender or
-combiner rejects inputs on different clocks (`CLOCK_MISMATCH`). Get each
-branch there at its data step, not after computing: aggregate raw data up
-with `TargetSignalResampler()` / `TargetTimeframeResampler()`, and place a
-coarser computed signal back down with `TargetSignalProjector()`. A regime on
-a slower clock than execution is the normal case and is fine — project it
-down. A branch whose data is FINER than the declared clock (e.g. hourly
-funding under a 1d declaration) must be resampled up before the indicator;
-no projector can fix it afterward.
+combiner rejects inputs on different clocks (`CLOCK_MISMATCH`). The loaders
+already serve the declared clock; only a branch pinned to its own
+`timeframe=` needs bringing back — a finer one coarsened with
+`TargetSignalResampler(method=...)`, a coarser computed regime projected down
+with `TargetSignalProjector()`.
 
 ## Minimal Example
 
 ```python
-Globals(target_timeframe="1d"),
+Globals(target_timeframe="1d")
+Universe(mode="manual", symbols=["BTC", "ETH", "SOL", "AVAX", "LINK"])
+Execution(rebalance="buffered", buffer_threshold=0.2, buffer_mode="relative", rebalance_method="to_edge")
+
 Pipeline([
     PriceDataLoader(),
-    Store("ohlcv_1d"),
     {
-        "trend": Pipeline([
-            Load("ohlcv_1d"),
+        "trend": [
             ROC(period=20),
             CrossSectionalZScore(),
             ForecastScaler(avg_abs_target=10.0),
             ForecastCapper(limit=20.0),
-        ]),
-        "carry": Pipeline([
-            FundingDataLoader(use_cache=True),
-            TargetSignalResampler(method="mean"),
+        ],
+        "carry": [
+            FundingDataLoader(),
             NegateTransform(),
             CrossSectionalZScore(),
             ForecastScaler(avg_abs_target=10.0),
             ForecastCapper(limit=20.0),
-        ]),
-        "regime": Pipeline([
-            FundingDataLoader(use_cache=True),
+        ],
+        "regime": [
+            FundingDataLoader(),
             Store("funding_level_funding_data"),
             FundingLevelRegime(lookback=20),
-        ]),
+        ],
     },
-    RegimeWeightedBlender(
-        signal_a_key="trend", signal_b_key="carry", regime_key="regime",
-    ),
+    RegimeWeightedBlender(signal_a_key="trend", signal_b_key="carry", regime_key="regime"),
     ForecastCapper(limit=20.0),
+    ForecastWeightNormalizer(target_leverage=1.0),
 ], name="regime_conditioned")
 ```
 

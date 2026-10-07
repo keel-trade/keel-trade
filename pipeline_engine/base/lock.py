@@ -17,8 +17,8 @@ Public API:
       the lock AND a target version that exists in the registry. This is
       what backs the components-upgrade UX.
     - ``check_lock_drift(lock)`` — UX helper. Compares a lock to the current
-      registry, returns entries that are outdated / missing. Informational
-      only — never feeds back into validate / compile.
+      registry, returns entries that are outdated / deprecated / missing /
+      unknown. Informational only — never feeds back into validate / compile.
 
 Quick Start:
     >>> from pipeline_engine.base.lock import evolve_lock, check_lock_drift
@@ -54,8 +54,13 @@ class LockDrift:
     component: str
     locked_version: int
     latest_version: int
-    drift_type: str  # "outdated" | "missing" | "unknown"
+    drift_type: str  # "outdated" | "deprecated" | "missing" | "unknown"
     changes: list[str]
+    #: The named successor when the component's LATEST version is deprecated
+    #: for one (``ComponentSignature.replacement``) — on a ``deprecated``
+    #: entry always, on an ``outdated`` one when the newer version it points
+    #: at is itself deprecated. None otherwise.
+    replacement: str | None = None
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -117,6 +122,14 @@ def evolve_lock(
 
     Pass ``prev_lock={}`` for a brand-new strategy with no prior lock.
 
+    A deprecated latest pins like any other version (Q-0684, ruled
+    2026-08-26): deprecation is advice, and validity belongs to the rule
+    catalog, not to lock generation. The catalog's ``DEPRECATED_COMPONENT``
+    warning (SUSPICIOUS — "still resolves and runs") carries the
+    upgrade steer; hard retirement is ``COMPONENT_NOT_RUNNABLE``. Refusing
+    here used to convert into a location-less ``UNKNOWN_COMPONENT`` error
+    on the validator's auto-lock path, suppressing every real diagnostic.
+
     Args:
         prev_lock: Previous lock (or ``{}`` for a fresh derivation).
         strategy: Parsed strategy file.
@@ -125,10 +138,10 @@ def evolve_lock(
         Evolved lock mapping component name → version number.
 
     Raises:
-        LockError: If a referenced component is unknown, a preserved pin's
-            version no longer exists in the registry, or a newly-added
-            component is deprecated. A pin that can't be preserved is the
-            user's signal to run ``upgrade_lock_entries`` and migrate.
+        LockError: If a referenced component is unknown, or a preserved
+            pin's version no longer exists in the registry. A pin that
+            can't be preserved is the user's signal to run
+            ``upgrade_lock_entries`` and migrate.
     """
     from pipeline_engine.base.registry import COMPONENT_REGISTRY, get_latest, get_version
     from pipeline_engine.registry_loader import ensure_registry_loaded
@@ -158,11 +171,32 @@ def evolve_lock(
             sig = get_latest(name)
             if sig is None:
                 raise LockError(f"No versions found for component '{name}'.")
-            if sig.status == "deprecated":
-                raise LockError(
-                    f"Component '{name}' is deprecated (v{sig.version}). Replace it before locking."
-                )
             lock[name] = sig.version
+
+    # Position-layer spec 03-R50: a registered factory's pinned version names
+    # the components its expansion compiles to; pin those too (preserving a
+    # prior pin, else latest), so compile never meets an unpinned expansion
+    # step. Template components are never factories (refused
+    # by position_factories_test), so one pass suffices.
+    from pipeline_engine.base.registry_types import is_factory
+    from pipeline_engine.binding import template_components
+
+    for name in sorted(referenced):
+        sig = get_version(name, lock[name])
+        if sig is None or not is_factory(sig):
+            continue
+        for part in template_components(sig.factory_expansion):
+            if part in lock:
+                continue
+            if part not in COMPONENT_REGISTRY:
+                raise LockError(
+                    f"Factory '{name}' v{sig.version} expands to unknown component "
+                    f"'{part}' — cannot evolve lock. Ensure all components are registered."
+                )
+            if part in prev_lock and get_version(part, prev_lock[part]) is not None:
+                lock[part] = prev_lock[part]
+            else:
+                lock[part] = get_latest(part).version
 
     return dict(sorted(lock.items()))
 
@@ -218,8 +252,18 @@ def upgrade_lock_entries(
 def check_lock_drift(lock: dict[str, int]) -> list[LockDrift]:
     """Compare a lock against the current registry to detect drift.
 
-    Returns a list of LockDrift entries for components that are outdated,
-    missing from the registry, or have newer versions available.
+    Returns a list of LockDrift entries, one per pin that is:
+
+    - ``outdated`` — a newer version is registered (``changes`` lists the
+      changelog entries in between; ``replacement`` is set when that newer
+      version is itself deprecated for a named successor);
+    - ``deprecated`` — pinned AT the component's latest version, which is
+      deprecated for a named successor (``replacement``). Nothing newer
+      exists, so the upgrade is a swap to the successor (Q-2201). A
+      deprecation that names no successor has no upgrade to offer and is not
+      listed; the validator's ``DEPRECATED_COMPONENT`` warning covers it;
+    - ``missing`` — the pinned version is not registered;
+    - ``unknown`` — the component is not registered at all.
 
     Args:
         lock: Lock mapping to check.
@@ -261,7 +305,21 @@ def check_lock_drift(lock: dict[str, int]) -> list[LockDrift]:
             continue
 
         latest = get_latest(name)
-        if latest and latest.version > pinned:
+        successor = (
+            latest.replacement if latest is not None and latest.status == "deprecated" else None
+        )
+        if latest and latest.version == pinned and successor:
+            drifts.append(
+                LockDrift(
+                    component=name,
+                    locked_version=pinned,
+                    latest_version=pinned,
+                    drift_type="deprecated",
+                    changes=[f"deprecated: replaced by {successor}"],
+                    replacement=successor,
+                )
+            )
+        elif latest and latest.version > pinned:
             # Collect changelog entries for versions after the pinned one
             changes = []
             all_versions = COMPONENT_REGISTRY.get(name, {})
@@ -277,6 +335,7 @@ def check_lock_drift(lock: dict[str, int]) -> list[LockDrift]:
                     latest_version=latest.version,
                     drift_type="outdated",
                     changes=changes,
+                    replacement=successor,
                 )
             )
 

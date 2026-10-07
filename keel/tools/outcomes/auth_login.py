@@ -3,7 +3,7 @@
 Stdio MCP servers (Keel's v1 surface) cannot use Claude Code's built-in
 HTTP-MCP auth ceremony — that ceremony is HTTP-transport-only. So we
 expose login as an outcome tool the agent calls directly. The agent
-runs this when `keel_status` returns `authenticated: false`, or when
+runs this when `keel_account_status` returns `authenticated: false`, or when
 any other tool fails with an auth error pointing here.
 
 UX flow:
@@ -45,10 +45,10 @@ def _login_summary(info: dict) -> dict:
         "plan": org.get("plan"),
         "tier": "live" if is_live else "base",
         "next": [
-            "keel_status                 # see entitlements + visible tools",
+            "keel_account_status                 # see entitlements + visible tools",
             "prompts/list                # load strategy-creation before composing",
             "keel_components_search      # discover component candidates",
-            "keel_components_detail_batch # fetch full schemas before drafting",
+            "keel_components_get_many # fetch full schemas before drafting",
             "keel_strategy_compose       # dry-run first, then save",
         ],
     }
@@ -119,7 +119,7 @@ AUTH_LOGIN = register(
             "Run the OAuth 2.1 + PKCE browser-loopback login flow against Keel "
             "and persist tokens to ~/.keel/config.yaml so subsequent tool "
             "calls are authenticated. Opens the user's browser and waits up "
-            "to 5 minutes for sign-in. Call this when `keel_status` returns "
+            "to 5 minutes for sign-in. Call this when `keel_account_status` returns "
             "`authenticated: false`, or whenever another tool's error "
             "envelope points here as the next action. If the current session "
             "was an anonymous grant, its workspace is auto-claimed into the "

@@ -145,3 +145,64 @@ def test_deprecated_flag_form_forwards_lookback(runner, stub_api):
     assert stub_api["body"]["lookback"] == "90d"
     assert stub_api["body"]["volume_quartiles"] == ["q1"]
     assert stub_api["body"]["mode"] == "top_volume"
+
+
+# ── Q-2416: the CLI refuses a market Keel does not trade ─────────────────
+
+_SPOT_SENTENCE = (
+    'market="spot" is not supported — Keel trades Hyperliquid perpetuals only. '
+    'Remove market= or use market="perp".'
+)
+
+
+@pytest.fixture
+def stub_get(monkeypatch):
+    """Stub KeelClient.get; records every call."""
+    calls: list = []
+
+    class _StubClient:
+        def get(self, path: str, **params):
+            calls.append((path, params))
+            return [{"symbol": "BTC", "tags": [], "status": "active"}]
+
+    monkeypatch.setattr("keel.client.KeelClient", _StubClient)
+    return calls
+
+
+def test_instruments_refuses_spot_without_a_request(runner, stub_get):
+    result = runner.invoke(cli, ["universe", "instruments", "--market", "spot"])
+    assert result.exit_code == 7, result.output
+    error = json.loads(result.output)
+    assert (error["code"], error["message"]) == ("UNSUPPORTED_MARKET", _SPOT_SENTENCE)
+    assert stub_get == []
+
+
+def test_instruments_perp_reaches_the_api(runner, stub_get):
+    """Control + non-vacuity: the stub really is what the command calls."""
+    result = runner.invoke(cli, ["universe", "instruments"])
+    assert result.exit_code == 0, result.output
+    assert stub_get == [("/v1/universe/instruments", {"market": "perp"})]
+
+
+def test_set_no_resolve_refuses_spot_and_leaves_the_file(runner, tmp_path):
+    path = tmp_path / "flagship.strategy"
+    path.write_text(STRATEGY)
+    result = runner.invoke(
+        cli,
+        [
+            "universe",
+            "set",
+            str(path),
+            "--mode",
+            "manual",
+            "--market",
+            "spot",
+            "--symbols",
+            "BTC",
+            "--no-resolve",
+        ],
+    )
+    assert result.exit_code == 7, result.output
+    error = json.loads(result.output)
+    assert (error["code"], error["message"]) == ("UNSUPPORTED_MARKET", _SPOT_SENTENCE)
+    assert path.read_text() == STRATEGY

@@ -8,7 +8,7 @@
 
 <p align="center">
   <strong>The Keel CLI and stdio MCP server.</strong><br>
-  Build, backtest, and automate <a href="https://hyperliquid.xyz">Hyperliquid</a> trading strategies — with your agent in the loop for <em>creation</em> and a deterministic engine in the loop for <em>execution</em>.
+  Build and backtest <a href="https://hyperliquid.xyz">Hyperliquid</a> perpetual-futures strategies with your AI assistant — typed strategy composition and deterministic backtests on real Hyperliquid market history. Running a strategy with real capital happens in the <a href="https://app.usekeel.io">Keel web app</a>.
 </p>
 
 <p align="center">
@@ -34,7 +34,7 @@
 [Keel](https://usekeel.io) is a quantitative crypto trading platform built around Hyperliquid — strategy development, backtesting, live execution, and portfolio management on the venue with the deepest on-chain perpetual order book. The full platform includes:
 
 - A **web app** for composing strategies, running backtests, and deploying live ([app.usekeel.io](https://app.usekeel.io))
-- A **deterministic backtest engine** with real Hyperliquid funding + price + slippage, walk-forward, and Monte Carlo
+- A **deterministic backtest engine** with real Hyperliquid funding, price and slippage
 - **Bit-for-bit live execution** — the same compiled strategy artifact runs in backtest and on Hyperliquid
 - A **strategy library** of documented, forkable trading strategies
 - A **screener + calculator suite** at [usekeel.io/lab](https://usekeel.io/lab) (funding leaderboard, momentum, overfit-check, walk-forward visualizer, more)
@@ -64,10 +64,37 @@ Three properties drive the design:
 2. **Typed composition over freeform code.** Strategies are graphs of versioned components. Compile errors catch bugs at author time instead of in production.
 3. **Agents compose, the deterministic engine executes.** Claude / Cursor / Codex help you build the strategy. They are not in the trade loop.
 
+## Quick start — the hosted MCP, nothing to install
+
+Paste one URL into the client you already use. You sign in through your
+client's own OAuth flow; no API key to copy, no local install.
+
+<!-- agent-surface:begin -->
+<!-- GENERATED from shared/agent-surface.json + LISTED_PROFILE_TOOLS — edit there, then run
+     python packages/keel-trade/keel-sdk/scripts/check_surface_routing.py --write -->
+Hosted endpoint URL: `https://mcp.usekeel.io/mcp` — one endpoint, a 29-tool research/backtest/read surface, nothing to install. Sign in or sign up on the Keel page that opens (no account needed beforehand); authentication is your MCP client's OAuth flow, never a tool call.
+
+- **Claude**: Customize → Connectors → Add custom connector. Paste https://mcp.usekeel.io/mcp and choose Connect.
+- **ChatGPT**: Settings → Security and login → turn on Developer mode (a paid ChatGPT plan; on Business/Enterprise an admin must allow it). Open chatgpt.com/plugins, choose +, give the connector a name and a description, and enter https://mcp.usekeel.io/mcp as the MCP server URL (the /mcp path included).
+- **Claude Code**: `claude mcp add --transport http keel https://mcp.usekeel.io/mcp`. Inside Claude Code run /mcp and choose Authenticate.
+- **Cursor**: Add the server to .cursor/mcp.json (project) or ~/.cursor/mcp.json (global): `{"mcpServers": {"keel": {"url": "https://mcp.usekeel.io/mcp"}}}`. Cursor asks you to sign in on first use.
+- **Codex**: `codex mcp add keel --url https://mcp.usekeel.io/mcp` then `codex mcp login keel`. Codex opens your browser for the sign-in.
+- **Windsurf**: Add the server to Windsurf's mcp_config.json: `{"mcpServers": {"keel": {"serverUrl": "https://mcp.usekeel.io/mcp"}}}`. Windsurf asks you to sign in on first use.
+- **VS Code**: Add the server to .vscode/mcp.json, or open the install link: `{"servers": {"keel": {"type": "http", "url": "https://mcp.usekeel.io/mcp"}}}`. VS Code asks you to sign in on first use.
+- **Other**: Use your client's own add remote / HTTP MCP server flow with https://mcp.usekeel.io/mcp. The first request answers 401 with OAuth 2.1 metadata, so a compliant client discovers the sign-in step by itself.
+
+The agent builds, tests and reads. When you want to run a strategy on your account, it hands it to the Keel app and you take it from there.
+
+Setup guide: https://usekeel.io/docs/agents/setup · Per-client runbook: https://usekeel.io/agents
+<!-- agent-surface:end -->
+
+**No Keel account yet?** [Create one free](https://app.usekeel.io/sign-up?from=agent-readme) —
+then connect the endpoint above and ask your agent to build something.
+
 ## Choose your surface
 
-`keel-trade` (this package) is the CLI + local MCP path. Keel is one product
-with several places to use it — pick by where you are:
+Keel is one product with several places to use it. The hosted MCP above is
+the default; this package is the CLI + local MCP path.
 
 <!-- surface-routing:begin -->
 <!-- GENERATED from shared/surface-routing.json — edit there, then run
@@ -75,18 +102,13 @@ with several places to use it — pick by where you are:
 | You are… | Default path (shown first) | Also works |
 | --- | --- | --- |
 | Using Claude/ChatGPT on web or phone | Hosted endpoint — paste the URL (directory one-click coming) | CLI + local MCP |
-| Working in Claude Code / Cursor / terminal | `pipx install keel-trade` (CLI + local MCP) | hosted endpoint |
-| Going live with a strategy | Keel web app (connect account, review sizing, go live) | reads on every surface |
+| Working in Claude Code / Cursor / terminal | Hosted endpoint — one command, or paste the URL | CLI + local MCP |
+| Running a strategy from the Keel app | Keel web app (connect an account, review sizing, start it there) | reads on every surface |
 | Building your own agent/scripts | SDK + API key | CLI |
 | Just browsing/running strategies | Web app + library | hosted endpoint |
 <!-- surface-routing:end -->
 
-- **Hosted endpoint** — the remote MCP at `https://mcp.usekeel.io/mcp`: one
-  23-tool research/backtest/read surface (compose, backtest, share, read-only
-  monitoring — no live-write, no local files). Paste the URL into any
-  remote-MCP client; the one-click directory listing is coming. Going live is
-  a handoff into the Keel web app.
-- **CLI + local MCP** — this package (install below).
+- **CLI + local MCP** — this package ([install below](#install)).
 - **SDK + API key** — the [REST API](https://usekeel.io/docs/api-reference)
   for building your own agents and scripts.
 
@@ -99,6 +121,8 @@ Per-surface zero-to-first-backtest runbook: [usekeel.io/agents](https://usekeel.
 Download `keel-trade-<version>.mcpb` from the [latest release](https://github.com/keel-trade/keel-trade/releases/latest) and drag onto Claude Desktop. Cross-platform single bundle — works on macOS, Windows, and Linux.
 
 The MCPB bundle requires system Python 3.11+ (same prerequisite as the terminal install path below). First launch takes ~10-30 seconds while the bundle pip-installs runtime deps to `~/.keel/mcpb-lib/py3.X/`; subsequent launches are instant.
+
+The bundle runs this package's local MCP server: your assistant composes and validates strategies, backtests them on real Hyperliquid history, browses the strategy library, compares runs, and shares results. Sign in once with `keel_auth_login`. By default it cannot place orders or move funds — running a strategy with real capital happens in the Keel web app, and the local tools that act on a live account stay off unless you enable them and arm them on your machine ([details below](#what-the-mcp-exposes)). Prefer nothing to install? Claude Desktop also works with the hosted connector in the [quick start](#quick-start--the-hosted-mcp-nothing-to-install).
 
 ### Terminal — pipx / uv (Claude Code, Codex, Cursor, Windsurf, etc.)
 
@@ -118,7 +142,7 @@ claude mcp add keel -- keel mcp serve
 codex mcp add keel -- keel mcp serve
 ```
 
-For Cursor, Windsurf, and generic MCP clients, see [usekeel.io/keel-mcp#install](https://usekeel.io/keel-mcp#install) or the [agent setup guide](https://usekeel.io/docs/sdk/agent-setup).
+For Cursor, Windsurf, and generic MCP clients, see [usekeel.io/keel-mcp#install](https://usekeel.io/keel-mcp#install) or the [agent setup guide](https://usekeel.io/docs/agents/setup).
 
 ## First conversation with your agent
 
@@ -132,13 +156,15 @@ Then describe what you want:
 
 > **You:** _"Find me momentum signals for Hyperliquid top-30 perps and compose a backtest from 2024-08-15 to today."_
 >
-> **Agent:** _Calls `keel_components_search` → `keel_components_detail_batch` → `keel_strategy_compose` → `keel_backtest_run`. Returns a share URL with the full tearsheet (equity curve, Sharpe, max drawdown, per-asset attribution)._
+> **Agent:** _Calls `keel_components_search` → `keel_components_get_many` → `keel_strategy_compose` → `keel_backtest_run`. Returns a share URL with the full tearsheet (equity curve, Sharpe, max drawdown, per-asset attribution)._
 
 Concrete example: [this share URL](https://app.usekeel.io/share/gDXjURKqWPs8CZ4eXdqAI?ref=H0O2KN) is a funding-carry backtest produced through exactly this flow — Sharpe 2.17 over 2024-08-15 → 2026-04-30 on real Hyperliquid data.
 
 ## What the MCP exposes
 
-The default toolset spans status, auth, components, strategy lifecycle, backtest, audit, accounts, sharing, and read-only live monitoring. **Live-write tools** (`keel_live_deploy`, `keel_live_control`) require an explicit opt-in toolset plus a local arming step — agents can't deploy your account without you authorizing it twice.
+The default local toolsets (`always`, `read-only`, `backtest`, `share`, `live-read`) span status, auth, components, strategy lifecycle, backtest, audit, accounts, sharing, and read-only live monitoring.
+
+**Live-write tools** (`keel_live_deploy`, `keel_live_control`, `keel_live_update`) are off unless you opt in with `KEEL_TOOLSETS`. Even then, going live is a hand-off: `keel_live_deploy` places no orders and returns a link into the Keel web app, where you choose the account, review sizing, and start the strategy. Acting on a live account from your machine (`keel_live_control`, or the operator-only direct deploy) also requires local arming (`keel arm live set`). The hosted connector at `mcp.usekeel.io` has no live-write tools at all.
 
 Full per-tool reference: [usekeel.io/docs/sdk/tool-reference](https://usekeel.io/docs/sdk/tool-reference).
 
@@ -148,7 +174,8 @@ Every MCP outcome tool has a CLI mirror. Useful for terminals, SSH sessions, CI,
 
 ```bash
 # Auth + status
-keel auth login
+keel auth login                      # opens a browser
+keel auth login --key "$KEEL_API_KEY"  # CI / SSH / no browser
 keel status
 
 # Search components, compose, backtest
@@ -167,12 +194,12 @@ Full CLI reference: [usekeel.io/docs/sdk/cli-reference](https://usekeel.io/docs/
 
 | Task                                                                           | Surface                                                                                    |
 | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
-| **Backtest a Hyperliquid strategy** — real fees, funding, slippage, ~220 perps | [usekeel.io/hyperliquid-backtest](https://usekeel.io/hyperliquid-backtest)                 |
+| **Backtest a Hyperliquid strategy** — real fees, funding and slippage across the HL perp universe, delisted names included | [usekeel.io/hyperliquid-backtest](https://usekeel.io/hyperliquid-backtest)                 |
 | **Screen HL perps** — momentum, funding, volume, breakout, regime              | [usekeel.io/lab](https://usekeel.io/lab)                                                   |
 | **Use AI to build strategies** — typed composition, not freeform code          | [usekeel.io/ai-trading-strategy-builder](https://usekeel.io/ai-trading-strategy-builder)   |
 | **Backtest portfolios** across the HL universe                                 | [usekeel.io/crypto-portfolio-backtesting](https://usekeel.io/crypto-portfolio-backtesting) |
-| **Robustness diagnostics** — walk-forward, Monte Carlo, deflated Sharpe, PBO   | [usekeel.io/hyperliquid](https://usekeel.io/hyperliquid)                                   |
-| **Deploy a strategy live** on Hyperliquid (non-custodial)                      | [usekeel.io/strategy-os](https://usekeel.io/strategy-os)                                   |
+| **Robustness calculators** — walk-forward visualizer, Monte Carlo, deflated Sharpe, overfit check | [usekeel.io/lab](https://usekeel.io/lab)                                                   |
+| **Run a strategy live** from the Keel web app, on your own Hyperliquid account (non-custodial) | [usekeel.io/strategy-os](https://usekeel.io/strategy-os)                                   |
 | **Compare strategies + venues**                                                | [usekeel.io/compare](https://usekeel.io/compare)                                           |
 | **Browse documented trading strategies**                                       | [usekeel.io/strategies](https://usekeel.io/strategies)                                     |
 
@@ -180,7 +207,7 @@ Full CLI reference: [usekeel.io/docs/sdk/cli-reference](https://usekeel.io/docs/
 
 - **Product page**: [usekeel.io/keel-mcp](https://usekeel.io/keel-mcp)
 - **Getting started**: [usekeel.io/docs/getting-started](https://usekeel.io/docs/getting-started)
-- **Agent setup (per host)**: [usekeel.io/docs/sdk/agent-setup](https://usekeel.io/docs/sdk/agent-setup)
+- **Agent setup (per host)**: [usekeel.io/docs/agents/setup](https://usekeel.io/docs/agents/setup)
 - **CLI reference**: [usekeel.io/docs/sdk/cli-reference](https://usekeel.io/docs/sdk/cli-reference)
 - **MCP tool reference**: [usekeel.io/docs/sdk/tool-reference](https://usekeel.io/docs/sdk/tool-reference)
 - **REST API reference**: [usekeel.io/docs/api-reference](https://usekeel.io/docs/api-reference)
@@ -189,6 +216,8 @@ Full CLI reference: [usekeel.io/docs/sdk/cli-reference](https://usekeel.io/docs/
 ## Status
 
 Alpha. The CLI and MCP surface are stable and ship to PyPI on a regular cadence; the underlying engine and component library are actively developed.
+
+Keel measures the strategies you design. It is not investment advice, and backtest results do not predict future returns.
 
 ## How to contribute / report a bug
 

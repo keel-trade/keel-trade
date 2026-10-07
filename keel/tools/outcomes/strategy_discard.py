@@ -17,6 +17,7 @@ from keel.errors import KeelError
 
 from . import register
 from ._base import OutcomeResult, OutcomeTool, ToolContext
+from .open_in_app import app_url_for
 
 
 def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
@@ -50,7 +51,7 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
     }
     return OutcomeResult(
         run_id=resolved_id,
-        hero_url=f"{ctx.app_url}/strategies/{resolved_id}"
+        hero_url=app_url_for("strategy", resolved_id, ctx)
         if resolved_id
         else f"{ctx.app_url}/strategies",
         share_url=None,

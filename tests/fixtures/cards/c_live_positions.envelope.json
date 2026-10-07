@@ -1,0 +1,162 @@
+{
+  "run_id": "dep_01HZQ4W2",
+  "hero_url": "https://app.usekeel.io/live/dep_01HZQ4W2?tab=positions",
+  "url_line": "View in Keel: https://app.usekeel.io/live/dep_01HZQ4W2?tab=positions",
+  "view": "positions",
+  "freshness": {
+    "source": "hyperliquid_exchange",
+    "mode": "live",
+    "realtime": true
+  },
+  "data": {
+    "name": "adx_trend_crypto",
+    "status": "ACTIVE",
+    "deployed_at": "2026-01-20T09:00:00+00:00",
+    "account_value": 41284.1,
+    "margin_summary": {
+      "total_margin_used": 8120.44,
+      "total_ntl_pos": 39440.0
+    },
+    "perp_positions": [
+      {
+        "symbol": "BTC",
+        "side": "short",
+        "size": 0.2143,
+        "entry_price": 120.5,
+        "mark_price": 121.9,
+        "unrealized_pnl": 43.77,
+        "leverage": 1.5
+      },
+      {
+        "symbol": "ETH",
+        "side": "long",
+        "size": 0.4286,
+        "entry_price": 241.0,
+        "mark_price": 243.8,
+        "unrealized_pnl": -87.54,
+        "leverage": 1.6
+      },
+      {
+        "symbol": "SOL",
+        "side": "long",
+        "size": 0.6429,
+        "entry_price": 361.5,
+        "mark_price": 365.7,
+        "unrealized_pnl": 131.31,
+        "leverage": 1.7
+      },
+      {
+        "symbol": "HYPE",
+        "side": "short",
+        "size": 0.8571,
+        "entry_price": 482.0,
+        "mark_price": 487.6,
+        "unrealized_pnl": -175.08,
+        "leverage": 1.8
+      },
+      {
+        "symbol": "AVAX",
+        "side": "long",
+        "size": 1.0714,
+        "entry_price": 602.5,
+        "mark_price": 609.5,
+        "unrealized_pnl": 218.85,
+        "leverage": 1.9
+      },
+      {
+        "symbol": "ARB",
+        "side": "long",
+        "size": 1.2857,
+        "entry_price": 723.0,
+        "mark_price": 731.4,
+        "unrealized_pnl": -262.62,
+        "leverage": 2.0
+      },
+      {
+        "symbol": "OP",
+        "side": "short",
+        "size": 1.5,
+        "entry_price": 843.5,
+        "mark_price": 853.3,
+        "unrealized_pnl": 306.39,
+        "leverage": 2.1
+      },
+      {
+        "symbol": "LINK",
+        "side": "long",
+        "size": 1.7143,
+        "entry_price": 964.0,
+        "mark_price": 975.2,
+        "unrealized_pnl": -350.16,
+        "leverage": 2.2
+      },
+      {
+        "symbol": "SUI",
+        "side": "long",
+        "size": 1.9286,
+        "entry_price": 1084.5,
+        "mark_price": 1097.1,
+        "unrealized_pnl": 393.93,
+        "leverage": 2.3
+      },
+      {
+        "symbol": "APT",
+        "side": "short",
+        "size": 2.1429,
+        "entry_price": 1205.0,
+        "mark_price": 1219.0,
+        "unrealized_pnl": -437.7,
+        "leverage": 2.4
+      },
+      {
+        "symbol": "TIA",
+        "side": "long",
+        "size": 2.3571,
+        "entry_price": 1325.5,
+        "mark_price": 1340.9,
+        "unrealized_pnl": 481.47,
+        "leverage": 2.5
+      },
+      {
+        "symbol": "SEI",
+        "side": "long",
+        "size": 2.5714,
+        "entry_price": 1446.0,
+        "mark_price": 1462.8,
+        "unrealized_pnl": -525.24,
+        "leverage": 2.6
+      },
+      {
+        "symbol": "INJ",
+        "side": "short",
+        "size": 2.7857,
+        "entry_price": 1566.5,
+        "mark_price": 1584.7,
+        "unrealized_pnl": 569.01,
+        "leverage": 2.7
+      },
+      {
+        "symbol": "DOGE",
+        "side": "long",
+        "size": 3.0,
+        "entry_price": 1687.0,
+        "mark_price": 1706.6,
+        "unrealized_pnl": -612.78,
+        "leverage": 2.8
+      },
+      {
+        "symbol": "WIF",
+        "side": "long",
+        "size": 3.2143,
+        "entry_price": 1807.5,
+        "mark_price": 1828.5,
+        "unrealized_pnl": 656.55,
+        "leverage": 2.9
+      }
+    ]
+  },
+  "render": {
+    "card": "live",
+    "fallback_url": "https://app.usekeel.io/live/dep_01HZQ4W2?tab=positions"
+  }
+}

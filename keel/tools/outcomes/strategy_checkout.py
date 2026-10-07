@@ -32,6 +32,7 @@ from keel.errors import KeelError
 
 from . import register
 from ._base import OutcomeResult, OutcomeTool, ToolContext
+from .open_in_app import app_url_for
 
 
 def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
@@ -91,7 +92,7 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
     }
     return OutcomeResult(
         run_id=strategy_id,
-        hero_url=f"{ctx.app_url}/strategies/{strategy_id}",
+        hero_url=app_url_for("strategy", strategy_id, ctx),
         share_url=None,
         extra=body,
     )
@@ -106,7 +107,7 @@ STRATEGY_CHECKOUT = register(
         local_only=True,  # writes a workspace under ~/.keel — meaningless on a shared hosted server
         # grounded-in: sync-contract (spec 08) — server HEAD is the single
         # source of truth, the checkout is a disposable working copy, runnable
-        # actions write local edits through by default; collaboration.md §4
+        # actions write local edits through by default; system/chat/collaboration.md §4
         # (iterate through version history, not raw rewrites).
         description=(
             "Pull a platform strategy into a local workspace so you can edit, "
@@ -153,7 +154,7 @@ STRATEGY_CHECKOUT = register(
             "readOnlyHint": False,  # writes to local filesystem
             "destructiveHint": False,
             "idempotentHint": False,  # re-running overwrites local if hash matches HEAD
-            "openWorldHint": True,
+            "openWorldHint": False,
         },
         handler=_handler,
     )

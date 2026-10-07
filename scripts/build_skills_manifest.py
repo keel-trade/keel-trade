@@ -10,7 +10,11 @@ instead of hosted file paths, since Keel skills ship inside the
 ``keel-trade`` package rather than as fetchable docs.
 
 Drift-gated by ``tests/test_skills_manifest.py`` (monorepo only): any
-change to a skill's frontmatter without regeneration fails CI.
+change to a skill's frontmatter without regeneration fails CI. Since
+agent-surface 2.8 the file is ALSO a whole-file consumer of
+``check_surface_routing.py`` (``--write`` renders it): the ``hosted``
+block and the hosted-first install pointers come from
+``shared/agent-surface.json`` + ``LISTED_EXCLUDED_SKILLS`` (Q-1467).
 
 Regenerate:
 
@@ -31,6 +35,7 @@ REPO_ROOT = SDK_ROOT.parents[2]
 MANIFEST_PATH = (
     REPO_ROOT / "services" / "keel-site" / "public" / ".well-known" / "skills" / "index.json"
 )
+AGENT_SURFACE_PATH = REPO_ROOT / "shared" / "agent-surface.json"
 
 INSTALL_BLOCK = {
     "package": "keel-trade",
@@ -41,7 +46,6 @@ INSTALL_BLOCK = {
     "claude_desktop_bundle": (
         "https://github.com/keel-trade/keel-trade/releases/latest/download/keel-trade-latest.mcpb"
     ),
-    "docs": "https://usekeel.io/keel-mcp",
 }
 
 
@@ -53,8 +57,13 @@ def _one_line(text: str) -> str:
 def build_manifest() -> dict:
     """Build the manifest dict from the live skill registry."""
     sys.path.insert(0, str(SDK_ROOT))
+    from keel.mcp.server import LISTED_EXCLUDED_SKILLS
     from keel.skills import BUNDLED_SKILLS, list_skills
 
+    surface = json.loads(AGENT_SURFACE_PATH.read_text(encoding="utf-8"))
+    endpoint = surface["endpoint"]["hosted"]
+    served = [name for name in BUNDLED_SKILLS if name not in LISTED_EXCLUDED_SKILLS]
+    excluded = [name for name in BUNDLED_SKILLS if name in LISTED_EXCLUDED_SKILLS]
     skills_map = list_skills()
     skills = []
     for name in BUNDLED_SKILLS:
@@ -74,14 +83,28 @@ def build_manifest() -> dict:
         "product": "Keel",
         "website": "https://usekeel.io",
         "description": (
-            "Agent skills bundled with the keel-trade package (CLI + stdio "
-            "MCP server) for building, backtesting, and deploying systematic "
-            "trading strategies on Hyperliquid. Each skill is an Anthropic "
-            "Agent Skill: markdown workflow + composed platform knowledge, "
-            "exposed via `keel skills` on the CLI and as MCP prompts "
-            "(prompts/list / prompts/get) in MCP hosts."
+            "Agent skills for building, backtesting and reading systematic "
+            "strategies on Hyperliquid. Each skill is an Anthropic Agent Skill: a "
+            "markdown workflow plus composed platform knowledge. The hosted "
+            "endpoint serves them through the keel_help tool; the keel-trade "
+            "package bundles the same set for the CLI (`keel skills`) and the "
+            "local stdio MCP server (prompts/list / prompts/get)."
         ),
-        "install": INSTALL_BLOCK,
+        "hosted": {
+            "endpoint": endpoint,
+            "setup": surface["setup_page_url"],
+            "tool_path": (
+                'keel_help(topic="skills") lists them; keel_help(topic="skill:<name>") returns one'
+            ),
+            "served": served,
+            "excluded": excluded,
+        },
+        "install": {
+            "hosted_endpoint": endpoint,
+            "hosted_setup": surface["setup_page_url"],
+            **INSTALL_BLOCK,
+            "docs": surface["agents_page_url"],
+        },
         "skills": skills,
     }
 

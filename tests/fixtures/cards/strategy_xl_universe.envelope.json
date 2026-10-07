@@ -1,0 +1,884 @@
+{
+  "strategy": {
+    "name": "a_169_asset_universe",
+    "status": "valid"
+  },
+  "view": {
+    "categories": {
+      "ApplyUniverseMask": "signal_transform",
+      "EWMATransform": "signal_transform",
+      "EmpiricalFDM": "forecast_mapper",
+      "ForecastCombiner": "forecast_composer",
+      "Load": "slot_op",
+      "PriceDataLoader": "data_loader",
+      "RealizedVolatility": "indicator",
+      "RollingUniverseMask": "universe_filter",
+      "Store": "slot_op",
+      "TargetTimeframeResampler": "data_transform"
+    },
+    "change": null,
+    "evidence": null,
+    "header": {
+      "clock": "1d @ 12h",
+      "execution": {
+        "label": "Buffered 0.25",
+        "params": {
+          "buffer_mode": "reference",
+          "buffer_threshold": 0.25,
+          "min_trade_size": 0.0,
+          "rebalance": "buffered",
+          "rebalance_method": "to_edge"
+        }
+      },
+      "factories": [],
+      "universe": {
+        "label": "Top 170 by volume \u00b7 HL perps",
+        "symbols": [],
+        "total": 170
+      }
+    },
+    "markdown": "**a_169_asset_universe** \u00b7 valid \u00b7 1d @ 12h\nuniverse  Top 170 by volume \u00b7 HL perps\nexecution Buffered 0.25\n\nPriceDataLoader\nStore\nTargetTimeframeResampler\nStore\nRollingUniverseMask\nStore\nLoad\nLoad\nmix6_return_vol\nStore\nLoad\nRealizedVolatility\n\u2026 33 more blocks\n",
+    "name": "a_169_asset_universe",
+    "size": "structure",
+    "status": "valid",
+    "status_text": "Valid",
+    "structure": {
+      "blocks": [
+        {
+          "args": {
+            "cache_freshness_hours": 12,
+            "cache_only": false,
+            "dex_name": "native",
+            "exchange": "hyperliquid",
+            "force_live_only": false,
+            "max_gap_fill": 3,
+            "max_stale_days": 90,
+            "output_format": "dict",
+            "symbols": [
+              "0G",
+              "2Z",
+              "AAVE",
+              "ACE",
+              "ADA",
+              "AERO",
+              "AIXBT",
+              "ALGO",
+              "ALT",
+              "ANIME",
+              "APE",
+              "APEX",
+              "APT",
+              "AR",
+              "ARB",
+              "ASTER",
+              "ATOM",
+              "AVAX",
+              "AVNT",
+              "AXS",
+              "AZTEC",
+              "BABY",
+              "BANANA",
+              "BCH",
+              "BERA",
+              "BIGTIME",
+              "BIO",
+              "BLUR",
+              "BNB",
+              "BOME",
+              "BRETT",
+              "BSV",
+              "BTC",
+              "CAKE",
+              "CASHCAT",
+              "CC",
+              "CELO",
+              "CFX",
+              "CHIP",
+              "COMP",
+              "CRV",
+              "DASH",
+              "DOGE",
+              "DOT",
+              "DYDX",
+              "DYM",
+              "EIGEN",
+              "ENA",
+              "ENS",
+              "ETC",
+              "ETH",
+              "ETHFI",
+              "FARTCOIN",
+              "FET",
+              "FIL",
+              "FOGO",
+              "GALA",
+              "GMT",
+              "GMX",
+              "GOAT",
+              "GRAM",
+              "GRASS",
+              "GRIFFAIN",
+              "HBAR",
+              "HEMI",
+              "HMSTR",
+              "HYPE",
+              "HYPER",
+              "ICP",
+              "IMX",
+              "INIT",
+              "INJ",
+              "IO",
+              "JTO",
+              "JUP",
+              "KAITO",
+              "KAS",
+              "LAYER",
+              "LDO",
+              "LINEA",
+              "LINK",
+              "LIT",
+              "LTC",
+              "MANTA",
+              "ME",
+              "MEGA",
+              "MELANIA",
+              "MEME",
+              "MERL",
+              "MET",
+              "MINA",
+              "MNT",
+              "MON",
+              "MOODENG",
+              "MORPHO",
+              "MOVE",
+              "NEAR",
+              "NIL",
+              "NOT",
+              "NXPC",
+              "ONDO",
+              "OP",
+              "ORDI",
+              "PAXG",
+              "PENDLE",
+              "PENGU",
+              "PEOPLE",
+              "PNUT",
+              "POL",
+              "POLYX",
+              "POPCAT",
+              "PROVE",
+              "PUMP",
+              "PURR",
+              "PYTH",
+              "RENDER",
+              "RESOLV",
+              "REZ",
+              "RSR",
+              "RUNE",
+              "S",
+              "SAGA",
+              "SAND",
+              "SEI",
+              "SKR",
+              "SKY",
+              "SNX",
+              "SOL",
+              "SPX",
+              "STABLE",
+              "STBL",
+              "STRK",
+              "STX",
+              "SUI",
+              "SUPER",
+              "SUSHI",
+              "SYRUP",
+              "TAO",
+              "TIA",
+              "TNSR",
+              "TRB",
+              "TRUMP",
+              "UNI",
+              "VINE",
+              "VIRTUAL",
+              "VVV",
+              "W",
+              "WCT",
+              "WIF",
+              "WLD",
+              "WLFI",
+              "XAI",
+              "XLM",
+              "XMR",
+              "XPL",
+              "XRP",
+              "YGG",
+              "ZEC",
+              "ZEN",
+              "ZETA",
+              "ZK",
+              "ZORA",
+              "ZRO",
+              "kBONK",
+              "kFLOKI",
+              "kLUNC",
+              "kNEIRO",
+              "kPEPE",
+              "kSHIB"
+            ],
+            "timeframe": "15min",
+            "use_cache": true
+          },
+          "category": "data_loader",
+          "component": "PriceDataLoader",
+          "type": "component"
+        },
+        {
+          "args": {
+            "slot": {
+              "__type__": "Slot",
+              "name": "ohlcv_15m",
+              "value_type": "OHLCVDict"
+            }
+          },
+          "category": "slot_op",
+          "component": "Store",
+          "type": "component"
+        },
+        {
+          "args": {},
+          "category": "data_transform",
+          "component": "TargetTimeframeResampler",
+          "type": "component"
+        },
+        {
+          "args": {
+            "slot": {
+              "__type__": "Slot",
+              "name": "ohlcv_1d",
+              "value_type": "OHLCVDict"
+            }
+          },
+          "category": "slot_op",
+          "component": "Store",
+          "type": "component"
+        },
+        {
+          "args": {
+            "exit_rank": 60,
+            "force_include": [],
+            "lookback_bars": 90,
+            "memory_k": 0,
+            "min_history_bars": 36,
+            "rebalance_freq": "7d",
+            "top_n": 60
+          },
+          "category": "universe_filter",
+          "component": "RollingUniverseMask",
+          "type": "component"
+        },
+        {
+          "args": {
+            "slot": {
+              "__type__": "Slot",
+              "name": "universe_mask",
+              "value_type": "BinarySignal"
+            }
+          },
+          "category": "slot_op",
+          "component": "Store",
+          "type": "component"
+        },
+        {
+          "args": {
+            "slot": {
+              "__type__": "Slot",
+              "name": "ohlcv_1d",
+              "value_type": "OHLCVDict"
+            }
+          },
+          "category": "slot_op",
+          "component": "Load",
+          "type": "component"
+        },
+        {
+          "args": {
+            "slot": {
+              "__type__": "Slot",
+              "name": "ohlcv_1d",
+              "value_type": "OHLCVDict"
+            }
+          },
+          "category": "slot_op",
+          "component": "Load",
+          "type": "component"
+        },
+        {
+          "factoryName": "mix6_return_vol",
+          "type": "factory_call"
+        },
+        {
+          "args": {
+            "slot": {
+              "__type__": "Slot",
+              "name": "return_vol",
+              "value_type": "ForecastSeries"
+            }
+          },
+          "category": "slot_op",
+          "component": "Store",
+          "type": "component"
+        },
+        {
+          "args": {
+            "slot": {
+              "__type__": "Slot",
+              "name": "ohlcv_15m",
+              "value_type": "OHLCVDict"
+            }
+          },
+          "category": "slot_op",
+          "component": "Load",
+          "type": "component"
+        },
+        {
+          "args": {
+            "min_coverage": 0.9,
+            "returns": "pct"
+          },
+          "category": "indicator",
+          "component": "RealizedVolatility",
+          "type": "component"
+        },
+        {
+          "args": {
+            "adjust": false,
+            "window": 36
+          },
+          "category": "signal_transform",
+          "component": "EWMATransform",
+          "type": "component"
+        },
+        {
+          "args": {
+            "slot": {
+              "__type__": "Slot",
+              "name": "rv_intra",
+              "value_type": "SignalSeries"
+            }
+          },
+          "category": "slot_op",
+          "component": "Store",
+          "type": "component"
+        },
+        {
+          "branches": {
+            "carry_bucket": [
+              {
+                "branches": {
+                  "raw_sub": [
+                    {
+                      "branches": {
+                        "carry_out_14": [
+                          {
+                            "factoryName": "carry_signal_outright",
+                            "type": "factory_call"
+                          }
+                        ],
+                        "carry_out_30": [
+                          {
+                            "factoryName": "carry_signal_outright",
+                            "type": "factory_call"
+                          }
+                        ],
+                        "carry_out_60": [
+                          {
+                            "factoryName": "carry_signal_outright",
+                            "type": "factory_call"
+                          }
+                        ],
+                        "carry_out_90": [
+                          {
+                            "factoryName": "carry_signal_outright",
+                            "type": "factory_call"
+                          }
+                        ]
+                      },
+                      "type": "parallel"
+                    },
+                    {
+                      "args": {
+                        "weights": {
+                          "carry_out_14": 0.25,
+                          "carry_out_30": 0.25,
+                          "carry_out_60": 0.25,
+                          "carry_out_90": 0.25
+                        }
+                      },
+                      "category": "forecast_composer",
+                      "component": "ForecastCombiner",
+                      "type": "component"
+                    },
+                    {
+                      "args": {
+                        "fdm_max": 2.5,
+                        "fdm_min": 1,
+                        "min_periods_frac": 0.25,
+                        "smoothing_half_life": 30,
+                        "target": 10,
+                        "window": "90d"
+                      },
+                      "category": "forecast_mapper",
+                      "component": "EmpiricalFDM",
+                      "type": "component"
+                    }
+                  ],
+                  "xs_sub": [
+                    {
+                      "branches": {
+                        "carry_xs_14": [
+                          {
+                            "factoryName": "carry_signal_xs",
+                            "type": "factory_call"
+                          }
+                        ],
+                        "carry_xs_30": [
+                          {
+                            "factoryName": "carry_signal_xs",
+                            "type": "factory_call"
+                          }
+                        ],
+                        "carry_xs_60": [
+                          {
+                            "factoryName": "carry_signal_xs",
+                            "type": "factory_call"
+                          }
+                        ],
+                        "carry_xs_90": [
+                          {
+                            "factoryName": "carry_signal_xs",
+                            "type": "factory_call"
+                          }
+                        ]
+                      },
+                      "type": "parallel"
+                    },
+                    {
+                      "args": {
+                        "weights": {
+                          "carry_xs_14": 0.25,
+                          "carry_xs_30": 0.25,
+                          "carry_xs_60": 0.25,
+                          "carry_xs_90": 0.25
+                        }
+                      },
+                      "category": "forecast_composer",
+                      "component": "ForecastCombiner",
+                      "type": "component"
+                    },
+                    {
+                      "args": {
+                        "fdm_max": 2.5,
+                        "fdm_min": 1,
+                        "min_periods_frac": 0.25,
+                        "smoothing_half_life": 30,
+                        "target": 10,
+                        "window": "90d"
+                      },
+                      "category": "forecast_mapper",
+                      "component": "EmpiricalFDM",
+                      "type": "component"
+                    }
+                  ]
+                },
+                "type": "parallel"
+              },
+              {
+                "args": {
+                  "weights": {
+                    "raw_sub": 0.2,
+                    "xs_sub": 0.8
+                  }
+                },
+                "category": "forecast_composer",
+                "component": "ForecastCombiner",
+                "type": "component"
+              },
+              {
+                "args": {
+                  "fdm_max": 2.5,
+                  "fdm_min": 1,
+                  "min_periods_frac": 0.25,
+                  "smoothing_half_life": 30,
+                  "target": 10,
+                  "window": "90d"
+                },
+                "category": "forecast_mapper",
+                "component": "EmpiricalFDM",
+                "type": "component"
+              }
+            ],
+            "mom_bucket": [
+              {
+                "branches": {
+                  "mom_res_126d": [
+                    {
+                      "factoryName": "mom_res_signal",
+                      "type": "factory_call"
+                    }
+                  ],
+                  "mom_res_14d": [
+                    {
+                      "factoryName": "mom_res_signal",
+                      "type": "factory_call"
+                    }
+                  ],
+                  "mom_res_21d": [
+                    {
+                      "factoryName": "mom_res_signal",
+                      "type": "factory_call"
+                    }
+                  ],
+                  "mom_res_63d": [
+                    {
+                      "factoryName": "mom_res_signal",
+                      "type": "factory_call"
+                    }
+                  ]
+                },
+                "type": "parallel"
+              },
+              {
+                "args": {
+                  "weights": {
+                    "mom_res_126d": 0.25,
+                    "mom_res_14d": 0.25,
+                    "mom_res_21d": 0.25,
+                    "mom_res_63d": 0.25
+                  }
+                },
+                "category": "forecast_composer",
+                "component": "ForecastCombiner",
+                "type": "component"
+              },
+              {
+                "args": {
+                  "fdm_max": 2.5,
+                  "fdm_min": 1,
+                  "min_periods_frac": 0.25,
+                  "smoothing_half_life": 30,
+                  "target": 10,
+                  "window": "90d"
+                },
+                "category": "forecast_mapper",
+                "component": "EmpiricalFDM",
+                "type": "component"
+              }
+            ],
+            "trend_bucket": [
+              {
+                "branches": {
+                  "ewmac_16_64": [
+                    {
+                      "factoryName": "ewmac_signal",
+                      "type": "factory_call"
+                    }
+                  ],
+                  "ewmac_2_8": [
+                    {
+                      "factoryName": "ewmac_signal",
+                      "type": "factory_call"
+                    }
+                  ],
+                  "ewmac_4_16": [
+                    {
+                      "factoryName": "ewmac_signal",
+                      "type": "factory_call"
+                    }
+                  ],
+                  "ewmac_8_32": [
+                    {
+                      "factoryName": "ewmac_signal",
+                      "type": "factory_call"
+                    }
+                  ]
+                },
+                "type": "parallel"
+              },
+              {
+                "args": {
+                  "weights": {
+                    "ewmac_16_64": 0.25,
+                    "ewmac_2_8": 0.25,
+                    "ewmac_4_16": 0.25,
+                    "ewmac_8_32": 0.25
+                  }
+                },
+                "category": "forecast_composer",
+                "component": "ForecastCombiner",
+                "type": "component"
+              },
+              {
+                "args": {
+                  "fdm_max": 2.5,
+                  "fdm_min": 1,
+                  "min_periods_frac": 0.25,
+                  "smoothing_half_life": 30,
+                  "target": 10,
+                  "window": "90d"
+                },
+                "category": "forecast_mapper",
+                "component": "EmpiricalFDM",
+                "type": "component"
+              }
+            ]
+          },
+          "type": "parallel"
+        },
+        {
+          "args": {
+            "weights": {
+              "carry_bucket": 0.25,
+              "mom_bucket": 0.35,
+              "trend_bucket": 0.4
+            }
+          },
+          "category": "forecast_composer",
+          "component": "ForecastCombiner",
+          "type": "component"
+        },
+        {
+          "args": {
+            "fdm_max": 2.5,
+            "fdm_min": 1,
+            "min_periods_frac": 0.25,
+            "smoothing_half_life": 30,
+            "target": 10,
+            "window": "90d"
+          },
+          "category": "forecast_mapper",
+          "component": "EmpiricalFDM",
+          "type": "component"
+        },
+        {
+          "args": {
+            "mask_slot": "universe_mask"
+          },
+          "category": "signal_transform",
+          "component": "ApplyUniverseMask",
+          "type": "component"
+        },
+        {
+          "args": {
+            "slot": {
+              "__type__": "Slot",
+              "name": "forecast_combined",
+              "value_type": "SignalSeries"
+            }
+          },
+          "category": "slot_op",
+          "component": "Store",
+          "type": "component"
+        },
+        {
+          "factoryName": "position_pipeline",
+          "type": "factory_call"
+        }
+      ],
+      "execution": {
+        "buffer_mode": "reference",
+        "buffer_threshold": 0.25,
+        "min_trade_size": 0.0,
+        "rebalance": "buffered",
+        "rebalance_method": "to_edge"
+      },
+      "factories": [],
+      "globals": {
+        "bar_offset": "12h",
+        "target_timeframe": "1d"
+      },
+      "name": "a_169_asset_universe",
+      "universe": {
+        "assets": [
+          "0G",
+          "2Z",
+          "AAVE",
+          "ACE",
+          "ADA",
+          "AERO",
+          "AIXBT",
+          "ALGO",
+          "ALT",
+          "ANIME",
+          "APE",
+          "APEX",
+          "APT",
+          "AR",
+          "ARB",
+          "ASTER",
+          "ATOM",
+          "AVAX",
+          "AVNT",
+          "AXS",
+          "AZTEC",
+          "BABY",
+          "BANANA",
+          "BCH",
+          "BERA",
+          "BIGTIME",
+          "BIO",
+          "BLUR",
+          "BNB",
+          "BOME",
+          "BRETT",
+          "BSV",
+          "BTC",
+          "CAKE",
+          "CASHCAT",
+          "CC",
+          "CELO",
+          "CFX",
+          "CHIP",
+          "COMP",
+          "CRV",
+          "DASH",
+          "DOGE",
+          "DOT",
+          "DYDX",
+          "DYM",
+          "EIGEN",
+          "ENA",
+          "ENS",
+          "ETC",
+          "ETH",
+          "ETHFI",
+          "FARTCOIN",
+          "FET",
+          "FIL",
+          "FOGO",
+          "GALA",
+          "GMT",
+          "GMX",
+          "GOAT",
+          "GRAM",
+          "GRASS",
+          "GRIFFAIN",
+          "HBAR",
+          "HEMI",
+          "HMSTR",
+          "HYPE",
+          "HYPER",
+          "ICP",
+          "IMX",
+          "INIT",
+          "INJ",
+          "IO",
+          "JTO",
+          "JUP",
+          "KAITO",
+          "KAS",
+          "LAYER",
+          "LDO",
+          "LINEA",
+          "LINK",
+          "LIT",
+          "LTC",
+          "MANTA",
+          "ME",
+          "MEGA",
+          "MELANIA",
+          "MEME",
+          "MERL",
+          "MET",
+          "MINA",
+          "MNT",
+          "MON",
+          "MOODENG",
+          "MORPHO",
+          "MOVE",
+          "NEAR",
+          "NIL",
+          "NOT",
+          "NXPC",
+          "ONDO",
+          "OP",
+          "ORDI",
+          "PAXG",
+          "PENDLE",
+          "PENGU",
+          "PEOPLE",
+          "PNUT",
+          "POL",
+          "POLYX",
+          "POPCAT",
+          "PROVE",
+          "PUMP",
+          "PURR",
+          "PYTH",
+          "RENDER",
+          "RESOLV",
+          "REZ",
+          "RSR",
+          "RUNE",
+          "S",
+          "SAGA",
+          "SAND",
+          "SEI",
+          "SKR",
+          "SKY",
+          "SNX",
+          "SOL",
+          "SPX",
+          "STABLE",
+          "STBL",
+          "STRK",
+          "STX",
+          "SUI",
+          "SUPER",
+          "SUSHI",
+          "SYRUP",
+          "TAO",
+          "TIA",
+          "TNSR",
+          "TRB",
+          "TRUMP",
+          "UNI",
+          "VINE",
+          "VIRTUAL",
+          "VVV",
+          "W",
+          "WCT",
+          "WIF",
+          "WLD",
+          "WLFI",
+          "XAI",
+          "XLM",
+          "XMR",
+          "XPL",
+          "XRP",
+          "YGG",
+          "ZEC",
+          "ZEN",
+          "ZETA",
+          "ZK",
+          "ZORA",
+          "ZRO",
+          "kBONK",
+          "kFLOKI",
+          "kLUNC",
+          "kNEIRO",
+          "kPEPE",
+          "kSHIB"
+        ],
+        "market": "perp",
+        "mode": "top_volume",
+        "top_n": 170
+      }
+    },
+    "validation": {
+      "errors": 0,
+      "ok": true,
+      "warnings": 0
+    },
+    "version": null
+  }
+}

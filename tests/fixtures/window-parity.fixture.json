@@ -1,0 +1,53 @@
+{
+  "_about": "Spec 03 guard 12 (display parity) fixture, shared by every surface that prints a backtest run's range. One completed run whose window is half-open on the wire: end_exclusive (2026-09-23) is the first day NOT covered, last_bar (2026-09-22) the last day that was. Every renderer - the app (window-parity.unit.test.ts), the SDK _window_line, the backtest card and the compare card - must print `expected`. `served_last_bar` is a second run whose engine-stamped last_bar is EARLIER than end_exclusive - 1 day, proving a renderer reads last_bar rather than re-deriving it.",
+  "expected": "Jul 27, 2024 – Sep 22, 2026",
+  "expected_compact": "Jul 2024 – Sep 2026",
+  "run": {
+    "id": "btr_window_parity",
+    "status": "completed",
+    "start_date": "2024-07-27T00:00:00+00:00",
+    "end_date": "2026-09-23T00:00:00+00:00",
+    "window": {
+      "requested": { "start": "2024-01-01", "end": null },
+      "ran": {
+        "start": "2024-07-27",
+        "end_exclusive": "2026-09-23",
+        "last_bar": "2026-09-22",
+        "days": 788
+      },
+      "warmup_bars": 30,
+      "chart_start": "2024-08-19",
+      "start_reason_code": "platform_floor",
+      "start_reason": "Keel's price history begins Jul 27, 2024, the earliest date any backtest can start",
+      "policy": "consumed_eras"
+    }
+  },
+  "public_share": {
+    "backtest_period_start": "2024-07-27",
+    "backtest_period_end": "2026-09-23",
+    "backtest_period_last_bar": "2026-09-22"
+  },
+  "view_window": {
+    "start": "2024-07-27",
+    "end": "2026-09-23",
+    "last_bar": "2026-09-22",
+    "days": 788,
+    "warmup_bars": 30,
+    "chart_start": "2024-08-19"
+  },
+  "served_last_bar": {
+    "run": {
+      "start_date": "2024-07-27T00:00:00+00:00",
+      "end_date": "2026-09-23T00:00:00+00:00",
+      "window": {
+        "ran": {
+          "start": "2024-07-27",
+          "end_exclusive": "2026-09-23",
+          "last_bar": "2026-09-20",
+          "days": 786
+        }
+      }
+    },
+    "expected": "Jul 27, 2024 – Sep 20, 2026"
+  }
+}

@@ -1,9 +1,9 @@
-"""Tests for `keel_components_detail_batch`.
+"""Tests for `keel_components_get_many`.
 
 The canonical pre-composition step per the `strategy-creation` skill:
 fetch full details for many components in one call, walk the result
 pair-wise to verify types fit BEFORE drafting DSL. Replaces N
-round-trips of `keel_components_compose_help`.
+round-trips of `keel_components_get`.
 """
 
 from __future__ import annotations
@@ -15,14 +15,13 @@ import httpx
 import pytest
 import respx
 from click.testing import CliRunner
-
 from keel.cli.main import cli
 from keel.errors import NotFoundError
 from keel.tools.outcomes import OUTCOMES, _bootstrap
-from keel.tools.outcomes._base import ToolContext
 
 # Import for side-effect registration.
 from keel.tools.outcomes import components_detail_batch as _batch_mod  # noqa: F401
+from keel.tools.outcomes._base import ToolContext
 
 
 runner = CliRunner()
@@ -68,8 +67,8 @@ def _ctx():
 
 
 def test_batch_detail_tool_registered():
-    assert "keel_components_detail_batch" in OUTCOMES
-    tool = OUTCOMES["keel_components_detail_batch"]
+    assert "keel_components_get_many" in OUTCOMES
+    tool = OUTCOMES["keel_components_get_many"]
     assert tool.toolset == "read-only"
     assert tool.required_action == "component.read"
 
@@ -78,7 +77,7 @@ def test_batch_detail_tool_registered():
 
 
 def test_batch_returns_dict_keyed_by_name():
-    tool = OUTCOMES["keel_components_detail_batch"]
+    tool = OUTCOMES["keel_components_get_many"]
     result = tool.handler({"names": ["ROC", "EWMA", "ForecastScaler"]}, _ctx())
     env = result.to_envelope()
     assert env["found"] == 3
@@ -100,7 +99,7 @@ def test_batch_returns_error_entries_for_unknown_names():
     """Unknown component names become `{"error": "..."}` entries — the
     batch as a whole succeeds. Matches chat-api's
     `strategy_component_detail_batch` shape."""
-    tool = OUTCOMES["keel_components_detail_batch"]
+    tool = OUTCOMES["keel_components_get_many"]
     result = tool.handler({"names": ["ROC", "DefinitelyNotARealComponent_XYZ"]}, _ctx())
     env = result.to_envelope()
     assert env["found"] == 1
@@ -111,7 +110,7 @@ def test_batch_returns_error_entries_for_unknown_names():
 
 def test_batch_with_only_unknown_names_still_returns_partial():
     """All-not-found is still a valid response, not an exception."""
-    tool = OUTCOMES["keel_components_detail_batch"]
+    tool = OUTCOMES["keel_components_get_many"]
     result = tool.handler({"names": ["NopeA", "NopeB"]}, _ctx())
     env = result.to_envelope()
     assert env["found"] == 0
@@ -127,7 +126,7 @@ def test_batch_missing_names_raises_usage_error():
     """Empty names list is a usage error (no batch to perform)."""
     from keel.errors import KeelError
 
-    tool = OUTCOMES["keel_components_detail_batch"]
+    tool = OUTCOMES["keel_components_get_many"]
     with pytest.raises(KeelError) as exc:
         tool.handler({"names": []}, _ctx())
     assert "missing required" in str(exc.value).lower() or "names" in str(exc.value).lower()
@@ -135,7 +134,7 @@ def test_batch_missing_names_raises_usage_error():
 
 def test_batch_strips_blank_names():
     """Whitespace-only or empty strings in the list are silently dropped."""
-    tool = OUTCOMES["keel_components_detail_batch"]
+    tool = OUTCOMES["keel_components_get_many"]
     result = tool.handler({"names": ["ROC", "", "  ", "EWMA"]}, _ctx())
     env = result.to_envelope()
     # Only the two real names processed.
@@ -144,7 +143,7 @@ def test_batch_strips_blank_names():
 
 def test_batch_accepts_comma_separated_string_for_cli_convenience():
     """CLI users may sometimes pass `--names ROC,EWMA` as a single string."""
-    tool = OUTCOMES["keel_components_detail_batch"]
+    tool = OUTCOMES["keel_components_get_many"]
     result = tool.handler({"names": "ROC, EWMA, ForecastScaler"}, _ctx())
     env = result.to_envelope()
     assert set(env["components"].keys()) == {"ROC", "EWMA", "ForecastScaler"}
@@ -211,15 +210,21 @@ def test_cli_json_payload_is_stdout_only_notices_go_to_stderr(monkeypatch):
         "notice": "Running anonymously — run `keel auth login` to keep your work.",
     }
     with respx.mock(assert_all_called=False) as api:
-        api.post("https://api.usekeel.io/v1/auth/anonymous").mock(
+        mint = api.post("https://api.usekeel.io/v1/auth/anonymous").mock(
             return_value=httpx.Response(201, json=grant)
         )
-        result = runner.invoke(
-            cli, ["components", "describe-batch", "ROC", "--format", "json"]
-        )
+        # Q-2494: a bundled lookup never mints, so it prints no notice at all.
+        lookup = runner.invoke(cli, ["components", "describe-batch", "ROC", "--format", "json"])
+        assert not mint.called
+        assert json.loads(lookup.stdout)["components"]["ROC"]["name"] == "ROC"
+        # A command that needs auth mints — and its notice stays off stdout.
+        # (`_request` answers its /v1/me read; the mint itself is httpx.post.)
+        with patch("keel.client.KeelClient._request", return_value={"org": {"plan": "anon"}}):
+            result = runner.invoke(cli, ["plan", "status", "--format", "json"])
 
+    assert mint.called
     assert result.exit_code == 0, result.output
     # The notice went out — and it is NOT on the machine-readable stream.
     assert "Running anonymously" in result.stderr
     assert "Running anonymously" not in result.stdout
-    assert json.loads(result.stdout)["components"]["ROC"]["name"] == "ROC"
+    assert json.loads(result.stdout)["plan"] == "anon"

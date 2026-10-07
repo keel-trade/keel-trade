@@ -1,9 +1,13 @@
-"""`keel_open_in_app` — navigation link into the Keel web app (spec 01 R4).
+"""`keel_app_link` — a link into the Keel web app (spec 01 R4).
+
+Renamed from `keel_open_in_app` on 2026-10-01 (Q-2080): "open" promised a
+navigation the tool never performs — it returns a URL. The old name is a
+callable alias (`_toolsets.TOOL_ALIASES`).
 
 Pure URL construction, no API call: given a strategy id, backtest run
 id, or share id, return the canonical web-app URL. On the LISTED server
 profile this is the only bridge from the agent surface into the app —
-the returned overview page is where the user manages the strategy
+the returned editor page is where the user manages the strategy
 onward under their own steam (research/08: navigation, not action;
 `readOnlyHint: true`; policy-vetted description).
 
@@ -15,6 +19,8 @@ the staging app) and ``ToolContext.share_url_root``
 
 from __future__ import annotations
 
+import re
+
 from keel.errors import KeelError
 
 from . import register
@@ -22,16 +28,31 @@ from ._base import OutcomeResult, OutcomeTool, ToolContext
 
 
 # ── Canonical app-URL routing — ONE source of truth (spec 06 R4) ─────
-# `keel_open_in_app` (MCP), `keel app open` (CLI), and `keel open`
+# `keel_app_link` (MCP), `keel app open` (CLI), and `keel open`
 # (browser-launching CLI verb) all resolve URLs HERE. Never duplicate
 # this routing elsewhere.
 
-# Known id prefixes → route kind.
+# Known id prefixes → route kind. `shr_` is the spelling this tool once
+# documented; no share link has ever carried it (see `_SHARE_TOKEN_RE`), and
+# it stays only so a caller that typed it still lands on the share page.
 _ID_PREFIX_KINDS: dict[str, str] = {
     "str_": "strategy",
     "btr_": "backtest",
+    # A running strategy's page (Q-2273 L6): `keel_live_monitor`'s and the
+    # listed connection check's hints send a deployment here, and
+    # `app_url_for("live", …)` always built its link — only the prefix was
+    # missing, so every such hint ended in "unknown prefix".
+    "dep_": "live",
     "shr_": "share",
 }
+
+#: A real share id — `libs/strategy_registry/share_links.py`
+#: `_generate_share_id`: `secrets.token_urlsafe(16)[:21]`, an UNPREFIXED
+#: 21-character URL-safe token (Q-2080 / FINDINGS F7). Until 2026-10-01 this
+#: tool recognised only `shr_…`, so every share id `keel_share_create` ever
+#: returned was refused here as an unknown prefix. Platform ids are
+#: `<kind>_<ulid>` and ≥ 30 characters, so the exact length discriminates.
+_SHARE_TOKEN_RE = re.compile(r"[A-Za-z0-9_-]{21}")
 
 # Envelope `target_kind` labels (existing wire contract, unchanged).
 TARGET_KINDS: dict[str, str] = {
@@ -43,28 +64,56 @@ TARGET_KINDS: dict[str, str] = {
 
 
 def kind_for_id(target_id: str) -> str | None:
-    """Route kind implied by a known id prefix, else ``None``."""
+    """Route kind implied by a known id prefix or a share token's shape, else ``None``."""
     for prefix, kind in _ID_PREFIX_KINDS.items():
         if target_id.startswith(prefix):
             return kind
+    if _SHARE_TOKEN_RE.fullmatch(target_id):
+        return "share"
     return None
 
 
-def app_url_for(kind: str, target_id: str, ctx: ToolContext) -> str:
+def _with_query(base: str, query: dict[str, object] | None) -> str:
+    """Append a query string, dropping empties.
+
+    Parameterised links are built HERE so every app URL has one author.
+    Two tools used to append their own and shipped parameters no page has
+    ever read (`?tab=history`, `?compare=a..b`) — a link that works and a
+    parameter that does nothing look identical from the tool's side.
+    """
+    items = [(k, v) for k, v in (query or {}).items() if v not in (None, "")]
+    if not items:
+        return base
+    from urllib.parse import urlencode
+
+    return base + "?" + urlencode([(k, str(v)) for k, v in items])
+
+
+def app_url_for(
+    kind: str,
+    target_id: str,
+    ctx: ToolContext,
+    *,
+    query: dict[str, object] | None = None,
+) -> str:
     """The canonical web-app URL for one target.
 
-    ``kind`` is one of ``strategy`` (overview = Deploy-button landing),
-    ``backtest`` (tearsheet tab), ``live`` (deployment view), or
-    ``share`` (public share page, rooted at ``ctx.share_url_root``).
+    ``kind`` is one of ``strategy`` (the EDITOR — V-6, ratified
+    2026-09-19: every strategy link lands where the work happens, and
+    ``/strategies/{id}`` redirects there), ``backtest`` (tearsheet tab),
+    ``live`` (deployment view), or ``share`` (public share page, rooted
+    at ``ctx.share_url_root``).
     """
     if kind == "strategy":
-        return f"{ctx.app_url}/strategies/{target_id}"
+        return _with_query(f"{ctx.app_url}/strategies/{target_id}/edit", query)
     if kind == "backtest":
-        return f"{ctx.app_url}/backtests/{target_id}?tab=tearsheet"
+        return _with_query(
+            f"{ctx.app_url}/backtests/{target_id}", {"tab": "tearsheet", **(query or {})}
+        )
     if kind == "live":
-        return f"{ctx.app_url}/live/{target_id}"
+        return _with_query(f"{ctx.app_url}/live/{target_id}", query)
     if kind == "share":
-        return f"{ctx.share_url_root}/{target_id}"
+        return _with_query(f"{ctx.share_url_root}/{target_id}", query)
     raise KeelError(
         f"Cannot build an app link for kind {kind!r}.",
         error_code="unknown_link_kind",
@@ -81,8 +130,9 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
             error_code="missing_id",
             exit_code=2,
             suggestion=(
-                "Pass a strategy id (str_...), a backtest run id (btr_...), "
-                "or a share id (shr_...)."
+                "Pass a strategy id (str_...), a backtest run id (btr_...), a "
+                "running strategy's id (dep_...), or a share id (the token in a "
+                "usekeel.io/share/<id> URL)."
             ),
         )
 
@@ -93,9 +143,11 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
             error_code="unknown_id_prefix",
             exit_code=2,
             suggestion=(
-                "Use a strategy id (str_...), a backtest run id (btr_...), "
-                "or a share id (shr_...). Find ids via `keel_strategy_search` "
-                "or `keel_backtest_run`."
+                "Use a strategy id (str_...), a backtest run id (btr_...), a "
+                "running strategy's id (dep_..., from `keel_live_monitor`), or a share "
+                "id (the token in a usekeel.io/share/<id> URL, as "
+                "`keel_share_create` returns). `keel_strategy_search` and "
+                "`keel_backtest_run` return the first two."
             ),
         )
     kind = TARGET_KINDS[route_kind]
@@ -132,7 +184,7 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
 
 OPEN_IN_APP = register(
     OutcomeTool(
-        name="keel_open_in_app",
+        name="keel_app_link",
         required_action="strategy.read",
         # CLI: `keel app open <id>` prints the canonical URL (hero_url).
         # spec 06's future `keel open` (which launches the browser) can
@@ -147,18 +199,11 @@ OPEN_IN_APP = register(
             # Lead sentence is R4's policy-vetted language (research/08) and
             # is asserted verbatim by tests/test_outcomes_open_in_app.py —
             # keep it exactly; level up in the sentences that follow.
-            "Returns a link to view and manage this strategy in the Keel web "
-            "app. This is the bridge from the agent surface to the interactive "
-            "product: give it a strategy id (`str_...`) for the strategy "
-            "overview page, a backtest run id (`btr_...`) for the full "
-            "interactive tearsheet and charts, or a share id (`shr_...`) for "
-            "the public share page. Reach for it whenever the user wants to "
-            "see the visual result or continue with the strategy in the app "
-            "beyond what these tools do; it is read-only navigation — it "
-            "builds the canonical URL and changes nothing. Present the "
-            "returned `url` to the user as a clickable link. "
-            "Do NOT use to fetch strategy data or metrics — call "
-            "`keel_strategy_get` or `keel_backtest_summarize` for those."
+            "Returns a link to view and manage this strategy in the Keel web app. A "
+            "strategy id (`str_...`) links to the strategy editor, a backtest run id (`btr_...`) "
+            "to the tearsheet and charts, a running strategy's id (`dep_...`) to its "
+            "page, and a share id (the token in a `usekeel.io/share/<id>` URL) "
+            "to the public share page. It returns the link as `url`; nothing is opened."
         ),
         input_schema={
             "type": "object",
@@ -168,13 +213,14 @@ OPEN_IN_APP = register(
                     "type": "string",
                     "x-cli-positional": True,
                     "description": (
-                        "Strategy id (str_...), backtest run id (btr_...), or share id (shr_...)."
+                        "Strategy id (`str_...`), backtest run id (`btr_...`), running "
+                        "strategy id (`dep_...`), or share id (the token in a `usekeel.io/share/<id>` URL)."
                     ),
                 },
             },
         },
         annotations={
-            "title": "Open in Keel App",
+            "title": "Get App Link",
             "readOnlyHint": True,
             "destructiveHint": False,
             "idempotentHint": True,

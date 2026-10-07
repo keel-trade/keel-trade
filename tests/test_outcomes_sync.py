@@ -51,7 +51,7 @@ def test_checkout_registered_and_returns_workspace_envelope(ctx):
     assert env["workspace"] == "/tmp/ws/str_abc"
     assert env["file"] == "/tmp/ws/str_abc/strategy.py"
     assert env["sequence"] == 3
-    assert env["hero_url"] == "https://app.usekeel.io/strategies/str_abc"
+    assert env["hero_url"] == "https://app.usekeel.io/strategies/str_abc/edit"
     # Agent-facing next-action hints
     assert any("editor" in n.lower() for n in env["next"])
     assert any("keel_strategy_status" in n for n in env["next"])
@@ -250,13 +250,20 @@ def test_status_can_opt_out_of_recent_commits(ctx):
     s.assert_called_once_with(strategy_id="str_x", recent_commits=0)
 
 
-def test_status_clamps_recent_commits(ctx):
+def test_status_refuses_recent_commits_past_20(ctx):
+    """The declared 0-20 is enforced, not clamped (Q-2270)."""
     fake = {"strategy_id": "str_x", "state": "current", "name": "X",
             "local_hash": "h", "remote_hash": "h",
             "sequence": 1, "workspace": "/tmp"}
     with patch("keel.workspace.status", return_value=fake) as s:
+        with pytest.raises(KeelError) as exc:
+            OUTCOMES["keel_strategy_status"].handler(
+                {"strategy_id": "str_x", "recent_commits": 9999}, ctx
+            )
+        assert exc.value.error_code == "argument_out_of_range"
+        s.assert_not_called()
         OUTCOMES["keel_strategy_status"].handler(
-            {"strategy_id": "str_x", "recent_commits": 9999}, ctx
+            {"strategy_id": "str_x", "recent_commits": 20}, ctx
         )
     s.assert_called_once_with(strategy_id="str_x", recent_commits=20)
 

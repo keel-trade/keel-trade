@@ -1,316 +1,468 @@
-<!-- keywords: entry, exit, threshold, binary, RSI, overbought, oversold, buy, sell, state, PositionStateMachine, ThresholdCross, mean reversion, breakout, zero cross -->
+<!-- keywords: entry, exit, stop loss, stop, take profit, target, trailing stop, trail, breakeven, partial, scale out, scale in, dca, safety order, pyramid, ladder, max hold, time exit, cooldown, re-entry, daily limit, R multiple, risk per trade, TradeManager, position, trade, binary, threshold, RSI, mean reversion, breakout -->
 <!-- pattern: entry_exit -->
 
-# Discrete Entry/Exit
+# Entries, exits and the position layer
 
-Threshold-based buy/sell signals with explicit position state management.
-Best for mean-reversion (buy oversold, sell overbought) and breakout strategies.
+## The model
 
-**Always use `Execution(rebalance='on_change')`** for entry/exit strategies. Binary weights only change on entry/exit events — `every_bar` causes unnecessary micro-rebalances every bar even when no signal fired.
+Four layers, in one direction: signals (market only; entry and exit signals are built separately) → positions (TradeManager, the only layer that remembers what the strategy did) → sizing (per asset) → portfolio. Continuous forecasts skip the position layer.
 
-## Two Approaches
+Position layer: TradeManager turns entry signals into a Position; each rule is a reader, then ordinary components, then an action (Exit, Reduce, ScaleIn, AllowEntry).
 
-### Stateless (simpler, start here)
-ThresholdCross re-evaluates every bar — no position memory. Position is active only while signal stays beyond threshold. Good for first iteration.
+- Store the entry signal (−1/0/1), then `TradeManager(entries='entries', prices='ohlcv')`.
+- A rule is one branch of the dict step below it. The branch name is the rule's name and its exit reason; names never change what a rule does. "Stop OR target" is two branches.
+- A trade value comes from a reader; a market value enters a rule with `Load('slot')` and keeps its full-history meaning.
+- A rule that reads what another rule did (`SoldFraction()`, `AddCount()`) goes in a later stage: a second dict step.
+- **Use `Execution(rebalance='on_change')`**: weights change only on entries, exits, partials and adds.
 
-### Stateful (separate entry/exit signals)
-Build entry and exit signals independently, combine with PositionStateMachine. Enables different entry and exit thresholds (e.g., enter at z=±2, exit when z crosses 0). Use when the user specifies distinct entry and exit conditions.
+## Readers
 
-## Component Sequence — Stateless
+Trade readers (unit in brackets):
 
-1. **PriceDataLoader** + **TargetTimeframeResampler** - Load and resample data
-2. **Indicator** (KeltnerChannel, RSI, etc.) - Compute signal
-3. **Normalization** (optional) - RollingZScoreTransform, CrossSectionalZScore
-4. **NegateTransform** (if needed) - Flip polarity for mean reversion
-5. **ThresholdCross** (upper=2, lower=-2) - Generate positions → BinarySignal
-6. **EqualWeightSizer** - Allocate → WeightSeries
+- `TradeReturn()`: return from the entry close, positive when winning (fraction).
+- `TradePnL()`: profit per unit from the entry close (price).
+- `BarsHeld()`: bars since entry, 0 on the entry bar.
+- `PeakPrice()` / `GiveBack()`: best close since entry / distance back from it (price).
+- `DrawdownFromPeak()`: fraction given back from the best close (≤ 0).
+- `MaxFavorable()` / `MaxAdverse()`: best / worst return so far (fraction).
+- `EntryPrice()` / `AveragePrice()`: entry close / average after adds (price).
+- `ReturnFromAverage()` / `ReturnSinceLastFill()`: return from the average / from the last fill (fraction).
+- `UnitsHeld()` / `SoldFraction()` / `AddCount()`: units held / initial size sold / adds made.
+- `TradeDirection()` / `IsLong()` / `IsShort()`: +1 or −1 / 1 while long / 1 while short.
+- `AtEntry(slot='x')`: a market value sampled at entry, held for the trade.
 
-## Component Sequence — Stateful
+Between-trade readers, read only in a branch ending in `AllowEntry()`:
 
-1. **Data pipeline** - PriceDataLoader, TargetTimeframeResampler
-2. **Signal computation** (Parallel if filter/confirm needed):
-   - Signal branch: Indicator → Normalize → NegateTransform (if MR)
-   - Filter branch: ADX/other → ThresholdFilter (independent, in Parallel)
-3. **ApplyMask** - Merge signal + filter from Parallel dict
-4. **Entry signal**: ThresholdCross(upper=2, lower=-2) → Store('entries')
-5. **Exit signal**: ThresholdCross(upper=0, lower=0) → Store('exits')
-   - Or: TimeBasedExitFilter(entry_slot='entries', hold_periods=5) → Store('exits')
-6. **PositionStateMachine**(entry_slot='entries', exit_slot='exits', exit_mode='directional')
-7. **EqualWeightSizer** → WeightSeries
+- `BarsSinceExit()` / `LastTradeReturn()`: bars since the last exit / the previous trade's return.
+- `EntryCount(window='1d')` / `LossStreak(window='1d')`: entries / consecutive losses in the window.
+- `RealizedPnL(window='1d')`: realized return of partial sells and closes in the window (fraction).
+- `EntriesThisSignal()` / `SignalReset()`: entries since the signal turned on / 1 when reset.
 
-## Directional Exits with PositionStateMachine
+Return readers are fractions: −0.05 is a 5% loss; `-5` is −500%. Windows are the UTC day or week by default (`anchor='rolling'` trails) and need `Globals(target_timeframe=)`. `SinceEntry(agg='max')` is a running max, min, sum or mean since entry (the best R so far).
 
-`exit_mode='directional'`: exit fires when exit signal **opposes** current position (exit × state < 0).
+## Actions and short forms
 
-Use ThresholdCross(upper=0, lower=0) as exit signal:
-- Signal > 0 → exit_signal = +1 → exits shorts (state=-1), holds longs (state=+1)
-- Signal < 0 → exit_signal = -1 → exits longs (state=+1), holds shorts (state=-1)
+- `Exit()` closes the whole trade on the first bar its 0/1 mask is 1.
+- `Reduce(fraction=0.5)` sells a fraction of the INITIAL size, once per rule per trade.
+- `ScaleIn(units=1.0, times=4)` adds each time its mask turns on, up to `times`; `on='every_bar'` adds on every bar it is on.
+- `AllowEntry()` gates new entries: a trade opens only where every gate is 1 and the entry signal has reset.
+- `Exposure()` turns the Position into signed units held. It sits between the rules and every sizer except `RiskSizer`, which takes the Position.
 
-This enables "enter at extreme, exit at mean" — the most common mean-reversion pattern.
+Short forms expand to the same rules: `StopLoss(pct=0.05)`, `TakeProfit(pct=0.10)` (`fraction=` makes it a `Reduce`), `TrailingStop(pct=0.08)` or `TrailingStop(atr=2.5, period=14)`, `MaxHold(bars=48)`, `Cooldown(bars=4)`; `MaxHold` and `Cooldown` also take `window='2d'`.
 
-`exit_mode='scalar'` (default): exit fires when exit_signal == 1.0, direction-blind. Use with TimeBasedExitFilter or ValueStopExitFilter.
+## Defaults
 
-## Stateful Example — Enter at ±2, Exit at Zero Cross, with Filter + Confirm
+- After an exit the next trade waits for the entry signal to reset; the exit bar's own value counts. Gates AND with that wait; `reentry='any_bar'` drops it.
+- Rules start the bar after entry.
+- State readers report the start of the bar and see only stages above (and earlier steps of their own branch).
+- On one bar: full exit, then partials, then adds; an add is skipped on a partial's bar.
+- An opposite entry flips the trade, as its own event.
+- A market exit's bar refuses a new entry.
+- `max_units` is derived from the `ScaleIn` rules, and the validator states it.
+- A missing `AtEntry` value (or `RiskSizer` distance) refuses that entry.
+- On a bar with no price nothing happens.
+- `Cooldown(bars=n)` re-enters from bar n + 1; a gate on a flip bar sees one row.
+- A transformed exposure (a `Clip`, a combiner) is sized as a signal.
 
-Decomposition for: "KeltnerChannel z-score, enter at ±2, exit at z=0, skip strong trends, confirm with RSI(3) extremes"
-
-| Block | Intent | Component(s) |
-|-------|--------|--------------|
-| Signal | (close-EMA20)/ATR20 | KeltnerChannel(20,1) |
-| Normalize | 60-bar z-score | RollingZScoreTransform(60), NegateTransform |
-| Entry | z > 2 short, z < -2 long | ThresholdCross(2, -2) |
-| Exit | z crosses 0 | ThresholdCross(0, 0) + directional PSM |
-| Filter | skip strong trends | ADX(14) → BelowThresholdFilter(25) |
-| Confirm | RSI(3) > 90 or < 10 | RSI → AboveThreshold(90) + BelowThreshold(10) → MaskOr |
-
-Bar-by-bar trace (negated z-score, directional exit):
-```
-negated_z  entry        exit         PSM state
-+2.5       +1 (long)    +1 (z>0)     entry wins  → LONG
-+1.5       0            +1 (z>0)     same sign   → HOLD
--0.3       0            -1 (z<0)     opposes +1  → EXIT  ← z crossed 0
--2.5       -1 (short)   -1 (z<0)     entry wins  → SHORT
--1.5       0            -1 (z<0)     same sign   → HOLD
-+0.3       0            +1 (z>0)     opposes -1  → EXIT  ← z crossed 0
-```
+## The bracket and the market exit
 
 ```python
-Globals(target_timeframe='1d')
+# canonical: bracket
+Globals(target_timeframe='4h')
+Universe(mode='manual', symbols=['BTC', 'ETH', 'SOL'])
+Execution(rebalance='on_change')
 Pipeline([
-    PriceDataLoader(timeframe='15min'),
-    TargetTimeframeResampler(),
-
-    # ── signal + filter + confirm (all independent → parallel) ──
+    PriceDataLoader(),
+    Store('ohlcv'),
+    RSI(period=14),
+    BelowThresholdFilter(threshold=30.0),
+    Store('entries'),
+    TradeManager(entries='entries', prices='ohlcv'),
     {
-        "signal": [
-            KeltnerChannel(period=20, multiplier=1),
-            RollingZScoreTransform(window=60),
-            NegateTransform(),
-        ],
-        "trend_filter": [
-            ADX(period=14),
-            BelowThresholdFilter(threshold=25, inclusive=True),
-        ],
-        "rsi_confirm": Pipeline([
-            RSI(period=3),
+        'stop':   [TradeReturn(), BelowThresholdFilter(threshold=-0.05, inclusive=True), Exit()],
+        'target': [TradeReturn(), AboveThresholdFilter(threshold=0.10, inclusive=True), Exit()],
+    },
+    Exposure(),
+    EqualWeightSizer(),
+])
+```
+
+Short form: `{'stop': [StopLoss(pct=0.05)], 'target': [TakeProfit(pct=0.10)]}`. `inclusive=True` fires at or beyond the level. A market exit reads a stored mask:
+
+```python
+# canonical: market_exit
+Globals(target_timeframe='4h')
+Universe(mode='manual', symbols=['BTC', 'ETH', 'SOL'])
+Execution(rebalance='on_change')
+Pipeline([
+    PriceDataLoader(),
+    Store('ohlcv'),
+    RSI(period=14),
+    Store('rsi'),
+    BelowThresholdFilter(threshold=30.0),
+    Store('entries'),
+    Load('rsi'),
+    AboveThresholdFilter(threshold=50.0),
+    Store('rsi_recovered'),
+    TradeManager(entries='entries', prices='ohlcv'),
+    {
+        'rsi_recovered': [Load('rsi_recovered'), Exit()],
+    },
+    Exposure(),
+    EqualWeightSizer(),
+])
+```
+
+## Stateless first iteration
+
+`ThresholdCross → EqualWeightSizer` holds a position only while the signal is beyond its threshold, with no memory. Move to `TradeManager` when the user names a stop, target, separate exit, partial, add or re-entry rule.
+
+## More rules
+
+**ATR trail and a trend exit.** The trail compares give-back with 2.5 ATR by difference: a ratio never fires on a zero-ATR bar. A % trail is `[DrawdownFromPeak(), BelowThresholdFilter(threshold=-0.08), Exit()]`.
+
+```python
+# canonical: atr_trail
+Globals(target_timeframe='4h')
+Universe(mode='manual', symbols=['BTC', 'ETH', 'SOL'])
+Execution(rebalance='on_change')
+Pipeline([
+    PriceDataLoader(),
+    Store('ohlcv'),
+    ATR(period=14),
+    Scale(by=2.5),
+    Store('trail_dist'),
+    Load('ohlcv'),
+    {'fast': [EWMA(window=20)], 'slow': [EWMA(window=80)]},
+    Crossover(),
+    Store('trend'),
+    AboveThresholdFilter(threshold=0.0),
+    Store('entries'),
+    Load('trend'),
+    BelowThresholdFilter(threshold=0.0),
+    Store('trend_down'),
+    TradeManager(entries='entries', prices='ohlcv'),
+    {
+        'trail':      [{'fast': [GiveBack()], 'slow': [Load('trail_dist')]}, Crossover(), AboveThresholdFilter(threshold=0.0), Exit()],
+        'trend_down': [Load('trend_down'), Exit()],
+    },
+    Exposure(),
+    EqualWeightSizer(),
+])
+```
+
+**Scale out, then breakeven.** Half off at +5%; after that, exit at entry. `SoldFraction()` sits in the stage below the sell. `Reduce(fraction=1.0)` sells one initial unit.
+
+```python
+# canonical: scale_out_breakeven
+Globals(target_timeframe='4h')
+Universe(mode='manual', symbols=['BTC', 'ETH', 'SOL'])
+Execution(rebalance='on_change')
+Pipeline([
+    PriceDataLoader(),
+    Store('ohlcv'),
+    RSI(period=14),
+    Store('rsi'),
+    BelowThresholdFilter(threshold=40.0),
+    Store('entries'),
+    Load('rsi'),
+    AboveThresholdFilter(threshold=63.0, inclusive=True),
+    Store('rsi_hot'),
+    TradeManager(entries='entries', prices='ohlcv'),
+    {
+        'stop':   [TradeReturn(), BelowThresholdFilter(threshold=-0.05, inclusive=True), Exit()],
+        'tp1':    [TradeReturn(), AboveThresholdFilter(threshold=0.05, inclusive=True), Reduce(fraction=0.5)],
+        'rsi_63': [Load('rsi_hot'), Exit()],
+    },
+    {
+        'breakeven': [
             {
-                "overbought": [AboveThresholdFilter(threshold=90)],
-                "oversold":   [BelowThresholdFilter(threshold=10)],
+                'after_tp1': [SoldFraction(), AboveThresholdFilter(threshold=0.0)],
+                'at_entry':  [TradeReturn(), BelowThresholdFilter(threshold=0.0, inclusive=True)],
+            },
+            MaskAnd(),
+            Exit(),
+        ],
+    },
+    Exposure(),
+    FixedWeightSizer(weight_per_position=0.2),
+    LeverageCap(max_leverage=1.0),
+])
+```
+
+**R-multiple ORB trade, 1% risk.** R = `TradePnL()` ÷ the stop distance frozen by `AtEntry`. `stop_dist` is in price units and also sizes the trade. The bell's bar refuses a new entry.
+
+```python
+# canonical: orb_r_trade
+Globals(target_timeframe='15min')
+Universe(mode='manual', symbols=['ETH'])
+Execution(rebalance='on_change')
+Pipeline([
+    PriceDataLoader(),
+    Store('ohlcv'),
+    SessionRangeLow(range_duration='30min', timezone='America/New_York', open='09:30', close='16:00'),
+    Scale(by=0.999),
+    Store('stop_level'),
+    Load('ohlcv'),
+    SessionCloseExit(bars_before_close=0, timezone='America/New_York', open='09:30', close='16:00'),
+    Store('bell'),
+    Load('ohlcv'),
+    {'fast': [ExtractSeries(series_name='close')], 'slow': [Load('stop_level')]},
+    Crossover(),
+    Store('stop_dist'),
+    Load('ohlcv'),
+    {
+        'fast': [ExtractSeries(series_name='close')],
+        'slow': [SessionRangeHigh(range_duration='30min', timezone='America/New_York', open='09:30', close='16:00')],
+    },
+    Crossover(),
+    ThresholdCross(upper=0.0, mode='long_only'),
+    Store('entries'),
+    TradeManager(entries='entries', prices='ohlcv'),
+    {'numerator': [TradePnL()], 'denominator': [AtEntry(slot='stop_dist')]},
+    SignalRatio(),
+    {
+        'stop':   [BelowThresholdFilter(threshold=-1.0, inclusive=True), Exit()],
+        'target': [AboveThresholdFilter(threshold=1.0, inclusive=True), Exit()],
+        'bell':   [Load('bell'), Exit()],
+    },
+    RiskSizer(risk=0.01, distance='stop_dist', max_weight=1.0),
+])
+```
+
+**Breakeven after +2R.** `SinceEntry(agg='max')` is the best R so far.
+
+```python
+# canonical: breakeven_after_2r
+Globals(target_timeframe='1h')
+Universe(mode='manual', symbols=['BTC', 'ETH', 'SOL'])
+Execution(rebalance='on_change')
+Pipeline([
+    PriceDataLoader(),
+    Store('ohlcv'),
+    ATR(period=14),
+    Scale(by=2.0),
+    Store('one_r'),
+    Load('ohlcv'),
+    {'fast': [EWMA(window=24)], 'slow': [EWMA(window=96)]},
+    Crossover(),
+    Store('trend'),
+    AboveThresholdFilter(threshold=0.0),
+    Store('entries'),
+    Load('trend'),
+    BelowThresholdFilter(threshold=0.0),
+    Store('trend_down'),
+    TradeManager(entries='entries', prices='ohlcv'),
+    {'numerator': [TradePnL()], 'denominator': [AtEntry(slot='one_r')]},
+    SignalRatio(),
+    {
+        'stop':       [BelowThresholdFilter(threshold=-1.0, inclusive=True), Exit()],
+        'breakeven':  [
+            {
+                'was_2r':   [SinceEntry(agg='max'), AboveThresholdFilter(threshold=2.0, inclusive=True)],
+                'at_entry': [BelowThresholdFilter(threshold=0.0, inclusive=True)],
+            },
+            MaskAnd(),
+            Exit(),
+        ],
+        'trend_down': [Load('trend_down'), Exit()],
+    },
+    Exposure(),
+    EqualWeightSizer(),
+])
+```
+
+**Time and stale exits.** Short form `MaxHold(bars=48)`. `BarsHeld()` counts from this trade's entry, not the signal (M-35).
+
+```python
+# canonical: time_and_stale
+Globals(target_timeframe='1h')
+Universe(mode='manual', symbols=['BTC', 'ETH', 'SOL'])
+Execution(rebalance='on_change')
+Pipeline([
+    PriceDataLoader(),
+    Store('ohlcv'),
+    {'fast': [EWMA(window=24)], 'slow': [EWMA(window=96)]},
+    Crossover(),
+    AboveThresholdFilter(threshold=0.0),
+    Store('entries'),
+    TradeManager(entries='entries', prices='ohlcv'),
+    {
+        'max_hold': [BarsHeld(), AboveThresholdFilter(threshold=48, inclusive=True), Exit()],
+        'stale':    [
+            {
+                'old': [BarsHeld(), AboveThresholdFilter(threshold=10, inclusive=True)],
+                'red': [TradeReturn(), BelowThresholdFilter(threshold=0.0)],
+            },
+            MaskAnd(),
+            Exit(),
+        ],
+        'trail':    [DrawdownFromPeak(), BelowThresholdFilter(threshold=-0.05), Exit()],
+    },
+    Exposure(),
+    EqualWeightSizer(),
+])
+```
+
+**DCA from the last fill.** `max_units` = 1 + 4 = 5, so at most 5 × 0.04 per asset. Adds on `TradeReturn()` need the price to recover before each re-add; `ReturnSinceLastFill()` re-arms at each fill. A TWAP is `ScaleIn(units=1.0, times=4, on='every_bar')`.
+
+```python
+# canonical: dca
+Globals(target_timeframe='1h')
+Universe(mode='manual', symbols=['BTC', 'ETH', 'SOL'])
+Execution(rebalance='on_change')
+Pipeline([
+    PriceDataLoader(),
+    Store('ohlcv'),
+    RSI(period=14),
+    BelowThresholdFilter(threshold=35.0),
+    Store('entries'),
+    TradeManager(entries='entries', prices='ohlcv'),
+    {
+        'safety': [ReturnSinceLastFill(), BelowThresholdFilter(threshold=-0.02, inclusive=True), ScaleIn(units=1.0, times=4)],
+        'take':   [ReturnFromAverage(), AboveThresholdFilter(threshold=0.02, inclusive=True), Exit()],
+        'stop':   [TradeReturn(), BelowThresholdFilter(threshold=-0.15, inclusive=True), Exit()],
+    },
+    Exposure(),
+    FixedWeightSizer(weight_per_position=0.04),
+    LeverageCap(max_leverage=1.0),
+])
+```
+
+**Staged entries, then a trail once full.** `AddCount()` sits below the adds. A pyramid adds on `ReturnSinceLastFill()` ≥ 0.05.
+
+```python
+# canonical: staged_and_pyramid
+Globals(target_timeframe='1h')
+Universe(mode='manual', symbols=['BTC', 'ETH', 'SOL'])
+Execution(rebalance='on_change')
+Pipeline([
+    PriceDataLoader(),
+    Store('ohlcv'),
+    ATR(period=14),
+    Store('atr'),
+    Load('ohlcv'),
+    {'fast': [EWMA(window=24)], 'slow': [EWMA(window=96)]},
+    Crossover(),
+    Store('trend'),
+    AboveThresholdFilter(threshold=0.0),
+    Store('entries'),
+    Load('trend'),
+    BelowThresholdFilter(threshold=0.0),
+    Store('trend_down'),
+    TradeManager(entries='entries', prices='ohlcv'),
+    {
+        'second_third': [
+            {
+                'pullback': [{'numerator': [TradePnL()], 'denominator': [AtEntry(slot='atr')]}, SignalRatio(), BelowThresholdFilter(threshold=-0.5, inclusive=True)],
+                'aged':     [BarsHeld(), AboveThresholdFilter(threshold=12, inclusive=True)],
             },
             MaskOr(),
-        ]),
+            ScaleIn(units=1.0, times=1),
+        ],
+        'last_third': [
+            {
+                'pullback': [{'numerator': [TradePnL()], 'denominator': [AtEntry(slot='atr')]}, SignalRatio(), BelowThresholdFilter(threshold=-1.0, inclusive=True)],
+                'aged':     [BarsHeld(), AboveThresholdFilter(threshold=24, inclusive=True)],
+            },
+            MaskOr(),
+            ScaleIn(units=1.0, times=1),
+        ],
+        'trend_down': [Load('trend_down'), Exit()],
     },
-
-    # ── combine filters, then apply to signal ──
-    #   trend_filter AND rsi_confirm → single mask, then mask the signal
-    # (For simplicity, apply sequentially or combine with nested MaskAnd)
-
-    # ── entry + exit (both consume masked z-score → parallel) ──
     {
-        "entry": [ThresholdCross(upper=2, lower=-2), Store('entries')],
-        "exit":  [ThresholdCross(upper=0, lower=0), Store('exits')],
+        'trail_when_full': [
+            {
+                'full':      [AddCount(), AboveThresholdFilter(threshold=2.0, inclusive=True)],
+                'gave_back': [DrawdownFromPeak(), BelowThresholdFilter(threshold=-0.06)],
+            },
+            MaskAnd(),
+            Exit(),
+        ],
     },
-
-    # ── position management + sizing ──
-    PositionStateMachine(entry_slot='entries', exit_slot='exits', exit_mode='directional'),
-    EqualWeightSizer(),
-], name="keltner_mean_reversion")
-```
-
-Key composition patterns shown:
-- **Nested Parallel**: RSI branch contains its own inner Parallel (overbought/oversold) → MaskOr
-- **MaskOr**: composes two boolean filters (RSI > 90 OR RSI < 10) into a single mask
-- **Three independent branches**: signal, trend filter, RSI confirm all receive OHLCV as `current`
-- **Entry/exit in Parallel**: both consume the same masked z-score, Store to separate slots
-- **Directional PSM**: exit_mode='directional' holds until exit signal opposes position
-
-## Exit Condition Components
-
-Six exit components are available. All output `1.0` (exit) / `0.0` (hold) and use `PSM(exit_mode='scalar')`.
-
-| Component | What it does | Needs entry_slot? | Needs ohlcv_slot? |
-|-----------|-------------|-------------------|-------------------|
-| `SignalReversionExit(exit_threshold)` | Exit when abs(signal) <= threshold | No | No |
-| `TrailingStopExit(entry_slot, ohlcv_slot, atr_multiplier, atr_period)` | ATR trailing stop, per-trade | Yes | Yes |
-| `MaxDrawdownStopLoss(entry_slot, ohlcv_slot, drawdown_threshold)` | Fixed % stop loss from entry | Yes | Yes |
-| `TakeProfitExit(entry_slot, ohlcv_slot, profit_threshold)` | Fixed % take profit from entry | Yes | Yes |
-| `TimeBasedExitFilter(entry_slot, hold_periods)` | Exit after N bars | Yes | No |
-| `ValueStopExitFilter(entry_slot, direction)` | Exit when momentum reverses | Yes | No |
-
-Slot-reading components ignore `current` — they read entry signals and/or OHLCV from pipeline slots. No `Load()` needed before them.
-
-### Pattern: Signal Reversion Exit
-
-Replaces the confusing `ThresholdCross(0,0)` + `PSM(exit_mode='directional')` pattern. Entry fires when signal is extreme, exit fires when it reverts to neutral.
-
-```python
-Globals(target_timeframe='1d')
-Pipeline([
-    PriceDataLoader(),
-    TargetTimeframeResampler(),
-    RSI(period=14),
-    RollingZScoreTransform(window=100),
-    NegateTransform(),
-    {
-        "entry": [ThresholdCross(upper=1.5, lower=-1.5), Store('entries')],
-        "exit":  [SignalReversionExit(exit_threshold=0.5), Store('exits')],
-    },
-    PositionStateMachine(entry_slot='entries', exit_slot='exits', exit_mode='scalar'),
-    EqualWeightSizer(),
+    Exposure(),
+    FixedWeightSizer(weight_per_position=0.1),
+    LeverageCap(max_leverage=1.0),
 ])
 ```
 
-The gap between entry threshold (1.5) and exit threshold (0.5) creates hysteresis that prevents whipsaw.
-
-### Pattern: Trailing Stop
-
-Per-trade ATR trailing stop. Resets on each new entry. Handles long and short via entry signal direction.
+**Re-entry and daily gates.** `reentry='any_bar'` lets a still-on signal re-enter after the cooldown. Two losses in a row: `[LossStreak(window='1d'), BelowThresholdFilter(threshold=2.0), AllowEntry()]`.
 
 ```python
-Globals(target_timeframe='1d')
+# canonical: reentry_gates
+Globals(target_timeframe='1h')
+Universe(mode='manual', symbols=['BTC', 'ETH', 'SOL'])
+Execution(rebalance='on_change')
 Pipeline([
     PriceDataLoader(),
-    TargetTimeframeResampler(),
     Store('ohlcv'),
-    RSI(period=14),
-    RollingZScoreTransform(window=100),
-    NegateTransform(),
-    ThresholdCross(upper=1.5, lower=-1.5),
+    {'fast': [EWMA(window=24)], 'slow': [EWMA(window=96)]},
+    Crossover(),
+    AboveThresholdFilter(threshold=0.0),
     Store('entries'),
-    TrailingStopExit(entry_slot='entries', ohlcv_slot='ohlcv', atr_multiplier=2.5, atr_period=14),
-    Store('exits'),
-    PositionStateMachine(entry_slot='entries', exit_slot='exits', exit_mode='scalar'),
+    TradeManager(entries='entries', prices='ohlcv', reentry='any_bar'),
+    {
+        'stop':       [TradeReturn(), BelowThresholdFilter(threshold=-0.03, inclusive=True), Exit()],
+        'target':     [TradeReturn(), AboveThresholdFilter(threshold=0.06, inclusive=True), Exit()],
+        'cooldown':   [BarsSinceExit(), AboveThresholdFilter(threshold=4, inclusive=True), AllowEntry()],
+        'two_a_day':  [EntryCount(window='1d'), BelowThresholdFilter(threshold=2.0), AllowEntry()],
+        'daily_loss': [RealizedPnL(window='1d'), AboveThresholdFilter(threshold=-0.03), AllowEntry()],
+    },
+    Exposure(),
     EqualWeightSizer(),
 ])
 ```
 
-### Pattern: Stop Loss + Take Profit (combined)
-
-Use Parallel + MaskOr to combine multiple exit conditions — whichever fires first closes the position.
+**Several books.** Each book is its own `TradeManager`; `Exposure()` makes it a signal for the combiner. A trade value never crosses books.
 
 ```python
-Globals(target_timeframe='1d')
+# canonical: multi_book
+Globals(target_timeframe='1h')
+Universe(mode='manual', symbols=['BTC', 'ETH', 'SOL'])
+Execution(rebalance='on_change')
 Pipeline([
     PriceDataLoader(),
-    TargetTimeframeResampler(),
     Store('ohlcv'),
-    MACD(fast_period=12, slow_period=26, signal_period=9),
-    RollingZScoreTransform(window=100),
-    ThresholdCross(upper=0.5, lower=-0.5),
-    Store('entries'),
-    {
-        "stop_loss":   [MaxDrawdownStopLoss(entry_slot='entries', ohlcv_slot='ohlcv', drawdown_threshold=0.05)],
-        "take_profit": [TakeProfitExit(entry_slot='entries', ohlcv_slot='ohlcv', profit_threshold=0.10)],
-    },
-    MaskOr(),
-    Store('exits'),
-    PositionStateMachine(entry_slot='entries', exit_slot='exits', exit_mode='scalar'),
-    EqualWeightSizer(),
-])
-```
-
-### Pattern: Trailing Stop + Time-based (whichever fires first)
-
-```python
-Globals(target_timeframe='1d')
-Pipeline([
-    PriceDataLoader(),
-    TargetTimeframeResampler(),
-    Store('ohlcv'),
-    # ... entry signal chain ...
-    Store('entries'),
-    {
-        "trailing": [TrailingStopExit(entry_slot='entries', ohlcv_slot='ohlcv', atr_multiplier=2.5)],
-        "time":     [TimeBasedExitFilter(entry_slot='entries', hold_periods=20)],
-    },
-    MaskOr(),
-    Store('exits'),
-    PositionStateMachine(entry_slot='entries', exit_slot='exits', exit_mode='scalar'),
-    EqualWeightSizer(),
-])
-```
-
-## Scaling Entries (Pyramiding / DCA / Laddered)
-
-`ScalingPositionManager` outputs integer position levels {-N, ..., 0, ..., +N} instead of binary {-1, 0, +1}. Use for DCA, pyramiding, or laddered entries where you want to scale into positions over time.
-
-Downstream sizers (FixedWeightSizer, EqualWeightSizer) work without changes — `positions * weight_per_position` naturally scales with level.
-
-### Two Entry Modes
-
-**Single slot** (DCA / pyramiding): Each 0→non-zero transition increments level.
-```python
-ScalingPositionManager(entry_slots='entries', exit_slots='exits', max_entries=3)
-```
-
-**Multiple slots** (laddered entries): Each slot independently controls one level.
-```python
-ScalingPositionManager(entry_slots=['entry_1', 'entry_2', 'entry_3'], exit_slots='exits')
-```
-
-### Exit Modes
-
-- `exit_mode='all'` (default): Any exit closes entire position (level → 0)
-- `exit_mode='one_level'`: Each exit decrements by 1 (partial exits)
-
-### Pattern: Laddered RSI Entries
-
-Enter more aggressively as conditions worsen, exit when signal reverts.
-
-```python
-Globals(target_timeframe='1d')
-Pipeline([
-    PriceDataLoader(),
-    TargetTimeframeResampler(),
+    RSI(period=2),
+    Store('rsi2'),
+    BelowThresholdFilter(threshold=10.0),
+    Store('entry_fast'),
+    Load('rsi2'),
+    AboveThresholdFilter(threshold=70.0),
+    Store('exit_fast'),
+    Load('ohlcv'),
     RSI(period=14),
-    RollingZScoreTransform(window=100),
-    NegateTransform(),
+    Store('rsi14'),
+    BelowThresholdFilter(threshold=30.0),
+    Store('entry_slow'),
+    Load('rsi14'),
+    AboveThresholdFilter(threshold=50.0),
+    Store('exit_slow'),
     {
-        "entry_1": [ThresholdCross(upper=1.5, lower=-1.5, mode='long_only'), Store('entry_1')],
-        "entry_2": [ThresholdCross(upper=2.0, lower=-2.0, mode='long_only'), Store('entry_2')],
-        "entry_3": [ThresholdCross(upper=2.5, lower=-2.5, mode='long_only'), Store('entry_3')],
-        "exit":    [SignalReversionExit(exit_threshold=0.5), Store('exits')],
+        'fast_book': [TradeManager(entries='entry_fast', prices='ohlcv'), {'revert': [Load('exit_fast'), Exit()]}, Exposure()],
+        'slow_book': [TradeManager(entries='entry_slow', prices='ohlcv'), {'revert': [Load('exit_slow'), Exit()]}, Exposure()],
     },
-    ScalingPositionManager(entry_slots=['entry_1', 'entry_2', 'entry_3'], exit_slots='exits'),
-    FixedWeightSizer(weight_per_position=0.10),
-], name="laddered_rsi")
-```
-
-Level 1 → 10%, level 2 → 20%, level 3 → 30%. Exit reverts to 0%.
-
-### Pattern: Partial Exits (Scale Out)
-
-```python
-Pipeline([
-    # ... entry signal chain ...
-    {
-        "entry_1": [..., Store('entry_1')],
-        "entry_2": [..., Store('entry_2')],
-        "entry_3": [..., Store('entry_3')],
-        "exit_tp1":   [TakeProfitExit(entry_slot='entry_1', ohlcv_slot='ohlcv', profit_threshold=0.05), Store('exit_tp1')],
-        "exit_tp2":   [TakeProfitExit(entry_slot='entry_1', ohlcv_slot='ohlcv', profit_threshold=0.10), Store('exit_tp2')],
-        "exit_trail": [TrailingStopExit(entry_slot='entry_1', ohlcv_slot='ohlcv', atr_multiplier=2.5), Store('exit_trail')],
-    },
-    ScalingPositionManager(
-        entry_slots=['entry_1', 'entry_2', 'entry_3'],
-        exit_slots=['exit_tp1', 'exit_tp2', 'exit_trail'],
-        exit_mode='one_level',
-    ),
-    FixedWeightSizer(weight_per_position=0.10),
+    ForecastCombiner(),
+    ForecastWeightNormalizer(target_leverage=1.0),
 ])
 ```
 
-Level 3 (30%). TP1 → level 2 (20%). TP2 → level 1 (10%). Trail → flat.
+## Not expressible
+
+- Cross-asset "max N open positions", or a loss limit across the whole book: not expressible yet, a later portfolio-layer project (`capability_boundaries`). Per asset: `EntryCount(window=)`, `RealizedPnL(window='1d')`.
+- Intrabar or resting fills: rules decide at the bar close.
+- A minimum hold on a continuous book; per-lot accounting (use sleeves of `TradeManager` + `Exposure()`).
+
+> **Live and backtest positions.** Live recomputes a strategy over its last 365 days at every bar. A position that
+> depends on its own past trades (a stop, a target or a re-entry gate) matches the backtest whenever the strategy has
+> been flat, with its entry off, at some point in that window. If a trade stays open longer than the window, or trades
+> re-enter back to back without a flat bar, live can differ from the backtest until the strategy is next flat. A
+> backtest reports this as `LIVE_WINDOW_SHORTER_THAN_TRADES`. A market exit (for example `Load('regime_off') → Exit()`)
+> or a time limit (`MaxHold`) keeps trades inside the window.
 
 ## Common Mistakes
 
-- **M-03**: Normalizing binary signals with CrossSectionalZScore — meaningless
-  on {-1, 0, +1} values. Binary signals skip normalization entirely.
-- **Missing exit logic**: ThresholdCross alone is stateless. If the user specifies
-  separate entry/exit conditions, use PositionStateMachine.
-- **Wrong polarity for mean reversion**: High indicator value = overbought. For mean
-  reversion, use NegateTransform BEFORE ThresholdCross so overbought → short.
-- **Using ApplyUniverseMask for signal filters**: Threshold filters produce True/False
-  (boolean). Use ApplyMask (SignalComposer), not ApplyUniverseMask (expects 1.0/NaN).
-- **Loading inside Parallel when unnecessary**: Parallel branches receive `current`
-  automatically. Only Load when you need data from a different pipeline point.
+- **M-35: Measuring a trade from its signal.** Stops, targets, trails and time exits are rules on the Position, never values computed from the stored entry signal.
+- **M-03: Normalizing binary signals**: meaningless on {-1, 0, +1}.
+- Refused by the validator: a reader above `TradeManager`; a branch below `TradeManager` that starts with a filter instead of a reader or `Load`; a state reader in its writer's stage; a gate without `AllowEntry()`; `-5` for −5%; a ±1 signal into `Exit()`.
+- **Mean-reversion polarity**: NegateTransform before ThresholdCross so overbought → short.

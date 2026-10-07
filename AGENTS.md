@@ -12,11 +12,18 @@ checked against the outcome registry.
 
 ## Choosing a Surface
 
-This package is the CLI + local MCP surface. Keel also runs as a hosted
-remote MCP — one endpoint `https://mcp.usekeel.io/mcp` serving a 23-tool
-research/backtest/read surface (paste the URL now; the one-click directory
-listing is coming) — and as a web app. Going live is a handoff into the web
-app. Per-surface runbook: https://usekeel.io/agents
+The default surface is the hosted remote MCP. This package is the other way
+to connect — the `keel` CLI and the local stdio MCP server (also shipped as the
+Claude Desktop `.mcpb` bundle) — for terminals, scripts, CI, and file-based
+workspaces. The hosted endpoint has no live-write tools at all; this package
+loads them only on an explicit `KEEL_TOOLSETS` opt-in (see Live Trading
+Safety). Running a strategy with real capital happens in the Keel web app.
+
+<!-- agent-surface:begin -->
+<!-- GENERATED from shared/agent-surface.json + LISTED_PROFILE_TOOLS — edit there, then run
+     python packages/keel-trade/keel-sdk/scripts/check_surface_routing.py --write -->
+- **Hosted endpoint (default)** — `https://mcp.usekeel.io/mcp`: one endpoint, a 29-tool research/backtest/read surface, nothing to install. Paste the URL into Claude, ChatGPT or any remote-MCP client and sign in or sign up when prompted; Claude Code: `claude mcp add --transport http keel https://mcp.usekeel.io/mcp`; Codex: `codex mcp add keel --url https://mcp.usekeel.io/mcp`. The agent builds, tests and reads. When you want to run a strategy on your account, it hands it to the Keel app and you take it from there. Per-client steps: https://usekeel.io/agents
+<!-- agent-surface:end -->
 
 <!-- surface-routing:begin -->
 <!-- GENERATED from shared/surface-routing.json — edit there, then run
@@ -24,8 +31,8 @@ app. Per-surface runbook: https://usekeel.io/agents
 | You are… | Default path (shown first) | Also works |
 | --- | --- | --- |
 | Using Claude/ChatGPT on web or phone | Hosted endpoint — paste the URL (directory one-click coming) | CLI + local MCP |
-| Working in Claude Code / Cursor / terminal | `pipx install keel-trade` (CLI + local MCP) | hosted endpoint |
-| Going live with a strategy | Keel web app (connect account, review sizing, go live) | reads on every surface |
+| Working in Claude Code / Cursor / terminal | Hosted endpoint — one command, or paste the URL | CLI + local MCP |
+| Running a strategy from the Keel app | Keel web app (connect an account, review sizing, start it there) | reads on every surface |
 | Building your own agent/scripts | SDK + API key | CLI |
 | Just browsing/running strategies | Web app + library | hosted endpoint |
 <!-- surface-routing:end -->
@@ -48,13 +55,13 @@ keel mcp serve
 
 When an agent starts with Keel:
 
-1. Call `keel_status`.
+1. Call `keel_account_status`.
 2. If `authenticated` is false, call `keel_auth_login`.
-3. Read `workflow_routes` from `keel_status` before choosing lower-level tools.
+3. Read `workflow_routes` from `keel_account_status` before choosing lower-level tools.
 4. For strategy creation or substantial edits, load the `strategy-creation`
    prompt before composing source.
 5. Search components with `keel_components_search`.
-6. Fetch exact component schemas with `keel_components_detail_batch`.
+6. Fetch exact component schemas with `keel_components_get_many`.
 7. Compose or validate DSL with `keel_strategy_compose`.
 8. Run evidence with `keel_backtest_run`.
 9. If the run is still active, watch it with `keel_backtest_watch`.
@@ -69,7 +76,7 @@ or run `keel --help`.
 Preferred agent path:
 
 ```text
-keel_status -> keel_auth_login -> retry original tool
+keel_account_status -> keel_auth_login -> retry original tool
 ```
 
 `keel_auth_login` opens the OAuth browser flow, captures the loopback redirect,
@@ -105,7 +112,7 @@ human handoff.
 ```text
 strategy-creation prompt
 keel_components_search(keyword="momentum")
-keel_components_detail_batch(names=["ROC", "ForecastScaler", "..."])
+keel_components_get_many(names=["ROC", "ForecastScaler", "..."])
 keel_strategy_compose(source_file="strategy.py", dry_run=true)
 keel_strategy_compose(source_file="strategy.py", name="momentum-baseline")
 keel_backtest_run(strategy_id="str_...", start_date="2025-01-01")
@@ -169,7 +176,7 @@ is a working copy: convenient, disposable, always reconcilable.
   manual merge via `keel_strategy_diff`, or pinning an explicit
   `commit_id` on the blocked action. There is no auto-merge and no
   force-push recommendation, ever.
-- **Commits carry surface attribution.** `keel_strategy_log` shows
+- **Commits carry surface attribution.** `keel_strategy_history` shows
   `modified_via` per commit ("modified via claude.ai, 2h ago") so
   multi-surface work stays legible.
 - Remote/hosted MCP is file-free: no workspace tools, inline `source`
@@ -184,23 +191,30 @@ For the exact generated schema/annotation/CLI mapping, see
 
 Always loaded:
 
-- `keel_status`
 - `keel_auth_login`
-- `keel_doctor`
+- `keel_auth_logout`
+- `keel_connection_check`
+- `keel_feedback`
 - `keel_help`
+- `keel_account_status`
 
 Read-only:
 
 - `keel_accounts_list`
 - `keel_audit_list_last`
 - `keel_components_search`
-- `keel_components_compose_help` (single known component schema/detail)
-- `keel_components_detail_batch` (several component schemas before composing)
+- `keel_components_get` (single known component schema/detail)
+- `keel_components_get_many` (several component schemas before composing)
+- `keel_library_list`
+- `keel_library_get`
+- `keel_app_link`
+- `keel_strategy_readiness`
+- `keel_plan_usage`
 - `keel_strategy_get`
 - `keel_strategy_search`
 - `keel_strategy_diff`
-- `keel_strategy_log`
-- `keel_strategy_memory_read`
+- `keel_strategy_history`
+- `keel_strategy_notes_read`
 - `keel_strategy_workspaces`
 
 Research and backtest:
@@ -210,14 +224,19 @@ Research and backtest:
 - `keel_strategy_delete`
 - `keel_strategy_discard`
 - `keel_strategy_fork`
-- `keel_strategy_memory_write`
+- `keel_strategy_notes_add`
 - `keel_strategy_pull`
 - `keel_strategy_push`
 - `keel_strategy_restore`
 - `keel_strategy_status`
+- `keel_library_fork`
 - `keel_backtest_run`
 - `keel_backtest_watch`
 - `keel_backtest_summarize`
+- `keel_backtest_compare`
+- `keel_backtest_positions` (one run's positions, each entry to exit: a
+  summary by default, one page per `asset` / `start`–`end` scope; CLI
+  `keel backtest positions`, alias `keel backtest trades`)
 
 Sharing:
 
@@ -225,12 +244,20 @@ Sharing:
 
 Live read, loaded by default:
 
-- `keel_live_monitor`
+- `keel_live_monitor` (12 views; `view='executions'` takes `expand_orders`
+  and `execution_run_id`)
+- `keel_deployments_list`
+- `keel_live_receipt` (one EPISODE's sealed receipt — a multi-episode run
+  has one per episode and no single run-level receipt)
+- `keel_live_quality`
+- `keel_accounts_safety` (execution HALT state; operator-gated, and its
+  refusal is not an auth problem)
 
 Live write, loaded only when `KEEL_TOOLSETS` includes `live-write`:
 
 - `keel_live_deploy`
 - `keel_live_control`
+- `keel_live_update`
 
 Default MCP toolsets are `always,read-only,backtest,share,live-read`. Opt into
 live write tools only when the user is explicitly working on live deployment or
@@ -275,26 +302,33 @@ calls:
 - `keel://strategy/{strategy_id}/backtest/latest`
 - `keel://dsl/reference/{topic}`
 - `keel://knowledge/{section}`
-- `keel://context/user`
-- `keel://context/project`
 - `keel://context/strategy/{strategy_id}`
+
+Local server only (stdio MCP / `.mcpb`; not on the hosted endpoint, where the
+server's filesystem is not yours):
+
+- `keel://context/user` — `~/.keel/context.md`
+- `keel://context/project` — `keel.md` or the `## Keel` block of `CLAUDE.md`
+  in the server's working directory
 
 ## Live Trading Safety
 
 Live trading is opt-in and should be treated as a release gate, not a normal
-research action.
+research action. Going live is a human action in the Keel web app.
 
 Required posture:
 
 1. Do not deploy unless the user explicitly asks.
 2. Load `deploy-and-monitor`.
-3. Check auth, scopes, accounts, and entitlements with `keel_status` and
-   `keel_accounts_list`.
-4. Run `keel_live_deploy` with preview enabled first.
-5. Show the preview to the user and ask for explicit confirmation.
-6. Actual deploy requires the preview `confirmation_token`, live OAuth scope,
-   and local account arming.
-7. Monitor immediately with `keel_live_monitor`.
+3. Call `keel_live_deploy(strategy_id=...)`. It places no orders and picks no
+   account: it returns `code=handoff_required` with an `action_url` into the
+   web deploy flow, where the human selects or connects the account, reviews
+   the server-computed sizing, accepts the risk, and goes live. Relay the
+   `action_url` in prose; do not try to deploy in the terminal.
+4. To check on the handoff, call it again with `intent_token` (the handoff's
+   `resume.token`) and `preview=true`: a pure status poll returning
+   `pending`, `completed` (with the `deployment_id`) or `expired`.
+5. Monitor immediately with `keel_live_monitor`.
 
 `keel_live_monitor` returns a `freshness` block. Read it before summarizing
 live data: `view="positions"` is an on-demand Hyperliquid snapshot, while
@@ -310,10 +344,11 @@ keel arm live set --account acct_...
 Local arming is not a sizing or risk cap. It means this machine is allowed to
 perform live actions for that account until expiry.
 
-Preview returns planning information plus a short-lived local
-`confirmation_token`. Actual deploy must pass that token with the same
-strategy, account, and schedule; host confirmation, live OAuth scope, and local
-arming still apply.
+`keel_live_control` (pause, resume, stop, trigger) requires local arming. The
+`preview=true` -> `confirmation_token` -> `preview=false` sequence belongs only
+to the `direct=true` operator escape hatch, which is inert unless the operator
+sets `KEEL_ALLOW_DIRECT_DEPLOY` and is refused on any hosted surface; that path
+also needs live OAuth scope and local arming. It is not the way to go live.
 
 ## CLI Contract
 
@@ -360,9 +395,8 @@ keel backtest watch <backtest_id>
 keel backtest summarize <backtest_id>
 keel share create <target_id> --yes
 keel accounts list
-keel live deploy <strategy_id> --account-id <account_id>
-keel live deploy <strategy_id> --account-id <account_id> \
-  --no-preview --confirmation-token <token> --yes
+keel live deploy <strategy_id>
+keel live deploy <strategy_id> --intent-token <token>
 keel live monitor <deployment_id>
 keel live control <deployment_id> --action pause|resume|stop|trigger --yes
 keel audit list-last

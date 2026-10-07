@@ -191,12 +191,48 @@ def dsl_reference(topic: str | None = None) -> dict[str, Any]:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
+def parse_error_issue(exc: Exception) -> dict[str, Any]:
+    """A parse failure as ONE validation issue, in the envelope's own shape.
+
+    Until Q-1840 the parse arm returned `{severity, message}` and nothing
+    else — no code, so the text block had no `keel_help rule:<CODE>` pointer
+    and the model had nowhere to look (R3 probe, 2026-09-23). The code is
+    the parser's own when it carries one (the parse-tier codes, Q-1695),
+    else the catalog's gate code `PARSE_ERROR`; the position rides as
+    `location` so a renderer can name the line without re-parsing the text.
+    """
+    issue: dict[str, Any] = {
+        "severity": "error",
+        "code": getattr(exc, "code", None) or "PARSE_ERROR",
+        "message": str(exc),
+    }
+    suggestion = getattr(exc, "suggestion", None)
+    if isinstance(suggestion, str) and suggestion:
+        issue["suggestion"] = suggestion
+    line = getattr(exc, "line", None)
+    if isinstance(line, int):
+        location: dict[str, Any] = {"line": line}
+        col = getattr(exc, "col", None)
+        if isinstance(col, int):
+            location["col"] = col
+        issue["location"] = location
+    return issue
+
+
 def strategy_validate(
     source: str,
     component_lock: dict[str, int] | None = None,
+    *,
+    pre_save: bool = False,
     **kwargs,
 ) -> dict[str, Any]:
-    """Validate a strategy source — full 9-pass validation."""
+    """Validate a strategy source — full 9-pass validation.
+
+    ``pre_save=True`` is for a DRY RUN of a save (the compose dry run): the
+    save resolves a criteria universe server-side, so the engine reports
+    UNRESOLVED_UNIVERSE as info there (review 06 §3.2 #4). Saves, the
+    validate tool and every backtest gate keep the default full severity.
+    """
     _ensure_registry()
 
     from pipeline_engine.dsl import parse_strategy, validate_strategy
@@ -205,15 +241,16 @@ def strategy_validate(
     try:
         parsed = parse_strategy(source)
     except DSLParseError as e:
+        issue = parse_error_issue(e)
         return {
             "valid": False,
-            "issues": [{"severity": "error", "message": str(e)}],
-            "errors": [{"severity": "error", "message": str(e)}],
+            "issues": [issue],
+            "errors": [issue],
             "warnings": [],
             "type_flow": [],
         }
 
-    result = validate_strategy(parsed, lock=component_lock)
+    result = validate_strategy(parsed, lock=component_lock, pre_save=pre_save, source=source)
 
     errors = [i.to_dict() for i in result.errors]
     warnings = [i.to_dict() for i in result.warnings]
@@ -288,7 +325,7 @@ def strategy_explain(
             "summary": f"Parse error: {e}",
         }
 
-    result = validate_strategy(parsed, lock=component_lock)
+    result = validate_strategy(parsed, lock=component_lock, source=source)
 
     def _serialize_args(args):
         out = {}
@@ -431,26 +468,34 @@ def strategy_diff(source_a: str, source_b: str) -> dict[str, Any]:
 def pipeline_stage(source: str) -> dict[str, Any]:
     """Assess pipeline completeness toward backtest readiness.
 
-    Lightweight reimplementation: parse + validate type flow,
-    then map each step's output type to a readiness stage.
+    The TERMINAL type and the READINESS verdict come from the shared owner
+    (`pipeline_engine.dsl.validator`, Q-1699). This function used to
+    reimplement both, and the two implementations disagreed twice over:
+
+      * it returned `stage: "invalid"` for ANY strategy with errors — losing
+        the stage the caller asked for — while the hosted twin reported
+        `stage: complete, backtest_ready: True` on the very same seeded
+        SLOT_REF_NOT_FOUND / TYPE_MISMATCH sources. Now BOTH report the
+        stage AND refuse readiness, because readiness is one function.
+      * both read `type_flow[-1]`, which names the last BRANCH step of a
+        terminal Parallel — so mistake M-12 read as a normal
+        work-in-progress signal in every surface that asked.
+
+    The stage NAMES stay local: they are this surface's vocabulary
+    (`portfolio` / `execution`), not a platform fact.
     """
     _ensure_registry()
 
     from pipeline_engine.dsl import parse_strategy, validate_strategy
     from pipeline_engine.dsl.parser import DSLParseError
+    from pipeline_engine.dsl.validator import is_backtest_ready, terminal_output_name
 
     try:
         parsed = parse_strategy(source)
     except DSLParseError as e:
         return {"stage": "unparseable", "error": str(e)}
 
-    result = validate_strategy(parsed)
-
-    if not result.valid:
-        return {
-            "stage": "invalid",
-            "errors": [i.to_dict() for i in result.errors],
-        }
+    result = validate_strategy(parsed, source=source)
 
     # Map the final output type to a readiness stage
     stage_map = {
@@ -463,22 +508,25 @@ def pipeline_stage(source: str) -> dict[str, Any]:
         "ForecastSeries": "forecast",
         "WeightSeries": "portfolio",
         "OrderSeries": "execution",
+        # A pipeline that ENDS at a Parallel emits dict[branch -> result],
+        # which nothing trades — its own stage, never "signal".
+        "dict": "parallel",
     }
 
-    final_type = "unknown"
-    if result.type_flow:
-        final_type = result.type_flow[-1].output_type
-
+    final_type = terminal_output_name(parsed, result.type_flow) or "unknown"
     stage = stage_map.get(final_type, "unknown")
-    backtest_ready = stage in ("portfolio", "execution")
 
-    return {
+    out: dict[str, Any] = {
         "stage": stage,
         "final_output_type": final_type,
-        "backtest_ready": backtest_ready,
+        "backtest_ready": is_backtest_ready(parsed, result),
+        "valid": result.valid,
         "step_count": len(result.type_flow),
         "type_flow": [e.to_dict() for e in result.type_flow],
     }
+    if result.errors:
+        out["errors"] = [i.to_dict() for i in result.errors]
+    return out
 
 
 def strategy_examples(**kwargs) -> dict[str, Any]:
@@ -512,6 +560,17 @@ def strategy_new_inline(
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
+def require_supported_market(market: object) -> None:
+    """Raise ``ValidationError(UNSUPPORTED_MARKET)`` with the validator's one
+    sentence when ``market`` is not a market Keel trades (Q-2363, Q-2416)."""
+    from keel.errors import ValidationError
+    from pipeline_engine.dsl.spec import unsupported_market_message
+
+    message = unsupported_market_message(market)
+    if message is not None:
+        raise ValidationError(message, error_code="UNSUPPORTED_MARKET")
+
+
 def universe_set(
     source: str,
     mode: str,
@@ -523,17 +582,40 @@ def universe_set(
     inclusions: list[str] | None = None,
     lookback: str | None = None,
     volume_quartiles: list[str] | None = None,
+    min_trailing_dollar_volume: float | None = None,
+    resolve: bool = True,
 ) -> dict[str, Any]:
-    """Set or replace universe criteria on a strategy.
+    """Set or replace universe criteria on a strategy, and resolve it.
 
     Accepts the full selector set (mode, market, symbols, categories, top_n,
-    exclusions, inclusions, lookback (7d/30d/90d), volume_quartiles (q1-q4)) for
-    parity with the web editor and the in-cluster universe_set tool.
+    exclusions, inclusions, lookback (7d/30d/90d), volume_quartiles (q1-q4),
+    min_trailing_dollar_volume — the dollar-liquidity floor: trailing-24h
+    traded dollar volume, Σ trade price × size over 1m bars; there is none
+    before 2025-03-23) for parity with the web editor and the in-cluster
+    universe_set tool. A floor declared under the deprecated alias
+    `min_trailing_notional_proxy` is carried and written back under the new
+    name (DV6b: this tool is a writer).
 
-    NOTE: this only writes the criteria. To bake the concrete asset list into
-    the source (which `deploy` and `backtest_submit` require), call
-    `universe_resolve(source)` on the returned source. The web editor does
-    both in one step; CLI / agent flows chain the two calls.
+    Declared state this call takes no argument for is CARRIED: `groups`, and
+    the floor when the caller passes None. The resolution (`resolved` /
+    `resolved_at` / `max_leverages`) is carried only when the call leaves the
+    criteria as declared — an edit that changes nothing must not un-resolve
+    the strategy (audit 04 U-18). A criteria change drops it (Q-2435): the old
+    list answers the old criteria, and carried it ran under the new label.
+    The spec is built by the SAME constructor the rich twin uses
+    (`pipeline_engine.dsl.spec.universe_spec_with_declared_state`, in the
+    bundled DSL subset), so the two cannot diverge again.
+
+    The universe is RESOLVED IN THE SAME CALL by default (Q-2283, spec 03 U2):
+    the returned source carries the baked asset list, exactly what
+    `universe_resolve` returns, so no second call is needed. A manual basket
+    is classified by the server: HIP-3 and unknown symbols are dropped from
+    `resolved` and named in `resolution_note` (e.g. "Resolved 2 of 3 symbols:
+    BTC, ETH. Dropped xyz:AAPL — listed on Hyperliquid (HIP-3); Keel does not
+    support HIP-3 markets yet — support is coming soon."); a basket with
+    nothing tradeable raises `ValidationError` with code
+    `UNIVERSE_NOTHING_TRADEABLE`. `resolve=False` writes the criteria only,
+    offline — the next save resolves them server-side.
 
     Like `universe_resolve`, the rewrite is a SURGICAL SPAN EDIT of the
     `Universe(...)` statement only (twin of the rich
@@ -547,20 +629,27 @@ def universe_set(
     from pipeline_engine.dsl import parse_strategy
     from pipeline_engine.dsl.edits import EditError, replace_declaration
     from pipeline_engine.dsl.emitter import spec_to_dsl
-    from pipeline_engine.dsl.spec import UniverseSpec
+    from pipeline_engine.dsl.spec import universe_spec_with_declared_state
+
+    # Q-2416: refuse an unsupported market BEFORE writing anything — with
+    # `resolve=False` nothing else would, and the file would carry e.g.
+    # market="spot" until the next save refused it.
+    require_supported_market(market)
 
     parsed = parse_strategy(source)
 
-    new_universe = UniverseSpec(
+    new_universe = universe_spec_with_declared_state(
+        parsed.universe,
         mode=mode,
         market=market,
-        symbols=symbols or [],
-        categories=categories or [],
+        symbols=symbols,
+        categories=categories,
         top_n=top_n,
-        exclusions=exclusions or [],
-        inclusions=inclusions or [],
+        exclusions=exclusions,
+        inclusions=inclusions,
         lookback=lookback,
-        volume_quartiles=volume_quartiles or [],
+        volume_quartiles=volume_quartiles,
+        min_trailing_dollar_volume=min_trailing_dollar_volume,
     )
 
     try:
@@ -579,14 +668,26 @@ def universe_set(
     if new_source is None:
         new_source = spec_to_dsl(parsed)
 
-    return {
-        "source": new_source,
-        "universe": _universe_to_dict(parsed.universe),
-        "reformatted": reformatted,
+    if not resolve:
+        return {
+            "source": new_source,
+            "universe": _universe_to_dict(parsed.universe),
+            "reformatted": reformatted,
+        }
+    # Resolve in the same call (spec 03 U2) — through the one server resolver
+    # every write path uses; its refusal (UNIVERSE_NOTHING_TRADEABLE) is this
+    # call's refusal.
+    resolution = universe_resolve(new_source)
+    resolved_universe = parse_strategy(resolution["source"]).universe
+    out: dict[str, Any] = {
+        **resolution,
+        "universe": _universe_to_dict(resolved_universe),
+        "reformatted": reformatted or bool(resolution.get("reformatted")),
     }
+    return out
 
 
-def universe_resolve(source: str) -> dict[str, Any]:
+def universe_resolve(source: str, client: Any = None) -> dict[str, Any]:
     """Resolve a strategy's universe and bake the resolved list back into source.
 
     Reads the `Universe(...)` declaration from `source`, calls the Keel API to
@@ -616,6 +717,9 @@ def universe_resolve(source: str) -> dict[str, Any]:
 
     Args:
         source: The strategy DSL source string.
+        client: the API client to resolve through (an outcome tool passes its
+            context's client, so a hosted call uses the caller's credentials);
+            None builds a ``KeelClient`` from the local credentials.
 
     Returns:
         dict with keys:
@@ -628,10 +732,23 @@ def universe_resolve(source: str) -> dict[str, Any]:
           - max_leverages: per-asset venue max leverage, when the API
             returns it (omitted otherwise)
           - diff: {"added": [...], "removed": [...]}, when the API returns it
+          - pool_size / band_size / supply_before_filters / rankings: the
+            SELECTION EVIDENCE (D-12), passed through when the server reports
+            it — the live pool a band was cut over, the band's size before
+            `top_n` caps it, the ranked names the venue supplied before any
+            filter, and {symbol: {rank, trailing_notional}} for the resolved
+            list. Omitted by an older server; never fabricated.
+          - resolution_note / dropped: what a manual basket (or inclusions)
+            kept and dropped and why — HIP-3 and unknown symbols are dropped
+            (Q-2283); omitted when every named symbol is tradeable
+          - top_n_written_down: present only when the VENUE could not supply
+            `top_n` and this call wrote it down (see below)
 
     Raises:
         ValueError: source has no Universe declaration.
-        KeelError: API call failed (unauthenticated, network, criteria invalid, etc.).
+        KeelError: API call failed (unauthenticated, network, criteria invalid, etc.)
+            — including `ValidationError` code `UNIVERSE_NOTHING_TRADEABLE` when
+            a manual basket holds no symbol Keel can trade.
     """
     _ensure_registry()
 
@@ -664,14 +781,25 @@ def universe_resolve(source: str) -> dict[str, Any]:
         body["lookback"] = u.lookback
     if u.volume_quartiles:
         body["volume_quartiles"] = list(u.volume_quartiles)
+    # The dollar-volume floor under its current name, even when the source
+    # declares the deprecated alias min_trailing_notional_proxy (DV6b: this
+    # tool is a writer); both names are sent as declared, so the API 422s the
+    # ambiguity instead of this tool picking a winner. Both helpers ship in
+    # the vendored DSL subset (build_data.py copies spec.py verbatim).
+    from pipeline_engine.dsl.spec import dollar_volume_floor_to_emit
+
+    floor_fields = dict(dollar_volume_floor_to_emit(u))
+    body.update(floor_fields)
+    floor = floor_fields.get("min_trailing_dollar_volume")
     if u.resolved:
         body["current_resolved"] = list(u.resolved)
 
     # Lazy import — only this tool actually needs the HTTP client. Keeps the
     # rest of the offline tools surface zero-network at import time.
-    from keel.client import KeelClient
+    if client is None:
+        from keel.client import KeelClient
 
-    client = KeelClient()
+        client = KeelClient()
     result = client.post("/v1/universe/resolve", json=body)
 
     resolved = list(result["resolved"])
@@ -688,26 +816,57 @@ def universe_resolve(source: str) -> dict[str, Any]:
     if max_leverages is not None:
         parsed.universe.max_leverages = max_leverages
 
-    # Under-fill honesty (cohort Lane U, `universe-resolve-topn-underfill`):
-    # when the venue's qualifying pool is smaller than the declared top_n, a
+    # Under-SUPPLY honesty (cohort Lane U, `universe-resolve-topn-underfill`):
+    # when the VENUE's qualifying pool is smaller than the declared top_n, a
     # resolve that writes back only `resolved` leaves top_n=200/resolved=177
     # in the source and the STALE_UNIVERSE gate then fails every submit with
     # a remediation (re-resolve) that reproduces the same state forever.
     # Write top_n down to the achievable count and say so.
-    requested_top_n = result.get("requested_top_n")
-    underfilled = (
-        u.mode == "top_volume" and requested_top_n is not None and len(resolved) < requested_top_n
-    )
-    if underfilled:
-        parsed.universe.top_n = len(resolved)
+    #
+    # Measured against the FINAL list (what this did until 2026-09-16) the test
+    # fires on two shapes it was never meant for, and both RATCHET:
+    # `top_n=30, exclusions=["BTC"]` walked 30 → 29 → 28 per call, and a q1
+    # band under `top_n=50` was rewritten to the band size — the exact silent
+    # rewrite of a user's declared intent that D-11 rejected. The decision is
+    # the ONE predicate the API and the rich twin use, bundled in the DSL
+    # subset, reading the pool size the server measured BEFORE bands, floor,
+    # exclusions and inclusions.
+    from pipeline_engine.dsl.universe_expectation import top_n_under_supplied
+
+    # `u.top_n` IS the requested value — this call sent it. The server's echo
+    # is read only to notice an older server (it predates `requested_top_n`).
+    requested_top_n = u.top_n
+    supply = result.get("supply_before_filters")
+    sdk_warnings: list[str] = []
+    underfilled = top_n_under_supplied(u.mode, requested_top_n, supply, u.volume_quartiles, floor)
+    if underfilled and supply is not None:
+        parsed.universe.top_n = supply
+        # No warning added here on purpose: the server emits the under-supply
+        # sentence from the SAME predicate, and the CLI renders
+        # `top_n_written_down` below it. A third phrasing of one fact is noise.
+    elif (
+        supply is None
+        and u.mode == "top_volume"
+        and requested_top_n is not None
+        and len(resolved) < requested_top_n
+    ):
+        # An older server does not report the pool size, and a short list alone
+        # cannot tell under-supply from an exclusion or a declared filter. Say
+        # that, rather than guess and rewrite the declaration on a guess.
+        sdk_warnings.append(
+            f"{len(resolved)} of a requested top_n={requested_top_n} resolved, and this "
+            "server does not report `supply_before_filters` — the shortfall could be the "
+            "venue's pool, your exclusions, or a declared filter, so top_n was left "
+            "unchanged. Upgrade the server, or set top_n yourself."
+        )
 
     try:
         new_source = set_decl_arg(source, "universe", "resolved", resolved)
         new_source = set_decl_arg(new_source, "universe", "resolved_at", resolved_at)
         if max_leverages is not None:
             new_source = set_decl_arg(new_source, "universe", "max_leverages", max_leverages)
-        if underfilled:
-            new_source = set_decl_arg(new_source, "universe", "top_n", len(resolved))
+        if underfilled and supply is not None:
+            new_source = set_decl_arg(new_source, "universe", "top_n", supply)
         reformatted = False
     except EditError:
         _LOGGER.warning(
@@ -729,16 +888,36 @@ def universe_resolve(source: str) -> dict[str, Any]:
         out["max_leverages"] = max_leverages
     if result.get("diff"):
         out["diff"] = result["diff"]
-    # Server-side listing advisories (unknown/delisted symbols, under-fill)
-    # pass through verbatim so the CLI/MCP caller can show them.
-    if result.get("warnings"):
-        out["warnings"] = list(result["warnings"])
-    if underfilled:
+    # ONE-SNAPSHOT label (Q-0983): the server names the instant its SQL window
+    # ended at and says the list is a snapshot, not a membership rule. Pass
+    # both through verbatim when present; older servers omit them.
+    for key in ("as_of", "snapshot_note"):
+        if result.get(key):
+            out[key] = result[key]
+    # Server-side listing advisories (unknown/delisted symbols, under-supply,
+    # and — since D-11 — the "top_n is a cap under a filter" sentence) pass
+    # through verbatim, followed by anything only this side knows: that it
+    # wrote top_n down, or that it could not tell whether it should.
+    warnings = list(result.get("warnings") or []) + sdk_warnings
+    if warnings:
+        out["warnings"] = warnings
+    if underfilled and supply is not None:
         out["top_n_written_down"] = {
             "requested": requested_top_n,
-            "achievable": len(resolved),
-            "reason": f"venue can supply {len(resolved)} of {requested_top_n} requested assets",
+            "achievable": supply,
+            "reason": f"venue can supply {supply} of {requested_top_n} requested assets",
         }
+    # The pool the bands were cut over and the ranking that produced the list —
+    # the server computes them from the same query (D-12). Passed through when
+    # present so an agent can explain a filtered list instead of restating it.
+    for key in ("pool_size", "band_size", "supply_before_filters", "rankings"):
+        if result.get(key) is not None:
+            out[key] = result[key]
+    # What the resolution kept and dropped from the symbols the user named,
+    # and why (Q-2283, spec 03 U4) — the server's sentence, verbatim.
+    for key in ("resolution_note", "dropped"):
+        if result.get(key):
+            out[key] = result[key]
     return out
 
 
@@ -854,6 +1033,13 @@ def _universe_to_dict(uni) -> dict[str, Any]:
         d["lookback"] = uni.lookback
     if getattr(uni, "volume_quartiles", None):
         d["volume_quartiles"] = uni.volume_quartiles
+    # Both floor names, AS DECLARED: this reports the declaration (the
+    # deprecated alias must stay visible, or it reads as "no floor"). Twin of
+    # pipeline_engine.mcp.tools.universe_get.
+    if getattr(uni, "min_trailing_dollar_volume", None) is not None:
+        d["min_trailing_dollar_volume"] = uni.min_trailing_dollar_volume
+    if getattr(uni, "min_trailing_notional_proxy", None) is not None:
+        d["min_trailing_notional_proxy"] = uni.min_trailing_notional_proxy
     if getattr(uni, "resolved", None):
         d["resolved"] = uni.resolved
     if getattr(uni, "resolved_at", None):
@@ -903,33 +1089,31 @@ def strategy_lock_generate(source: str) -> dict[str, Any]:
 def strategy_lock_status(
     source: str, component_lock: dict[str, int] | None = None
 ) -> dict[str, Any]:
-    """Check component version drift against current registry."""
+    """Check component version drift: keel-api's ``POST /v1/strategies/lock/check``, offline.
+
+    Each drift entry (``breaking``, ``issues_at_target``, ``interface``,
+    ``replacement``, ``changes``) is decided by validating the strategy with
+    only that pin bumped — ``pipeline_engine.base.lock_upgrade``, the one
+    owner keel-api and the agent tools share (dollar-volume spec 02 §2),
+    vendored into this bundle. "Latest" is this wheel's bundled registry.
+    Returns ``{status, drift, component_lock}``; with no lock, a fresh one is
+    current by construction.
+    """
     _ensure_registry()
 
+    from pipeline_engine.base.lock import evolve_lock
+    from pipeline_engine.base.lock_upgrade import drift_entries
+    from pipeline_engine.dsl import parse_strategy
+
+    parsed = parse_strategy(source)
     if component_lock is None:
-        return {"status": "unknown", "message": "No component lock provided"}
-
-    from pipeline_engine.base.registry import get_latest
-
-    drift = []
-    for name, locked_version in component_lock.items():
-        sig = get_latest(name)
-        if sig is None:
-            drift.append(
-                {"name": name, "locked": locked_version, "latest": None, "status": "unknown"}
-            )
-        elif sig.version != locked_version:
-            drift.append(
-                {
-                    "name": name,
-                    "locked": locked_version,
-                    "latest": sig.version,
-                    "status": "drift",
-                }
-            )
-
-    status = "current" if not drift else "drift"
-    return {"status": status, "drift": drift, "component_lock": component_lock}
+        return {"status": "current", "drift": [], "component_lock": evolve_lock({}, parsed)}
+    drift = drift_entries(parsed, component_lock)
+    return {
+        "status": "drift" if drift else "current",
+        "drift": drift,
+        "component_lock": component_lock,
+    }
 
 
 def strategy_lock_upgrade(
@@ -937,31 +1121,39 @@ def strategy_lock_upgrade(
     component_lock: dict[str, int] | None = None,
     components: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Upgrade component versions in a lock."""
+    """Move pins to latest and validate there: keel-api's ``POST /v1/strategies/lock/upgrade``, offline.
+
+    The "try it" step (spec 02 §3): bumps the requested pins (every drifting
+    pin when ``components`` is omitted), breaking or not, validates the
+    unchanged source at the new lock, and persists nothing. Returns
+    ``{component_lock, upgraded, valid, issues, changes}``; a breaking bump
+    comes back invalid with the issues to recompose against. Same owner as
+    the drift check (``lock_upgrade.bump_pins``).
+    """
     _ensure_registry()
 
+    from pipeline_engine.base.lock import evolve_lock
+    from pipeline_engine.base.lock_upgrade import bump_pins
+    from pipeline_engine.dsl import parse_strategy
+
+    parsed = parse_strategy(source)
     if component_lock is None:
-        result = strategy_lock_generate(source)
+        # A fresh lock is at latest by construction.
         return {
-            "component_lock": result["component_lock"],
-            "upgraded": list(result["component_lock"].keys()),
+            "component_lock": evolve_lock({}, parsed),
+            "upgraded": [],
+            "valid": None,
+            "issues": [],
+            "changes": [],
         }
-
-    from pipeline_engine.base.registry import get_latest
-
-    new_lock = dict(component_lock)
-    upgraded = []
-    targets = components or list(component_lock.keys())
-
-    for name in targets:
-        if name not in new_lock:
-            continue
-        sig = get_latest(name)
-        if sig and sig.version != new_lock[name]:
-            new_lock[name] = sig.version
-            upgraded.append(name)
-
-    return {"component_lock": new_lock, "upgraded": upgraded}
+    result = bump_pins(parsed, dict(component_lock), components)
+    return {
+        "component_lock": result["component_lock"],
+        "upgraded": sorted(result["upgraded"]),
+        "valid": result["valid"],
+        "issues": result["issues"],
+        "changes": result["changes"],
+    }
 
 
 # ─────────────────────────────────────────────────────────────────────────────

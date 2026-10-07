@@ -74,14 +74,26 @@ def universe() -> None:
     "--lookback",
     type=click.Choice(["7d", "30d", "90d"]),
     default=None,
-    help="Volume-ranking lookback window (top_volume mode)",
+    help="Dollar-volume ranking lookback window (top_volume mode)",
 )
 @click.option(
     "--volume-quartiles",
     "volume_quartiles",
     multiple=True,
     type=click.Choice(["q1", "q2", "q3", "q4"]),
-    help="Volume quartile filter, e.g. q1=top 25% by volume (top_volume mode)",
+    help=(
+        "Dollar-volume quartile filter, e.g. q1=top 25% by traded dollar volume (top_volume mode)"
+    ),
+)
+@click.option(
+    "--no-resolve",
+    "no_resolve",
+    is_flag=True,
+    default=False,
+    help=(
+        "Write the criteria only (offline). By default the universe is resolved in the "
+        "same call, so the file carries the baked asset list."
+    ),
 )
 @click.pass_context
 def set_universe(
@@ -96,8 +108,10 @@ def set_universe(
     inclusions: tuple[str, ...],
     lookback: str | None,
     volume_quartiles: tuple[str, ...],
+    no_resolve: bool,
 ) -> None:
-    """Set or replace universe criteria on a strategy."""
+    """Set or replace universe criteria on a strategy, and resolve it."""
+    from keel.errors import KeelError
     from keel.tools.local import universe_set
 
     try:
@@ -117,6 +131,8 @@ def set_universe(
             kwargs["lookback"] = lookback
         if volume_quartiles:
             kwargs["volume_quartiles"] = list(volume_quartiles)
+        if no_resolve:
+            kwargs["resolve"] = False
         result = universe_set(**kwargs)
         if result.get("reformatted"):
             click.echo(
@@ -130,6 +146,10 @@ def set_universe(
         emit(result, _get_format(ctx))
     except click.BadParameter:
         raise
+    except KeelError as e:
+        # e.g. UNSUPPORTED_MARKET (Q-2416), exit 7 like every validation refusal
+        emit_error(e, _get_format(ctx))
+        ctx.exit(e.exit_code)
     except ValueError as e:
         emit_error(e, _get_format(ctx))
         ctx.exit(7)
@@ -435,13 +455,17 @@ def categories(ctx: click.Context) -> None:
 
 
 @universe.command()
-@click.option("--market", default="perp", help="Market type filter")
+@click.option("--market", default="perp", help="Market (perp only — Keel trades Hyperliquid perps)")
 @click.pass_context
 def instruments(ctx: click.Context, market: str) -> None:
     """List available instruments (remote)."""
     from keel.errors import KeelError
+    from keel.tools.local import require_supported_market
 
     try:
+        # Q-2416: the same sentence and exit 7 the validator gives, and no
+        # HTTP call for a market Keel does not trade.
+        require_supported_market(market)
         result = _client().get("/v1/universe/instruments", market=market)
         emit(result, _get_format(ctx))
     except KeelError as e:

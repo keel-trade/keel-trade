@@ -124,7 +124,7 @@ def anonymous_start(
         from keel.config import _parse_expires_at
 
         config.anon_org_expires_at = _parse_expires_at(org_expires_raw)
-    save_config(config)
+    _save_or_refuse(config)
 
     if not quiet:
         notice = data.get("notice") or (
@@ -132,6 +132,36 @@ def anonymous_start(
         )
         print(notice, file=sys.stderr)
     return config
+
+
+def _save_or_refuse(config: KeelConfig) -> None:
+    """Persist the anonymous credentials, or refuse loudly (Q-2494).
+
+    A workspace whose tokens cannot be saved is lost the moment this process
+    exits, and the next command mints ANOTHER one (each mint spends the
+    network's 3-per-day anonymous allowance). So the save is read back: a
+    write that fails, or a config that does not return the token just
+    written, is an error naming the fix — never a silent re-mint later.
+    """
+    from keel.config import CONFIG_FILE
+
+    try:
+        save_config(config)
+        persisted = load_config().api_key == config.api_key
+    except OSError as e:
+        persisted = False
+        cause = f" ({e})"
+    else:
+        cause = ""
+    if not persisted:
+        raise AuthError(
+            f"Your Keel config at {CONFIG_FILE} isn't persisting{cause}, so an "
+            "anonymous workspace would be lost after this command and a new one "
+            "minted on the next. Set KEEL_API_KEY, or run `keel auth login --key "
+            "<token>` with a writable home directory.",
+            suggestion="Set KEEL_API_KEY or run `keel auth login --key <token>`.",
+            docs_url="https://app.usekeel.io/settings?tab=api-keys",
+        )
 
 
 def _fresh_anon_access_token(api_url: str, refresh_token: str) -> str | None:
@@ -186,7 +216,7 @@ def _set_org_context(org_id: str | None) -> None:
 def _count_anon_work(api_url: str, anon_access_token: str) -> dict | None:
     """Pre-claim counts for the CL-8 prompt, read AS the anon principal.
 
-    The anon caps (≤3 strategies / ≤15 backtests) make one unpaginated
+    The anon caps (≤3 strategies / ≤10 backtests) make one unpaginated
     page exact. Returns None on any failure — the prompt degrades to
     countless wording, never blocks the flow."""
     base = api_url.rstrip("/")
@@ -373,7 +403,7 @@ def maybe_claim_after_login(
     def _clear_marker() -> None:
         # The marker refers to the pre-login tokens, which the login just
         # replaced — whatever the claim outcome, keeping it would make
-        # is_anon()/keel_status lie about the signed-in account. The
+        # is_anon()/keel_account_status lie about the signed-in account. The
         # expiry-notice fields follow the marker (spec 09 CL-3c); any
         # deferred-claim material lives in pending_claim instead.
         config = load_config()

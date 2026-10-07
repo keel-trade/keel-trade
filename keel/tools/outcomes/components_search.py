@@ -6,14 +6,14 @@ Per spec §4 (lines 280-281): collapses
 `keel components list/search/after/before` CLI verbs into one
 outcome.
 
-For 0.3.0 we still read from the bundled `keel/data/registry.json`
-because Phase 2A ships bundled component data. Phase 2C migrates
-to a lazy `GET /v1/components` endpoint; this handler is already
-structured `try API → fallback bundled` so the migration is a
-local swap.
+The handler tries the server's `GET /v1/components` (it exists; it needs
+`component.list`, which the anonymous tier has since Q-2494) and falls back
+to the bundled `keel/data/registry.json` on failure. The bundle is the
+snapshot this wheel shipped with, so it can trail the server's current
+component versions (Q-2500); the server answer is the current one.
 
 Do NOT use this tool to fetch the full param schema for ONE
-component — call `keel_components_compose_help` instead.
+component — call `keel_components_get` instead.
 """
 
 from __future__ import annotations
@@ -63,7 +63,7 @@ def _clock_direction_enum() -> tuple[str, ...]:
 
 def _format_entry(comp: dict) -> dict:
     """Shape one registry record into the search-result entry."""
-    from keel.data.registry import clock_direction_of
+    from keel.data.registry import clock_direction_of, position_search_fields
 
     entry: dict[str, Any] = {
         "name": comp.get("name"),
@@ -74,6 +74,10 @@ def _format_entry(comp: dict) -> dict:
     }
     if comp.get("sub_category"):
         entry["sub_category"] = comp["sub_category"]
+    entry.update(position_search_fields(comp))
+    from pipeline_engine.component_ranking import deprecation_fields
+
+    entry.update(deprecation_fields(comp))
     direction = clock_direction_of(comp)
     if direction != "keep":
         entry["clock_direction"] = direction
@@ -92,6 +96,7 @@ def _search_bundled(args: dict) -> list[dict]:
         clock_direction_of,
         get_components_after,
         get_components_before,
+        keyword_matches,
         rank_components,
         search_components,
     )
@@ -124,8 +129,10 @@ def _search_bundled(args: dict) -> list[dict]:
         try:
             candidates = get_components_after(after_name)
         except KeyError as e:
+            # `str(KeyError)` is the repr of its argument — the message came
+            # back wrapped in quotes (Q-2273); its first argument is the text.
             raise KeelError(
-                str(e),
+                str(e.args[0]) if e.args else "Component not found.",
                 error_code="not_found",
                 exit_code=3,
                 suggestion="Pass a valid component name (see `keel_components_search`).",
@@ -134,19 +141,28 @@ def _search_bundled(args: dict) -> list[dict]:
         try:
             candidates = get_components_before(before_name)
         except KeyError as e:
+            # `str(KeyError)` is the repr of its argument — the message came
+            # back wrapped in quotes (Q-2273); its first argument is the text.
             raise KeelError(
-                str(e),
+                str(e.args[0]) if e.args else "Component not found.",
                 error_code="not_found",
                 exit_code=3,
                 suggestion="Pass a valid component name (see `keel_components_search`).",
             ) from None
 
+    include_deprecated = bool(args.get("include_deprecated", False))
+
     if candidates is not None:
         # Apply the remaining filters in-place; `search_components` only
         # operates over the full bundled list so we filter manually here.
-        results = candidates
+        # Deprecation visibility first (spec 04-R28): the type-flow
+        # neighbours of a component are search results like any other.
+        from pipeline_engine.component_ranking import visible
+
+        results = [c for c in candidates if visible(c, include_deprecated)]
         keyword = args.get("keyword")
         category = args.get("category")
+        sub_category = args.get("sub_category")
         input_type = args.get("input_type")
         output_type = args.get("output_type")
         direction = args.get("clock_direction")
@@ -155,6 +171,10 @@ def _search_bundled(args: dict) -> list[dict]:
         if category:
             cat = category.lower()
             results = [c for c in results if (c.get("category") or "").lower() == cat]
+        if sub_category:
+            # spec 03-R63: case-insensitive exact match, as the bundled helper.
+            sc = sub_category.lower()
+            results = [c for c in results if (c.get("sub_category") or "").lower() == sc]
         if input_type:
             results = [c for c in results if c.get("input_type") == input_type]
         if output_type:
@@ -162,12 +182,7 @@ def _search_bundled(args: dict) -> list[dict]:
         if direction:
             results = [c for c in results if clock_direction_of(c) == direction]
         if keyword:
-            kw = keyword.lower()
-            results = [
-                c
-                for c in results
-                if kw in (c.get("name") or "").lower() or kw in (c.get("description") or "").lower()
-            ]
+            results = keyword_matches(results, keyword)
         if query:
             # THE one scorer (spec 02 §9.2 item 3) — this overlay used to
             # carry a verbatim copy of the scoring block, which is exactly
@@ -177,8 +192,16 @@ def _search_bundled(args: dict) -> list[dict]:
         return [_format_entry(c) for c in results[:limit]]
 
     # No after/before — delegate the heavy lifting to the bundled helper.
-    kwargs: dict[str, Any] = {"top_k": limit}
-    for key in ("keyword", "category", "input_type", "output_type", "clock_direction", "query"):
+    kwargs: dict[str, Any] = {"top_k": limit, "include_deprecated": include_deprecated}
+    for key in (
+        "keyword",
+        "category",
+        "sub_category",
+        "input_type",
+        "output_type",
+        "clock_direction",
+        "query",
+    ):
         if args.get(key):
             kwargs[key] = args[key]
 
@@ -199,8 +222,8 @@ def _search_via_api(ctx: ToolContext, args: dict) -> list[dict] | None:
     here and let `_search_bundled` (which implements every filter
     correctly via `keel.data.registry.search_components`) handle it.
 
-    Phase 2C is expected to extend the API endpoint to support the full
-    filter set; at that point this guard can be relaxed.
+    The API endpoint was never extended to the full filter set, so this
+    guard is the steady state rather than a temporary one.
 
     Also returns None on any client-side or transport failure so
     unauthenticated / offline callers keep working unchanged.
@@ -213,6 +236,7 @@ def _search_via_api(ctx: ToolContext, args: dict) -> list[dict] | None:
         "input_type",
         "output_type",
         "clock_direction",
+        "sub_category",
         "after",
         "before",
     }
@@ -223,28 +247,47 @@ def _search_via_api(ctx: ToolContext, args: dict) -> list[dict] | None:
         client = ctx.get_client()
     except Exception:  # noqa: BLE001
         return None
+    if not client.has_credentials:
+        # Q-2494: a lookup the bundle answers never mints an anonymous
+        # workspace (each mint spends the network's daily allowance).
+        return None
 
+    # `GET /v1/components` takes `category` only; `limit` is applied by
+    # `_handler` to whichever source answered (Q-2270 — it used to ride as a
+    # query param the route never declared, so the API path returned the
+    # whole catalogue under a result saying `limit: 20`).
     params: dict[str, Any] = {}
     if args.get("category"):
         params["category"] = args["category"]
-    if args.get("limit"):
-        params["limit"] = int(args["limit"])
 
     try:
         # `KeelClient.get` splats kwargs into the httpx params dict —
         # passing `params=params` would send a single literal `params`
         # query string. Unpack.
         resp = client.get("/v1/components", **params)
+    except KeelError as exc:
+        if exc.error_code == "rate_limited":
+            raise  # Q-2494: a 429 is the caller's to see, never a silent fallback
+        return None
     except Exception:  # noqa: BLE001 — component search fetch best-effort → None on failure
         return None
 
     # API contract: either {"results": [...]} or a bare list. Normalize
-    # to a list of compact entries.
+    # to a list of compact entries. `GET /v1/components` returns EVERY
+    # component (the library resolves blocks through it), so deprecation
+    # visibility is applied here, client-side (spec 04-R28).
+    from pipeline_engine.component_ranking import visible
+
+    include_deprecated = bool(args.get("include_deprecated", False))
     if isinstance(resp, dict) and "results" in resp:
-        return [_format_entry(c) for c in resp["results"]]
-    if isinstance(resp, list):
-        return [_format_entry(c) for c in resp]
-    return None
+        rows = resp["results"]
+    elif isinstance(resp, list):
+        rows = resp
+    else:
+        return None
+    return [
+        _format_entry(c) for c in rows if isinstance(c, dict) and visible(c, include_deprecated)
+    ]
 
 
 def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
@@ -254,6 +297,9 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
     results = _search_via_api(ctx, args)
     if results is None:
         results = _search_bundled(args)
+    # ONE place applies `limit`, whichever source answered: the bundled
+    # search already stops at it, the API returns its whole list (Q-2270).
+    results = results[:limit]
 
     return OutcomeResult(
         run_id=None,
@@ -274,39 +320,22 @@ COMPONENTS_SEARCH = register(
         required_action="component.list",
         cli_path=("components", "search"),
         toolset="read-only",
-        # grounded-in: tool_usage.md:23-27 (REQUIRED two-step discovery,
-        # new + iterative); collaboration.md:36-44 (plan from real
-        # types/slots, not names or pattern memory); mistakes.md M-28
-        # (ALWAYS search a named domain concept BEFORE selecting; don't
-        # hand-roll it — a manual ConstantForecast is not a beta hedge).
+        # grounded-in: system/chat/tool_usage.md:21-25 (two-step discovery,
+        # new + iterative); system/chat/collaboration.md:39-47 (plan from
+        # real types/slots, not names or pattern memory — and :45, search a
+        # named domain concept BEFORE selecting; a manual ConstantForecast
+        # is not a beta hedge).
         description=(
-            "Search the Keel pipeline component catalog by keyword, "
-            "semantic query, category, input/output type, or pipeline "
-            "position (`after`/`before`) — the REQUIRED first step of the "
-            "two-step discovery every build turn starts with. "
-            "\n\n"
-            "Decompose the thesis into roles (universe, signal, entry/exit, "
-            "filter, sizing, normalize) and search each role — plus every "
-            "domain concept the user names (beta hedge, vol targeting, risk "
-            "parity, trailing stop, regime) — in natural language BEFORE "
-            "selecting anything. This holds for new strategies AND every "
-            "edit. When the user names a concept, ALWAYS search for it "
-            "rather than hand-rolling from memory: a manual "
-            "`ConstantForecast(-10)` is a static short, not the "
-            "`BetaHedgeAllocator` that was asked for. "
-            "\n\n"
-            "Keel re-clocks in one direction — resample raw data fine → "
-            "coarse, project signals coarse → fine. Filter by "
-            "`clock_direction` for the operator in the direction you want. "
-            "\n\n"
-            "Returns compact entries (name, category, description, "
-            "input/output type) to triage; feed the set you pick straight "
-            "into `keel_components_detail_batch` to verify types and slots "
-            "before drafting DSL. Do NOT plan a pipeline from names or "
-            "pattern memory alone — search is not optional. "
-            "Do NOT use to fetch the full schema of ONE component — use "
-            "`keel_components_compose_help`. "
-            "Do NOT use to enumerate strategies — call `keel_strategy_search`."
+            "Search the Keel pipeline component catalog — the chosen candidates go to "
+            "`keel_components_get_many`, which verifies their types and slots. It "
+            "matches `keyword` (narrows), a natural-language `query` (ranks), `category`, "
+            "`input_type` / `output_type`, or pipeline position (`after` / `before`); "
+            "`clock_direction` "
+            "filters to one re-clocking direction (resample raw data fine → coarse, "
+            "project signals coarse → fine). Domain concepts (beta hedge, regime) are "
+            "components, found here. Returns compact entries (name, "
+            "category, description, input/output type); one component's full contract is "
+            "`keel_components_get`."
         ),
         input_schema={
             "type": "object",
@@ -315,23 +344,19 @@ COMPONENTS_SEARCH = register(
                     "type": "string",
                     "x-cli-positional": True,
                     "description": (
-                        "Case-insensitive substring match against name or "
-                        "description. The CLI positional arg maps here — "
-                        "`keel components search momentum` filters to "
-                        "components mentioning 'momentum'. For weighted "
-                        "token-scoring across name/category/description, "
-                        "use `--query` instead."
+                        "Case-insensitive substring match against name or description, "
+                        "e.g. `momentum` keeps the components mentioning it. `query` adds "
+                        "weighted token scoring across name/category/description."
                     ),
                 },
                 "query": {
                     "type": "string",
                     "description": (
-                        "Free-text semantic query — tokens are matched against "
-                        "name, category, and description with weighted scoring "
-                        "(name ×3, category ×2, description ×1). Returns "
-                        "components scored > 0 ranked by relevance. Pair with "
-                        "`keyword` (or the CLI positional keyword) to first "
-                        "narrow by substring, then rank."
+                        "Free-text semantic query — tokens are matched against name, "
+                        "category, and description with weighted scoring (name ×3, category "
+                        "×2, description ×1); components scored > 0 return ranked by "
+                        "relevance. Combined with `keyword` (or the CLI positional "
+                        "keyword), the substring narrows first and the query ranks."
                     ),
                 },
                 "category": {
@@ -339,47 +364,68 @@ COMPONENTS_SEARCH = register(
                     "enum": list(_CATEGORIES),
                     "description": "Restrict to one component category.",
                 },
+                "sub_category": {
+                    "type": "string",
+                    "description": (
+                        "Restrict to one sub-category, case-insensitive exact match "
+                        "(e.g. `trade_reader`, `trade_action`, `trade_factory`)."
+                    ),
+                },
                 "input_type": {
                     "type": "string",
-                    "description": "Restrict to components consuming this type (e.g. `SignalSeries`).",
+                    "description": (
+                        "Restrict to components consuming this type (e.g. `SignalSeries`)."
+                    ),
                 },
                 "output_type": {
                     "type": "string",
-                    "description": "Restrict to components producing this type (e.g. `ForecastSeries`).",
+                    "description": (
+                        "Restrict to components producing this type (e.g. `ForecastSeries`)."
+                    ),
                 },
                 "clock_direction": {
                     "type": "string",
                     "enum": list(_clock_direction_enum()),
                     "description": (
-                        "Restrict to components that change the bar clock in "
-                        "one direction. `resample` = fine → coarse "
-                        "aggregation of raw data (e.g. 1h OHLCV → 1d). "
-                        "`project` = coarse → fine, holding the last "
-                        "COMPLETED coarse bar across the finer grid (e.g. a "
-                        "1d regime signal driving 1h execution) — the only "
-                        "safe way to move a signal down. `synth` = a data "
-                        "loader minting the entry clock. `keep` = leaves the "
-                        "clock untouched (most components)."
+                        "Restrict to components that change the bar clock in one direction. "
+                        "`resample` = fine → coarse aggregation of raw data (e.g. 1h OHLCV "
+                        "→ 1d). `project` = coarse → fine, holding the last COMPLETED "
+                        "coarse bar across the finer grid (e.g. a 1d regime signal driving "
+                        "1h execution) — the only safe way to move a signal down. `synth` = "
+                        "a data loader minting the entry clock. `keep` = leaves the clock "
+                        "untouched (most components)."
                     ),
                 },
                 "after": {
                     "type": "string",
                     "description": (
-                        "Return components that can FOLLOW the named component "
-                        "(their input type accepts that component's output)."
+                        "Return components that can FOLLOW the named component (their input "
+                        "type accepts that component's output)."
                     ),
                 },
                 "before": {
                     "type": "string",
                     "description": (
-                        "Return components that can PRECEDE the named component "
-                        "(their output type matches that component's input)."
+                        "Return components that can PRECEDE the named component (their "
+                        "output type matches that component's input)."
+                    ),
+                },
+                "include_deprecated": {
+                    "type": "boolean",
+                    "default": False,
+                    "description": (
+                        "Also return deprecated components (hidden by default); each "
+                        "carries `status` and `replacement_text`. A lookup by name "
+                        "(`keel_components_get`) always answers."
                     ),
                 },
                 "limit": {
                     "type": "integer",
                     "default": 20,
-                    "description": "Maximum number of results.",
+                    "minimum": 1,
+                    "description": (
+                        "Maximum number of results (default 20); `total` is the number returned."
+                    ),
                 },
             },
             "required": [],

@@ -1,9 +1,11 @@
 """`keel_strategy_push` — commit local working copy back to the platform.
 
 The "git push" of the lightweight strategy sync model. Reads the
-local `strategy.py`, validates it (same as `keel_strategy_compose
-dry_run=True`), then PATCHes the platform via
-`/v1/strategies/<id>` to create a new commit (new HEAD).
+local `strategy.py` and PATCHes the platform via
+`/v1/strategies/<id>` to create a new commit (new HEAD). keel-api
+validates the saved source; the result carries that verdict as
+`validation` (or `{"unavailable": true}` — position-layer spec 04-R22).
+Validation never blocks the push, as with compose.
 
 Conflict detection: by default sends `expected_source_hash` so the
 server rejects with 409 if the server-side HEAD has moved since the
@@ -19,6 +21,48 @@ from keel.errors import ConflictError, KeelError
 
 from . import register
 from ._base import OutcomeResult, OutcomeTool, ToolContext
+from .open_in_app import app_url_for
+
+
+def push_validation(result: dict) -> dict[str, Any]:
+    """The push envelope's validation facts (position-layer spec 04-R22).
+
+    ``validation`` is ``{ok, errors, warnings}`` from keel-api's verdict on
+    the saved source, or ``{"unavailable": true}`` when the response carried
+    none — never omitted silently, because this tool says it validates.
+    ``validation_line`` is the same text line every MCP view result carries
+    (errors, then the position-layer upgrade, then other warnings). Push stays
+    non-blocking: the version is saved either way, like compose.
+    """
+    from ._mcp_adapter import _validation_line
+    from ._strategy_view import deprecations_block
+
+    raw = result.get("validation")
+    out: dict[str, Any] = {}
+    if isinstance(raw, dict):
+        errors = list(raw.get("errors") or [])
+        warnings = list(raw.get("warnings") or [])
+        ok = raw.get("ok")
+        if ok is None:
+            ok = raw.get("valid")
+        if ok is None:
+            ok = not errors
+        validation = {"ok": bool(ok), "errors": errors, "warnings": warnings}
+        out["validation"] = validation
+        out["validation_line"] = _validation_line(validation) or "validation: clean"
+    else:
+        out["validation"] = {"unavailable": True}
+        out["validation_line"] = (
+            "validation: unavailable — the server returned no verdict for this push; "
+            "keel_strategy_compose with dry_run=true validates the same source."
+        )
+    deprecations = deprecations_block(result.get("deprecations"))
+    if deprecations:
+        from ._known_issue import deprecations_line
+
+        out["deprecations"] = deprecations
+        out["upgrade"] = deprecations_line(deprecations)
+    return out
 
 
 def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
@@ -54,6 +98,12 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
         "commit_id": result.get("commit_id"),
         "message": message,
     }
+    if result.get("status") != "no_changes":
+        body.update(push_validation(result))
+        if result.get("lock_changes"):
+            # The pushed text was the position-layer upgrade of HEAD and it
+            # moved these pins; they were saved with it (Q-2448).
+            body["lock_changes"] = result["lock_changes"]
     if result.get("status") == "no_changes":
         body["next"] = [
             "No local changes detected — nothing to push.",
@@ -66,11 +116,11 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
         body["next"] = [
             f"Pushed sequence={seq}{commit_hint} — now the new HEAD.",
             "Run `keel_backtest_run` with `--wait` to backtest the new version.",
-            "Or `keel_strategy_log` to see the full commit history.",
+            "Or `keel_strategy_history` to see the full commit history.",
         ]
     return OutcomeResult(
         run_id=resolved_id,
-        hero_url=f"{ctx.app_url}/strategies/{resolved_id}"
+        hero_url=app_url_for("strategy", resolved_id, ctx)
         if resolved_id
         else f"{ctx.app_url}/strategies",
         share_url=None,
@@ -87,7 +137,7 @@ STRATEGY_PUSH = register(
         local_only=True,  # reads the local workspace working copy
         # grounded-in: sync-contract (spec 08) — server HEAD is the source of
         # truth, pushing is how local edits become runnable; conflict-safe by
-        # expected_source_hash; collaboration.md §6 (validate before, backtest
+        # expected_source_hash; system/chat/collaboration.md §6 (validate before, backtest
         # runs against server HEAD).
         description=(
             "Commit local strategy.py changes back to the platform as a new "
@@ -101,7 +151,7 @@ STRATEGY_PUSH = register(
             "`strategy_id` from the current workspace when omitted. Push AFTER "
             "editing strategy.py, BEFORE running a backtest — backtests run "
             "against server HEAD, so unpushed local changes won't be tested; "
-            "include a commit `message` so `keel_strategy_log` stays readable. "
+            "include a commit `message` so `keel_strategy_history` stays readable. "
             "Do NOT use to CREATE a new strategy from scratch — call "
             "`keel_strategy_compose`. Do NOT use to publish a strategy "
             "publicly — call `keel_share_create`."
@@ -123,7 +173,7 @@ STRATEGY_PUSH = register(
                     "type": "string",
                     "description": (
                         "Commit message. Highly recommended — shows in "
-                        "`keel_strategy_log` and the web app version history. "
+                        "`keel_strategy_history` and the web app version history. "
                         "Like a git commit message."
                     ),
                 },
@@ -143,7 +193,7 @@ STRATEGY_PUSH = register(
             "readOnlyHint": False,
             "destructiveHint": False,  # creates new commit, doesn't delete
             "idempotentHint": False,
-            "openWorldHint": True,
+            "openWorldHint": False,
         },
         handler=_handler,
     )

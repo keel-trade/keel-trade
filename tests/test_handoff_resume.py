@@ -7,10 +7,10 @@ without the user returning to the tab:
     tool exists on the surface that emitted the envelope and the args
     satisfy its schema (pinned for every builder, both execution modes).
   * ``keel_live_deploy`` with ``intent_token`` (preview phase) is a pure
-    status poll of ``POST /v1/live/deploy-intents/status`` returning
+    status poll of ``POST /v1/deployments/deploy-intents/status`` returning
     ``handoff_state`` (pending | completed | expired).
   * ``keel_live_deploy`` with ``intent_token`` + ``preview=False``
-    forwards the token to ``POST /v1/live`` (server-side
+    forwards the token to ``POST /v1/deployments`` (server-side
     ``handoff_completed`` attribution; telemetry-only).
 
 R7: every deploy-intent failure path surfaced through the SDK names the
@@ -145,7 +145,7 @@ def test_poll_is_a_pure_status_read():
     )
 
     client.post.assert_called_once_with(
-        "/v1/live/deploy-intents/status", json={"intent_token": INTENT_TOKEN}
+        "/v1/deployments/deploy-intents/status", json={"intent_token": INTENT_TOKEN}
     )
     client.get.assert_not_called()
 
@@ -159,7 +159,7 @@ def test_poll_unknown_status_shape_raises_instead_of_guessing():
             {"strategy_id": "strat_x", "intent_token": INTENT_TOKEN}, _ctx(client)
         )
     assert exc.value.error_code == "deploy_intent_status_unexpected"
-    assert "keel_doctor" in (exc.value.suggestion or "")
+    assert "keel_connection_check" in (exc.value.suggestion or "")
 
 
 # ─── R7: poll failure paths instruct the agent correctly ─────────────────
@@ -231,7 +231,7 @@ def test_actual_deploy_forwards_intent_token(tmp_path, monkeypatch):
     client.post.side_effect = [
         {"strategy_name": "S", "derived_schedule": "0 0 * * *"},  # preview
         {},  # deploy-intent mint during preview (no handoff_url)
-        {"deployment_id": "dep_9"},  # POST /v1/live
+        {"deployment_id": "dep_9"},  # POST /v1/deployments
     ]
     tool = get("keel_live_deploy")
     token = tool.handler(
@@ -252,7 +252,7 @@ def test_actual_deploy_forwards_intent_token(tmp_path, monkeypatch):
     )
 
     live_call = client.post.call_args_list[-1]
-    assert live_call.args[0] == "/v1/live"
+    assert live_call.args[0] == "/v1/deployments"
     assert live_call.kwargs["json"]["intent_token"] == INTENT_TOKEN
     assert result.to_envelope()["run_id"] == "dep_9"
 

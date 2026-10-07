@@ -12,17 +12,40 @@ live-trading mutations.
 from __future__ import annotations
 
 import json
+from typing import Any
 
 from fastmcp import FastMCP
 from mcp.types import Icon
 
-from keel.data.knowledge import load_operating_core
 from keel.mcp._branding import (
+    KEEL_ICON_256_DATA_URI,
+    KEEL_ICON_256_SIZES,
+    KEEL_ICON_256_URL,
     KEEL_ICON_DATA_URI,
     KEEL_ICON_MIME,
     KEEL_ICON_SIZES,
     KEEL_WEBSITE_URL,
 )
+from pipeline_engine.reference.system import assemble as _assemble
+
+
+class KeelMCP(FastMCP):
+    """FastMCP plus the deprecated-name layer (`_toolsets.TOOL_ALIASES`).
+
+    `tools/call` with a renamed tool's OLD name runs the renamed tool: the
+    name is canonicalised here, before FastMCP resolves it and before the
+    middleware chain runs, so the hosted server's scope gate, audit row and
+    metrics see the registered name. `tools/list` is untouched — it is the
+    local provider's catalog, which carries only the new names — so a host
+    that refreshes its catalog never learns an old spelling. Both the wire
+    handler (`_call_tool_mcp`) and in-process callers go through
+    `call_tool`, which is why the override lives on this one method.
+    """
+
+    async def call_tool(self, name: str, arguments: Any = None, **kwargs: Any) -> Any:
+        from keel.tools.outcomes._toolsets import canonical_tool_name
+
+        return await super().call_tool(canonical_tool_name(name), arguments, **kwargs)
 
 
 def create_server() -> FastMCP:
@@ -61,7 +84,7 @@ def create_server() -> FastMCP:
         # never display 0.0.0.
         from keel import __version__ as _keel_version
 
-    mcp = FastMCP(
+    mcp = KeelMCP(
         name="keel",
         version=_keel_version,
         instructions=instructions,
@@ -71,10 +94,20 @@ def create_server() -> FastMCP:
         # connectors do not render it yet, but the field is correct).
         icons=[
             Icon(
+                src=KEEL_ICON_256_URL,
+                mimeType=KEEL_ICON_MIME,
+                sizes=KEEL_ICON_256_SIZES,
+            ),
+            Icon(
+                src=KEEL_ICON_256_DATA_URI,
+                mimeType=KEEL_ICON_MIME,
+                sizes=KEEL_ICON_256_SIZES,
+            ),
+            Icon(
                 src=KEEL_ICON_DATA_URI,
                 mimeType=KEEL_ICON_MIME,
                 sizes=KEEL_ICON_SIZES,
-            )
+            ),
         ],
     )
 
@@ -94,8 +127,7 @@ def create_server() -> FastMCP:
     # ── Resources (spec §4 — lazy on demand, no startup token cost) ─────
     # All resources prefer live API fetches; the components catalog +
     # DSL reference fall back to bundled data when the API isn't
-    # reachable (offline / unauth). Phase 2C+ adds tearsheet PNG,
-    # weights parquet, and `keel://context/*` (per spec §9).
+    # reachable (offline / unauth).
 
     @mcp.resource("keel://components/catalog")
     def components_catalog() -> str:
@@ -194,13 +226,11 @@ def create_server() -> FastMCP:
                     "strategy_id": strategy_id,
                     "latest": None,
                     "results": None,
+                    # A fact, not a call to spend quota (spec 05 R-L4).
                     "suggested_next_action": {
-                        "tool": "keel_backtest_run",
-                        "args": {"strategy_id": strategy_id} if strategy_id else {},
-                        "reason": (
-                            "No backtests were found for this scope. Run a "
-                            "backtest first, then read this resource again."
-                        ),
+                        "tool": None,
+                        "args": {},
+                        "reason": "No backtests have been run for this scope.",
                     },
                 }
 
@@ -257,106 +287,44 @@ def create_server() -> FastMCP:
     @mcp.resource("keel://ownership/strategy/{strategy_id}")
     def strategy_ownership(strategy_id: str) -> str:
         """First-session ownership projection for one strategy."""
-        from keel.tools.outcomes._base import ToolContext
-        from keel.tools.outcomes._ownership import (
-            fetch_ownership_projection,
-            ownership_envelope_fields,
-        )
-
-        ctx = ToolContext()
-        projection = fetch_ownership_projection(ctx, strategy_id)
-        if projection:
-            out = {"strategy_id": strategy_id, "projection": projection}
-            out.update(ownership_envelope_fields(projection))
-            return json.dumps(out, default=str)
-        return json.dumps(
-            {
-                "strategy_id": strategy_id,
-                "projection_available": False,
-                "ownership_status": "not_started",
-                "next_recommended_action": {
-                    "kind": "write_strategy_brief",
-                    "reason": "No first-session ownership projection is available yet.",
-                },
-                "missing_evidence": [
-                    "strategy_brief",
-                    "baseline_evidence",
-                    "failure_modes",
-                ],
-                "live_readiness_blockers": [
-                    "no_baseline",
-                    "no_diagnosis",
-                    "no_ownership_decision",
-                    "no_readiness_review",
-                ],
-            },
-            default=str,
-        )
+        return ownership_resource_payload(strategy_id)
 
     @mcp.resource("keel://dsl/reference/{topic}")
     def dsl_reference_resource(topic: str) -> str:
         """DSL reference doc by topic (phases, types, slots, composition,
-        normalization, best_practices). Bundled for 0.3.0 — API endpoint
-        ships in Phase 2C."""
+        normalization, best_practices). Served from the bundled data: the
+        planned `/v1/reference/{topic}` endpoint never shipped, and the
+        bundle is the path (same note as `help.py`)."""
         from keel.tools.local import dsl_reference
 
         return json.dumps(dsl_reference(topic=topic), default=str)
 
     @mcp.resource("keel://knowledge/{section}")
     def knowledge_resource(section: str) -> str:
-        """Bundled system-knowledge section (same files chat-api loads
-        into its always-on system prompt). Use for direct fetch of one
-        section without invoking a full skill. Sections include:
-        ``reasoning_principles``, ``composition_mechanics``,
-        ``dsl_syntax``, ``mistakes``, ``tool_usage``, ``trading_domain``,
-        ``strategy_paths``, ``strategy_patterns``, ``universe_selection``,
-        ``pipeline_system``, ``collaboration``, ``editor_ui``,
-        ``component_versioning``. Section name matches the filename stem
-        under ``keel/data/knowledge/``. Raises FileNotFoundError if the
-        section doesn't exist — caller can use ``resources/list`` to
-        enumerate available sections."""
-        from keel.skills import load_section
+        """Bundled system-knowledge section — a direct fetch of one
+        section without invoking a full skill. Raises FileNotFoundError
+        if the section doesn't exist; ``resources/list`` enumerates
+        them."""
+        # Served form, not the raw file: `operating_core` is the base
+        # document (no chat opinion layer), exactly as `keel_help` serves it.
+        from keel.data.knowledge import served_section
 
-        return load_section(section)
+        return served_section(section)
 
-    @mcp.resource("keel://context/user")
-    def user_context_resource() -> str:
-        """Global user context (`~/.keel/context.md`) — preferences,
-        default universe, custom prompt fragments. Read on session
-        start by the agent (per spec §9.2)."""
-        from keel.context import read_user_context
+    # The section list is GENERATED from the bundled directory, never
+    # hand-typed (W2 §5 S4): a list in prose is a list that goes stale
+    # the first time a file is added. `Section name matches the filename
+    # stem under keel/data/knowledge/.`
+    knowledge_resource.__doc__ = (knowledge_resource.__doc__ or "") + (
+        " Sections: " + ", ".join(f"``{name}``" for name in _bundled_knowledge_sections()) + "."
+    )
 
-        entry = read_user_context()
-        return json.dumps(
-            {
-                "layer": entry.layer,
-                "source": str(entry.source) if entry.source else None,
-                "exists": entry.exists,
-                "body": entry.body,
-            },
-            default=str,
-        )
-
-    @mcp.resource("keel://context/project")
-    def project_context_resource() -> str:
-        """Project-level context (`<cwd>/keel.md` or the `## Keel` block
-        in `CLAUDE.md`) — repo-specific preferences (per spec §9.1)."""
-        from keel.context import read_project_context
-
-        entry = read_project_context()
-        return json.dumps(
-            {
-                "layer": entry.layer,
-                "source": str(entry.source) if entry.source else None,
-                "exists": entry.exists,
-                "body": entry.body,
-            },
-            default=str,
-        )
+    if serves_local_filesystem_context():
+        _register_local_context_resources(mcp)
 
     @mcp.resource("keel://context/strategy/{strategy_id}")
     def strategy_context_resource(strategy_id: str) -> str:
-        """Per-strategy context — wraps `keel_strategy_memory_read` so
+        """Per-strategy context — wraps `keel_strategy_notes_read` so
         agents can browse memory as a resource. Returns the most recent
         notes."""
         from keel.client import KeelClient
@@ -385,178 +353,167 @@ def create_server() -> FastMCP:
     return mcp
 
 
-# ── Server instructions, per profile (spec 01 R3) ─────────────────────
+# ── Server instructions, per profile (spec 01 R3; guidance spec §3 L2) ─
 #
-# The strategy-behavior knowledge (ethos, build discipline, required
-# two-step discovery, iterate-don't-rewrite, routing, and the pull-deeper
-# pointer) is NOT hand-written here any more — it is the corpus-distilled
-# operating core (`operating_core.md`, loaded via `load_operating_core()`).
-# LISTED_INSTRUCTIONS and `_full_instructions()` are THIN wrappers: the
-# core + MCP-surface plumbing + only the profile-specific plumbing that
-# legitimately differs (auth, write-through state model, live-write
-# opt-in, cross-surface hints). The core is authored policy-clean and
-# references only listed tools, so it rides both profiles safely.
+# NOTHING is hand-written here any more. Every sentence of every profile
+# comes from the corpus source (`operating_core.md`) through the builder
+# (`pipeline_engine.reference.system.assemble`, vendored into this wheel
+# by scripts/build_data.py exactly as `dsl/catalog.py` is). The builder
+# emits, per profile, the 482-character head plus the `layer: body`
+# sections whose `profiles:` admit that profile — so a copy change is a
+# corpus edit, never a Python edit, and the three profiles cannot drift
+# from one another or from the chat's static prompt.
+#
+# Host facts the assembly is written against (guidance spec §2):
+#
+# * claude.ai DROPS server instructions entirely (claude-ai-mcp#93) — so
+#   nothing lives only here; every sentence has an L1/L3 twin, checked by
+#   the sole-carrier guard in tests/test_guidance_guards.py.
+# * ChatGPT and Codex read the FIRST 512 CHARACTERS as the essentials —
+#   the head is self-contained inside them (six facts, guard-pinned).
+# * Claude Code truncates at 2 KB (BYTES) and uses the string as its
+#   tool-search discovery signal — hence fact 1's task category.
 #
 # LISTED (directory registration): policy-vetted copy — no deploy/fund/
 # trade verbs, no routing to tools absent from the listed surface
-# (research/08 string rules; gate: tests/test_policy_scan.py). Live /
-# account / go-live verbs appear ONLY in the full-only branches below,
-# never in the listed path.
-
-# MCP-surface mechanics — how to drive the tool surface. Policy-clean and
-# listed-tool-only, so it is shared verbatim by both profiles.
-_MCP_SURFACE = (
-    "The agent surface is a workflow-shaped set of outcome tools — call "
-    "each by its canonical `keel_*` name (see `tools/list` for the active "
-    "set). Start with `keel_status`. Deep-knowledge sections are "
-    "pull-on-demand MCP resources at `keel://knowledge/{section}`; guided "
-    "workflows load as skills — see `prompts/list`. File friction (a tool "
-    "erroring twice, a confusing result, a missing capability) with "
-    "`keel_feedback`; it never fails and nothing waits on it."
-)
-
-# Server-authoritative state, policy-clean phrasing (listed profile).
-_STATE_MODEL_LISTED = (
-    "STATE MODEL — strategy state lives on the Keel server: every tool "
-    "call reads and writes the server's canonical version (one linear "
-    "history), and `keel_strategy_log` shows which surface made each "
-    "change."
-)
-
-# Listed cross-surface hint — CORRECT routing: acting on a strategy beyond
-# chat is a web-app handoff (`keel_open_in_app`), file/workspace work is
-# the CLI. There is ONE hosted endpoint (mcp.usekeel.io serves this same
-# listed surface), so there is no "full endpoint" to route live management
-# to — the old copy claiming that was stale/false. Policy-vetted copy
-# (research/08 string rules; gated by tests/test_policy_scan.py). NOTE:
-# the package name "keel-trade" cannot appear here — the word-boundary
-# scan reads its "trade" segment as a verb hit.
-_LISTED_SURFACE = (
-    "SURFACE — this connector carries research, backtests, and read-only "
-    "monitoring. To act on a strategy beyond chat, `keel_open_in_app` "
-    "opens it in the Keel web app; file and workspace work uses the Keel "
-    "CLI. Per-surface guide: https://usekeel.io/agents"
-)
+# (research/08 string rules; gate: tests/test_policy_scan.py). The
+# full-only blocks (auth, write-through state, live) carry
+# `profiles: [full]` in the corpus and never reach the listed string.
 
 
 def _listed_instructions() -> str:
-    """Thin listed-profile wrapper: operating core + surface plumbing.
-
-    Every part is policy-clean and references only listed tools, so the
-    composed string passes tests/test_policy_scan.py by construction.
-    """
-    return "\n\n".join(
-        [
-            load_operating_core().rstrip(),
-            _MCP_SURFACE,
-            _STATE_MODEL_LISTED,
-            _LISTED_SURFACE,
-        ]
-    )
+    """The listed profile's instructions, assembled from the corpus."""
+    return _assemble.instructions("listed")
 
 
 LISTED_INSTRUCTIONS = _listed_instructions()
 
 
 def _full_instructions(live_write_loaded: bool, *, hosted: bool = False) -> str:
-    """Instructions for the full (unlisted endpoint / local) profile.
+    """Instructions for the full (local MCP / CLI) profile.
 
-    Thin wrapper: the operating core (strategy behavior) + MCP-surface
-    plumbing + the full-only plumbing blocks (auth, write-through state
-    model, live read/write, skills) + the cross-surface hint. ``hosted``
-    selects the hosted-server hint (spec 07 R7): the hosted endpoint is
-    file-free, so file/workspace asks route to the CLI; local servers get
-    the charts → web-app hint.
+    ``hosted`` selects the hosted-server SURFACE section (spec 07 R7):
+    the hosted endpoint is file-free, so file/workspace asks route to the
+    CLI; local servers get the charts → web-app hint. The live-write
+    notice is emitted only when that toolset is absent, exactly as
+    before — the condition is the corpus section's
+    ``when: live_write_absent`` key.
     """
-    auth_block = (
-        "AUTH — when `keel_status` returns `authenticated: false`, OR when "
-        "any tool's error envelope sets `suggested_next_action.tool` to "
-        "`keel_auth_login`, call `keel_auth_login` directly — it opens the "
-        "user's browser, captures the OAuth redirect, and persists tokens. "
-        "Optional `scope='live'` pre-checks live-trading consent. First "
-        "session: `keel_status` → `keel_auth_login` if needed → load the "
-        "`strategy-creation` skill before strategy work."
-    )
-    state_model_full = (
-        "STATE MODEL — server HEAD is the single source of truth: "
-        "backtests, deploys, and shares always resolve a server commit, "
-        "never a local file. Local checkouts are working copies that WRITE "
-        "THROUGH by default: `keel_backtest_run` and the `keel_live_deploy` "
-        "preview push unpushed local edits automatically and pin to the new "
-        "commit (`auto_push=false` opts out and raises `local_ahead`). "
-        "Server-side edits (`keel_strategy_compose`) write back into a "
-        "same-machine checkout; elsewhere `keel_strategy_status` detects "
-        "staleness by hash and says to run `keel_strategy_pull`. A true "
-        "conflict (local edited AND server moved) STOPS with a "
-        "`sync_conflict` envelope carrying three-way hashes plus options "
-        "`pull_force` | manual merge via `keel_strategy_diff` | pin "
-        "`commit_id` — never auto-merged, never force-pushed. Commits carry "
-        "surface attribution: `keel_strategy_log` shows 'modified via "
-        "claude.ai, 2h ago'."
-    )
-    live_block = (
-        "LIVE READ — `keel_live_monitor` is visible by default for existing "
-        "deployments. Read `keel_live_monitor.freshness` before interpreting "
-        "live data; positions are exchange snapshots, while portfolio/history "
-        "views are recorded backend state. "
-        "LIVE WRITE — deploy/control tools require explicit user request and "
-        "`live-write` toolset opt-in. Load `deploy-and-monitor`, call "
-        "`keel_accounts_list`, preview with `keel_live_deploy`, show the "
-        "preview, then deploy only with the returned `confirmation_token` plus "
-        "host/CLI confirmation and local arming."
-    )
-    skills_block = (
-        "SKILLS — load deep workflow guidance BEFORE composing or iterating. "
-        "This server exposes 8 MCP prompts under the `keel-skill` tag (see "
-        "`prompts/list`): `strategy-creation`, `strategy-fork-and-iterate`, "
-        "`backtest-and-analyze`, `component-discovery`, `deploy-and-monitor`, "
-        "`portfolio-review`, `overfit-check`, `recover-from-error`. Each "
-        "auto-loads the matching knowledge sections inline (the same knowledge "
-        "chat-api keeps always-on). INVOKE `strategy-creation` BEFORE the "
-        "first `keel_strategy_compose`; `backtest-and-analyze` before "
-        "`keel_backtest_run`; `recover-from-error` when a tool keeps failing. "
-        "DEBUG: read the structured error envelope first; use "
-        "`recover-from-error`, `keel_doctor`, and `keel_audit_list_last`."
-    )
-    surface_hint = (
-        (
-            "SURFACE — this hosted server is file-free: workspace tools "
-            "(checkout/push/pull/status/discard/workspaces) and "
-            "`keel_auth_login` are not registered here; authentication is "
-            "your MCP client's OAuth flow. For file-based work, install "
-            "the CLI (`pipx install keel-trade`). For charts and visual "
-            "review, `keel_open_in_app` returns the canonical web-app "
-            "URL. Per-surface guide: https://usekeel.io/agents"
-        )
-        if hosted
-        else (
-            "SURFACE — for charts and visual review, run `keel open "
-            "backtest <id>` (CLI) or call `keel_open_in_app` for the "
-            "canonical web-app URL. Live management from chat without a "
-            "local install: the hosted endpoint "
-            "https://mcp.usekeel.io/mcp. Per-surface guide: "
-            "https://usekeel.io/agents"
+    profile = "full-hosted" if hosted else "full-local"
+    return _assemble.instructions(profile, live_write_loaded=live_write_loaded)
+
+
+def _bundled_knowledge_sections() -> tuple[str, ...]:
+    """Every bundled knowledge section stem, read from the directory.
+
+    W2 §5 S4: the resource docstring used to carry a hand-typed list of
+    13 names while 18 files shipped. Reading the directory is the fix —
+    the enumeration cannot disagree with what is served.
+    """
+    from importlib import resources
+
+    return tuple(
+        sorted(
+            f.name.removesuffix(".md")
+            for f in resources.files("keel.data").joinpath("knowledge").iterdir()
+            if f.name.endswith(".md")
         )
     )
 
-    parts = [
-        load_operating_core().rstrip(),
-        _MCP_SURFACE,
-        auth_block,
-        state_model_full,
-        live_block,
-        skills_block,
-    ]
-    if not live_write_loaded:
-        parts.append(
-            "Live write tools (deploy/control) are NOT loaded under the default "
-            "toolset. Set "
-            "`KEEL_TOOLSETS=read-only,backtest,share,live-read,live-write` "
-            "to opt in. `live` remains a deprecated alias for both live-read "
-            "and live-write."
-        )
-    parts.append(surface_hint)
-    return "\n\n".join(parts)
+
+# URIs of the resources that read the SERVER MACHINE's filesystem. They
+# exist only where the server machine is the user's machine.
+LOCAL_FILESYSTEM_CONTEXT_URIS: tuple[str, ...] = (
+    "keel://context/user",
+    "keel://context/project",
+)
+
+
+def serves_local_filesystem_context() -> bool:
+    """Whether this server registers the local-filesystem context resources.
+
+    ``keel://context/user`` reads ``~/.keel/context.md`` and
+    ``keel://context/project`` reads ``keel.md`` / ``CLAUDE.md`` from the
+    process cwd. On the user's own machine (CLI, stdio MCP, the .mcpb
+    bundle) that is the user's context. On a hosted server
+    (``KEEL_EXECUTION_MODE=hosted`` — services/mcp-server always sets it)
+    or the directory-listed profile (``KEEL_SERVER_PROFILE=listed``) it
+    would be the POD's home directory and working directory: always absent
+    today, but a server-filesystem read on a shared connector serves
+    whatever file an image ever ships there to every caller, and reads as a
+    data-exposure path to a directory reviewer. So neither is registered
+    there (S-5). Per-strategy context (``keel://context/strategy/{id}``)
+    reads through the Keel API as the caller and stays on every profile.
+    """
+    from keel.hosting import is_hosted
+    from keel.tools.outcomes._toolsets import is_listed_profile
+
+    return not (is_hosted() or is_listed_profile())
+
+
+def _local_context_payload(entry) -> str:
+    return json.dumps(
+        {
+            "layer": entry.layer,
+            "source": str(entry.source) if entry.source else None,
+            "exists": entry.exists,
+            "body": entry.body,
+        },
+        default=str,
+    )
+
+
+def _register_local_context_resources(mcp: "FastMCP") -> None:
+    """Register the two local-filesystem context layers (local mode only —
+    see :func:`serves_local_filesystem_context`)."""
+
+    @mcp.resource("keel://context/user")
+    def user_context_resource() -> str:
+        """Global user context (`~/.keel/context.md`) — preferences,
+        default universe, custom prompt fragments. Read on session
+        start by the agent (per spec §9.2)."""
+        from keel.context import read_user_context
+
+        return _local_context_payload(read_user_context())
+
+    @mcp.resource("keel://context/project")
+    def project_context_resource() -> str:
+        """Project-level context (`<cwd>/keel.md` or the `## Keel` block
+        in `CLAUDE.md`) — repo-specific preferences (per spec §9.1)."""
+        from keel.context import read_project_context
+
+        return _local_context_payload(read_project_context())
+
+
+def ownership_resource_payload(strategy_id: str) -> str:
+    """Body of the ``keel://ownership/strategy/{id}`` resource.
+
+    Module-level (not a closure inside ``create_server``) so it can be driven
+    directly by tests — the resource's registration is trivial, its behaviour
+    is not.
+    """
+    import os
+
+    from keel.tools.outcomes import _ownership
+    from keel.tools.outcomes._base import ToolContext
+
+    # Honor KEEL_APP_URL like _cli_adapter and _mcp_adapter do; a bare
+    # ToolContext() would point every staging reader at prod URLs.
+    app_url = os.environ.get("KEEL_APP_URL")
+    ctx = ToolContext(app_url=app_url) if app_url else ToolContext()
+
+    fetch = _ownership.fetch_projection(ctx, strategy_id)
+    out: dict = {"strategy_id": strategy_id}
+    if fetch.projection is not None:
+        out["projection"] = fetch.projection
+        out.update(_ownership.ownership_envelope_fields(fetch.projection))
+        return json.dumps(out, default=str)
+    # Honest unavailability with its reason — never a fabricated
+    # 'not_started' projection (Q-0500). A strategy with no ownership work at
+    # all is NOT this branch: keel-api answers that with a real projection
+    # whose session_id is null (spec 20 §2.4 N1).
+    out.update(_ownership.projection_unavailable_fields(fetch))
+    return json.dumps(out, default=str)
 
 
 # Skills excluded from the listed-profile prompt surface — their bodies
@@ -572,21 +529,22 @@ def _register_skill_prompts(mcp: "FastMCP") -> None:
     `add_prompt` to register one prompt per skill. The prompt name is
     the skill's canonical name; the description is the skill's
     short description; the body lazy-loads via `compose_skill()`.
+
+    A skill that fails to parse fails server startup, loudly, naming the
+    skill (`keel.skills._parse` raises ``ValueError``). It used to be caught
+    here and the server came up serving NO prompts — a silent fallback
+    (`.claude/rules/lessons.md`) that hid a packaging defect behind a
+    healthy-looking server whose method layer had vanished (05 R-L2). Every
+    bundled skill ships in the wheel and is parsed by the test suite, so a
+    parse failure is a build error, never a runtime condition.
     """
     from keel.skills import BUNDLED_SKILLS, compose_skill, list_skills
     from keel.tools.outcomes._toolsets import is_listed_profile
 
-    try:
-        skills_map = list_skills()
-    except Exception:  # noqa: BLE001 — skill parse failure at startup → serve no prompts, tools still work
-        # If skill parsing fails at server startup, fall back to no
-        # prompts rather than crashing the server. Tools still work.
-        return
+    skills_map = list_skills()
 
     for name in BUNDLED_SKILLS:
-        sk = skills_map.get(name)
-        if sk is None:
-            continue
+        sk = skills_map[name]
         if is_listed_profile() and name in LISTED_EXCLUDED_SKILLS:
             # The listed registration exposes no deploy workflow —
             # its guidance would route to tools absent from the
@@ -602,7 +560,7 @@ def _register_skill_prompts(mcp: "FastMCP") -> None:
             _handler.__name__ = f"skill_{skill_name.replace('-', '_')}"
             _handler.__doc__ = (
                 f"Keel agent skill: {skill_name}. "
-                f"Composes frontmatter + knowledge sections + workflow body. "
+                f"Composes frontmatter + reference index + workflow body. "
                 f"Trigger: {' '.join(sk.trigger.split())[:200]}"
             )
             return _handler

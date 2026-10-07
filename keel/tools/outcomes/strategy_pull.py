@@ -14,6 +14,7 @@ from keel.errors import KeelError
 
 from . import register
 from ._base import OutcomeResult, OutcomeTool, ToolContext
+from .open_in_app import app_url_for
 
 
 def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
@@ -62,7 +63,7 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
         next_hints = [
             "Local working copy is now at server HEAD.",
             "Open the file in your editor to see changes.",
-            "Use `keel_strategy_log` to see what changed since your last checkout.",
+            "Use `keel_strategy_history` to see what changed since your last checkout.",
         ]
     elif status == "current":
         next_hints = [
@@ -90,7 +91,7 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
     }
     return OutcomeResult(
         run_id=resolved_id,
-        hero_url=f"{ctx.app_url}/strategies/{resolved_id}"
+        hero_url=app_url_for("strategy", resolved_id, ctx)
         if resolved_id
         else f"{ctx.app_url}/strategies",
         share_url=None,
@@ -118,7 +119,7 @@ STRATEGY_PULL = register(
             "locally; check `keel_strategy_status` first to see whether a "
             "pull is even needed. "
             "Do NOT use to send local edits UP — call `keel_strategy_push`. "
-            "Do NOT use to inspect what changed — call `keel_strategy_log`."
+            "Do NOT use to inspect what changed — call `keel_strategy_history`."
         ),
         input_schema={
             "type": "object",
@@ -144,7 +145,7 @@ STRATEGY_PULL = register(
             "readOnlyHint": False,  # writes to local filesystem
             "destructiveHint": False,
             "idempotentHint": True,  # pulling twice gives the same result
-            "openWorldHint": True,
+            "openWorldHint": False,
         },
         handler=_handler,
     )

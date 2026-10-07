@@ -1,13 +1,14 @@
-"""`keel_components_compose_help` — full schema for one component.
+"""`keel_components_get` — full schema for one component.
 
 Per spec §4 (lines 280-281): collapses `strategy_component_detail` +
 the per-component slice of `dsl_reference` / `strategy_examples` /
 `composition_patterns` into one tool the agent calls once it knows
 which component it wants to wire up.
 
-For 0.3.0 the data source is the bundled `keel/data/registry.json`.
-Phase 2C migrates to `GET /v1/components/{name}`; the handler tries
-the API first and falls back to bundled so the migration is local.
+The data source is the bundled `keel/data/registry.json`. The planned
+`GET /v1/components/{name}` endpoint never shipped; the handler still
+tries the API first and falls back to bundled, so bundled data is the
+path in practice.
 
 Do NOT use to discover components — use `keel_components_search`.
 """
@@ -20,6 +21,8 @@ from keel.errors import KeelError, NotFoundError
 
 from . import register
 from ._base import OutcomeResult, OutcomeTool, ToolContext
+from ._param_range import RANGE_NOTE, param_range
+from ._surface_hints import usage_hint
 
 
 def _extract_examples(detail: dict) -> list[str]:
@@ -115,13 +118,13 @@ def _clock_block(detail: dict) -> dict | None:
     `declaration_refs` says whether that parameter is wired to `Globals`
     (so it tracks the declaration) or must be passed explicitly.
     """
-    from keel.data.registry import clock_direction_of
+    from keel.data.registry import clock_direction_of, clock_transfer_of
 
     direction = clock_direction_of(detail)
     if direction == "keep":
         return None
 
-    transfer = detail.get("clock_transfer") or {}
+    transfer = clock_transfer_of(detail) or {}
     src = transfer.get("src")
     decl_refs = detail.get("declaration_refs") or {}
     optional_refs = detail.get("optional_declaration_refs") or {}
@@ -162,16 +165,32 @@ def _shape_detail(detail: dict) -> dict:
     return _shape_detail_base(detail)
 
 
+def _with_ranges(parameters: list) -> tuple[list, bool]:
+    """Each parameter plus its labelled ``range`` (Q-2242), copied — the
+    registry cache's dicts are never mutated. Returns whether any carried one."""
+    out: list = []
+    any_range = False
+    for p in parameters:
+        if isinstance(p, dict):
+            rng = param_range(p.get("constraints"))
+            if rng is not None:
+                p = {**p, "range": rng}
+                any_range = True
+        out.append(p)
+    return out, any_range
+
+
 def _shape_detail_base(detail: dict) -> dict:
     """The clock-independent part of the outcome shape."""
-    return {
+    parameters, any_range = _with_ranges(detail.get("parameters") or [])
+    shaped = {
         "name": detail.get("name"),
         "category": detail.get("category"),
         "sub_category": detail.get("sub_category"),
         "description": (detail.get("description") or "").strip(),
         "input_type": detail.get("input_type"),
         "output_type": detail.get("output_type"),
-        "parameters": detail.get("parameters") or [],
+        "parameters": parameters,
         "param_constraints": detail.get("param_constraints") or [],
         "usage_hint": detail.get("usage_hint"),
         "deterministic": detail.get("deterministic"),
@@ -181,21 +200,133 @@ def _shape_detail_base(detail: dict) -> dict:
         "examples": _extract_examples(detail),
         "pitfalls": _extract_pitfalls(detail),
     }
+    if any_range:
+        shaped["range_note"] = RANGE_NOTE
+    shaped.update(_position_block(detail))
+    shaped.update(deprecation_record(detail))
+    return shaped
+
+
+#: The clock a factory's documented example is expanded on (a ``window=``
+#: needs one); stated in the ``expands_to_note`` so the text is never read
+#: as clock-independent.
+_EXAMPLE_CLOCK = ("1h", 60)
+
+
+def _position_block(detail: dict) -> dict:
+    """The position-layer declarations (spec 03-R62), keep-by-omission.
+
+    ``binding`` (the role), ``trade_safe`` (this latest version's
+    certification), ``preserves_size``; for a registered factory its
+    ``factory_expansion`` template and ``expands_to`` — the long form, as DSL
+    text, of the documented example arguments (03-R51).
+    """
+    out: dict[str, Any] = {}
+    for key in ("binding", "trade_safe", "preserves_size", "factory_expansion"):
+        if detail.get(key) is not None and detail.get(key) is not False:
+            out[key] = detail[key]
+    template = detail.get("factory_expansion")
+    if template:
+        example = next(iter(_extract_examples(detail)), None)
+        text = _expands_to(detail.get("name") or "", template, example)
+        if text is not None:
+            out["expands_to"] = text
+            out["expands_to_note"] = (
+                f"The long form of {example} on a {_EXAMPLE_CLOCK[0]} clock under a "
+                "TradeManager(prices='ohlcv'): what validation, the canvas and the "
+                "compiled strategy hold."
+            )
+    return out
+
+
+def _expands_to(name: str, template: list, example: str | None) -> str | None:
+    """Render a factory's expansion at its example's literal arguments."""
+    import ast
+
+    from pipeline_engine.binding import expand_factory
+
+    if not example:
+        return None
+    try:
+        call = ast.parse(example.strip(), mode="eval").body
+    except SyntaxError:
+        return None
+    if not isinstance(call, ast.Call) or getattr(call.func, "id", None) != name:
+        return None
+    args = {kw.arg: ast.literal_eval(kw.value) for kw in call.keywords if kw.arg}
+    steps = expand_factory(
+        name,
+        template,
+        args,
+        kappa_minutes=_EXAMPLE_CLOCK[1],
+        kappa_token=_EXAMPLE_CLOCK[0],
+        prices_slot="ohlcv",
+    )
+    return _render_steps(steps)
+
+
+def _render_steps(steps: list) -> str:
+    parts: list[str] = []
+    for st in steps:
+        if "parallel" in st:
+            inner = ", ".join(f"{k!r}: [{_render_steps(v)}]" for k, v in st["parallel"].items())
+            parts.append("{" + inner + "}")
+        elif "load" in st:
+            parts.append(f"Load({st['load']!r})")
+        else:
+            kw = ", ".join(f"{k}={v!r}" for k, v in st["params"].items())
+            parts.append(f"{st['component']}({kw})")
+    return ", ".join(parts)
+
+
+def deprecation_record(detail: dict) -> dict:
+    """A deprecated component's full deprecation record (position-layer 04-R26).
+
+    ``replacement`` (the successor's name), ``replacement_shape`` (``{head,
+    text, recipe}`` — the agent-facing line and the recipe id; the DSL
+    fragments stay in the bundled registry for the planner) and
+    ``known_issue`` (``{id, summary}``). Empty for an active component and
+    keep-by-omission for each key, so every other record is byte-identical.
+    """
+    if detail.get("status") != "deprecated":
+        return {}
+    out: dict = {}
+    if detail.get("replacement"):
+        out["replacement"] = detail["replacement"]
+    shape = detail.get("replacement_shape")
+    if isinstance(shape, dict) and shape.get("head"):
+        out["replacement_shape"] = {
+            k: shape.get(k) for k in ("head", "text", "recipe") if shape.get(k) is not None
+        }
+    issue = detail.get("known_issue")
+    if isinstance(issue, dict) and issue.get("id"):
+        out["known_issue"] = {"id": issue.get("id"), "summary": issue.get("summary")}
+    return out
 
 
 def _detail_via_api(ctx: ToolContext, name: str) -> dict | None:
     """Try `GET /v1/components/{name}`; return None on any failure.
 
-    Phase 2C will land this endpoint. Until then we silently fall back
-    so unauthenticated and offline callers keep working.
+    The endpoint exists (it needs `component.read`, which the anonymous tier
+    has since Q-2494) and returns the server's CURRENT record; on None the
+    bundled registry answers, which is this wheel's release snapshot and can
+    trail the server's versions (Q-2500). Offline callers keep working.
     """
     try:
         client = ctx.get_client()
     except Exception:  # noqa: BLE001
         return None
+    if not client.has_credentials:
+        # Q-2494: a lookup the bundle answers never mints an anonymous
+        # workspace (each mint spends the network's daily allowance).
+        return None
 
     try:
         resp = client.get(f"/v1/components/{name}")
+    except KeelError as exc:
+        if exc.error_code == "rate_limited":
+            raise  # Q-2494: a 429 is the caller's to see, never a silent fallback
+        return None
     except Exception:  # noqa: BLE001 — component detail fetch best-effort → None on failure
         return None
 
@@ -206,17 +337,23 @@ def _detail_via_api(ctx: ToolContext, name: str) -> dict | None:
 
 def _detail_bundled(name: str) -> dict:
     """Read one component from the bundled registry. Raises on miss."""
-    from keel.data.registry import get_component_detail
+    from keel.data.registry import get_component_detail, get_components_dump
+    from pipeline_engine.dsl.component_names import (
+        render_component_name_suggestion,
+        suggest_component_names,
+    )
 
     try:
         return get_component_detail(name)
     except KeyError as e:
+        # The one hint owner (Q-2449): the real name for a case slip, a
+        # synonym or a spelled-out abbreviation, the recipe for a pattern
+        # name the docs teach (`EWMAC`), else an honest no-match.
+        names = [c["name"] for c in get_components_dump()]
+        hint = render_component_name_suggestion(name, suggest_component_names(name, names))
         raise NotFoundError(
             f"Component {name!r} not found in registry.",
-            suggestion=(
-                "Run `keel_components_search` to list available components. "
-                "Component names are case-sensitive (e.g. `RSI`, not `rsi`)."
-            ),
+            suggestion=f"{hint} Run `keel_components_search` to list available components.",
         ) from e
 
 
@@ -227,7 +364,10 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
             "Missing required `name` argument.",
             error_code="missing_name",
             exit_code=2,
-            suggestion="Pass a component name, e.g. `keel components compose-help RSI`.",
+            suggestion=usage_hint(
+                "Pass a component name, e.g. `keel components compose-help RSI`.",
+                'Pass a component name, e.g. `name="RSI"`; `keel_components_search` finds names.',
+            ),
         )
 
     detail = _detail_via_api(ctx, name)
@@ -247,27 +387,21 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
 
 COMPONENTS_COMPOSE_HELP = register(
     OutcomeTool(
-        name="keel_components_compose_help",
+        name="keel_components_get",
         required_action="component.read",
         cli_path=("components", "compose-help"),
         toolset="read-only",
-        # grounded-in: tool_usage.md:27 (single-component detail is the
-        # right call for a lone edit); collaboration.md §7 (read the full
-        # param list incl. slot params before wiring a component in).
+        # grounded-in: system/chat/tool_usage.md:23 (single-component detail
+        # is the call for a lone edit); system/chat/collaboration.md:77-79
+        # (§6 — read the full param list incl. slot params before wiring a
+        # component in).
         description=(
-            "Fetch the full schema/detail contract for ONE known pipeline "
-            "component: parameter list, type signature, slot reads/writes, "
-            "examples, and common pitfalls. Call this once discovery has "
-            "narrowed to a single component you're about to wire — use "
-            "`keel_components_search` first to find candidates, and "
-            "`keel_components_detail_batch` when you're verifying SEVERAL "
-            "at once. The returned contract is the source of truth for "
-            "authoring that component's `ComponentRef(...)`: read the exact "
-            "parameter names, types, and slot reads/writes here so the DSL "
-            "you pass to `keel_strategy_compose` fits on the first try, not "
-            "after a dry-run bounce. "
-            "Do NOT use to discover components — use `keel_components_search`. "
-            "Do NOT use to look up DSL syntax topics — call `keel_help`."
+            "Fetch the full contract for ONE known pipeline component — several at once "
+            "are `keel_components_get_many`. It carries the parameter list, type "
+            "signature, slot reads and writes, examples and common pitfalls: the exact "
+            "names, types and slots a `ComponentRef(...)` in the DSL passed to "
+            "`keel_strategy_compose` has to match. `name` is case-sensitive. Discovering "
+            "components is `keel_components_search`."
         ),
         input_schema={
             "type": "object",
@@ -275,13 +409,15 @@ COMPONENTS_COMPOSE_HELP = register(
             "properties": {
                 "name": {
                     "type": "string",
-                    "description": "Component name (case-sensitive), e.g. `RSI`, `RollingZScoreTransform`.",
+                    "description": (
+                        "Component name (case-sensitive), e.g. `RSI`, `RollingZScoreTransform`."
+                    ),
                     "x-cli-positional": True,
                 },
             },
         },
         annotations={
-            "title": "Component Composition Help",
+            "title": "Get Component",
             "readOnlyHint": True,
             "destructiveHint": False,
             "idempotentHint": True,

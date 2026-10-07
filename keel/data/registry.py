@@ -13,10 +13,12 @@ from importlib import resources
 from typing import Any
 
 from pipeline_engine.component_ranking import (  # noqa: F401  (re-exported)
+    deprecation_fields,
     rank_components,
     score_component,
     tokenize_name,
     tokenize_text,
+    visible,
 )
 
 
@@ -96,14 +98,37 @@ def clock_direction_for_op(op: str | None) -> str:
         ) from None
 
 
+def clock_transfer_of(comp: dict[str, Any]) -> dict | None:
+    """The declared `clock_transfer` of one component record, from either source.
+
+    The bundled `registry.json` carries it top-level (`build_data.py`);
+    keel-api's `GET /v1/components[/{name}]` serves it only per version
+    (`versions[<n>].clock_transfer`, Q-2205), so the API record's own
+    version — `latest`, else `version` — is read there (Q-2270: reading the
+    top-level key alone made every hosted component read as `keep`, and the
+    hosted results carried no `clock_direction` or `clock` block).
+    """
+    if "clock_transfer" in comp:
+        transfer = comp.get("clock_transfer")
+        return transfer if isinstance(transfer, dict) and transfer else None
+    versions = comp.get("versions")
+    version = comp.get("latest") if comp.get("latest") is not None else comp.get("version")
+    if isinstance(versions, dict) and version is not None:
+        entry = versions.get(str(version))
+        if isinstance(entry, dict):
+            transfer = entry.get("clock_transfer")
+            return transfer if isinstance(transfer, dict) and transfer else None
+    return None
+
+
 def clock_direction_of(comp: dict[str, Any]) -> str:
-    """The `clock_direction` of one registry record.
+    """The `clock_direction` of one registry record (bundled or keel-api).
 
     Derived from `clock_transfer` rather than read from the emitted
     `clock_direction` key so a stale bundled registry can never change
     filter behaviour; the freshness test asserts the two agree.
     """
-    return clock_direction_for_op((comp.get("clock_transfer") or {}).get("op"))
+    return clock_direction_for_op((clock_transfer_of(comp) or {}).get("op"))
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -122,6 +147,31 @@ def clock_direction_of(comp: dict[str, Any]) -> str:
 # module into the wheel's `pipeline_engine` subset, so the shipped SDK and
 # the monorepo execute the same bytes.
 # ─────────────────────────────────────────────────────────────────────────
+def keyword_matches(components: list[dict[str, Any]], keyword: str) -> list[dict[str, Any]]:
+    """The components ``keyword`` names: its text inside the NAME, or a word
+    of the DESCRIPTION that starts with it — name matches first.
+
+    A bare substring over descriptions matched inside words (Q-2273 L6):
+    ``ROC`` hit "process" and "procedure" in 49 components, so a
+    ``keyword`` + ``query`` search led with components that never mention
+    ROC and the keyword read as ignored. Case-insensitive.
+    """
+    import re
+
+    kw = keyword.strip().lower()
+    if not kw:
+        return list(components)
+    word_start = re.compile(r"(?<![a-z0-9])" + re.escape(kw))
+    name_matches = [c for c in components if kw in (c.get("name") or "").lower()]
+    named = {id(c) for c in name_matches}
+    desc_matches = [
+        c
+        for c in components
+        if id(c) not in named and word_start.search((c.get("description") or "").lower())
+    ]
+    return name_matches + desc_matches
+
+
 def search_components(
     *,
     keyword: str | None = None,
@@ -133,8 +183,14 @@ def search_components(
     query: str | None = None,
     top_k: int = 10,
     component_lock: dict[str, int] | None = None,
+    include_deprecated: bool = False,
 ) -> list[dict[str, Any]]:
     """Search components using bundled registry data.
+
+    A component whose latest version is deprecated is hidden unless
+    ``include_deprecated`` (position-layer spec 04-R28, the ONE shared
+    predicate ``component_ranking.visible``); a shown one carries ``status``
+    and ``replacement_text``. Lookups by name never filter.
 
     Supports keyword filtering, category filtering, type filtering, and
     `clock_direction` filtering (`keep` / `synth` / `resample` / `project`).
@@ -142,7 +198,7 @@ def search_components(
     `query` is provided.
     """
     data = _ensure_loaded()
-    results = list(data["components"])
+    results = [c for c in data["components"] if visible(c, include_deprecated)]
 
     # Apply filters
     if category:
@@ -168,15 +224,7 @@ def search_components(
         results = [c for c in results if clock_direction_of(c) == clock_direction]
 
     if keyword:
-        kw_lower = keyword.lower()
-        name_matches = []
-        desc_matches = []
-        for c in results:
-            if kw_lower in c.get("name", "").lower():
-                name_matches.append(c)
-            elif kw_lower in c.get("description", "").lower():
-                desc_matches.append(c)
-        results = name_matches + desc_matches
+        results = keyword_matches(results, keyword)
 
     # Score + order by query if provided
     if query:
@@ -215,6 +263,8 @@ def search_components(
         }
         if comp.get("sub_category"):
             entry["sub_category"] = comp["sub_category"]
+        entry.update(position_search_fields(comp))
+        entry.update(deprecation_fields(comp))
         # A distinguishing field, only where it distinguishes: the 10
         # clock-changing components carry it, the other ~174 `keep` ones
         # would just be noise in every result set.
@@ -224,6 +274,25 @@ def search_components(
         output.append(entry)
 
     return output
+
+
+def position_search_fields(comp: dict[str, Any]) -> dict[str, Any]:
+    """What a search result says a position component is (spec 03-R64).
+
+    ``position_role`` when the component declares one (``reader``,
+    ``action``, ``factory`` …) and ``trade_safe: true`` when its latest
+    version is certified to run on a trade window — keep-by-omission, so an
+    ordinary component's entry is unchanged. The ONE projection both search
+    paths (this bundled helper and the outcome tool's ``after``/``before``
+    path) use.
+    """
+    out: dict[str, Any] = {}
+    binding = comp.get("binding")
+    if isinstance(binding, dict) and binding.get("role"):
+        out["position_role"] = binding["role"]
+    if comp.get("trade_safe") is not None:
+        out["trade_safe"] = True
+    return out
 
 
 def get_component_detail(name: str, component_lock: dict[str, int] | None = None) -> dict[str, Any]:
@@ -248,7 +317,14 @@ def get_component_detail(name: str, component_lock: dict[str, int] | None = None
 
 
 def get_components_after(name: str) -> list[dict[str, Any]]:
-    """Find components that can follow the given component (by output type)."""
+    """Find components that can DIRECTLY follow the given component.
+
+    Reads the baked answer in ``type_graph.json`` — the live engine's
+    ``is_compatible()`` verdict, precomputed by ``scripts/build_data.py``
+    at regen (Q-0732). No string-matching or ``type_transitions``
+    expansion here: this must return the same set as
+    ``pipeline_engine.mcp.tools.strategy_components_after``.
+    """
     data = _ensure_loaded()
     type_graph = _load_json("type_graph.json")
 
@@ -262,16 +338,14 @@ def get_components_after(name: str) -> list[dict[str, Any]]:
         raise KeyError(f"Component '{name}' not found")
 
     output_type = comp["output_type"]
-
-    # Find all components that accept this output type
-    accepting_names = set(type_graph.get("input_type_to_names", {}).get(output_type, []))
-
-    # Also check type transitions for compatible types
-    transitions = data.get("type_transitions", {})
-    if output_type in transitions:
-        for _cat, out_types in transitions[output_type].items():
-            for ot in out_types:
-                accepting_names.update(type_graph.get("input_type_to_names", {}).get(ot, []))
+    # Position layer (spec 03-R65): a role-narrowed answer, baked per
+    # component, wins over the base-type one.
+    by_component = type_graph.get("successors_by_component", {})
+    accepting_names = set(
+        by_component[name]
+        if name in by_component
+        else type_graph["successors_by_output_type"][output_type]
+    )
 
     results = []
     for c in data["components"]:
@@ -292,7 +366,11 @@ def get_components_after(name: str) -> list[dict[str, Any]]:
 
 
 def get_components_before(name: str) -> list[dict[str, Any]]:
-    """Find components that can precede the given component (by input type)."""
+    """Find components that can DIRECTLY precede the given component.
+
+    Reads the baked live-engine answer in ``type_graph.json`` (see
+    ``get_components_after`` / Q-0732).
+    """
     data = _ensure_loaded()
     type_graph = _load_json("type_graph.json")
 
@@ -305,8 +383,12 @@ def get_components_before(name: str) -> list[dict[str, Any]]:
         raise KeyError(f"Component '{name}' not found")
 
     input_type = comp["input_type"]
-
-    outputting_names = set(type_graph.get("output_type_to_names", {}).get(input_type, []))
+    by_component = type_graph.get("predecessors_by_component", {})
+    outputting_names = set(
+        by_component[name]
+        if name in by_component
+        else type_graph["predecessors_by_input_type"][input_type]
+    )
 
     results = []
     for c in data["components"]:

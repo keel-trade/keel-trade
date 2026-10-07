@@ -1,216 +1,256 @@
-"""`keel_plan_status` — plan, limits, and remaining quota as numbers (spec 04 R2).
+"""`keel_plan_usage` — the caller's own plan, usage and reset (spec 04 R2, D-12).
 
-Read-only wrapper over ``GET /v1/me``: surfaces the server-computed
-``plan_status`` block — ``{plan, limits, remaining: {backtest_runs,
-compute_seconds, live_slots}, builder_fee_bps, upgrade_options}`` — whose
-every figure traces to the platform's enforcement sources
-(``libs/platform_auth/plans.yaml``, the enforced builder-fee schedule,
-and the ``/pricing.md`` price map). Numbers only; no marketing language
-in any output, on any surface.
+Read-only wrapper over ``GET /v1/me``. It returns EXACTLY:
 
-Per-surface policy (spec 04 R2/R3, research/08):
+* ``plan`` — the org's plan id (``free``, ``starter`` …);
+* ``period`` — the metering window the backtest units share (``weekly``),
+  or ``None`` when the server named none or the units disagree;
+* ``quota`` — one block per metered backtest unit, projected to
+  ``{unit, limit, used, remaining, resets_at}`` (the same projection
+  ``keel_backtest_run``'s ``quota`` carries);
+* ``talking_points`` — ONE neutral sentence::
 
-* ``manage_url`` (the billing page, where plan changes happen via the
-  EXISTING Stripe checkout — no new billing logic) plus the ``checkout``
-  pointer to ``POST /v1/billing/checkout`` are included on the CLI, the
-  local MCP, the unlisted hosted endpoint, and a listed registration
-  declared ``KEEL_LISTED_CLIENT=claude``.
-* On a listed registration declared ``chatgpt`` — or with NO declared
-  client (fail-safe default) — both are OMITTED and ``talking_points``
-  carry facts only, validated by the same honesty rules as the spec 03
-  handoff envelope (``_handoff.validate_talking_points`` — one
-  validator, no second shape).
+      Current plan: Free. This week: 46 of 50 backtest runs and 1,380 of
+      1,500 compute seconds remaining; resets Mon 29 Sep 00:00 UTC.
 
-Entitlements are org-level: after a human changes the plan, the SAME
-token immediately reads the new limits here — no re-auth (asserted at
-the API layer in keel-api's tests/test_plan_status.py).
+  and, only while the server reports a first-week allowance on the
+  ``backtest_runs`` block (connect-onboarding spec 01 §1.8/§1.9), a second
+  one — the only first-week wording on any agent surface::
+
+      154 of 200 first-week backtests left; they end Tue 13 Oct 15:02 UTC.
+
+That is the Lovable ``get_workspace`` shape: the caller's own state and
+nothing else (mcp-conversion D-12, 04 §4.3, founder ruling 2026-09-28).
+
+**Removed by D-12, and why.** ``upgrade_options`` (the other plans, their
+limits and — off the listed profile — their prices), ``builder_fee_bps``,
+``manage_url`` / ``hero_url`` (the billing tab, whose plan buttons start
+Stripe Checkout), ``live_slots`` (live capacity is not a research-surface
+fact), and the "plan changes are an account action …" and "doing nothing is
+also fine" points. OpenAI rejected Keel v1.0.0 for "commerce for disallowed
+offerings" while this tool listed the other plans (Q-2080). keel-api still
+serves every one of those numbers (D-10: the API carries numbers); this
+tool simply never projects them — an allow-list, so a future server field
+cannot leak onto a surface whose policy was not reviewed for it.
+
+Entitlements are org-level: after a human changes the plan, the SAME token
+immediately reads the new limits here — no re-auth (asserted at the API
+layer in keel-api's tests/test_plan_status.py).
 """
 
 from __future__ import annotations
 
 from typing import Any
 
+from keel.errors import (
+    assert_neutral_wall_text,
+    format_reset_instant,
+    plan_display_name,
+    project_first_week,
+    quota_reset_instant,
+    render_first_week_sentence,
+)
+
 from . import register
 from ._base import OutcomeResult, OutcomeTool, ToolContext
 from ._handoff import validate_talking_points
-from ._toolsets import manage_links_allowed
 
 
 # INT_MAX sentinel platform_auth uses for unlimited grants (config.UNLIMITED).
 _UNLIMITED_SENTINEL = 2147483647
 
-# Entitlement unit → spec 04 R2 key, for the degraded (older-API) path only.
-_FALLBACK_UNIT_KEYS = {
-    "backtest_runs": "backtest_runs",
-    "backtest_compute_seconds": "compute_seconds",
-    "live_strategies_max": "live_slots",
+#: The metered research units this tool reports, in talking-point order, with
+#: the label the sentence reads. plans.yaml unit names — the vocabulary the
+#: served `quotas` blocks, the /v1/me balances and `keel_backtest_run`'s
+#: `quota` all speak. `live_strategies_max` (a cap) and `ai_messages` (the
+#: in-app chat's allowance) are deliberately absent (D-12).
+_UNITS: tuple[tuple[str, str], ...] = (
+    ("backtest_runs", "backtest runs"),
+    ("backtest_compute_seconds", "compute seconds"),
+)
+
+#: The per-unit projection — identical to `backtest_run.QUOTA_BLOCK_KEYS`.
+#: `first_week` is present only while a first-week allowance is active
+#: (spec 01 §1.8) and is itself projected to `errors.FIRST_WEEK_KEYS`.
+_BLOCK_KEYS: tuple[str, ...] = ("unit", "limit", "used", "remaining", "resets_at", "first_week")
+
+#: The top-level key set, exactly (pinned by test_outcomes_plan_status).
+RESULT_KEYS: frozenset[str] = frozenset({"plan", "period", "quota", "talking_points"})
+
+_PERIOD_PHRASES: dict[str, str] = {
+    "daily": "Today",
+    "weekly": "This week",
+    "monthly": "This month",
 }
 
-_BILLING_PATH = "/settings?tab=billing"
 
+def _served_blocks(me: dict) -> dict[str, dict[str, Any]]:
+    """Per-unit quota blocks, keyed by unit, from whichever place the server
+    sent them — both read verbatim, neither invented:
 
-def _fallback_remaining(entitlements: list[Any]) -> dict[str, int | str]:
-    """Remaining counters from the /v1/me entitlement balances, for
-    servers that predate the plan_status block. Same vocabulary, same
-    balance math (consumable → available; cap → granted − cap_current);
-    nothing here invents a number the server didn't send."""
-    remaining: dict[str, int | str] = {}
-    for bal in entitlements:
-        if not isinstance(bal, dict):
-            continue
-        key = _FALLBACK_UNIT_KEYS.get(bal.get("unit"))
-        if key is None:
+    1. ``plan_status.quotas`` — the served ``QuotaView`` wire blocks (limit,
+       used, remaining, period, reset), the one computation owner;
+    2. the ``/v1/me`` entitlement balances, for a keel-api older than that
+       block: ``granted`` → limit, ``spent + reserved`` → used (the
+       ``QuotaView`` definition), ``available`` → remaining.
+
+    An unlimited unit reads ``"unlimited"`` for its limit and remaining —
+    never the INT_MAX sentinel.
+    """
+    out: dict[str, dict[str, Any]] = {}
+    wanted = {unit for unit, _ in _UNITS}
+    ps = me.get("plan_status")
+    served = ps.get("quotas") if isinstance(ps, dict) else None
+    if isinstance(served, list) and served:
+        for block in served:
+            if not isinstance(block, dict) or block.get("unit") not in wanted:
+                continue
+            if block.get("unlimited"):
+                out[block["unit"]] = {
+                    "unit": block["unit"],
+                    "limit": "unlimited",
+                    "remaining": "unlimited",
+                }
+                continue
+            out[block["unit"]] = dict(block)
+        return out
+    for bal in me.get("entitlements") or []:
+        if not isinstance(bal, dict) or bal.get("unit") not in wanted:
             continue
         granted = bal.get("granted")
-        if granted is None:
+        if not isinstance(granted, int):
             continue
+        unit = bal["unit"]
         if granted >= _UNLIMITED_SENTINEL:
-            remaining[key] = "unlimited"
-        elif bal.get("type") == "cap":
-            remaining[key] = max(0, granted - (bal.get("cap_current") or 0))
-        else:
-            remaining[key] = bal.get("available", 0)
-    return remaining
+            out[unit] = {"unit": unit, "limit": "unlimited", "remaining": "unlimited"}
+            continue
+        block: dict[str, Any] = {"unit": unit, "limit": granted}
+        spent, reserved = bal.get("spent"), bal.get("reserved")
+        if isinstance(spent, int):
+            block["used"] = spent + (reserved if isinstance(reserved, int) else 0)
+        if isinstance(bal.get("available"), int):
+            block["remaining"] = bal["available"]
+        for key in ("period", "resets_at", "first_week"):
+            if bal.get(key) is not None:
+                block[key] = bal[key]
+        out[unit] = block
+    return out
 
 
-def _facts_talking_points(plan: Any, limits: dict | None, remaining: dict | None) -> list[str]:
-    """Facts-only talking points for upsell-suppressed surfaces.
+def _project(block: dict[str, Any]) -> dict[str, Any]:
+    """One served block projected to :data:`_BLOCK_KEYS`."""
+    out = {k: block[k] for k in _BLOCK_KEYS if k in block and k != "first_week"}
+    first_week = project_first_week(block.get("first_week"))
+    if first_week:
+        out["first_week"] = first_week
+    return out
 
-    Numbers come verbatim from the API response; the lines name the
-    human-only nature of plan changes and the do-nothing alternative,
-    and are validated by the SAME honesty rules as the spec 03 handoff
-    envelope (no second shape, per the M3.1 adoption note)."""
+
+def _shared_period(blocks: list[dict[str, Any]]) -> str | None:
+    """The one metering window the units share, or ``None``."""
+    periods = {b.get("period") for b in blocks if b.get("limit") != "unlimited"}
+    periods.discard(None)
+    return periods.pop() if len(periods) == 1 else None
+
+
+def _amount(n: Any) -> str:
+    return f"{n:,}" if isinstance(n, int) and not isinstance(n, bool) else str(n)
+
+
+def _talking_point(plan: Any, period: str | None, blocks: list[dict[str, Any]]) -> str:
+    """The ONE neutral sentence (D-12 §4.3, exact shape)::
+
+        Current plan: Free. This week: 46 of 50 backtest runs and 1,380 of
+        1,500 compute seconds remaining; resets Mon 29 Sep 00:00 UTC.
+
+    Numbers verbatim from the server; a unit it did not send is omitted,
+    and the reset clause appears only when it sent an instant (Q-1597: a
+    client-side guess at a period boundary is a lie).
+    """
+    labels = dict(_UNITS)
     facts: list[str] = []
-    for key, label in (
-        ("backtest_runs", "backtest runs"),
-        ("compute_seconds", "backtest compute seconds"),
-        ("live_slots", "live strategy slots"),
-    ):
-        if remaining and key in remaining:
-            limit = (limits or {}).get(key)
-            if limit is not None:
-                facts.append(f"{remaining[key]} of {limit} {label} remaining")
-            else:
-                facts.append(f"{remaining[key]} {label} remaining")
-    usage_line = f"Current plan: {plan}."
+    for block in blocks:
+        label = labels[block["unit"]]
+        if block.get("limit") == "unlimited":
+            facts.append(f"unlimited {label}")
+        elif isinstance(block.get("remaining"), int) and isinstance(block.get("limit"), int):
+            facts.append(f"{_amount(block['remaining'])} of {_amount(block['limit'])} {label}")
+    name = plan_display_name(plan) or "unknown"
+    sentence = f"Current plan: {name}."
     if facts:
-        usage_line += " This period: " + "; ".join(facts) + "."
-    points = [
-        usage_line,
-        (
-            "Plan changes are a billing action performed by a human in the "
-            "Keel account settings; they cannot be made from this chat."
-        ),
-        (
-            "Doing nothing is also fine — the current plan keeps working "
-            "and existing strategies, backtests, and results stay available."
-        ),
-    ]
-    return validate_talking_points(points)
+        window = _PERIOD_PHRASES.get(str(period or ""), "This period")
+        sentence += f" {window}: {' and '.join(facts)} remaining"
+        instants = []
+        for block in blocks:
+            when = quota_reset_instant(block)
+            if when is not None and when not in instants:
+                instants.append(when)
+        if instants:
+            sentence += "; resets " + ", ".join(format_reset_instant(w) for w in instants)
+        sentence += "."
+    return sentence
 
 
 def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
     me = ctx.get_client().get("/v1/me")
     if not isinstance(me, dict):
         me = {}
-    org = me.get("org") or {}
     ps = me.get("plan_status")
-    allowed = manage_links_allowed()
+    plan = ps.get("plan") if isinstance(ps, dict) and ps.get("plan") else None
+    if plan is None:
+        org = me.get("org") if isinstance(me.get("org"), dict) else {}
+        plan = org.get("plan")
 
-    body: dict[str, Any] = {}
-    if isinstance(ps, dict):
-        # Explicit field projection on every surface: a future server
-        # field can never leak onto a surface whose policy wasn't
-        # reviewed for it (the suppression is an allow-list, not a
-        # strip-list).
-        body["plan"] = ps.get("plan")
-        body["builder_fee_bps"] = ps.get("builder_fee_bps")
-        body["limits"] = ps.get("limits")
-        body["remaining"] = ps.get("remaining")
-        body["upgrade_options"] = [
-            {k: option.get(k) for k in ("plan", "price", "what_changes")}
-            for option in (ps.get("upgrade_options") or [])
-            if isinstance(option, dict)
-        ]
-        manage_url = ps.get("manage_url") or f"{ctx.app_url}{_BILLING_PATH}"
-    else:
-        # Older keel-api without plan_status: report what /v1/me does
-        # carry (plan + entitlement balances). Prices, limits tables, and
-        # fee schedule are server-sourced numbers — absent server support
-        # they are OMITTED, never reconstructed client-side.
-        body["plan"] = org.get("plan")
-        body["remaining"] = _fallback_remaining(me.get("entitlements") or [])
-        body["note"] = (
-            "this keel-api version does not provide plan pricing fields; "
-            "limits, builder fee, and other-plan details are unavailable "
-            "here — see the platform's pricing.md"
-        )
-        manage_url = f"{ctx.app_url}{_BILLING_PATH}"
-
-    if allowed:
-        body["manage_url"] = manage_url
-        # spec 04 R3: plan changes ride the EXISTING checkout endpoint —
-        # this is a pointer to it, not new billing logic. Card entry and
-        # payment happen on the hosted Stripe page, never through an agent.
-        body["checkout"] = {
-            "endpoint": "POST /v1/billing/checkout",
-            "body": {"plan": "<plan>", "billing_cycle": "monthly | annual"},
-            "returns": (
-                "checkout_url — a hosted Stripe checkout page on Keel's "
-                "domain; a human completes payment there"
-            ),
-            "note": (
-                "orgs with an active subscription change plans via "
-                "POST /v1/billing/upgrade instead; entitlements apply to "
-                "the org immediately, so the same token sees the new "
-                "limits without re-authentication"
-            ),
-        }
-    else:
-        body["talking_points"] = _facts_talking_points(
-            body.get("plan"), body.get("limits"), body.get("remaining")
-        )
-
-    return OutcomeResult(
-        run_id=None,
-        hero_url=manage_url if allowed else None,
-        share_url=None,
-        extra=body,
+    served = _served_blocks(me)
+    blocks = [served[unit] for unit, _ in _UNITS if unit in served]
+    period = _shared_period(blocks)
+    points = [_talking_point(plan, period, blocks)]
+    # The first-week sentence (spec 01 §1.9): always here when the server
+    # reports the allowance on the backtest-runs block — the compute unit's
+    # block carries one too, but the sentence counts backtests.
+    if "backtest_runs" in served:
+        first_week = render_first_week_sentence(served["backtest_runs"].get("first_week"))
+        if first_week:
+            points.append(first_week)
+    # The same validator and D-12 scan as every wall: no other plan, no
+    # price, no destination, no expiry urgency. A neutral fact proposes no
+    # action, so there is no do-nothing line to require.
+    talking_points = validate_talking_points(
+        [assert_neutral_wall_text(p, free_plan=False) for p in points],
+        require_do_nothing=False,
     )
+
+    body: dict[str, Any] = {
+        "plan": plan,
+        "period": period,
+        "quota": [_project(b) for b in blocks],
+        "talking_points": talking_points,
+    }
+    return OutcomeResult(run_id=None, hero_url=None, share_url=None, extra=body)
 
 
 PLAN_STATUS = register(
     OutcomeTool(
-        name="keel_plan_status",
-        # Lowest consent bucket (read — same as keel_status/keel_doctor):
+        name="keel_plan_usage",
+        # Lowest consent bucket (read — same as keel_account_status/keel_connection_check):
         # plan visibility must never sit behind a write-scope grant.
         required_action="audit.read",
         cli_path=("plan", "status"),
         toolset="read-only",
-        # grounded-in: costs_and_fees.md:28-43 (builder fee varies by plan;
-        # for a high-turnover strategy a higher tier materially lowers the
-        # per-order live cost) + plan_status.py _handler (server-computed
-        # plan_status block — numbers only, no recommendation). Kept
-        # policy-clean: "upgrade_options" (token, no word boundary), no bare
-        # "trade"/"upgrade"/money verbs.
+        # grounded-in: plan_status.py _handler (the caller's own plan, the
+        # served per-unit quota blocks and reset instants — numbers only);
+        # mcp-conversion 04 §4.3 / D-12 (the Lovable get_workspace shape:
+        # the caller's own state and nothing else).
         description=(
-            "Report the org's current Keel plan as enforced numbers: plan "
-            "name, per-plan limits, remaining quota this period (backtest "
-            "runs, compute seconds, live strategy slots), the builder fee "
-            "in bps, and `upgrade_options` — the other available plans "
-            "with USD prices and exact limit differences, returned as "
-            "data, not a recommendation. Read-only: calling it never "
-            "changes the plan and never spends quota. Check it before a "
-            "large backtest sweep to stay within the remaining allowance, "
-            "and when a high-turnover strategy's live cost comes up — the "
-            "builder fee in bps is the per-order cost a higher plan tier "
-            "lowers, so these figures are what to reason from. "
-            "Do NOT use to check auth state or visible tools — call "
-            "`keel_status`."
+            "Report the org's own Keel plan and its backtest usage this period — auth, "
+            "identity and visible tools are `keel_account_status`. It returns the plan name, the "
+            "period, and for backtest runs and backtest compute seconds the limit, the "
+            "used and remaining counts, and the reset instant. It changes nothing and "
+            "spends no quota."
         ),
         input_schema={"type": "object", "properties": {}, "required": []},
         annotations={
-            "title": "Plan Status",
+            "title": "Get Plan Usage",
             "readOnlyHint": True,
             "destructiveHint": False,
             "idempotentHint": True,

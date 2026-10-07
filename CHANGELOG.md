@@ -4,6 +4,429 @@ All notable changes to `keel-trade` are documented here. Versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html), and the format
 loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+**A first-week backtest allowance is reported as one fact (connect-onboarding
+spec 01 §1.8/§1.9).** When keel-api reports a `first_week` block on a
+backtest balance (`{granted, remaining, ends_at}`), `keel_plan_usage` and
+`keel_backtest_run` pass it through in each unit's `quota` block, projected
+to those three keys. `keel_plan_usage` adds one talking point after the plan
+sentence, for example "154 of 200 first-week backtests left; they end Tue 13
+Oct 15:02 UTC." `keel_backtest_run` appends the same sentence to
+`quota_notice` only when that line already renders without it, so the
+allowance never makes a response carry a quota line, and it never appears in
+`next`. The sentence is built from the `backtest_runs` block only, and only
+when all three facts arrived. The neutral-wall guard (`assert_neutral_wall_text`,
+and through it `validate_talking_points`) now also refuses expiry urgency:
+"before they expire", "before it expires", "don't lose", "use them before",
+"running out" and "expires soon". No tool description or server instruction
+changed.
+
+## [0.8.0] — 2026-10-06
+
+**0.8.0 is the first wheel since 0.7.0 (2026-08-21).** It was versioned on
+2026-08-23 and never published, so everything below reached only the hosted
+connector until now. Pipx does not upgrade itself: run `pipx upgrade
+keel-trade`.
+
+**Ten MCP tools renamed; the old names are deprecated aliases (2026-10-01,
+Q-2080).** OpenAI's plugin tool scan reads a tool name for what it does, and
+ten of the hosted surface's names did not say: `keel_ownership_status` →
+`keel_strategy_readiness`, `keel_doctor` → `keel_connection_check`,
+`keel_components_compose_help` → `keel_components_get`,
+`keel_components_detail_batch` → `keel_components_get_many`,
+`keel_strategy_memory_read` / `_write` → `keel_strategy_notes_read` /
+`keel_strategy_notes_add`, `keel_plan_status` → `keel_plan_usage`,
+`keel_status` → `keel_account_status`, `keel_open_in_app` → `keel_app_link`,
+`keel_strategy_log` → `keel_strategy_history`. `tools/list` advertises only
+the new names; `tools/call` with an old name still runs the renamed tool, on
+the hosted endpoint and on a local `keel mcp serve` alike, until at least
+2027-01-01. The `no_ownership_hint` parameter of `keel_strategy_get`,
+`keel_strategy_status`, `keel_backtest_run` and `keel_backtest_watch` is
+`skip_readiness`: the old name is accepted over MCP on both servers and wins
+when a call carries both, and the CLI keeps `--no-ownership-hint` as a hidden
+alias of `--skip-readiness` (Q-2267). `keel_strategy_search`'s retired `tag`,
+`owner` and `share_id` are accepted and dropped over MCP on every profile, so
+a connector catalog frozen before their removal keeps working; the CLI
+options are gone. CLI command paths are unchanged. In the same change:
+`keel_share_create` and `keel_feedback` are `destructiveHint: true` (a public
+disclosure and a sent note are irreversible), `keel_live_monitor` and
+`keel_strategy_fork` are `openWorldHint: true` (a live exchange-account read;
+any public share as a source); `keel_app_link` accepts real share ids (the
+unprefixed 21-character tokens `keel_share_create` returns — it had only ever
+recognised a `shr_` form no share carried); `keel_strategy_search` drops its
+`tag`, `owner` and `share_id` inputs, which matched nothing; share links
+derive the recipient's permission from `include_source`; and a save whose
+source does not compile is reported as a stored draft with no new version.
+
+**Round 2 (2026-10-01, Q-2268 / Q-2269).** `keel_strategy_get` returns
+`recent_runs` — the strategy's newest backtest runs (up to 5, any status,
+newest first: `run_id`, status, version, window, `completed_at`, headline
+metrics), the ids `keel_backtest_summarize`, `keel_backtest_compare` and
+`keel_share_create` take. On the LISTED (hosted directory) profile only:
+`keel_account_status.identity` and `keel_connection_check`'s auth check no
+longer carry `principal_id` / `org_id` (an email-free `display_name` joins
+`org_name` and `plan`), `keel_strategy_history` entries carry `modified_via`
+without the raw `client_name` / `auth_surface`, and `keel_strategy_readiness`'s
+`projection` is an allow-list (stage, status, next step, missing evidence,
+latest run) rather than keel-api's whole strategy-work projection; the CLI
+and local server are unchanged. On every surface: the free-plan wall's plan
+sentence is D-12's recorded fallback, "Plans are changed in the Keel web
+app."; `keel_feedback` reports `delivered: false` (and a new `stored`) when
+keel-api answers that the note could not be persisted; the hosted
+no-credential error names no particular client; `keel_share_create`'s copy
+says what a hidden-source link still publishes (name, description, metrics,
+fork count, live status, market count, risk settings) and that
+`include_source` decides whether viewers see and can copy the source.
+
+**Round 3 (2026-10-01, Q-2268 / Q-2266).** On the LISTED profile only, every
+tool that passes a keel-api row through returns an allow-listed projection of
+it (one owner, `keel/tools/outcomes/_listed_projection.py`):
+`keel_strategy_get`'s `metadata` (no org id, storage key, source / lock hash
+or deployment id — `is_live` says whether the strategy is running), its
+`include_versions` rows (the `keel_strategy_history` row) and its
+`include_source` payload; `keel_strategy_search` results drop `owner`;
+`keel_live_monitor`'s deployment rows drop the org, exchange-account and
+config ids and the source hash, and its other views lose those keys at any
+depth; notes and Library variants are allow-listed. Listed results also stop
+naming the CLI or other clients: no `render.surface_hints`, no `exit_code` on
+MCP error envelopes, a connection-check hint without the CLI sentence, and
+compose's `missing_input` names only `source`. `keel_backtest_summarize` and
+`keel_backtest_watch` no longer return a signed `results_url` there. The
+listed `keel_strategy_compose` schema requires `source`. On every surface: the
+internal-error remedy names `keel_connection_check` rather than `keel doctor`;
+`keel_live_monitor`'s trade filters say they apply to the trade-history view
+only; `keel_feedback`'s `severity` is described as free text;
+`keel_strategy_fork` says a share must show its source and that forking adds
+to its public fork count. The CLI and local server results are unchanged.
+
+**The catalog and the live surface both grow, and the validator sheds two
+whole passes.** The bundled component catalog goes from 190 to 223: the W3
+data-loader families (per-bar flow, open interest, premium, predicted
+funding) and the W5 authoring families (trading session, market structure /
+SMC, level-derived risk). The outcome surface goes from 40 to 46 tools —
+four of them (Q-0913) finally let an agent answer "what did my live
+deployment actually do, what did it cost, and is the account halted?"
+`5min` becomes a platform timeframe end to end. On the validator side the
+phase-order pass and the entire Layer C runtime walk are retired, each
+after a census showing it was never the sole catcher of a real defect.
+
+**The ownership projection actually reaches agents.** `keel ownership
+status`, the `keel://ownership/strategy/{id}` MCP resource, and the
+ownership hint fields on `keel_strategy_get` / `keel_strategy_status` /
+`keel_backtest_run` / `keel_backtest_watch` have promised since 0.5.0 to
+tell an agent what a strategy still needs before it can go live. They
+never could: the routes behind them existed only on an internal host no
+SDK surface can reach, so 0.7.1 turned the feature off and made it say so
+honestly. keel-api now serves the reads, and this release turns it back
+on.
+
+### Added
+
+- **Short backtest windows, in the tools (new-data-loaders spec 07 §5–§6,
+  Q-2025).** `keel_backtest_run` / `_watch` / `_summarize` carry
+  `exposure` (bars that held a position out of the window's bars, with the
+  first and last position) as a first-class field, an `exposure:` text line
+  and a card line. `keel_backtest_summarize` takes `start` / `end` /
+  `capital` and returns `slice`: that part of the run as it ran, scaled to
+  `capital`, from keel-api's `/slice` read. An omitted `start_date` now
+  runs the platform's default window for the strategy's timeframe (5min 60
+  days, 15min 90 days, coarser 5,000 bars, capped at available data;
+  Q-2012), and the tool text says how warm-up shows up.
+- **Execution outcomes reach the CLI and MCP (Q-0913).** Four read-only
+  tools, each a CLI verb and an MCP twin, all on the `live-read` toolset:
+  `keel_deployments_list` / `keel deployments list` (every deployment with
+  id, strategy, status, schedule, `account_id`, deployed version, realized
+  P&L and open-position count — the id-lookup step for the other three);
+  `keel_live_receipt` / `keel live receipt` (one EPISODE's sealed receipt,
+  addressed by `(session_id, intent_rev)` — a multi-episode run has one
+  receipt per episode and no run-level receipt);
+  `keel_live_quality` / `keel live quality` (execution quality / TCA); and
+  `keel_accounts_safety` / `keel accounts safety` (the server's execution
+  HALT state, GET only — clearing a halt is an operator ceremony, not a CLI
+  flag, and a refusal here is not an auth problem). None of the four is on
+  the listed hosted profile.
+- **`keel_live_monitor` `view='executions'`** gains `expand_orders` (the
+  child orders behind each attempt's counts) and `execution_run_id` (narrow
+  to one run). Both are executions-only and mirrored into the listed input
+  schema.
+- **`keel_backtest_compare` / `keel backtest compare`** — two runs' cost and
+  turnover profiles side by side (Q-0581).
+- **`keel_live_update` / `keel live update`** — the SDK/MCP producer of the
+  UPDATE intent (deploy-wizard-v2 spec 04 §4). Mints a signed update link
+  for a LIVE/PAUSED deployment (`POST /v1/deployments/update-intents`, body
+  `{"deployment_id"}` and nothing else) and returns the shared handoff
+  envelope: `action_url` opens the web update flow, `resume.token` +
+  `intent_token` give a pure status poll (pending | completed | expired,
+  with the applied version on completion). The agent can mint and share the
+  URL; it cannot apply the update and cannot put configuration into the
+  intent. Toolset `live-write`; never registered on the listed profile.
+- **33 new components — the bundled catalog goes 190 → 223.**
+  - Per-bar flow loaders (new-data-loaders spec 01), one serving core:
+    `TakerFlowLoader` (aggressor buy/sell/net/total volume or trade counts),
+    `WhalePrintLoader`, `VWAPLoader`, `DollarVolumeLoader`,
+    `TwapVolumeLoader`.
+  - Positioning and basis loaders: `OpenInterestLoader`, `PremiumLoader`
+    (perp-vs-oracle), `PredictedFundingLoader` (the hourly PREDICTED rate),
+    plus the market-wide regime filters `OpenInterestRegime` and
+    `PremiumRegime`.
+  - Trading-session family: `SessionMask`, `SessionVWAP`,
+    `SessionRangeHigh`, `SessionRangeLow`, `SessionRelativeVolume`,
+    `SessionCloseExit`.
+  - Market-structure / SMC family: `SwingPivot`, `BreakOfStructure`,
+    `ChangeOfCharacter`, `OrderBlock`, `BreakerBlock`, `FairValueGap`,
+    `LiquiditySweep`, `Displacement`, `PremiumDiscount`.
+  - Risk and sizing: `StopDistanceRiskSizer` (size so a stop hit loses a
+    fixed fraction of equity), `TradeLevelRiskExit` (one lifecycle from a
+    one-shot entry to its level-derived stop or R-multiple target — its
+    `short_level_slot` lets that one lifecycle own both directions of a
+    two-level trade, Q-1029), and `WeightCadence` (sample target weights at
+    calendar boundaries and hold).
+  - Signals and universe: `SMA`, `CumulativeSum` (the CVD carrier),
+    `SignalProduct`, `SignalRatio`, and `RollingNotionalProxyMask` (keep
+    only assets whose trailing candle-notional PROXY clears a dollar floor).
+- **`5min` is a platform timeframe.** It joins `VALID_TIMEFRAMES` and the
+  minutes table, so `frequency`, `interval` and `target_timeframe` all admit
+  it. The wheel now also ships the stdlib-only `timeframes` package — the
+  platform's clock alphabet, vendored verbatim rather than mirrored, which
+  is what the bundled `validation_shared` re-exports.
+- **`Universe(min_trailing_notional_proxy=…)`** — a dollar-liquidity floor
+  criterion, parsed by the vendored engine and forwarded to the resolver.
+- **Dollar volume is traded notional** (dollar-volume DV1–DV6): the sum of
+  trade price × size (`pv_sum`), replacing the candle proxy `volume × close`.
+  `DollarVolumeLoader` v2 serves it and, before 2025-03-23 where no trade
+  notional exists, splices in the 15m candle `volume × close` — in that one
+  place, named in its `dollar_volume_splice` provenance; it declares the new
+  `DollarVolumeSeries` type. `RollingDollarVolumeMask` is the dollar-liquidity
+  floor on it (a required `dollar_volume_slot`), and
+  `Universe(min_trailing_dollar_volume=…)` is the floor field — the universe
+  resolver ranks and floors on dollar volume, the same number at every
+  clock. The universe tools write the new field name.
+- **`keel universe resolve` reports `as_of` and `snapshot_note`** (Q-0983):
+  the server names the ONE instant the list resolved at and labels it a
+  snapshot rather than a membership rule; both pass through verbatim when
+  the server sends them.
+- **Two advisory catalog rules (Q-0580):** `UNREACHABLE_THRESHOLD_ARM`
+  (warning — a mode-gated arm whose opposite-arm param is explicitly
+  written, or an adjacent `Clip` that collapses an evaluated arm's
+  `{-1,+1}` into the flat value) and `PRICE_MARKS_AUTO` (info — fires only
+  when the funding-only auto-load will actually happen).
+- **Validator surface:** relational param constraints (arm constraint schema
+  v2, Q-0691); typed slots complete — `slot_domains`, slot operand refs and
+  `cond_id` (Q-0692, Q-0548); and `cond_fixed`, which takes the transfer
+  algebra to 7 ops.
+- **Bundled agent knowledge:** `capability_boundaries.md` and
+  `platform-operations.md` join the always-on corpus (Q-0840), and the
+  pattern library gains `session_and_structure_patterns.md` and
+  `screen_select_patterns.md`.
+- **Every request names the client version** (Q-2500): `X-Keel-Client:
+keel-trade/<version>`. keel-api treats the component pins a wheel without
+  it sends (0.7.0 and earlier, whose bundled catalogue predates the server's)
+  as advisory — latest on create, the stored lock kept on update — and keeps
+  this release's explicit pins as the caller's.
+
+### Changed
+
+- **Six components rank or weight on dollar volume from a required
+  `dollar_volume_slot`**, wired from `DollarVolumeLoader() -> Store(…)`:
+  `RollingUniverseMask` v2, `RollingVolumeUniverseMask` v2,
+  `VolumeUniverseReducer` v2, `VolumeUniverseReducerAny` v2,
+  `VolumeWeightedMultiplier` v2 and `MarketVolumeRegimeFilter` v3. An
+  unwired slot is a validation error naming it. The earlier versions are
+  frozen, so a pinned strategy keeps running unchanged. The new versions drop
+  `volume_column` (both reducers) and `ohlcv_slot`
+  (`VolumeWeightedMultiplier`).
+- **Deprecated, still valid with a warning naming the replacement:**
+  `RollingNotionalProxyMask` (the candle proxy; use
+  `RollingDollarVolumeMask`) and `Universe(min_trailing_notional_proxy=…)`
+  (an alias of `min_trailing_dollar_volume` with the same meaning; declaring
+  both is an error).
+
+- **Every backtest count is named by the era that recorded it
+  (trade-metrics spec 01, Q-2122).** A run's `trade_model` stamp decides
+  what its stored counts are: runs with no stamp and `"reducing_order"`
+  runs carry **Trades** (every order that reduced or closed a position,
+  plus each position still open at the end) and a **Win rate** over closed
+  trades; `"position_round_trip"` runs (2026-08-25 until the engine change)
+  carry **Positions** and a **Position win rate**; current runs carry both,
+  plus **Resizes**, **Turnover** and **Avg holding time**. The backtest
+  view, `summary_metrics`, compare's rows and cost profile, the strategy
+  evidence line and the cards read each run through one era read model:
+  a count the run did not record reads "—", never 0; a basis line says
+  which view a run lacks; a comparison of runs from different eras says so
+  in one line. The sample-size note keys on positions when recorded.
+  `keel_backtest_positions`' `position_count` is the run's own position
+  count (null, with a note, when not recorded) and the envelope no longer
+  relays the era stamp. Compare's cost profile reads `resizes` where it
+  read `rebalance_legs`; `metrics_raw` stays verbatim.
+
+- **`keel_plan_status` names no plan prices on the hosted connector.** On
+  `mcp.usekeel.io` (`KEEL_SERVER_PROFILE=listed`) each `upgrade_options`
+  entry now carries the plan name and its limit differences only, with no
+  `price`. The hosted description says where plans are listed (the
+  `manage_url` page) instead of promising prices. The CLI and the local
+  stdio MCP server still return prices.
+- **The Claude Desktop bundle is described as a strategy builder.** The
+  `.mcpb` manifest's display name is now "Keel — Hyperliquid strategy
+  builder", and its description, long description and keywords lead with
+  building and backtesting strategies. They also state that the bundle
+  cannot place orders or move funds by default: running a strategy with real
+  capital happens in the Keel web app, and the local live-write tools stay off
+  unless you opt in and arm them on your machine. The new copy notes that Keel
+  is not investment advice. Only the wording changed. The bundle's tools and
+  default toolsets (`always,read-only,backtest,share,live-read`) did not.
+  The public README, the package readme's live-safety section and the PyPI
+  summary now say the same, and the readme no longer describes the
+  `direct=true` preview/confirm sequence as the way to go live.
+- **One drawdown sign in backtest results** (Q-1805). `summary_metrics`
+  (run, watch, summarize) and compare's `performance` / `performance_by_run`
+  rows state the drawdown as `max_drawdown_pct`, negative or zero — the
+  number and sign `view.metrics`, the card and the text already showed.
+  The unsigned `max_drawdown` key is gone from those blocks; a script
+  reading `.summary_metrics.max_drawdown` reads `-max_drawdown_pct`.
+  `metrics_raw*` keep the worker's sealed metrics verbatim.
+
+- **Deployment tools call `/v1/deployments`** (Q-0639). `live_monitor`,
+  `live_deploy`, `live_control` and the handoff envelope migrate off the
+  `/v1/live` alias to the canonical paths, on the CLI and both MCP
+  surfaces.
+- **Execution outcomes render per field, not as one-line JSON** (Q-0913).
+  `keel/output.py` gains `FIELD_RENDERERS` / `format_field_line`, and BOTH
+  human surfaces — `format_human` for the CLI-only verbs and the outcome
+  tools' `_cli_adapter` — route through it, so a field cannot read two ways.
+  Unrecognised nested values keep each surface's existing fallback.
+- **`keel backtest run` wait budgets are split** (Q-0573): an interactive
+  terminal waits 300s with a stderr progress line (healthy runs measured at
+  ~141s); non-interactive surfaces, including MCP, keep 90s. The timeout
+  message names the budget actually used.
+- **`keel backtest summarize` treats fee drag as a first-class line**
+  (Q-0581): `total_fees_paid`, `fees_pct_of_initial`,
+  `fees_pct_of_gross_profit`, `fees_pct_of_net_profit` and `rebalance_legs`
+  join the canonical summary keys (ordering and labelling only — values are
+  verbatim from stored metrics).
+- **The 8 bundled skills move to the portable Agent Skills layout**
+  (Q-0267): `keel/skills/<name>/SKILL.md` instead of
+  `keel/skills/<name>.md`.
+- **The anonymous tier delivers the 10 backtests it advertises** (Q-0466).
+  Every copy site, `keel/anon.py` included, now says 10.
+- **`Execution(buffer_threshold=…)` floor drops 0.01 → 0.001** (Q-0636), so
+  cost-referenced no-trade bands are expressible at intraday timeframes.
+- **`NONDENSE_TERMINAL_WEIGHTS` is promoted** (Q-0686): a masked pipeline
+  with no terminal `FillNaN(0.0)` now warns in both engines, and errors
+  under production mode.
+- **A deprecated latest is a lockable state** (Q-0684). `evolve_lock` pins
+  it and full validation runs, with the catalog `DEPRECATED_COMPONENT`
+  warning as the upgrade nudge; `COMPONENT_NOT_RUNNABLE` stays the hard
+  gate. Previously such a strategy got one location-less
+  `UNKNOWN_COMPONENT` with every other diagnostic suppressed.
+- **`components_after` / `components_before` match the live engine** (Q-0732).
+  The bundled answers are precomputed from `find_components_accepting` /
+  `find_components_outputting` at regen instead of approximated by exact
+  input-type string lookup plus transition expansion.
+- **`keel_components_search` keeps a recall slot** (Q-1074): a lexical field
+  with a weak tail no longer lets the strong set fill the whole quota and
+  switch the semantic arm off.
+- **Claims and clock metadata across the catalog** — the rank family,
+  `ApplyUniverseMask`, the three FDM components, five forecast components
+  and `SelectionToSignalConverter` now state what they actually claim
+  instead of inheriting it from a name or declaring it falsely; a soft type
+  name is a ROLE that survives (Q-0543); and the annualized-vol guidance
+  agents compose against is corrected (Q-1151).
+- **Ownership projection is live.** `PROJECTION_ROUTES_SERVED` is `True`
+  and the fetch reads keel-api's `GET /v1/strategy-work?strategy_id=…` —
+  ONE request per strategy read instead of the previous two, and it
+  answers for a strategy that has never been opened in chat (the response
+  carries a computed projection with a null `session_id`). Requires
+  keel-api ≥ the 2026-08-23 release; against an older API the surfaces
+  degrade to honest unavailability, never to an error.
+- **`keel_ownership_status` and the MCP resource no longer fabricate.**
+  The hardcoded `"not_started"` body — `missing_evidence:
+[strategy_brief, baseline_evidence, failure_modes]`,
+  `live_readiness_blockers: [no_baseline, …]` — is DELETED. Those lists
+  are now read from the server or not reported at all. When there is no
+  projection to read, the body carries `projection_available: false`, a
+  machine-readable `unavailable_code` (`strategy_not_visible`,
+  `projection_read_failed`, `projection_not_served`) and a plain-language
+  `unavailable_reason`, and no evidence fields whatsoever.
+- **A compose's create sends only the caller's own pins** (Q-2270): it used
+  to send the wheel's whole bundled lock, which keel-api began honouring in
+  release-v1.180 and which pinned new strategies at a 47-day-old catalogue
+  (`PriceDataLoader` v1 under source written for v3). An update sends the
+  stored lock with `expected_lock_hash`.
+- **A component lookup never mints an anonymous workspace** (Q-2494).
+  `keel components get` / `search` ask the server only when credentials
+  already exist (the anonymous tier can read components since the matching
+  keel-api release) and otherwise answer from the bundled catalogue — they
+  had minted one per command wherever `~/.keel` did not persist. A 429 on
+  those lookups is raised, never swallowed into the bundled answer.
+- **Anonymous start refuses when its config cannot persist** (Q-2494): the
+  tokens are read back after the save, and a config that does not return
+  them is an error naming `KEEL_API_KEY` / `keel auth login --key`, not a
+  workspace silently lost and re-minted on the next command.
+
+### Fixed
+
+- **The SDK and MCP stopped rejecting a `5min` strategy** (L37). The data
+  bundle was regenerated before `5min` reached the loader/resampler/
+  transform surface, so 7 param option lists still ended at `15min` and the
+  vendored validator hard-rejected e.g. `PriceDataLoader(timeframe="5min")`
+  with `PARAM_INVALID_OPTION` before it could reach the platform. All 12
+  option lists that carry `15min` now carry `5min`.
+- **A composer role key naming no branch is a pass-6 ERROR** (Q-1278). A
+  one-character typo in `numerator_key` / `left_key` / `signal_key`
+  validated with zero issues and then raised `ValueError` from inside the
+  backtest; it now emits `COMPOSER_KEY_MISMATCH` with the offending key and
+  the available branch names.
+- **The local dry-run gives the platform's verdict on composers, param
+  types and mask slots** (Q-1870). The bundled registry carried each
+  composer's role contract, each param's structural type and each slot's
+  domain demand, but the loader never read them back, so a local
+  `keel strategy validate` / `keel_strategy_compose(dry_run=true)` never
+  raised `COMPOSER_INPUT_TYPE_MISMATCH`, `COMPOSER_KEY_MISMATCH`, the
+  composer `CLOCK_MISMATCH` / `TERMINAL_CLOCK_MISMATCH`,
+  `PARAM_TYPE_MISMATCH` on `enum`/`list`/`dict`/union params, or the
+  mask-slot `VALUE_DOMAIN_*` checks that the platform raised on save. Every
+  conformance fixture now gets the same verdict locally as on the server.
+- **`keel help` normalizes topics and never touches the network** (Q-0573).
+  Lookups fold case, hyphens and spaces to the bundled slugs, and a miss is
+  instant and offline with top-3 suggestions — the old fallback called a
+  `/v1/reference` endpoint that never shipped, so every miss cost a
+  guaranteed 404 round-trip.
+- **Three components are deprecated in the bundled catalog:**
+  `ExtractIndicatorOutput` (a false multi-output promise that silently
+  passed through, Q-0823); `CumulativeTransform` (superseded by
+  `CumulativeSum`); and `VolumeUniverseReducerAny` (Q-1087 — it chose a
+  universe from a whole-window liquidity statistic and applied it from bar
+  0, so extending the data forward changed which assets were kept at the
+  start; a static reducer has no causal form).
+- The `keel://ownership/strategy/{id}` resource honored `KEEL_APP_URL`
+  nowhere, so a staging reader was handed prod URLs. It now reads the env
+  like the CLI and MCP adapters do.
+- `keel --help` rendered the `ownership` command group with no
+  description.
+- **Backtest results carry a realism line** (Q-1881): when a run's orders
+  fall below the venue's minimum notional, the result says how many and that
+  the reported returns include them, so a $100 sweep is no longer read as
+  good without that caveat.
+- **Works on fastmcp 4** (Q-2099): `ToolResult` is imported from
+  `fastmcp.tools` and the five `except ImportError` fallbacks that turned
+  the 4.x API change into degraded tool results are gone.
+
+### Removed
+
+- **`PHASE_ORDER_VIOLATION` is retired** (Q-0685) and its code tombstoned,
+  reserved and never re-mintable. The census: 932 fires on 701 of 1380
+  stored subjects, all false positives, and zero cases where the phase rule
+  was the sole catcher of a real defect. The type system is the ordering
+  authority.
+- **Layer C — the runtime validation walk — is retired** (Q-0689, Q-0688).
+  Write-time validation is the one authority; six runtime codes are
+  tombstoned reserved. The restored walk rejects 8 of 18 Layer-B-valid
+  library strategies, which is the defect it was.
+- **`FUNDING_RATES` leaves the documented slot list.** The channel is now
+  `FUNDING_SERIES` and its DSL half is retired, so the bundled slot
+  reference no longer offers `Load(FUNDING_RATES)` as an example.
+
 ## [0.7.0] — 2026-08-21
 
 **Hosted MCP, anonymous instant start, the Keel Library on the agent
@@ -271,7 +694,7 @@ version.
 - **Full TS↔Python validator parity** (Option C type policy). The SDK's
   DSL validator and the browser editor's validator now emit the same
   error codes for the same compositions. Affects `keel strategy
-  validate`, every MCP composition tool, and the in-browser canvas.
+validate`, every MCP composition tool, and the in-browser canvas.
 
 ### Fixed
 
@@ -344,7 +767,7 @@ behavioral change to the SDK or MCP surface.
 
 - Tighter Registry description aligned to the landing page positioning:
   `Build, backtest, and automate Hyperliquid trading strategies — typed,
-  deterministic, live parity.` Replaces the previous product-style
+deterministic, live parity.` Replaces the previous product-style
   framing on registry.modelcontextprotocol.io so the canonical entry
   cascades the right copy to downstream directories (PulseMCP auto-
   ingests from the Registry).
@@ -556,19 +979,19 @@ pipx install keel-trade
 claude mcp add keel -- keel mcp serve
 ```
 
-Then open Claude and say *"Connect to Keel."* — the agent calls
+Then open Claude and say _"Connect to Keel."_ — the agent calls
 `keel_auth_login`, browser opens, sign-in completes, tokens land in
 `~/.keel/config.yaml`. No terminal-side login dance.
 
 ### Added
 
 - **`keel_auth_login` MCP-only outcome tool** — runs the same OAuth 2.1
-  + PKCE loopback flow as the CLI's `keel auth login`. Optional args:
-  `scope="live"` to pre-check the live-trading consent box; `api_url`
-  to target staging or a self-hosted Keel. Returns the same concise
-  summary as the CLI command (authenticated/principal_id/org_id/plan/
-  tier + next-hint). Always available in the `always` toolset — agents
-  can call it before any authenticated tool.
+  - PKCE loopback flow as the CLI's `keel auth login`. Optional args:
+    `scope="live"` to pre-check the live-trading consent box; `api_url`
+    to target staging or a self-hosted Keel. Returns the same concise
+    summary as the CLI command (authenticated/principal_id/org_id/plan/
+    tier + next-hint). Always available in the `always` toolset — agents
+    can call it before any authenticated tool.
 - **`mcp_only` field on `OutcomeTool`** — declares that an outcome is
   MCP-only, so the CLI adapter doesn't try to register a duplicate
   command on top of a hand-rolled CLI (`keel auth login` stays
@@ -677,7 +1100,7 @@ Then open Claude and say *"Connect to Keel."* — the agent calls
   `_PdStub` class whose `.DataFrame` and `.Series` resolve to `object`,
   runtime helpers `expect_instrument` / `expect_global` stubbed to
   no-ops). NewType chain stays intact — `StreamSeries.__supertype__ is
-  SignalSeries` evaluates correctly in the SDK env, and `is_compatible`
+SignalSeries` evaluates correctly in the SDK env, and `is_compatible`
   returns True. SDK wheel size unchanged (pandas still not a dep). Two
   regression tests lock the contract: one asserts the NewType chain is
   reachable from inside the SDK, one runs the full user-reported
@@ -708,7 +1131,7 @@ Then open Claude and say *"Connect to Keel."* — the agent calls
   (e.g. anyone with `PYTHONPATH` set inside a development checkout)
   and pandas/numpy aren't installed, the registry
   hydration used to explode with `ModuleNotFoundError: No module
-  named 'pandas'` for every tool call. Fixed by catching the
+named 'pandas'` for every tool call. Fixed by catching the
   ImportError on the rich-registry import — bundled JSON data is
   still served for read-only queries (search/detail/after/before/
   dump). This matters for the pipx-install + monorepo-dev scenario;
@@ -776,12 +1199,13 @@ Then open Claude and say *"Connect to Keel."* — the agent calls
 
 **Patch — terse `keel auth login` confirmation.** The success output
 was dumping the full `/v1/me` response (principal + org + entitlements
-+ all 26-27 scopes) — too verbose for both humans and parsing agents.
-Trimmed to a 7-field summary: `authenticated`, `principal_id`,
-`org_id`, `org_name`, `plan`, `tier` (`base`/`live`), and a `next`
-hint pointing at `keel status` and `keel strategy new`. Same shape
-across human and JSON modes. The exhaustive view is one command away
-(`keel auth status`).
+
+- all 26-27 scopes) — too verbose for both humans and parsing agents.
+  Trimmed to a 7-field summary: `authenticated`, `principal_id`,
+  `org_id`, `org_name`, `plan`, `tier` (`base`/`live`), and a `next`
+  hint pointing at `keel status` and `keel strategy new`. Same shape
+  across human and JSON modes. The exhaustive view is one command away
+  (`keel auth status`).
 
 ### Changed
 
@@ -890,7 +1314,7 @@ same returns, same destructive-action gating.
   deploy/control. `live` remains a deprecated compatibility alias for both
   live toolsets.
 - **Standard return envelope** — every tool returns `{run_id?,
-  hero_url?, share_url, summary_metrics?, resource_uri?, ...}`.
+hero_url?, share_url, summary_metrics?, resource_uri?, ...}`.
   `hero_url` defaults to an authenticated `app.usekeel.io/...` URL.
   `share_url` is always `None` except in `keel_share_create` output
   (the one explicit-publication tool).
@@ -908,8 +1332,8 @@ same returns, same destructive-action gating.
 - ~50 legacy MCP tools (collapsed into the 22 outcomes). Examples:
   `strategy_validate` → `keel_strategy_compose --dry-run`;
   `strategy_components_after/before/dump` → `keel_components_search
-  --after/--before`; `live_positions/equity/pnl/...` → `keel_live_monitor
-  --view <slice>`.
+--after/--before`; `live_positions/equity/pnl/...` → `keel_live_monitor
+--view <slice>`.
 - ~10 legacy CLI command files (`commands/strategy.py`, `live.py`,
   `backtest.py`, `components.py`, `accounts.py`, `sharing.py`,
   `audit.py`, `market_data.py`). Their content is reachable through
@@ -917,7 +1341,7 @@ same returns, same destructive-action gating.
 - The standalone MCP registry + dispatch modules (`keel/mcp/registry.py`,
   `keel/mcp/dispatch.py`) — replaced by `keel.tools.outcomes._mcp_adapter`.
 - The `keel skills` / `keel strategy checkout|push|pull|workspaces|
-  discard` CLI commands. Workspace operations and skill management
+discard` CLI commands. Workspace operations and skill management
   return in Phase 2D/2F with the redesigned interfaces.
 
 ### Changed

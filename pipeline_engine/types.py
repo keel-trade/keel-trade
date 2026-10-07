@@ -25,11 +25,17 @@ from typing import Annotated, NewType
 
 # SDK-bundled stub — full file imports pandas; SDK strips it to keep
 # the wheel lightweight. NewType chain is preserved (used by validator);
-# the underlying pd.DataFrame/pd.Series typing is collapsed to `object`,
-# which is fine since the SDK never executes pipeline_engine.runtime code.
+# pd.DataFrame / pd.Series become empty classes that keep their NAMES —
+# the validator's type relation reads a raw frame's base by name
+# ('DataFrame', as with pandas installed), and `object` made it
+# 'object', an unknown base (RelationError). The SDK never executes
+# pipeline_engine.runtime code, so no behaviour is needed.
 class _PdStub:
-    DataFrame = object
-    Series = object
+    class DataFrame:
+        pass
+
+    class Series:
+        pass
 
 
 pd = _PdStub()
@@ -131,6 +137,15 @@ StreamSeries = NewType("StreamSeries", SignalSeries)
 Asset columns x timestamp rows. Subtype of SignalSeries — compatible
 with steps that accept SignalSeries input."""
 
+DollarVolumeSeries = NewType("DollarVolumeSeries", StreamSeries)
+"""Dollar volume per bar (USDC traded notional), the ``DollarVolumeLoader``
+output (v2 on; dollar-volume DV4). Asset columns x bar-close timestamp rows.
+Subtype of StreamSeries — every step that accepts a stream or signal frame
+accepts it. It exists so a component's dollar-volume SLOT is type-checked:
+a slot declaring DollarVolumeSeries rejects any other stream stored into it
+(VWAP, base-coin taker flow, funding) with SLOT_TYPE_MISMATCH, where a
+StreamSeries slot would take all nine stream loaders silently."""
+
 ForecastSeries = Annotated[SignalSeries, Bounds(-20, 20)]
 """Standardized forecast. Expected range: [-20, 20]. Index: datetime.
 Transparent subtype of SignalSeries — is_compatible(ForecastSeries, SignalSeries) is True."""
@@ -172,6 +187,31 @@ Shape: (T,) — one scalar per time step."""
 # Zero-cost aliases that carry intent. Tightened with Annotated constraints
 # where value ranges are well-defined.
 # ═══════════════════════════════════════════════════════════════════════════════
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# THE POSITION LAYER (position-layer spec 03-R1, Q-2448)
+# A Position is a ROOT base, incomparable with every other base: no pandas
+# carrier, so it can never subsume into (or be subsumed by) a series, a dict
+# or a record. The runtime value (``pipeline_engine.positions.Position``,
+# spec 01-R2) subclasses the carrier; the carrier itself carries identity only.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class PositionPlan:
+    """Opaque structural carrier of the ``Position`` base (spec 03-R1).
+
+    Identity only — no data, no behaviour, no pandas import. Spec 01's runtime
+    ``positions.Position`` subclasses it; the plain-data export of a plan is a
+    different class, ``positions.plan.PositionPlanData`` (spec 01-R40).
+    """
+
+    __slots__ = ()
+
+
+Position = NewType("Position", PositionPlan)
+"""A trade plan minted by ``TradeManager``: entries, prices, rules, a lineage.
+Lazy and immutable; realised only by ``Exposure()`` or ``RiskSizer``."""
+
 
 RawSignal = SignalSeries
 """Unprocessed indicator output. Any numeric values."""
@@ -231,9 +271,13 @@ __all__ = [
     "WeightSeries",
     "OrderSeries",
     "StreamSeries",
+    "DollarVolumeSeries",
     "FundingFrame",
     "SentimentFrame",
     "TemporalOffset",
+    # The position layer (spec 03-R1)
+    "PositionPlan",
+    "Position",
     # Scope-aware types
     "InstrumentFrame",
     "GlobalSeries",

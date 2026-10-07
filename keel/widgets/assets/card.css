@@ -1,110 +1,312 @@
-/* Keel card styles — shared by all four cards. Theme-aware two ways:
-   the host-context theme sets [data-theme] on <html>, and
-   prefers-color-scheme covers hosts that never send one. */
+/* Keel card styles — shared by all four cards.
+   Theme-aware three ways: the host's own CSS variables (mapped onto
+   these tokens by host-adapter.js when the host ships them), the
+   host-context theme setting [data-theme] on <html>, and
+   prefers-color-scheme for hosts that never send one.
+   Sizing: the document is exactly as tall as its content — no fixed
+   heights, no viewport-height units, no internal scrolling (Q-1505). */
+/* ── Tokens ───────────────────────────────────────────────────────
+   Structure (ground, text, border, surface) is the HOST's where it
+   ships tokens — both rulebooks say so in their own words: MCP Apps
+   documents `var(--color-background-primary, #ffffff)`, and the
+   ChatGPT guidelines say partner brand "should not override
+   backgrounds or text colors". The values below are therefore the
+   DECLARED FALLBACK, not an override.
+
+   `--accent` is the exception and is deliberately NOT host-mapped:
+   both vendors permit brand as the accent — "brand only as accent"
+   (Claude) and "use brand accent colors on primary buttons inside app
+   display modes" (ChatGPT). It is Keel's `--accent-light` / `--accent`
+   from services/keel-app/src/lib/design/tokens.ts.
+
+   Every pair below clears WCAG AA against BOTH the ground and the
+   raised tile, which is the harder surface. Dark `--muted` is
+   #7d8da4 rather than the app's #65758b because the app's value
+   measures 3.92:1 on --bg-deep and fails (see REVIEW-2026-09-22 §4.3).
+
+   Light is DERIVED, not transcribed: the app ships no light theme.
+   The rule is the app's 220 hue lock kept, elevation inverted, and
+   the semantic hues re-tuned for a light ground.
+
+   `--tile` is TRANSLUCENT, not an opaque colour. The card's ground is
+   the host's and we never see it — `--bg` is transparent by contract
+   — so an opaque surface assumes a ground it cannot know, and a
+   blue-tinted tile on a warm host ground reads wrong. A wash reads as
+   "raised" on any ground, which is what the app already does for its
+   borders (a white-alpha ramp). A host that ships
+   --color-background-secondary still overrides it, and should. */
 :root {
-  --bg: #ffffff;
-  --fg: #101418;
-  --muted: #5b6673;
-  --line: #e3e7ec;
-  --accent: #0b5fff;
-  --good: #0a7d43;
-  --bad: #b42318;
-  --tile: #f5f7fa;
+  --bg: transparent;
+  --fg: #0f1724;
+  --muted: #5c6a80;
+  --line: rgba(15, 23, 36, 0.1);
+  --accent: #4f46e5;
+  --good: #0a7d51;
+  --bad: #c22f2f;
+  --tile: rgba(15, 23, 36, 0.04);
+  --font: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* Radius: 9px is the editor canvas block radius, which keel-site
+     already matches deliberately (`--radius-lg: 9px /* match the
+     editor canvas block radius *\/`). The card was 10px — one pixel
+     off our own product. Badges are full pills, as everywhere else. */
+  --radius: 9px;
+  --radius-badge: 100px;
+
+  /* Type scale, adopted from keel-site. Sizes PAIRED with line
+     heights — the card previously used seven ad-hoc sizes and
+     declared no line heights at all, which is most of why it read as
+     less considered than the landing page. Neither rulebook
+     constrains the scale; only the font FAMILY, which stays the
+     host's ("Don't use custom fonts, even in full screen modes"). */
+  --t-2xs: 9px;
+  --t-2xs-lh: 12px;
+  --t-tiny: 10px;
+  --t-tiny-lh: 14px;
+  --t-micro: 11px;
+  --t-micro-lh: 16px;
+  --t-xs: 12px;
+  --t-xs-lh: 16px;
+  --t-sm: 13px;
+  --t-sm-lh: 18px;
+  --t-base: 14px;
+  --t-base-lh: 20px;
+  --t-lg: 15px;
+  --t-lg-lh: 20px;
+  --t-md: 16px;
+  --t-md-lh: 22px;
+  --t-xl: 17px;
+  --t-xl-lh: 24px;
+  --t-2xl: 20px;
+  --t-2xl-lh: 28px;
+
+  --safe-bottom: 0px;
+  --safe-top: 0px;
 }
 @media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #101418;
-    --fg: #e8ecf1;
-    --muted: #94a0ad;
-    --line: #262d35;
-    --accent: #6ea8ff;
-    --good: #4cc38a;
-    --bad: #f4746a;
-    --tile: #1a2028;
+  :root:not([data-theme="light"]) {
+    --fg: #e1e7ef;
+    --muted: #8794ab;
+    --line: rgba(255, 255, 255, 0.07);
+    --accent: #8b84ff;
+    --good: #3fcf98;
+    --bad: #f47a7a;
+    --tile: rgba(255, 255, 255, 0.045);
   }
 }
 :root[data-theme="dark"] {
-  --bg: #101418;
-  --fg: #e8ecf1;
-  --muted: #94a0ad;
-  --line: #262d35;
-  --accent: #6ea8ff;
-  --good: #4cc38a;
-  --bad: #f4746a;
-  --tile: #1a2028;
+  --fg: #e1e7ef;
+  --muted: #8794ab;
+  --line: rgba(255, 255, 255, 0.07);
+  --accent: #8b84ff;
+  --good: #3fcf98;
+  --bad: #f47a7a;
+  --tile: rgba(255, 255, 255, 0.045);
 }
 :root[data-theme="light"] {
-  --bg: #ffffff;
-  --fg: #101418;
-  --muted: #5b6673;
-  --line: #e3e7ec;
-  --accent: #0b5fff;
-  --good: #0a7d43;
-  --bad: #b42318;
-  --tile: #f5f7fa;
+  --fg: #0f1724;
+  --muted: #5c6a80;
+  --line: rgba(15, 23, 36, 0.1);
+  --accent: #4f46e5;
+  --good: #0a7d51;
+  --bad: #c22f2f;
+  --tile: rgba(15, 23, 36, 0.04);
 }
 * {
   box-sizing: border-box;
+}
+/* A class rule with `display:` beats the UA's `[hidden] { display:none }`
+   — `.link-row { display: flex }` would keep a hidden row visible. */
+[hidden] {
+  display: none !important;
 }
 html,
 body {
   margin: 0;
   padding: 0;
+  height: auto;
+  min-height: 0;
+  overflow: hidden;
   background: var(--bg);
   color: var(--fg);
-  font:
-    14px/1.45 -apple-system,
-    "Segoe UI",
-    Roboto,
-    Helvetica,
-    Arial,
-    sans-serif;
+  font: var(--t-base)/var(--t-base-lh) var(--font);
+  -webkit-font-smoothing: antialiased;
 }
 .keel-card {
-  padding: 12px 14px;
-  max-width: 720px;
+  width: 100%;
+  padding: 10px 12px calc(10px + var(--safe-bottom)) 12px;
 }
 .card-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
-  gap: 8px;
-  margin-bottom: 8px;
+  gap: 4px 8px;
+  margin-bottom: 6px;
+  min-width: 0;
 }
 .brand {
   font-weight: 700;
   letter-spacing: 0.02em;
+  font-size: var(--t-sm);
+}
+/* ChatGPT draws the app's name above every widget itself (REVIEW §4.4):
+   the wordmark inside the card would be the name twice. One rule, every
+   state (Q-1776). */
+:root[data-dialect="openai"] .brand,
+:root[data-dialect="openai"] .sv-brand {
+  display: none !important;
 }
 .card-title {
   color: var(--muted);
-  font-size: 13px;
+  font-size: var(--t-sm);
+}
+.head-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 6px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.head-name {
+  font-family: var(--font-mono);
+  font-size: var(--t-sm);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  min-width: 0;
+}
+.head-when {
+  color: var(--muted);
+  font-size: var(--t-xs);
+  white-space: nowrap;
 }
 .muted {
   color: var(--muted);
 }
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ── Skeleton (Q-1627): the shape the card resolves into ─────────── */
+.skeleton {
+  margin: 4px 0 2px;
+}
+.skeleton .sk-line,
+.skeleton .sk-tiles i,
+.skeleton .sk-block {
+  background: var(--tile);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  display: block;
+}
+.skeleton .sk-title {
+  height: 18px;
+  width: 42%;
+  border-radius: 6px;
+  margin-bottom: 8px;
+}
+.skeleton .sk-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(108px, 1fr));
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.skeleton .sk-tiles i {
+  height: 46px;
+  /* A card that labels its tiles before the result (the backtest card,
+     Q-1781) writes the label in the tile's own label style. */
+  box-sizing: border-box;
+  padding: 7px 9px;
+  font-style: normal;
+  font-size: var(--t-tiny);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+}
+.skeleton .sk-block {
+  height: 96px;
+}
+body[data-card="backtest"] .skeleton .sk-block {
+  height: 196px;
+}
+body[data-card="preflight"] .skeleton .sk-block,
+body[data-card="strategy"] .skeleton .sk-block {
+  height: 72px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .skeleton {
+    animation: keel-pulse 1.4s ease-in-out infinite;
+  }
+  @keyframes keel-pulse {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.55;
+    }
+  }
+}
+.title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  margin: 2px 0 8px;
+}
+.title-row .name {
+  font-size: var(--t-md);
+  font-weight: 650;
+  line-height: 1.3;
+}
+.title-row .period {
+  color: var(--muted);
+  font-size: var(--t-sm);
+  font-variant-numeric: tabular-nums;
+}
 .stat-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
-  gap: 8px;
-  margin: 8px 0;
+  grid-template-columns: repeat(auto-fit, minmax(108px, 1fr));
+  gap: 6px;
+  margin: 6px 0 10px;
 }
 .stat {
   background: var(--tile);
   border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 8px 10px;
+  border-radius: var(--radius);
+  padding: 7px 9px;
+  min-width: 0;
 }
 .stat .label {
   display: block;
-  font-size: 11px;
+  font-size: var(--t-tiny);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.05em;
   color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .stat .value {
   display: block;
-  font-size: 17px;
-  font-weight: 600;
+  font-size: var(--t-xl);
+  font-weight: 620;
   font-variant-numeric: tabular-nums;
+  line-height: 1.25;
 }
 .stat .value.pos {
   color: var(--good);
@@ -112,11 +314,41 @@ body {
 .stat .value.neg {
   color: var(--bad);
 }
+.stat.missing .value {
+  color: var(--muted);
+}
+.tile-host {
+  margin: 6px 0 10px;
+}
+.tile-host .stat-grid {
+  margin: 0;
+}
+button.more {
+  margin-top: 6px;
+  min-height: 32px;
+  padding: 4px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--tile);
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--t-xs);
+  cursor: pointer;
+}
+button.more:hover {
+  color: var(--fg);
+}
+.receipt {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: var(--t-xs);
+  line-height: 1.4;
+}
 table.kv,
 table.rows {
   width: 100%;
   border-collapse: collapse;
-  margin: 8px 0;
+  margin: 6px 0;
   font-variant-numeric: tabular-nums;
 }
 table.kv td,
@@ -128,7 +360,7 @@ table.rows th {
   vertical-align: top;
 }
 table.rows th {
-  font-size: 11px;
+  font-size: var(--t-micro);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--muted);
@@ -141,44 +373,930 @@ table.kv td.k {
 pre.source {
   background: var(--tile);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius);
   padding: 10px;
   overflow-x: auto;
-  font-size: 12px;
-  max-height: 260px;
-}
-.embed-frame {
-  width: 100%;
-  height: 300px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--tile);
+  font: var(--t-xs)/var(--t-xs-lh) var(--font-mono);
+  white-space: pre;
+  margin: 6px 0;
 }
 .badge {
   display: inline-block;
   border: 1px solid var(--line);
   border-radius: 999px;
   padding: 1px 8px;
-  font-size: 11px;
+  font-size: var(--t-micro);
   color: var(--muted);
   margin-right: 4px;
 }
-.link-row {
-  margin: 10px 0 2px;
-  padding-top: 8px;
-  border-top: 1px solid var(--line);
-  font-size: 13px;
-  word-break: break-all;
+.badge.warn {
+  color: var(--bad);
+  border-color: var(--bad);
 }
-.link-row a {
+
+/* ── Chart (backtest card) ─────────────────────────────────────── */
+.chart {
+  position: relative;
+  margin: 2px 0 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--tile);
+  padding: 8px 6px 4px;
+}
+.chart svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+  font: var(--t-tiny)/var(--t-tiny-lh) var(--font);
+  font-variant-numeric: tabular-nums;
+}
+.chart .grid line {
+  stroke: var(--line);
+  stroke-width: 1;
+}
+.chart .axis text {
+  fill: var(--muted);
+}
+.chart .equity-line {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.6;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.chart .equity-area {
+  fill: var(--accent);
+  fill-opacity: 0.08;
+}
+.chart .dd-area {
+  fill: var(--bad);
+  fill-opacity: 0.22;
+}
+.chart .dd-line {
+  fill: none;
+  stroke: var(--bad);
+  stroke-width: 1;
+  stroke-opacity: 0.8;
+}
+.chart .pane-label {
+  fill: var(--muted);
+  font-size: var(--t-tiny);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.chart .crosshair {
+  stroke: var(--fg);
+  stroke-opacity: 0.35;
+  stroke-width: 1;
+  stroke-dasharray: 2 2;
+  pointer-events: none;
+}
+.chart .marker {
+  fill: var(--accent);
+  stroke: var(--tile);
+  stroke-width: 1.5;
+  pointer-events: none;
+}
+.chart .hit {
+  fill: transparent;
+  cursor: crosshair;
+}
+.chart .readout {
+  position: absolute;
+  top: 6px;
+  right: 10px;
+  font-size: var(--t-micro);
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+  white-space: nowrap;
+}
+.chart .readout b {
+  color: var(--fg);
+  font-weight: 600;
+}
+/* A drawdown is a magnitude, not a loss event: neutral ink, minus
+   glyph, same rule as the Max DD tile (Q-1629). */
+.chart .readout .dd {
+  color: var(--muted);
+}
+/* No rule above the action row (Q-1779): the founder read it as "an
+   extra line on the bottom we don't need, below the graph". Spacing
+   separates the actions from what they act on. */
+.link-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0 0;
+  font-size: var(--t-sm);
+  word-break: break-word;
+}
+/* Q-1633: the one action a card offers is a real target — 36 px, 44 px
+   on a phone — with a visible focus ring, not an 18 px inline link. */
+.button-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--tile);
   color: var(--accent);
   text-decoration: none;
+  font-weight: 500;
+  cursor: pointer;
 }
-.link-row a:hover {
-  text-decoration: underline;
+.button-link:hover {
+  border-color: var(--accent);
+}
+@media (max-width: 480px) {
+  .button-link {
+    min-height: 44px;
+    flex: 1 1 auto;
+  }
+  button.more {
+    min-height: 44px;
+  }
+}
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
 }
 .note {
-  font-size: 12px;
+  font-size: var(--t-xs);
   color: var(--muted);
   margin: 6px 0;
+}
+.note-list .note:not(:first-child) {
+  margin-top: 2px;
+}
+.note.error {
+  color: var(--bad);
+}
+/* S-6: the one line that says what kind of numbers a backtest shows.
+   Text, not an action: smallest body step, the muted ink (AA on every
+   host ground, test_card_contrast.py), and it wraps rather than clips. */
+.hist-note {
+  margin: 10px 0 0;
+  font-size: var(--t-micro);
+  line-height: var(--t-micro-lh);
+  color: var(--muted);
+}
+
+/* ── Strategy / live / preflight cards (Q-1505 follow-up) ─────────── */
+.badge.good {
+  color: var(--good);
+  border-color: var(--good);
+}
+.section-label {
+  margin: 8px 0 4px;
+  font-size: var(--t-tiny);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+.desc {
+  margin: 2px 0 6px;
+  color: var(--fg);
+  font-size: var(--t-sm);
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.small {
+  font-size: var(--t-xs);
+}
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 3px;
+  margin: 2px 0 8px;
+}
+.chip {
+  display: inline-block;
+  background: var(--tile);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 2px 9px;
+  font-size: var(--t-xs);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.chip.muted {
+  color: var(--muted);
+}
+.chip.good {
+  color: var(--good);
+  border-color: var(--good);
+}
+.chip.warn {
+  color: var(--bad);
+  border-color: var(--bad);
+}
+.chip-arrow {
+  color: var(--muted);
+  font-size: var(--t-micro);
+  padding: 0 1px;
+}
+table.rows td.num,
+table.rows th.num {
+  text-align: right;
+  white-space: nowrap;
+}
+table.rows td.pos {
+  color: var(--good);
+}
+table.rows td.neg {
+  color: var(--bad);
+}
+table.rows td,
+table.rows th {
+  font-size: var(--t-xs);
+}
+.chart.spark svg {
+  font-size: var(--t-tiny);
+}
+.chart .baseline {
+  stroke: var(--muted);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+  stroke-opacity: 0.7;
+}
+.chart .equity-line.down {
+  stroke: var(--bad);
+}
+.chart .equity-area.down {
+  fill: var(--bad);
+}
+
+/* ── Narrow tables become per-row lists (Q-1628) ──────────────────── */
+/* Under 480 px a 7-column grid does not shrink — it is clipped by the
+   no-nested-scroll rule and the right-hand columns vanish silently. The
+   table helper draws this instead: the three columns that matter, per
+   row, with the dropped columns named. */
+.row-list {
+  margin: 6px 0;
+}
+.row-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 10px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--t-xs);
+}
+.row-item .lead {
+  font-weight: 600;
+  margin-right: auto;
+}
+.row-item .field .k {
+  color: var(--muted);
+  margin-right: 4px;
+  font-size: var(--t-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.row-item .pos {
+  color: var(--good);
+}
+.row-item .neg {
+  color: var(--bad);
+}
+table.rows caption {
+  text-align: left;
+}
+
+/* ── Fullscreen (Q-1632) ──────────────────────────────────────────── */
+/* The one display mode a card may scroll in. The host owns the
+   viewport here, so the document keeps its natural height (the adapter
+   stops pinning it) and the content is allowed to run past the fold. */
+:root[data-display-mode="fullscreen"],
+:root[data-display-mode="fullscreen"] body {
+  height: auto;
+  min-height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+:root[data-display-mode="fullscreen"] .keel-card {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 16px 20px calc(16px + var(--safe-bottom)) 20px;
+}
+:root[data-display-mode="fullscreen"] .stat-grid {
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+}
+:root[data-display-mode="fullscreen"] .stat .value {
+  font-size: var(--t-2xl);
+}
+:root[data-display-mode="fullscreen"] .head-name {
+  font-size: var(--t-md);
+}
+:root[data-display-mode="fullscreen"] .fs-only {
+  display: block;
+}
+.fs-only {
+  display: none;
+}
+
+/* ── The series palette (Q-1688) ──────────────────────────────────── */
+/* ONE owner for the six series hues. They were declared inside
+   card-strategy.js's injected stylesheet, which made them reachable
+   only from the strategy card; the comparison card overlays one curve
+   per run and needs the same six, so they live here — the file every
+   card inlines — and card-strategy.js keeps only the wash/mark
+   derivatives it alone draws.
+
+   Order of use (review page, decided 2026-09-22; Q-1782): the
+   baseline is the INK (--fg), heaviest — a neutral reference no hue can
+   be mistaken for — then cyan · amber · green · rose · violet. The
+   accent is not a series colour: it reads violet in both themes, so an
+   accent baseline put "violet first". Runs beyond six reuse the sequence
+   dashed, so colour is never the sole carrier — the legend, the line
+   weight and the dash carry it too.
+
+   Light cyan and amber are one step deeper than they were (Q-1782): the
+   old #0b7fa3 / #9a6a12 measured 4.35:1 / 4.49:1 on claude.ai's light
+   ground — under AA — and read steel-blue / olive-brown there.
+
+   These are declared in all four sites for the same reason the ink is:
+   a host that stamps no data-theme resolves the media block, and a
+   viewer who toggled resolves the attribute block. */
+:root {
+  --sv-violet: #6d4fd6;
+  --sv-cyan: #0e7490;
+  --sv-green: #0a7d43;
+  --sv-amber: #946200;
+  --sv-rose: #b42318;
+  --sv-blue: #4f46e5;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --sv-violet: #b992f7;
+    --sv-cyan: #39b6ee;
+    --sv-green: #3fcf98;
+    --sv-amber: #f0b133;
+    --sv-rose: #f47a7a;
+    --sv-blue: #9d97ff;
+  }
+}
+:root[data-theme="dark"] {
+  --sv-violet: #b992f7;
+  --sv-cyan: #39b6ee;
+  --sv-green: #3fcf98;
+  --sv-amber: #f0b133;
+  --sv-rose: #f47a7a;
+  --sv-blue: #9d97ff;
+}
+:root[data-theme="light"] {
+  --sv-violet: #6d4fd6;
+  --sv-cyan: #0e7490;
+  --sv-green: #0a7d43;
+  --sv-amber: #946200;
+  --sv-rose: #b42318;
+  --sv-blue: #4f46e5;
+}
+
+/* ── The receipt row (BUILD §4.1, Q-1688) ─────────────────────────── */
+/* ONE row, ~48 px including the card's own padding, drawn by
+   `KeelHost.receiptRow` and shared by the backtest and strategy cards.
+   A receipt draws NO action band: the bordered `.link-row` is ~52 px
+   with its rule and margins, which would make the "one-line" receipt
+   taller than the card it is a receipt for. The band appears only when
+   the row is opened in place (`body[data-size="receipt-open"]`), and
+   then it is the SAME row every other card draws (F-2).
+
+   The card's own header row is replaced by this one, so the template's
+   brand line is hidden. `head.hidden = true` alone does not do it:
+   `.card-head { display: flex }` is a class rule and beats the UA's
+   `[hidden] { display: none }`. */
+.card-head[hidden] {
+  display: none !important;
+}
+body[data-size="receipt"] .keel-card,
+body[data-size="receipt-open"] .keel-card {
+  padding: 6px 12px calc(6px + var(--safe-bottom)) 12px;
+}
+.rr {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: nowrap;
+  min-height: 36px;
+  min-width: 0;
+}
+.rr > *,
+.rr-l1 > *,
+.rr-l2 > * {
+  flex: none;
+}
+/* One line from 480 px up: the two groups are transparent to layout. */
+.rr .rr-l1,
+.rr .rr-l2 {
+  display: contents;
+}
+/* Below 480 px (Q-1772): two deliberate lines. Line 1 is who it is —
+   name (ellipsis) · version · state; line 2 is what it says and what you
+   can do — chips and numbers left, actions pinned to the right edge. */
+@media (max-width: 480px) {
+  .rr {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+  }
+  .rr .rr-l1,
+  .rr .rr-l2 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+  .rr .rr-l1 {
+    min-height: 24px;
+  }
+}
+/* The name is the FIRST thing to shrink at 390 px (the host's own tool
+   row carries it in full); the state chip is never dropped to make
+   room for it. */
+.rr .rr-name {
+  font: 600 var(--t-sm) / var(--t-sm-lh) var(--font-mono);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 48px;
+  flex: 0 1 auto;
+}
+.rr .chip {
+  margin: 0;
+}
+.rr .rr-nums {
+  font: 500 var(--t-sm) / var(--t-sm-lh) var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  display: inline-flex;
+  gap: 8px;
+}
+.rr .rr-nums .pos {
+  color: var(--good);
+}
+.rr .rr-nums .neg {
+  color: var(--bad);
+}
+.rr .rr-win {
+  color: var(--muted);
+  font-size: var(--t-xs);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.rr .rr-err {
+  color: var(--bad);
+  font-size: var(--t-sm);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1 1 120px;
+}
+.rr .rr-acts {
+  margin-left: auto;
+  display: inline-flex;
+  gap: 2px;
+}
+.rr .rr-act {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 8px;
+  border-radius: 6px;
+  font: 500 var(--t-sm) / 1 var(--font);
+  color: var(--accent);
+  cursor: pointer;
+  background: none;
+  border: 0;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.rr .rr-act:hover {
+  background: var(--tile);
+}
+/* Opened in place (Q-1778). The action row beneath the opened layout owns
+   Open — one Open per card in every state (F-2) — and the change is drawn
+   below, on its blocks and chips; the row keeps who it is and the toggle,
+   and the name gets the room back. */
+body[data-size="receipt-open"] .rr a.rr-act,
+body[data-size="receipt-open"] .rr .rr-sc,
+body[data-size="receipt-open"] .rr .rr-win {
+  display: none;
+}
+/* Q-1771: an item the row had no room for goes whole, never clipped. */
+.rr .rr-dropped {
+  display: none !important;
+}
+.rr .rr-caret {
+  font-size: var(--t-2xs);
+  margin-left: 5px;
+  color: var(--muted);
+}
+@media (max-width: 480px) {
+  .rr .rr-act {
+    min-height: 44px;
+  }
+}
+/* What the disclosure opens into, under the row and above the action
+   band the adapter draws once the row is open. */
+.rr-body {
+  margin-top: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+.rr-body .sv-head,
+.rr-body .sv-foot {
+  display: none !important;
+}
+.rr-body .sv-card {
+  margin-top: 2px;
+}
+/* A dry run's draft check (Q-1848): the agent's step, not the user's
+   result, so the name reads at the same muted weight as its chips. */
+.rr-draft .rr-name {
+  color: var(--muted);
+  font-weight: 500;
+}
+/* The honest error state (BUILD §4.1): a named lead plus the message,
+   never "Untitled" over four em dashes. */
+.err-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-height: 36px;
+}
+.err-line .rr-name {
+  font: 600 var(--t-sm) / var(--t-sm-lh) var(--font-mono);
+}
+.err-line .msg {
+  color: var(--bad);
+  font-size: var(--t-sm);
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
+/* ── A plan limit (Q-1806) ─────────────────────────────────────────
+   A state, not a failure: ordinary text colour (never `--bad`), the
+   facts in reading order, and one ordinary link. No accent fill, no
+   badge — the link is the same `.button-link` every card uses. */
+.plan-limit {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 0;
+}
+.pl-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.pl-headline {
+  color: var(--fg);
+  font-weight: 600;
+  font-size: var(--t-sm);
+}
+.plan-limit p {
+  margin: 0;
+  font-size: var(--t-sm);
+}
+
+/* ── The comparison card (BUILD §4.4, Q-1688) ─────────────────────── */
+.cmp-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  margin-bottom: 6px;
+}
+.cmp-head .rr-name {
+  font: 600 var(--t-sm) / var(--t-sm-lh) var(--font-mono);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  flex: 0 1 auto;
+}
+.chip.warn {
+  color: var(--bad);
+  border-color: var(--bad);
+}
+table.cmp {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 6px 0;
+  font-variant-numeric: tabular-nums;
+  table-layout: fixed;
+}
+table.cmp td,
+table.cmp th {
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+  font-size: var(--t-xs);
+  min-width: 0;
+}
+table.cmp th {
+  font-size: var(--t-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  font-weight: 500;
+}
+table.cmp th.run {
+  text-transform: none;
+  letter-spacing: 0;
+  font: 600 var(--t-micro) / var(--t-micro-lh) var(--font-mono);
+  color: var(--fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: right;
+}
+table.cmp th.run .base {
+  display: block;
+  font: 500 var(--t-2xs) / var(--t-2xs-lh) var(--font);
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+table.cmp th.k,
+table.cmp td.k {
+  color: var(--muted);
+  white-space: nowrap;
+  width: 22%;
+}
+table.cmp td.num {
+  text-align: right;
+  white-space: nowrap;
+}
+table.cmp td.pos {
+  color: var(--good);
+}
+table.cmp td.neg {
+  color: var(--bad);
+}
+table.cmp td .delta {
+  display: block;
+  font-size: var(--t-tiny);
+  line-height: var(--t-tiny-lh);
+  color: var(--muted);
+  font-weight: 400;
+}
+table.cmp td a {
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 500;
+}
+table.cmp td.diff {
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  color: var(--muted);
+  white-space: normal;
+  text-align: right;
+}
+.cmp-lines .row-item .lead {
+  font-family: var(--font-mono);
+}
+/* The narrow comparison (Q-1784): the four metric names once, as a header
+   over four aligned columns; each run is its name over its four numbers. */
+.cmp-blocks .row-head,
+.cmp-blocks .row-item {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 2px 10px;
+}
+.cmp-blocks .row-head {
+  padding: 0 0 4px;
+  border-bottom: 1px solid var(--line);
+}
+.cmp-blocks .row-head .k {
+  color: var(--muted);
+  font-size: var(--t-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cmp-blocks .row-item .lead {
+  grid-column: 1 / -1;
+  margin-right: 0;
+}
+.row-item .base {
+  font: 500 var(--t-2xs) var(--font);
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-left: 6px;
+}
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 2px 2px 6px;
+  font: var(--t-xs) / var(--t-xs-lh) var(--font-mono);
+  color: var(--fg);
+}
+.legend .sw {
+  display: inline-block;
+  width: 18px;
+  height: 0;
+  border-top: 2px solid;
+  vertical-align: middle;
+  margin-right: 6px;
+}
+.legend .sw.dash {
+  border-top-style: dashed;
+}
+.legend .sw.heavy {
+  border-top-width: 3px;
+}
+.legend .rest {
+  color: var(--muted);
+  font-family: var(--font);
+}
+.chart .ml {
+  fill: none;
+  stroke-width: 1.4;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.chart .ml.base {
+  stroke-width: 2.2;
+}
+.chart .mdd {
+  fill: none;
+  stroke-width: 1;
+  stroke-opacity: 0.8;
+}
+/* Dates not every run covers (Q-1802): the common window stays clear. */
+.chart .outside {
+  fill: var(--fg);
+  fill-opacity: 0.07;
+}
+.link-row .muted {
+  font-size: var(--t-xs);
+}
+:root[data-display-mode="fullscreen"] .chip {
+  font-size: var(--t-sm);
+}
+
+/* ── Per-kind skeletons (BUILD §4.1) ──────────────────────────────── */
+/* The template ships every shape; exactly one set is shown, chosen by
+   the card KIND. The kind's full shape is what a call expected to be a
+   VIEW waits as; a call expected to be a receipt waits as the in-flight
+   row below (`data-expect`, set from the call's arguments — Q-1769), and
+   the receipt variant is also what a RE-render falls back to once a size
+   is known (a second tool result on an open card). */
+.skeleton .sk-row,
+.skeleton .sk-table {
+  display: none;
+}
+.skeleton .sk-row {
+  height: 20px;
+  width: 62%;
+  border-radius: 6px;
+}
+.skeleton .sk-table {
+  height: 96px;
+  margin-bottom: 8px;
+}
+/* Comparison: a table over a chart, never four tiles. */
+body[data-card="compare"] .skeleton .sk-title,
+body[data-card="compare"] .skeleton .sk-tiles {
+  display: none;
+}
+body[data-card="compare"] .skeleton .sk-table {
+  display: block;
+}
+body[data-card="compare"] .skeleton .sk-block {
+  height: 150px;
+}
+/* A receipt is one row and nothing else. */
+body[data-size="receipt"] .skeleton .sk-title,
+body[data-size="receipt"] .skeleton .sk-tiles,
+body[data-size="receipt"] .skeleton .sk-table,
+body[data-size="receipt"] .skeleton .sk-block {
+  display: none;
+}
+body[data-size="receipt"] .skeleton .sk-row {
+  display: block;
+}
+/* In flight (Q-1769): the adapter sets `data-expect` from the call's own
+   arguments before any result exists. A call that will resolve into a
+   receipt waits AS the receipt row — same padding, same `.rr` row, the
+   card head hidden exactly as `receiptRow` hides it — so the result swaps
+   in place instead of collapsing a full skeleton into one line. Before
+   the arguments arrive it is a bare row bar of the same height. A call
+   expected to be a view keeps its kind's full skeleton above. */
+.skeleton .sk-live {
+  display: none;
+}
+body[data-expect="receipt"] .keel-card {
+  padding: 6px 12px calc(6px + var(--safe-bottom)) 12px;
+}
+body[data-expect="receipt"] .card-head {
+  display: none;
+}
+body[data-expect="receipt"] .skeleton {
+  margin: 0;
+}
+body[data-expect="receipt"] .skeleton .sk-title,
+body[data-expect="receipt"] .skeleton .sk-tiles,
+body[data-expect="receipt"] .skeleton .sk-table,
+body[data-expect="receipt"] .skeleton .sk-block {
+  display: none;
+}
+body[data-expect="receipt"] .skeleton .sk-row {
+  display: block;
+  margin: 8px 0;
+}
+body[data-expect="receipt"] .skeleton.has-live .sk-row {
+  display: none;
+}
+body[data-expect="receipt"] .skeleton .sk-live {
+  display: flex;
+}
+/* A call expected to be a VIEW says what it is doing too (Q-1883): the
+   status line takes the title bar's place, at the title bar's height, above
+   the full shape the card becomes — words, not only grey blocks. */
+body[data-expect="view"] .skeleton.has-live .sk-title {
+  display: none;
+}
+body[data-expect="view"] .skeleton .sk-live {
+  display: flex;
+  min-height: 18px;
+  margin-bottom: 8px;
+}
+.skeleton .sk-live .rr-win {
+  font-size: var(--t-sm);
+}
+@media (prefers-reduced-motion: no-preference) {
+  /* The words stay still and readable; only the status text breathes. */
+  .skeleton.has-live {
+    animation: none;
+  }
+  .skeleton .sk-live .rr-win {
+    animation: keel-pulse 1.4s ease-in-out infinite;
+  }
+}
+/* The one change a save receipt shows (BUILD §4.2): where it is, and
+   what it was before. */
+.rr .rr-sc {
+  display: inline-flex;
+  align-items: center;
+  font: var(--t-micro) / 1 var(--font-mono);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+  max-width: 100%;
+  min-width: 0;
+}
+.rr .rr-sc .k {
+  padding: 4px 6px;
+  color: var(--muted);
+  background: var(--tile);
+  white-space: nowrap;
+}
+/* The block path is capped so a long component name stays compact, and
+   hidden outright when the row needs the room (Q-1795): the param and its
+   two values are what the chip is for. */
+.rr .rr-sc .p {
+  display: inline-block;
+  max-width: 18ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+}
+.rr .rr-sc.rr-compact .p,
+.rr .rr-sc.rr-compact .sep {
+  display: none;
+}
+.rr .rr-sc .v {
+  padding: 4px 6px;
+  color: var(--fg);
+  white-space: nowrap;
+}
+.rr .rr-sc .old {
+  color: var(--muted);
+  text-decoration: line-through;
+  margin-right: 5px;
+}
+.rr .rr-sc .new {
+  font-weight: 600;
 }

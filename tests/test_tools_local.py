@@ -2,7 +2,21 @@
 
 from __future__ import annotations
 
+import os
+
 import pytest
+import respx
+
+
+@pytest.fixture
+def mock_api():
+    """respx mock of the Keel API: the lock tools must make NO call to it."""
+    os.environ["KEEL_API_KEY"] = "test-key"
+    os.environ["KEEL_API_URL"] = "https://api.test.usekeel.io"
+    with respx.mock(base_url="https://api.test.usekeel.io") as mock:
+        yield mock
+    os.environ.pop("KEEL_API_KEY", None)
+    os.environ.pop("KEEL_API_URL", None)
 
 
 # Valid pipeline using actual component names from registry
@@ -126,26 +140,76 @@ class TestLockTools:
         assert "ROC" in lock
         assert isinstance(lock["ROC"], int)
 
-    def test_lock_status_current(self):
-        from keel.tools.local import strategy_lock_generate, strategy_lock_status
+    # RollingUniverseMask v2 made `dollar_volume_slot` required; this source is
+    # the v1 interface. PriceDataLoader v1 -> latest changes no interface.
+    PINNED_SOURCE = """
+Globals(target_timeframe="1d")
+Universe(mode="top_volume", top_n=2, resolved=["BTC", "ETH"], resolved_at="2026-07-01T00:00:00Z")
+Pipeline([
+    PriceDataLoader(),
+    Store("ohlcv"),
+    RollingUniverseMask(top_n=2),
+    Store("universe_mask"),
+    Load("ohlcv"),
+    EWMA(window=20),
+    ApplyUniverseMask(mask_slot="universe_mask"),
+    EqualWeightSizer(target_leverage=1.0),
+    FillNaN(fill_value=0.0),
+])
+"""
 
-        lock_result = strategy_lock_generate(source=VALID_SOURCE)
-        lock = lock_result["component_lock"]
-        status = strategy_lock_status(source=VALID_SOURCE, component_lock=lock)
-        assert status["status"] == "current"
+    def _pinned_lock(self) -> dict[str, int]:
+        from keel.tools.local import strategy_lock_generate
 
-    def test_lock_status_no_lock(self):
+        lock = strategy_lock_generate(source=self.PINNED_SOURCE)["component_lock"]
+        # Non-vacuity: the bundle's latest is above both pins.
+        assert lock["RollingUniverseMask"] > 1 and lock["PriceDataLoader"] > 1
+        return {**lock, "RollingUniverseMask": 1, "PriceDataLoader": 1}
+
+    def test_lock_status_decides_breaking_offline_with_the_one_owner(self, mock_api):
+        """Drift entries come from the vendored lock_upgrade (the owner keel-api's
+        /lock/check runs), with no API call: an unchanged interface is not
+        breaking; a v2 that adds a required slot is, and says what is missing."""
         from keel.tools.local import strategy_lock_status
 
-        result = strategy_lock_status(source=VALID_SOURCE)
-        assert result["status"] == "unknown"
+        result = strategy_lock_status(source=self.PINNED_SOURCE, component_lock=self._pinned_lock())
+        assert not mock_api.calls
+        assert result["status"] == "drift"
+        by = {d["component"]: d for d in result["drift"]}
+        assert by["PriceDataLoader"]["breaking"] is False
+        assert by["PriceDataLoader"]["issues_at_target"] == []
+        rum = by["RollingUniverseMask"]
+        assert rum["breaking"] is True
+        assert [i["code"] for i in rum["issues_at_target"]] == ["MISSING_PARAM"]
+        assert rum["interface"]["params_added"] == [
+            {"name": "dollar_volume_slot", "required": True, "slot_type": "DollarVolumeSeries"}
+        ]
 
-    def test_lock_upgrade(self):
+    def test_lock_upgrade_bumps_offline_and_validates_at_the_new_pin(self, mock_api):
         from keel.tools.local import strategy_lock_upgrade
 
-        result = strategy_lock_upgrade(source=VALID_SOURCE)
-        assert "component_lock" in result
-        assert "upgraded" in result
+        lock = self._pinned_lock()
+        ok = strategy_lock_upgrade(
+            source=self.PINNED_SOURCE, component_lock=lock, components=["PriceDataLoader"]
+        )
+        bad = strategy_lock_upgrade(
+            source=self.PINNED_SOURCE, component_lock=lock, components=["RollingUniverseMask"]
+        )
+        assert not mock_api.calls
+        assert ok["upgraded"] == ["PriceDataLoader"] and ok["valid"] is True
+        assert ok["component_lock"]["RollingUniverseMask"] == 1  # only the requested pin
+        assert bad["upgraded"] == ["RollingUniverseMask"] and bad["valid"] is False
+        assert "MISSING_PARAM" in {i["code"] for i in bad["issues"]}
+        assert [c["component"] for c in bad["changes"]] == ["RollingUniverseMask"]
+
+    def test_lock_tools_without_a_lock_return_a_fresh_one(self):
+        from keel.tools.local import strategy_lock_status, strategy_lock_upgrade
+
+        status = strategy_lock_status(source=self.PINNED_SOURCE)
+        up = strategy_lock_upgrade(source=self.PINNED_SOURCE)
+        assert status["status"] == "current" and status["drift"] == []
+        assert up["upgraded"] == [] and up["valid"] is None
+        assert status["component_lock"] == up["component_lock"]
 
 
 class TestUniverseTools:
@@ -174,6 +238,7 @@ Pipeline([
         from keel.tools.local import universe_set
 
         result = universe_set(
+            resolve=False,
             source=self.SOURCE_WITH_UNIVERSE,
             mode="top_volume",
             market="perp",
@@ -181,6 +246,131 @@ Pipeline([
         )
         assert "source" in result
         assert result["universe"]["mode"] == "top_volume"
+
+    #: A resolved universe carrying everything `universe set` takes no
+    #: argument for — the shape every real strategy has once it can run.
+    RESOLVED_WITH_STATE = (
+        'Universe(mode="top_volume", market="perp", top_n=30, '
+        "min_trailing_notional_proxy=10000000.0, "
+        'resolved=["BTC", "ETH"], resolved_at="2026-09-01T00:00:00+00:00", '
+        "groups={'core': ['BTC']}, max_leverages={'BTC': 40.0, 'ETH': 25.0})\n"
+        'Pipeline([ROC(period=8)], name="s")\n'
+    )
+
+    def test_universe_set_keeps_resolved_state_groups_leverages_and_the_floor(self):
+        """U-18 (SDK twin): rebuilding the spec from the call's arguments
+        deleted every declaration the signature has no argument for. The worst
+        of them is `resolved` — `keel universe set` on a resolved strategy
+        silently UN-resolved it, and the next `deploy` / `backtest_submit`
+        refused the strategy with UNRESOLVED_UNIVERSE, naming nothing the user
+        had done. A call that leaves the criteria as declared keeps all of it
+        (Q-2435: only a CRITERIA change drops the resolution — next test)."""
+        from keel.tools.local import universe_set
+
+        from pipeline_engine.dsl import parse_strategy
+
+        result = universe_set(
+            resolve=False, source=self.RESOLVED_WITH_STATE, mode="top_volume", top_n=30
+        )
+        universe = parse_strategy(result["source"]).universe
+
+        assert universe.top_n == 30
+        assert universe.resolved == ["BTC", "ETH"]
+        assert universe.resolved_at == "2026-09-01T00:00:00+00:00"
+        assert universe.groups == {"core": ["BTC"]}
+        assert universe.max_leverages == {"BTC": 40.0, "ETH": 25.0}
+        # The fixture declares the floor under the deprecated alias (the
+        # alias arm, DV6b): carried with the same value and written back
+        # under the current name — universe_set is a writer.
+        assert universe.min_trailing_dollar_volume == 10000000.0
+        assert universe.min_trailing_notional_proxy is None
+
+    @pytest.mark.parametrize(
+        ("kwargs", "field"),
+        [
+            ({"mode": "category", "categories": ["defi"]}, "categories"),
+            ({"mode": "top_volume", "top_n": 30, "lookback": "90d"}, "lookback"),
+            ({"mode": "top_volume", "top_n": 30, "exclusions": ["BTC"]}, "exclusions"),
+            ({"mode": "top_volume", "top_n": 30, "inclusions": ["MORPHO"]}, "inclusions"),
+            ({"mode": "top_volume", "top_n": 30, "volume_quartiles": ["q4"]}, "volume_quartiles"),
+            ({"mode": "manual", "symbols": ["MORPHO"]}, "symbols"),
+            ({"mode": "top_volume", "top_n": 50}, "top_n"),
+        ],
+    )
+    def test_universe_set_no_resolve_drops_a_resolution_the_criteria_did_not_produce(
+        self, kwargs, field
+    ):
+        """Q-2435 (SDK twin, `resolve=False` / `keel universe set
+        --no-resolve`): a criteria edit writes no `resolved` list, so the
+        docstring's promise holds — the next save resolves the NEW criteria
+        server-side instead of storing the old list under the new label. The
+        floor and the hand-authored groups are carried. Red on the pre-fix
+        shared constructor (the carry)."""
+        from keel.tools.local import universe_set
+
+        from pipeline_engine.dsl import parse_strategy
+
+        before = parse_strategy(self.RESOLVED_WITH_STATE).universe
+        assert before.resolved == ["BTC", "ETH"]  # non-vacuity: a resolved fixture
+        result = universe_set(resolve=False, source=self.RESOLVED_WITH_STATE, **kwargs)
+        universe = parse_strategy(result["source"]).universe
+
+        assert getattr(universe, field) != getattr(before, field)  # the edit landed
+        assert universe.resolved is None
+        assert universe.resolved_at is None
+        assert universe.max_leverages is None
+        assert universe.groups == {"core": ["BTC"]}
+        assert universe.min_trailing_dollar_volume == 10000000.0
+
+    def test_universe_set_replaces_the_floor_when_the_caller_passes_one(self):
+        """Carrying is not pinning: an explicit value still wins."""
+        from keel.tools.local import universe_set
+
+        from pipeline_engine.dsl import parse_strategy
+
+        result = universe_set(
+            resolve=False,
+            source=self.RESOLVED_WITH_STATE,
+            mode="top_volume",
+            top_n=30,
+            min_trailing_dollar_volume=5e6,
+        )
+        universe = parse_strategy(result["source"]).universe
+        assert universe.min_trailing_dollar_volume == 5e6
+        assert universe.min_trailing_notional_proxy is None
+
+    def test_universe_set_carries_a_current_name_floor(self):
+        from keel.tools.local import universe_set
+
+        from pipeline_engine.dsl import parse_strategy
+
+        source = self.RESOLVED_WITH_STATE.replace(
+            "min_trailing_notional_proxy", "min_trailing_dollar_volume"
+        )
+        universe = parse_strategy(
+            universe_set(resolve=False, source=source, mode="top_volume", top_n=50)["source"]
+        ).universe
+        assert universe.min_trailing_dollar_volume == 10000000.0
+        assert universe.min_trailing_notional_proxy is None
+
+    def test_universe_set_on_a_strategy_with_no_universe_carries_nothing(self):
+        """Control: with nothing declared there is nothing to carry, and the
+        criteria still land."""
+        from keel.tools.local import universe_set
+
+        from pipeline_engine.dsl import parse_strategy
+
+        result = universe_set(
+            resolve=False,
+            source='Pipeline([ROC(period=8)], name="s")\n',
+            mode="top_volume",
+            top_n=10,
+        )
+        universe = parse_strategy(result["source"]).universe
+        assert universe.top_n == 10
+        assert universe.resolved is None and universe.max_leverages is None
+        assert universe.min_trailing_notional_proxy is None
+        assert universe.min_trailing_dollar_volume is None
 
     def test_universe_resolve_bakes_resolved_into_source(self, monkeypatch):
         """universe_resolve reads criteria from source, calls API, bakes the
@@ -508,7 +698,12 @@ class TestUniverseSetPreservesSource:
         from keel.tools.local import universe_set
 
         result = universe_set(
-            source=COMMENTED_SOURCE, mode="top_volume", market="perp", top_n=10, lookback="30d"
+            resolve=False,
+            source=COMMENTED_SOURCE,
+            mode="top_volume",
+            market="perp",
+            top_n=10,
+            lookback="30d",
         )
         new_source = result["source"]
 
@@ -531,15 +726,34 @@ class TestUniverseSetPreservesSource:
             raise edits.EditEquivalenceError("forced")
 
         monkeypatch.setattr("pipeline_engine.dsl.edits.replace_declaration", _boom)
-        result = universe_set(source=COMMENTED_SOURCE, mode="manual", symbols=["BTC"])
+        result = universe_set(
+            resolve=False, source=COMMENTED_SOURCE, mode="manual", symbols=["BTC"]
+        )
         assert result["reformatted"] is True
         assert result["universe"]["mode"] == "manual"
 
 
 class TestUniverseResolveUnderfill:
-    """Lane U: under-filled top_n is written down so the STALE gate can't loop."""
+    """The `top_n` write-down fires on UNDER-SUPPLY, and on nothing else.
 
-    def _resolve(self, monkeypatch, response):
+    The write-down exists so a permanently unachievable `top_n` cannot fail the
+    STALE_UNIVERSE gate forever (cohort Lane U). Measured against the FINAL
+    list — what this did until 2026-09-16 (evaluator T3 finding F1) — it also
+    fired on a list shortened by the user's own exclusions or by a declared
+    band, and both RATCHET: `top_n=30, exclusions=["BTC"]` walked 30 → 29 → 28
+    per call, and `top_n=50` under a q1 band was rewritten to the band size.
+    That is the silent rewrite of a declared intent D-11 rejected.
+
+    The decision is `top_n_under_supplied` — the one predicate keel-api and the
+    rich twin use — reading `supply_before_filters`: the ranked pool the VENUE
+    supplied, measured BEFORE bands, floor, exclusions and inclusions.
+    """
+
+    SOURCE = """Universe(mode="top_volume", market="perp", top_n=200)
+Pipeline([ROC(period=8)], name='s')
+"""
+
+    def _resolve(self, monkeypatch, response, source=None):
         from keel.tools.local import universe_resolve
 
         class _StubClient:
@@ -547,12 +761,11 @@ class TestUniverseResolveUnderfill:
                 return response
 
         monkeypatch.setattr("keel.client.KeelClient", _StubClient)
-        source = """Universe(mode="top_volume", market="perp", top_n=200)
-Pipeline([ROC(period=8)], name='s')
-"""
-        return universe_resolve(source=source)
+        return universe_resolve(source=source or self.SOURCE)
 
-    def test_top_n_written_down_on_underfill(self, monkeypatch):
+    # ── arm 1: the venue really cannot supply top_n ──────────────────────────
+
+    def test_top_n_written_down_on_under_supply(self, monkeypatch):
         resolved = [f"S{i}" for i in range(177)]
         result = self._resolve(
             monkeypatch,
@@ -561,6 +774,7 @@ Pipeline([ROC(period=8)], name='s')
                 "resolved_at": "2026-08-20T00:00:00+00:00",
                 "count": 177,
                 "requested_top_n": 200,
+                "supply_before_filters": 177,
                 "warnings": ["venue can supply 177 of 200 requested assets"],
             },
         )
@@ -570,23 +784,101 @@ Pipeline([ROC(period=8)], name='s')
             "reason": "venue can supply 177 of 200 requested assets",
         }
         assert "top_n=177" in result["source"].replace(" ", "")
+        # The server's own under-supply sentence passes through untouched; the
+        # SDK does not add a third phrasing of the same fact (the CLI renders
+        # `top_n_written_down` beside it).
         assert result["warnings"] == ["venue can supply 177 of 200 requested assets"]
 
-    def test_exact_fill_leaves_top_n_alone(self, monkeypatch):
-        resolved = [f"S{i}" for i in range(200)]
+    def test_the_write_down_is_idempotent_on_a_second_call(self, monkeypatch):
+        """It must CONVERGE: re-resolving the written-down source sees the same
+        177-name pool, which now equals top_n, so nothing moves."""
+        resolved = [f"S{i}" for i in range(177)]
+        response = {
+            "resolved": resolved,
+            "resolved_at": "2026-08-20T00:00:00+00:00",
+            "count": 177,
+            "supply_before_filters": 177,
+        }
+        first = self._resolve(monkeypatch, response)
+        second = self._resolve(monkeypatch, response, source=first["source"])
+
+        assert "top_n=177" in second["source"].replace(" ", "")
+        assert "top_n_written_down" not in second
+
+    # ── arm 2: the shortfall is the user's own exclusions ────────────────────
+
+    def test_an_exclusion_shortfall_does_not_ratchet_top_n(self, monkeypatch):
+        """F1's measured ratchet: the venue supplied all 30 and an exclusion
+        removed one. Two calls, and top_n must still be 30 — measured against
+        the final list it would read 29, then 28."""
+        source = """Universe(mode="top_volume", market="perp", top_n=30, exclusions=["BTC"])
+Pipeline([ROC(period=8)], name='s')
+"""
+        response = {
+            "resolved": [f"S{i}" for i in range(29)],
+            "resolved_at": "2026-08-20T00:00:00+00:00",
+            "count": 29,
+            "requested_top_n": 30,
+            "supply_before_filters": 30,
+        }
+        first = self._resolve(monkeypatch, response, source=source)
+        second = self._resolve(monkeypatch, response, source=first["source"])
+
+        assert "top_n=30" in second["source"].replace(" ", "")
+        assert "top_n_written_down" not in first and "top_n_written_down" not in second
+
+    # ── arm 3: the shortfall is a declared filter — top_n is a CAP (D-11) ────
+
+    def test_a_quartile_under_fill_is_not_written_down(self, monkeypatch):
+        """`top_n=50` over a q1 band that can only supply 44. top_n is a cap
+        here, not a target; rewriting it to 44 would replace the user's cap
+        with today's band size. The server's cap sentence is passed through."""
+        source = """Universe(mode="top_volume", market="perp", top_n=50, volume_quartiles=["q1"])
+Pipeline([ROC(period=8)], name='s')
+"""
         result = self._resolve(
             monkeypatch,
             {
-                "resolved": resolved,
+                "resolved": [f"S{i}" for i in range(44)],
+                "resolved_at": "2026-08-20T00:00:00+00:00",
+                "count": 44,
+                "requested_top_n": 50,
+                "supply_before_filters": 178,
+                "pool_size": 178,
+                "band_size": 44,
+                "warnings": [
+                    "44 assets selected against top_n=50 — top_n is a cap under a "
+                    "volume-quartile filter, not a target."
+                ],
+            },
+            source=source,
+        )
+        assert "top_n=50" in result["source"].replace(" ", "")
+        assert "top_n_written_down" not in result
+        assert any("cap under a volume-quartile filter" in w for w in result["warnings"])
+        # The evidence rides along so an agent can explain the 44 (D-12).
+        assert result["pool_size"] == 178 and result["band_size"] == 44
+
+    # ── controls ────────────────────────────────────────────────────────────
+
+    def test_exact_fill_leaves_top_n_alone(self, monkeypatch):
+        result = self._resolve(
+            monkeypatch,
+            {
+                "resolved": [f"S{i}" for i in range(200)],
                 "resolved_at": "2026-08-20T00:00:00+00:00",
                 "count": 200,
                 "requested_top_n": 200,
+                "supply_before_filters": 200,
             },
         )
         assert "top_n_written_down" not in result
         assert "top_n=200" in result["source"].replace(" ", "")
 
-    def test_old_server_without_requested_top_n_unchanged(self, monkeypatch):
+    def test_an_older_server_without_the_pool_size_never_guesses(self, monkeypatch):
+        """No `supply_before_filters` means the shortfall's CAUSE is unknown,
+        and a write-down rewrites the user's declaration — so it says what it
+        cannot tell instead of guessing."""
         result = self._resolve(
             monkeypatch,
             {
@@ -597,3 +889,167 @@ Pipeline([ROC(period=8)], name='s')
         )
         assert "top_n_written_down" not in result
         assert "top_n=200" in result["source"].replace(" ", "")
+        assert any("does not report `supply_before_filters`" in w for w in result["warnings"])
+
+
+class TestUniverseResolveSnapshotLabel:
+    def test_as_of_and_snapshot_note_pass_through_when_present(self, monkeypatch):
+        """Q-0983: the server's ONE-SNAPSHOT label reaches the caller verbatim;
+        an older server that omits it leaves the keys absent, never fabricated."""
+        from keel.tools.local import universe_resolve
+
+        payload = {
+            "resolved": ["BTC"],
+            "resolved_at": "2025-06-01T12:00:00+00:00",
+            "as_of": "2025-06-01T12:00:00+00:00",
+            "snapshot_note": "One snapshot as of 2025-06-01T12:00:00+00:00: ...",
+            "count": 1,
+        }
+
+        class _StubClient:
+            def __init__(self):
+                pass
+
+            def post(self, path: str, json: dict):
+                return dict(payload)
+
+        monkeypatch.setattr("keel.client.KeelClient", _StubClient)
+        source = 'Universe(mode="manual", symbols=["BTC"])\nPipeline([ROC(period=8)], name="s")\n'
+        result = universe_resolve(source=source)
+        assert result["as_of"] == payload["as_of"]
+        assert result["snapshot_note"] == payload["snapshot_note"]
+
+        del payload["as_of"], payload["snapshot_note"]
+        result = universe_resolve(source=source)
+        assert "as_of" not in result and "snapshot_note" not in result
+
+
+class TestUniverseResolveNotionalFloor:
+    @staticmethod
+    def _stub(monkeypatch) -> dict:
+        captured: dict = {}
+
+        class _StubClient:
+            def __init__(self):
+                pass
+
+            def post(self, path: str, json: dict):
+                captured["body"] = json
+                return {"resolved": ["BTC"], "resolved_at": "2026-06-03T12:00:00+00:00", "count": 1}
+
+        monkeypatch.setattr("keel.client.KeelClient", _StubClient)
+        return captured
+
+    @pytest.mark.parametrize(
+        # DV6b: the current name, and the deprecated alias (the alias arm) —
+        # the same floor, sent under the current name either way.
+        "field",
+        ["min_trailing_dollar_volume", "min_trailing_notional_proxy"],
+    )
+    def test_declared_floor_rides_the_request_body(self, monkeypatch, field):
+        """Spec 04 §1: the floor is forwarded when declared and absent
+        otherwise (the server default is 'no floor', so absence is exact);
+        universe_get reports it under the name it was declared with."""
+        from keel.tools.local import universe_get, universe_resolve
+
+        captured = self._stub(monkeypatch)
+        with_floor = (
+            f'Universe(mode="top_volume", market="perp", top_n=20, {field}=10000000)\n'
+            "Pipeline([ROC(period=8)], name='s')\n"
+        )
+        universe_resolve(source=with_floor)
+        assert captured["body"]["min_trailing_dollar_volume"] == 10000000
+        assert "min_trailing_notional_proxy" not in captured["body"]
+        assert universe_get(source=with_floor)["universe"][field] == 10000000
+        universe_resolve(
+            source='Universe(mode="manual", symbols=["BTC"])\nPipeline([ROC(period=8)], name=\'s\')\n'
+        )
+        assert "min_trailing_dollar_volume" not in captured["body"]
+        assert "min_trailing_notional_proxy" not in captured["body"]
+
+    def test_both_floor_names_are_sent_as_declared(self, monkeypatch):
+        """Ambiguous (DV6b): forwarded as declared so the API refuses it —
+        this tool never picks a winner."""
+        from keel.tools.local import universe_resolve
+
+        captured = self._stub(monkeypatch)
+        universe_resolve(
+            source=(
+                'Universe(mode="top_volume", top_n=20, min_trailing_dollar_volume=1e7, '
+                "min_trailing_notional_proxy=2e7)\nPipeline([ROC(period=8)], name='s')\n"
+            )
+        )
+        assert (
+            captured["body"]["min_trailing_dollar_volume"],
+            captured["body"]["min_trailing_notional_proxy"],
+        ) == (1e7, 2e7)
+
+
+class TestUniverseSetResolvesInTheSameCall:
+    """Q-2283 (spec 03 U2): `universe_set` resolves by default — the agent or
+    CLI user gets the baked list and the server's note without a second call."""
+
+    NOTE = (
+        "Resolved 2 of 3 symbols: BTC, ETH. Dropped xyz:AAPL — listed on Hyperliquid "
+        "(HIP-3); Keel does not support HIP-3 markets yet — support is coming soon."
+    )
+    SOURCE = 'Universe(mode="top_volume", top_n=5)\nPipeline([ROC(period=8)], name="s")\n'
+
+    def test_default_resolves_and_carries_the_note(self, monkeypatch):
+        from keel.tools.local import universe_set
+
+        from pipeline_engine.dsl import parse_strategy
+
+        posted: list[dict] = []
+        note = self.NOTE
+
+        class _StubClient:
+            def post(self, path: str, json: dict):
+                posted.append({"path": path, "body": json})
+                return {
+                    "resolved": ["BTC", "ETH"],
+                    "resolved_at": "2026-10-03T00:00:00+00:00",
+                    "count": 2,
+                    "resolution_note": note,
+                    "dropped": ["xyz:AAPL"],
+                }
+
+        monkeypatch.setattr("keel.client.KeelClient", _StubClient)
+        result = universe_set(source=self.SOURCE, mode="manual", symbols=["BTC", "ETH", "xyz:AAPL"])
+
+        assert len(posted) == 1 and posted[0]["path"] == "/v1/universe/resolve"
+        assert posted[0]["body"]["symbols"] == ["BTC", "ETH", "xyz:AAPL"]
+        u = parse_strategy(result["source"]).universe
+        assert u.symbols == ["BTC", "ETH", "xyz:AAPL"]  # the user's list is kept
+        assert u.resolved == ["BTC", "ETH"]
+        assert result["universe"]["resolved"] == ["BTC", "ETH"]
+        assert result["resolution_note"] == note
+        assert result["dropped"] == ["xyz:AAPL"]
+
+    def test_nothing_tradeable_is_this_calls_refusal(self, monkeypatch):
+        from keel.errors import ValidationError
+        from keel.tools.local import universe_set
+
+        class _StubClient:
+            def post(self, path: str, json: dict):
+                raise ValidationError(
+                    "None of the 1 requested symbol can be traded on Keel …",
+                    error_code="UNIVERSE_NOTHING_TRADEABLE",
+                )
+
+        monkeypatch.setattr("keel.client.KeelClient", _StubClient)
+        with pytest.raises(ValidationError) as exc:
+            universe_set(source=self.SOURCE, mode="manual", symbols=["xyz:AAPL"])
+        assert exc.value.error_code == "UNIVERSE_NOTHING_TRADEABLE"
+
+    def test_CONTROL_resolve_false_stays_offline(self, monkeypatch):
+        from keel.tools.local import universe_set
+
+        class _NoNetwork:
+            def __init__(self):
+                raise AssertionError("resolve=False must not touch the API")
+
+        monkeypatch.setattr("keel.client.KeelClient", _NoNetwork)
+        result = universe_set(source=self.SOURCE, mode="manual", symbols=["BTC"], resolve=False)
+        assert "resolution_note" not in result
+        assert result["universe"]["symbols"] == ["BTC"]

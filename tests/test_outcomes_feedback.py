@@ -88,26 +88,18 @@ def test_round_trip_happy_path(_api_env):
 
 
 @respx.mock
-def test_round_trip_malformed_input_is_passed_through_and_still_succeeds(_api_env):
-    """The server is the single normalization point: an off-enum kind is
-    sent verbatim; keel-api answers 200 + note (M2.5 contract) and the
-    tool surfaces that note in a SUCCESS envelope."""
-    respx.post(f"{API}/v1/feedback").mock(
-        return_value=Response(
-            200,
-            json={
-                "status": "ok",
-                "feedback_id": "fbk_01NOTE",
-                "note": "kind 'rant' is not one of friction, praise, bug; stored as-is",
-            },
-        )
+def test_an_off_enum_kind_is_refused_before_anything_is_sent(_api_env):
+    """`kind` publishes an enum (friction / praise / bug), and a value
+    outside it is refused before the POST (Q-2273 L5) — never stored under a
+    kind no reader filters on. Never-fails (spec 02 R4) covers DELIVERY: a
+    well-formed note still reports success when keel-api cannot take it."""
+    route = respx.post(f"{API}/v1/feedback").mock(
+        return_value=Response(200, json={"status": "ok", "feedback_id": "fbk_01X"})
     )
     env = _call_mcp({"kind": "rant", "text": "everything"})
-    assert env["status"] == "ok"
-    assert env["delivered"] is True
-    assert env["feedback_id"] == "fbk_01NOTE"
-    assert "kind 'rant'" in env["note"]
-    assert "code" not in env
+    assert env["code"] == "usage_error"
+    assert "`kind`" in env["message"] and "'rant'" in env["message"]
+    assert not route.called
 
 
 @respx.mock
@@ -146,16 +138,16 @@ def test_unauthenticated_returns_success_with_note(monkeypatch):
 
 
 @respx.mock
-def test_empty_call_still_succeeds_with_guidance_note(_api_env):
-    """A contentless call is delivered (the empty record itself is
-    friction signal) and the note nudges toward providing `text`."""
-    respx.post(f"{API}/v1/feedback").mock(
+def test_an_empty_call_is_refused_and_sends_nothing(_api_env):
+    """A contentless call stored an empty record no one could act on
+    (Q-2273): it is refused before the POST, naming `text`."""
+    route = respx.post(f"{API}/v1/feedback").mock(
         return_value=Response(200, json={"status": "ok", "feedback_id": "fbk_01EMPTY"})
     )
     env = _call_mcp({})
-    assert env["status"] == "ok"
-    assert env["delivered"] is True
-    assert "no `text` was provided" in env["note"]
+    assert env["code"] == "usage_error"
+    assert "text" in env["message"]
+    assert not route.called
 
 
 def test_programming_errors_are_not_swallowed(_api_env):
@@ -170,7 +162,10 @@ def test_programming_errors_are_not_swallowed(_api_env):
         mp.setattr(ToolContext, "get_client", _broken_get_client)
         env = _call_mcp({"kind": "bug", "text": "x"})
     assert env.get("code") == "internal_error"
-    assert "bug in our code" in env["message"]
+    # The failure names the tool; the exception text is logged, never the
+    # message the model and the user read (Q-2273 L3).
+    assert "keel_feedback" in env["message"]
+    assert "bug in our code" not in env["message"]
 
 
 # ─── Registration surface: toolset `always`, every profile ──────────────
@@ -197,8 +192,8 @@ def test_tool_is_always_loaded_on_every_profile(monkeypatch):
 
 
 def test_read_bucket_action_so_no_scope_can_gate_it():
-    """audit.read = the lowest consent bucket (same as keel_status /
-    keel_doctor / keel_help): every authenticated caller can file
+    """audit.read = the lowest consent bucket (same as keel_account_status /
+    keel_connection_check / keel_help): every authenticated caller can file
     feedback — a write-scope grant must never gate it (spec 02 R4)."""
     assert TOOL.required_action == "audit.read"
 
@@ -213,10 +208,11 @@ def test_cli_command_registers():
     assert "feedback" in root.commands
 
 
-def test_schema_has_no_required_fields():
-    """Never-fails extends to arguments: nothing is `required`, so the
-    adapter's usage_error pre-flight can never reject a sparse call."""
-    assert TOOL.input_schema["required"] == []
+def test_schema_requires_only_text():
+    """`text` is the one required field (Q-2273: an empty call stored an
+    empty record); never-fails still covers DELIVERY, so every other field
+    stays optional."""
+    assert TOOL.input_schema["required"] == ["text"]
     assert set(TOOL.input_schema["properties"]) == {
         "goal",
         "kind",

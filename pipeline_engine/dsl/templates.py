@@ -34,11 +34,11 @@ Globals(target_timeframe="1d")
 
 Universe(mode="top_volume", top_n=30, market="perp", resolved=[], resolved_at="")
 
-Execution(rebalance='every_bar')
+Execution(rebalance='buffered', buffer_threshold=0.2, buffer_mode='relative', rebalance_method='to_edge')
 
 Pipeline([
-    PriceDataLoader(timeframe="15min"),
-    TargetTimeframeResampler(),
+    # PriceDataLoader() follows Globals: 1d bars on the UTC-day grid, no resampler
+    PriceDataLoader(),
     ROC(period=8),
     ForecastScaler(avg_abs_target=10.0),
     ForecastCapper(limit=20.0),
@@ -56,7 +56,7 @@ Globals(target_timeframe="1d")
 
 Universe(mode="top_volume", top_n=30, market="perp", resolved=[], resolved_at="")
 
-Execution(rebalance='every_bar')
+Execution(rebalance='buffered', buffer_threshold=0.2, buffer_mode='relative', rebalance_method='to_edge')
 
 xs_post = Pipeline([
     CrossSectionalZScore(),
@@ -65,8 +65,8 @@ xs_post = Pipeline([
 ], name="xs_post_process")
 
 Pipeline([
-    PriceDataLoader(timeframe="15min"),
-    TargetTimeframeResampler(),
+    # PriceDataLoader() follows Globals: 1d bars on the UTC-day grid, no resampler
+    PriceDataLoader(),
     EWMA(window=8),
     xs_post,
     ForecastWeightNormalizer(target_leverage=1.0),
@@ -83,11 +83,11 @@ Globals(target_timeframe="1d")
 
 Universe(mode="top_volume", top_n=30, market="perp", resolved=[], resolved_at="")
 
-Execution(rebalance='every_bar')
+Execution(rebalance='buffered', buffer_threshold=0.2, buffer_mode='relative', rebalance_method='to_edge')
 
 Pipeline([
-    PriceDataLoader(timeframe="15min"),
-    TargetTimeframeResampler(),
+    # PriceDataLoader() follows Globals: 1d bars on the UTC-day grid, no resampler
+    PriceDataLoader(),
     {{
         "momentum": [
             ROC(period=8),
@@ -114,17 +114,17 @@ Globals(target_timeframe="1d")
 
 Universe(mode="top_volume", top_n=30, market="perp", resolved=[], resolved_at="")
 
-Execution(rebalance='every_bar')
+Execution(rebalance='buffered', buffer_threshold=0.2, buffer_mode='relative', rebalance_method='to_edge')
 
 # Funding carry: short instruments with positive funding (collect from longs),
 # long instruments with negative funding (collect from shorts). VolatilityStandardizer
 # reads OHLCV from the "ohlcv_1d" slot to scale the signal by realised volatility.
 Pipeline([
-    PriceDataLoader(timeframe="15min"),
-    TargetTimeframeResampler(),
+    # Both loaders follow Globals: price serves 1d bars on the UTC-day grid, funding
+    # serves 1d as the mean of the hourly rates on the same grid — no resampler.
+    PriceDataLoader(),
     Store("ohlcv_1d"),
     FundingDataLoader(),
-    SignalResampler(method="mean"),
     NegateTransform(),
     CrossSectionalZScore(),
     VolatilityStandardizer(signal_type="percentage", ohlcv_slot="ohlcv_1d"),

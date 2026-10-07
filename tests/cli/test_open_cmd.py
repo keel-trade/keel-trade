@@ -2,7 +2,7 @@
 
 The AC: `keel open backtest <id>` opens the RIGHT URL, proven via a
 captured browser-open call (the browser itself is always mocked). URL
-routing must be the same single source of truth as `keel_open_in_app`.
+routing must be the same single source of truth as `keel_app_link`.
 """
 
 from __future__ import annotations
@@ -27,7 +27,8 @@ def opened(monkeypatch):
     ("kind", "target_id", "expected"),
     [
         ("backtest", "btr_01ABC", "https://app.usekeel.io/backtests/btr_01ABC?tab=tearsheet"),
-        ("strategy", "str_01ABC", "https://app.usekeel.io/strategies/str_01ABC"),
+        # V-6 (ratified 2026-09-19): a strategy link lands in the editor.
+        ("strategy", "str_01ABC", "https://app.usekeel.io/strategies/str_01ABC/edit"),
         ("live", "dep_01ABC", "https://app.usekeel.io/live/dep_01ABC"),
     ],
 )
@@ -41,7 +42,7 @@ def test_open_launches_canonical_url(opened, kind, target_id, expected):
 
 def test_open_respects_keel_app_url(opened, monkeypatch):
     """KEEL_APP_URL steers the target — same env, same routing as
-    keel_open_in_app (one URL source of truth)."""
+    keel_app_link (one URL source of truth)."""
     monkeypatch.setenv("KEEL_APP_URL", "https://staging-app.tailf4d598.ts.net")
     result = CliRunner().invoke(cli, ["open", "backtest", "btr_9"])
     assert result.exit_code == 0
@@ -54,7 +55,7 @@ def test_open_routing_matches_open_in_app(opened):
     from keel.tools.outcomes._base import ToolContext
 
     _bootstrap()
-    twin = OUTCOMES["keel_open_in_app"].handler({"id": "btr_77"}, ToolContext())
+    twin = OUTCOMES["keel_app_link"].handler({"id": "btr_77"}, ToolContext())
     result = CliRunner().invoke(cli, ["open", "backtest", "btr_77"])
     assert result.exit_code == 0
     assert opened == [twin.hero_url]
@@ -88,14 +89,14 @@ def test_open_rejects_unknown_prefix_for_prefixed_kinds(opened):
 
 def test_open_refuses_on_hosted_server(opened, monkeypatch):
     """LOCAL envs only (spec 06 R4): the hosted server must never
-    attempt a browser open — it points at keel_open_in_app instead."""
+    attempt a browser open — it points at keel_app_link instead."""
     monkeypatch.setenv("KEEL_EXECUTION_MODE", "hosted")
     result = CliRunner().invoke(cli, ["open", "strategy", "str_01ABC"])
     assert result.exit_code == 2
     assert opened == []
     payload = json.loads(result.stderr)
     assert payload["code"] == "open_not_available_hosted"
-    assert "keel_open_in_app" in payload["what_was_expected"]
+    assert "keel_app_link" in payload["what_was_expected"]
 
 
 def test_open_reports_failed_browser_launch(monkeypatch):
@@ -103,13 +104,13 @@ def test_open_reports_failed_browser_launch(monkeypatch):
     monkeypatch.setattr(browser_login, "_try_open_browser", lambda _u: False)
     result = CliRunner().invoke(cli, ["open", "strategy", "str_01ABC"])
     assert result.exit_code == 0
-    assert "View in Keel: https://app.usekeel.io/strategies/str_01ABC" in result.output
+    assert "View in Keel: https://app.usekeel.io/strategies/str_01ABC/edit" in result.output
     assert "open the URL above manually" in result.output
 
 
 def test_open_is_cli_only_never_an_mcp_tool():
     """`keel open` must not appear on any MCP surface (its MCP twin is
-    keel_open_in_app, which only RETURNS the URL)."""
+    keel_app_link, which only RETURNS the URL)."""
     from keel.tools.outcomes import OUTCOMES, _bootstrap
 
     _bootstrap()

@@ -1,0 +1,237 @@
+{
+  "_meta": {
+    "ui": {
+      "resourceUri": "ui://keel/cards/strategy.html"
+    }
+  },
+  "content": [
+    {
+      "type": "text",
+      "text": "card: where the host draws Keel cards, what follows is shown to the user as a card \u2014 its structure, metrics and links.\n\nPreview \u00b7 5 blocks \u00b7 valid\n\nexecution: Execution(rebalance='every_bar')"
+    }
+  ],
+  "structuredContent": {
+    "share_url": null,
+    "validation": {
+      "ok": true,
+      "errors": [],
+      "warnings": []
+    },
+    "compiled": true,
+    "compile_error": null,
+    "dry_run": true,
+    "universe": {
+      "mode": "top_volume",
+      "market": "perp",
+      "source": "resolved",
+      "as_stored": false,
+      "resolved_count": 30,
+      "resolved_preview": [
+        "AAVE",
+        "ARB",
+        "AVAX",
+        "BNB",
+        "BTC",
+        "CASHCAT",
+        "DOGE",
+        "ENA"
+      ]
+    },
+    "view": {
+      "kind": "strategy",
+      "name": "sv_roc20",
+      "version": null,
+      "status": "PREVIEW",
+      "validation": {
+        "ok": true,
+        "errors": 0,
+        "warnings": 0
+      },
+      "header": {
+        "clock": "1d @ 12h",
+        "universe": {
+          "label": "Top 30 by volume \u00b7 HL perps",
+          "total": 30,
+          "symbols": [
+            "AAVE",
+            "ARB",
+            "AVAX",
+            "BNB",
+            "BTC",
+            "CASHCAT",
+            "DOGE",
+            "ENA",
+            "ETH",
+            "FARTCOIN",
+            "HYPE",
+            "LINK",
+            "LIT",
+            "LTC",
+            "NEAR",
+            "ONDO",
+            "PONS",
+            "PUMP",
+            "SOL",
+            "SUI",
+            "TAO",
+            "UNI",
+            "USELESS",
+            "VVV",
+            "WLD",
+            "XMR",
+            "XPL",
+            "XRP",
+            "ZEC",
+            "kPEPE"
+          ]
+        },
+        "execution": {
+          "label": "Every bar",
+          "params": {
+            "rebalance": "every_bar"
+          }
+        },
+        "factories": []
+      },
+      "structure": {
+        "blocks": [
+          {
+            "id": "324ed07278ce",
+            "type": "component",
+            "component": "PriceDataLoader",
+            "params": {}
+          },
+          {
+            "id": "3c2d6fd1d763",
+            "type": "component",
+            "component": "ROC",
+            "params": {
+              "period": 50
+            }
+          },
+          {
+            "id": "a25a6517491f",
+            "type": "component",
+            "component": "ForecastScaler",
+            "params": {
+              "avg_abs_target": 10.0
+            }
+          },
+          {
+            "id": "0ca56b9a640b",
+            "type": "component",
+            "component": "ForecastCapper",
+            "params": {
+              "limit": 20.0
+            }
+          },
+          {
+            "id": "aea890d81c49",
+            "type": "component",
+            "component": "ForecastWeightNormalizer",
+            "params": {
+              "target_leverage": 1.0
+            }
+          }
+        ],
+        "globals": {
+          "target_timeframe": "1d",
+          "bar_offset": "12h"
+        },
+        "universe": {
+          "mode": "top_volume",
+          "market": "perp",
+          "top_n": 30,
+          "resolved": [
+            "AAVE",
+            "ARB",
+            "AVAX",
+            "BNB",
+            "BTC",
+            "CASHCAT",
+            "DOGE",
+            "ENA",
+            "ETH",
+            "FARTCOIN",
+            "HYPE",
+            "LINK",
+            "LIT",
+            "LTC",
+            "NEAR",
+            "ONDO",
+            "PONS",
+            "PUMP",
+            "SOL",
+            "SUI",
+            "TAO",
+            "UNI",
+            "USELESS",
+            "VVV",
+            "WLD",
+            "XMR",
+            "XPL",
+            "XRP",
+            "ZEC",
+            "kPEPE"
+          ],
+          "resolved_at": "2026-09-22T21:43:04.294205+00:00",
+          "max_leverages": {
+            "AAVE": 10.0,
+            "ARB": 10.0,
+            "AVAX": 10.0,
+            "BNB": 10.0,
+            "BTC": 40.0,
+            "CASHCAT": 3.0,
+            "DOGE": 10.0,
+            "ENA": 10.0,
+            "ETH": 25.0,
+            "FARTCOIN": 10.0,
+            "HYPE": 10.0,
+            "LINK": 10.0,
+            "LIT": 5.0,
+            "LTC": 10.0,
+            "NEAR": 10.0,
+            "ONDO": 10.0,
+            "PONS": 3.0,
+            "PUMP": 10.0,
+            "SOL": 20.0,
+            "SUI": 10.0,
+            "TAO": 5.0,
+            "UNI": 10.0,
+            "USELESS": 3.0,
+            "VVV": 3.0,
+            "WLD": 10.0,
+            "XMR": 5.0,
+            "XPL": 10.0,
+            "XRP": 20.0,
+            "ZEC": 10.0,
+            "kPEPE": 10.0
+          }
+        },
+        "execution": {
+          "rebalance": "every_bar"
+        }
+      },
+      "change": null,
+      "evidence": null,
+      "categories": {
+        "PriceDataLoader": "data_loader",
+        "ROC": "indicator",
+        "ForecastScaler": "forecast_mapper",
+        "ForecastCapper": "forecast_mapper",
+        "ForecastWeightNormalizer": "position_sizer"
+      },
+      "size": "receipt",
+      "status_text": "Preview",
+      "at": "2026-09-23T18:43:02.399Z",
+      "seq": 23,
+      "markdown": "Preview \u00b7 5 blocks \u00b7 valid\n",
+      "source": {
+        "text": "Globals(target_timeframe='1d', bar_offset='12h')\nUniverse(mode='top_volume', top_n=30, market='perp', resolved=[\"AAVE\", \"ARB\", \"AVAX\", \"BNB\", \"BTC\", \"CASHCAT\", \"DOGE\", \"ENA\", \"ETH\", \"FARTCOIN\", \"HYPE\", \"LINK\", \"LIT\", \"LTC\", \"NEAR\", \"ONDO\", \"PONS\", \"PUMP\", \"SOL\", \"SUI\", \"TAO\", \"UNI\", \"USELESS\", \"VVV\", \"WLD\", \"XMR\", \"XPL\", \"XRP\", \"ZEC\", \"kPEPE\"], resolved_at=\"2026-09-22T21:43:04.294205+00:00\", max_leverages={\"AAVE\": 10.0, \"ARB\": 10.0, \"AVAX\": 10.0, \"BNB\": 10.0, \"BTC\": 40.0, \"CASHCAT\": 3.0, \"DOGE\": 10.0, \"ENA\": 10.0, \"ETH\": 25.0, \"FARTCOIN\": 10.0, \"HYPE\": 10.0, \"LINK\": 10.0, \"LIT\": 5.0, \"LTC\": 10.0, \"NEAR\": 10.0, \"ONDO\": 10.0, \"PONS\": 3.0, \"PUMP\": 10.0, \"SOL\": 20.0, \"SUI\": 10.0, \"TAO\": 5.0, \"UNI\": 10.0, \"USELESS\": 3.0, \"VVV\": 3.0, \"WLD\": 10.0, \"XMR\": 5.0, \"XPL\": 10.0, \"XRP\": 20.0, \"ZEC\": 10.0, \"kPEPE\": 10.0})\nExecution(rebalance='every_bar')\nPipeline([\n    PriceDataLoader(),\n    ROC(period=50),\n    ForecastScaler(avg_abs_target=10.0),\n    ForecastCapper(limit=20.0),\n    ForecastWeightNormalizer(target_leverage=1.0),\n], name='sv_roc20')",
+        "lines": 10,
+        "truncated": false
+      }
+    }
+  },
+  "isError": false
+}

@@ -66,7 +66,7 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
     except Exception as e:  # noqa: BLE001
         raise KeelError(
             f"Failed to list accounts: {e}",
-            suggestion="Run `keel_doctor` to check auth / API reachability.",
+            suggestion="Run `keel_connection_check` to check auth / API reachability.",
         )
 
     # API canonical shape is {data: [...], pagination: {cursor, has_more}}

@@ -531,10 +531,27 @@ def push(
     body: dict[str, Any] = {"source": source}
     if not force:
         body["expected_source_hash"] = meta.source_hash
-    if message:
-        body["message"] = message
 
     client = KeelClient()
+    # A pushed text that IS the planner's upgrade of HEAD (Q-2448: e.g. the
+    # source keel_strategy_upgrade returned, written into strategy.py) is
+    # valid only at the planner's lock when the upgrade moved a pin; keel-api
+    # re-evolving the stored pins keeps the old one. Send that lock; every
+    # other push sends exactly what it did before (no lock).
+    from keel.tools.outcomes._known_issue import head_upgrade_lock
+
+    upgrade_lock = head_upgrade_lock(client, strategy_id, source)
+    if upgrade_lock is not None:
+        body["component_lock"] = upgrade_lock["component_lock"]
+    # Every version carries a message (Q-1752): the caller's, else one
+    # derived from the change against the server's HEAD — the same owner
+    # `keel_strategy_compose` uses, so the history reads one way.
+    if not message:
+        from keel.tools.outcomes.strategy_compose import commit_message_for_save
+        from keel.tools.outcomes.strategy_get import read_source
+
+        message = commit_message_for_save(None, read_source(client, strategy_id), source)
+    body["message"] = message
     try:
         try:
             result = client.patch(f"/v1/strategies/{strategy_id}", json=body)
@@ -587,6 +604,16 @@ def push(
         "sequence": meta.current_sequence,
         "commit_id": commit_id,
         "compilation_error": result.get("compilation_error"),
+        # keel-api validates every source save and returns the verdict on the
+        # PATCH response (``{valid, errors, warnings}``); a push that dropped
+        # it claimed to validate and never did (position-layer spec 04-R22).
+        # ``None`` when the response carried none — the caller says so.
+        "validation": result.get("validation") if isinstance(result, dict) else None,
+        # The pinned deprecated components keel-api derives from the lock
+        # (04-R24), when the response carries them.
+        "deprecations": result.get("deprecations") if isinstance(result, dict) else None,
+        # The pins a recognised upgrade moved (Q-2448); [] for any other push.
+        "lock_changes": upgrade_lock["lock_changes"] if upgrade_lock is not None else [],
     }
 
 
@@ -920,7 +947,7 @@ def build_conflict_envelope(
         },
         {
             "option": "pin_commit",
-            "tool": "keel_strategy_log",
+            "tool": "keel_strategy_history",
             "args": {"strategy_id": strategy_id},
             "effect": (
                 "Pick a commit_id from history and pass it explicitly to "

@@ -3,68 +3,37 @@
 
 # Common Mistakes
 
-Top mistakes ranked by frequency. Check these when debugging a strategy.
-
-## M-01: Equal Weights on Continuous Forecasts
-
-**Wrong**: `ForecastSeries → EqualWeightAllocator`
-**Right**: `ForecastSeries → ForecastWeightNormalizer` (simple) or `ForecastSeries → VolTargetWeightConverter` (production)
-
-ForecastSeries values carry conviction (higher magnitude = stronger signal).
-EqualWeightAllocator discards this information. Use ForecastWeightNormalizer
-to preserve signal magnitude while normalizing to a target leverage.
-
-**Exception**: EqualWeightAllocator IS correct for Path 3 (TopN/filter → equal-weight
-selected assets) where the selection is the signal, not the magnitude.
+Structural mistakes — a clock or bar offset the loaders cannot serve, a
+resampler after a loader that already follows Globals, branches on different
+clocks at a combiner, a missing Store, a type that does not chain, equal
+weights on a continuous forecast, an uncapped FixedWeightSizer — are reported
+by the validator with a coded message whose suggestion is the fix; the
+`rule:<CODE>` help topic explains any code. A pipeline that does not end in
+WeightSeries, including one that ends at an unconsumed Parallel, is refused
+by the backtest before it runs. The mistakes below are the ones the validator cannot judge.
 
 ## M-03: Normalizing Binary Signals
 
 **Wrong**: `ThresholdCross → CrossSectionalZScore → ForecastScaler`
-**Right**: `ThresholdCross → SelectionToSignalConverter → EqualWeightAllocator`
+**Right**: `ThresholdCross → EqualWeightSizer` (or `ThresholdCross → Store("entries") → TradeManager(...) → sizer`)
 
 Binary signals ({-1, 0, +1}) are already discrete decisions. Cross-sectional
 z-scoring is meaningless. Binary signals follow Path 2 (entry/exit), not
 Path 1 (continuous forecast).
 
-## M-09: Pipeline Without WeightSeries Output
+## M-11: Top-N Without a Hold
 
-The backtester needs WeightSeries. A pipeline ending at SignalSeries or
-ForecastSeries cannot be tested. Always check the output type before running
-a backtest. Use `pipeline_stage` tool to verify. The simplest fix: add
-`ForecastWeightNormalizer(target_leverage=1.0)` as the terminal step.
+**Wrong**: `ROC → TopNAssetSelector → EqualWeightAllocator` (re-selected every bar)
+**Right**: `ROC → TopNAssetSelector → EqualWeightAllocator → WeightCadence(duration="7d") → FillNaN(fill_value=0.0)`
 
-## M-10: Missing Data Pipeline
-
-Every pipeline needs data. The standard opening is:
-`Globals(target_timeframe="1d")` above the Pipeline, then `PriceDataLoader → Store("ohlcv_1d")`.
-Don't skip this even for simple strategies.
-
-## M-11: TopN Without Exit Logic
-
-**Wrong**: `ROC → TopNAssetSelector → EqualWeightAllocator`
-**Right**: `ROC → TopNAssetSelector → SelectionToSignalConverter(hold_periods=7) → EqualWeightAllocator`
-
-TopNAssetSelector selects entries but doesn't manage exits. Without
-SelectionToSignalConverter, positions have no exit mechanism.
-
-## M-12: Unconsumed Parallel
-
-After a Parallel block (produces dict), you MUST add a Composer, Extract,
-or Load. A pipeline ending at dict is incomplete and cannot be backtested.
+TopNAssetSelector selects assets but doesn't manage exits; WeightCadence holds
+the targets for the calendar period (the `screen_select_patterns` topic).
 
 ## M-16: Over-Indexing on One Pattern
 
 Not every strategy needs hierarchical multi-signal forecast-combine. A simple
 factor tilt (4 components) or entry/exit strategy may be exactly right.
 Match complexity to user intent.
-
-## M-17: Missing ReturnVolatility Before VolTargetWeightConverter
-
-**Wrong**: `ForecastCapper → VolTargetWeightConverter` (no return volatility computed)
-**Right**: `ReturnVolatility(window="36d") → Store("return_vol")` then `VolTargetWeightConverter(return_vol_slot="return_vol", pct_target=0.25)`
-
-VolTargetWeightConverter needs per-instrument return volatility from a `return_vol`
-slot. Compute it first via ReturnVolatility and store it in a parallel branch.
 
 ## M-18: Parallel Branch Shape Mismatch (Advanced)
 
@@ -78,68 +47,56 @@ branch doesn't → ForecastCombiner gets mismatched shapes.
 **Right**: Store reduced OHLCV before Parallel, use AssetAligner in
 secondary branches:
 
-```
-VolumeUniverseReducer() → Store("ohlcv_1d") →
-Parallel({
-    "momentum": [ROC(...), ...],
-    "carry": [FundingDataLoader(), TargetSignalResampler(method="mean"), AssetAligner(reference_slot="ohlcv_1d"), ...],
-})
+```python fragment
+VolumeUniverseReducer(...) → Store("ohlcv_1d") → {
+    "momentum": [ROC(period=20), ...],
+    "carry": [FundingDataLoader(), AssetAligner(reference_slot="ohlcv_1d"), ...],
+}
 ```
 
 Note: TopNAssetSelector does NOT change dimensions — it produces a mask,
 not a reduced universe.
 
-## M-19: TargetTimeframeResampler after a signal step
+## M-34: "Same length, different timestamps" at a combiner — a span, not a clock
 
-**Wrong**: `RSI → NegateTransform → TargetTimeframeResampler`
-**Right**: `TargetTimeframeResampler → RSI → NegateTransform`
+**Symptom**: `SignalProduct` / `SignalRatio` / `Crossover` refuse with
+`branch indices differ: 'left' has N rows, 'right' has N rows (same length,
+different timestamps)` although both branches ARE on the declared clock and
+the validator is clean (no `CLOCK_MISMATCH`).
 
-TargetTimeframeResampler expects OHLCV data, not a signal. Place it
-immediately after the data loader, before any indicator or transform.
-Validator emits `TYPE_MISMATCH` with this code.
+**What it is**: the two branches carry the same `(period, offset)` but a
+different **span** — different first/last labels. The guard says so
+(`This is a SPAN difference`) and names each side's clock, first/last and the
+first divergent label. Every series on one clock inside one run must carry
+the run window's completed-bar grid `(start, end]`; a producer that does not
+is a platform defect, which re-projecting or re-resampling the branch does
+not fix (that is the fix for a CLOCK difference, and the guard names those
+by name: `TargetSignalProjector()` coarse → fine, `TargetSignalResampler()`
+fine → coarse, `Globals(bar_offset=...)` for a phase split).
 
-## M-20: bar_offset at same source/target timeframe
+## M-35: Measuring a Trade From Its Signal
 
-**Wrong**: `Globals(target_timeframe='15min', bar_offset='15min')` with a 15min loader.
-**Right**: Remove `bar_offset` — it has no valid value when target matches source.
+A stop, target, trail or time exit is measured from this trade's entry, so it
+is a rule on the Position. A value computed from the stored entry signal is
+anchored to the signal, which stays on after the trade closes or re-enters.
 
-`bar_offset` shifts bin anchors when aggregating up (e.g. 15min → 1d at
-12:00 UTC). At same source/target it would silently mislabel bars.
-Validator emits `BAR_OFFSET_AT_SAME_TF`.
+**Wrong** (fires 48 bars after the signal, so on a level entry a re-entered
+trade is closed early):
 
-## M-21: bar_offset not a multiple of source timeframe
+```python fragment
+Load("entries") → Lag(periods=48) → Store("old_signal")
+→ TradeManager(entries="entries", prices="ohlcv")
+→ {"max_hold": [Load("old_signal"), Exit()]}
+```
 
-**Wrong**: `Globals(bar_offset='5min')` with a 15min loader.
-**Right**: Use a multiple of the source timeframe (e.g. `'15min'`, `'30min'`, `'12h'`).
+**Right** (counts from this trade's entry):
 
-A non-multiple offset pulls partial source bars into the wrong aggregation
-bin. Validator emits `BAR_OFFSET_NOT_MULTIPLE`.
+```python fragment
+TradeManager(entries="entries", prices="ohlcv")
+→ {"max_hold": [BarsHeld(), AboveThresholdFilter(threshold=48, inclusive=True), Exit()]}
+```
 
-## M-22: Unnecessary TargetTimeframeResampler at same timeframe
-
-**Wrong (works but noisy)**: `Globals(target_timeframe='15min') + PriceDataLoader(timeframe='15min') + TargetTimeframeResampler()`
-**Right (cleaner)**: Drop both `Globals(target_timeframe=...)` and the resampler step.
-
-The runtime short-circuits TargetTimeframeResampler when target equals
-source, so this is safe — just visually noisy. Validator emits
-`RESAMPLER_NOOP` as a warning. Keep the Globals+Resampler pair only if
-you want the timeframe-knob for later iteration; otherwise omit both.
-
-## M-23: Combining branches on different timeframes
-
-**Wrong**: a `carry` branch with `SignalResampler(target_timeframe='1d')`
-meeting a 12h branch at `ForecastCombiner`, under `Globals(target_timeframe='12h')`.
-**Right**: end the coarse branch with `TargetSignalProjector()` so it lands on
-the declared 12h clock before the combine.
-
-Every multi-input step (combiners, blenders, gates, `Parallel` consumers)
-requires all inputs on one timeframe. Validator emits `CLOCK_MISMATCH` and
-names both clocks; the fix is usually a one-step insert it suggests directly.
-A coarse signal projects DOWN (forward-fill of the last COMPLETED bar — no
-lookahead). If instead the offending branch is FINER than the declared clock,
-resample its raw data UP before the indicator — projection only goes coarse →
-fine, so nothing added later can rescue it. Related: `TERMINAL_CLOCK_MISMATCH`
-means the pipeline's final weights are not on the declared timeframe.
+The validator accepts both; the difference is what the number means.
 
 ## Polarity Mistakes
 

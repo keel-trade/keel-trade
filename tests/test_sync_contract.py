@@ -90,7 +90,7 @@ def _valid(monkeypatch):
     monkeypatch.setattr(
         mod,
         "_try_local_validate",
-        lambda src: {"ok": True, "warnings": [], "errors": [], "lock": None},
+        lambda src, **_kw: {"ok": True, "warnings": [], "errors": [], "lock": None},
     )
 
 
@@ -262,7 +262,7 @@ def test_stale_checkout_status_says_exactly_pull(monkeypatch):
     with patch("keel.workspace.status", return_value=fake_status):
         env = (
             OUTCOMES["keel_strategy_status"]
-            .handler({"strategy_id": "str_stale", "no_ownership_hint": True}, ctx)
+            .handler({"strategy_id": "str_stale", "skip_readiness": True}, ctx)
             .to_envelope()
         )
     assert env["status"] == "behind"
@@ -290,7 +290,7 @@ def test_stale_checkout_detected_end_to_end(workspace_root):
                 {
                     "strategy_id": "str_stale",
                     "include_recent": False,
-                    "no_ownership_hint": True,
+                    "skip_readiness": True,
                 },
                 ctx,
             )
@@ -319,6 +319,33 @@ _SERVER_HEAD_COMMIT = {
     "client_name": "claude.ai",
     "auth_surface": "hosted-mcp",
 }
+
+
+def test_push_without_a_message_still_writes_one(workspace_root):
+    """Q-1752: a push with no `message` minted an empty-message commit, the
+    same defect as compose. It derives one from the change against HEAD,
+    through the same owner compose uses.
+
+    # SEED: in keel.workspace.push, drop `body["message"] = message` —
+    # this reds.
+    """
+    import json
+    from pathlib import Path
+
+    base = json.loads(
+        (Path(__file__).resolve().parents[1] / "keel/data/templates.json").read_text()
+    )["basic"]["content"].replace("{name}", "demo")
+    _checkout(workspace_root, "str_msg", base)
+    (workspace_root / "str_msg" / STRATEGY_FILE).write_text(base.replace("period=8", "period=42"))
+    inst = MagicMock()
+    inst.get.return_value = {"source": base}
+    inst.patch.return_value = {"strategy_id": "str_msg", "current_sequence": 2}
+    with patch("keel.client.KeelClient", return_value=inst):
+        from keel.workspace import push
+
+        push(strategy_id="str_msg")
+    body = inst.patch.call_args.kwargs["json"]
+    assert body["message"] == "ROC · period 8 → 42"
 
 
 def test_push_conflict_raises_three_way_envelope(workspace_root):
@@ -416,7 +443,7 @@ def test_conflict_recovery_by_commit_id_pinning(workspace_root):
                     "strategy_id": "str_cfl",
                     "commit_id": "cmt_srv_head",
                     "wait": False,
-                    "no_ownership_hint": True,
+                    "skip_readiness": True,
                 },
                 ctx,
             )
@@ -484,7 +511,7 @@ def test_strategy_log_surfaces_modified_via():
     inst.get.return_value = {"data": versions}
     ctx = ToolContext(api_client=inst, is_tty=False, app_url="https://app.usekeel.io")
 
-    env = OUTCOMES["keel_strategy_log"].handler({"strategy_id": "str_x"}, ctx).to_envelope()
+    env = OUTCOMES["keel_strategy_history"].handler({"strategy_id": "str_x"}, ctx).to_envelope()
 
     head, legacy = env["commits"]
     assert head["client_name"] == "claude.ai"
@@ -533,7 +560,7 @@ def test_workspace_family_descriptions_state_the_model():
         "keel_strategy_push",
         "keel_strategy_compose",
         "keel_backtest_run",
-        "keel_strategy_log",
+        "keel_strategy_history",
     ):
         assert "source of truth" in OUTCOMES[tool].description, tool
 
@@ -541,7 +568,7 @@ def test_workspace_family_descriptions_state_the_model():
     for tool in ("keel_backtest_run",):
         desc = OUTCOMES[tool].description
         assert "Write-through" in desc, tool
-        assert "auto_push=False" in desc, tool
+        assert "auto_push=false" in desc.lower(), tool
         assert "conflict" in desc.lower(), tool
 
 
@@ -592,14 +619,44 @@ def test_server_instructions_state_the_model():
     from keel.mcp.server import LISTED_INSTRUCTIONS, _full_instructions
 
     full = _full_instructions(live_write_loaded=True)
-    assert "single source of truth" in full
-    assert "WRITE THROUGH" in full or "write through" in full.lower()
+    # "server HEAD is the truth" since 2026-09-22 (the state block became
+    # the `state-model` corpus section — guidance spec §4).
+    assert "server HEAD is the truth" in full
+    assert "writes through" in full.lower()
     assert "sync_conflict" in full
-    assert "pull_force" in full
-    assert "never auto-merged" in full
+    # Indicative since agent-surface-cleanup spec 01 §2.1 ("never" is an
+    # IMPERATIVE_RE match whatever its case).
+    assert "nothing merges automatically" in full
+    assert "three-way" in full
+    # The `pull_force` option NAME left the instructions with the
+    # 2026-09-22 restructure (the block went from 394 to 278 chars to fit
+    # the head and the invariants inside the 2 KB host cut). It is a
+    # RESOLUTION OPTION, not the contract — the contract is that a
+    # conflict STOPS and is never auto-merged. The option itself is
+    # published where an agent meets it, as `keel_strategy_pull`'s
+    # `force` parameter; asserted here so the move is a move, not a loss.
+    assert "pull_force" not in full
+    from keel.tools.outcomes import OUTCOMES
 
-    assert "STATE MODEL" in LISTED_INSTRUCTIONS
-    assert "canonical version" in LISTED_INSTRUCTIONS
-    # Policy boundary: the listed copy must stay free of deploy/fund verbs.
+    pull = OUTCOMES["keel_strategy_pull"]
+    assert "force=True" in (pull.description or ""), (
+        "the conflict's resolution route is named by neither the instructions "
+        "nor keel_strategy_pull's description"
+    )
+    assert "force" in ((pull.input_schema or {}).get("properties") or {})
+
+    # Listed: no write-through plumbing. The listed line is the no-trading
+    # boundary (mcp-conversion 04 §5.3 / 05 §3.3): research and backtests,
+    # no orders, funds or wallets, running strategies managed in the web
+    # app. It names "funds" and "wallets" only inside that one negated
+    # clause; the rest of the line stays free of the deploy/trade family.
+    from pipeline_engine.reference.system import assemble
+
+    boundary = "It cannot place orders, move funds or connect wallets"
+    surface_block = assemble.section("surface-listed").terse
+    assert surface_block in LISTED_INSTRUCTIONS
+    assert surface_block.count(boundary) == 1
+    assert "sync_conflict" not in LISTED_INSTRUCTIONS
+    surface = surface_block.replace(boundary, "").lower()
     for banned in ("deploy", "fund", "trade verb", "wallet", "leverage"):
-        assert banned not in LISTED_INSTRUCTIONS.split("STATE MODEL")[1].lower()
+        assert banned not in surface

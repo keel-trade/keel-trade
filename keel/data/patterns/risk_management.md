@@ -1,4 +1,4 @@
-<!-- keywords: risk, IDM, inertia, portfolio, aggregator, leverage, weight, converter, sparse, dense, PositionInertia, IDMPortfolioAggregator -->
+<!-- keywords: risk, IDM, turnover, buffer, portfolio, aggregator, leverage, weight, cap, IDMPortfolioAggregator, LeverageCap -->
 <!-- pattern: risk_management -->
 
 # Risk and Position Management
@@ -17,49 +17,40 @@ diversification credit.
 
 **Key params**: target_vol, window, shrinkage (oas recommended), cap (max IDM).
 
-## PositionInertia
+## Buffered execution (turnover)
 
-**What**: Reduces unnecessary trading by only rebalancing when positions drift
-beyond a threshold.
+**What**: Trades only when a position drifts outside a band around its
+target — `Execution(rebalance="buffered", buffer_threshold=0.2,
+buffer_mode="relative", rebalance_method="to_edge")`. It is a declaration,
+not a pipeline step.
 
 **When to add**: When backtest shows high turnover or trading costs matter.
 
-**Key params**: threshold (0.1-0.3), mode ("relative"), rebalance_method ("to_edge").
+## LeverageCap
 
-## DenseToSparseConverter
+**What**: Caps the book's gross leverage (`max_leverage`) and, optionally,
+any single asset's weight (`max_asset_weight`).
 
-**What**: Strips zero-weight entries from WeightSeries for efficient backtest
-execution.
-
-**When to add**: Always, as the last step before backtest. Reduces computation
-by only tracking non-zero positions.
+**When to add**: After any sizer whose book can grow with the position count
+(VolTargetWeightConverter, FixedWeightSizer, IDMPortfolioAggregator).
 
 ## Full Position Pipeline
 
-```python
-def position_pipeline():
-    return Pipeline([
-        {"return_vol": [
-            Load("ohlcv_1d"),
-            ReturnVolatility(window="36d"),
-            Store("return_vol"),
-        ]},
-        VolTargetWeightConverter(return_vol_slot="return_vol", pct_target=0.25),
-        IDMPortfolioAggregator(
-            forecast_slot="forecast_combined", return_vol_slot="return_vol",
-            ohlcv_slot="ohlcv_1d", target_vol=0.25,
-        ),
-        PositionInertia(threshold=0.30, mode="relative"),
-        LeverageCap(max_leverage=5.0),
-        DenseToSparseConverter(tolerance=0.00000001),
-    ])
+```python fragment
+Store("forecast_combined")
+→ {"return_vol": [Load("ohlcv_1d"), ReturnVolatility(window="36d"), Store("return_vol")]}
+→ Load("forecast_combined")
+→ VolTargetWeightConverter(return_vol_slot="return_vol", pct_target=0.25)
+→ IDMPortfolioAggregator(forecast_slot="forecast_combined", return_vol_slot="return_vol",
+                         ohlcv_slot="ohlcv_1d", target_vol=0.25)
+→ LeverageCap(max_leverage=5.0)
 ```
 
 ## Common Mistakes
 
 - Adding IDMPortfolioAggregator to a single-signal strategy — diversification
   benefit requires multiple positions. Start simple.
-- Setting PositionInertia threshold too low (< 0.05) — defeats the purpose
-  by rebalancing too frequently.
+- Setting a buffer threshold too low (< 0.05) — defeats the purpose by
+  rebalancing too frequently.
 - Forgetting VolTargetWeightConverter — without it, forecasts are not
   converted to vol-targeted portfolio weights. The backtester needs WeightSeries.

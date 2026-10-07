@@ -19,6 +19,8 @@ The contract under test (founder ruling 2026-08-21, additive-only):
 
 from __future__ import annotations
 
+import json
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -130,6 +132,44 @@ def test_get_envelope(_api_env):
     assert env["hero_url"].endswith("/library/funding-carry")
     assert env["backtest_window"]["start"] == "2024-08-15"
     assert env["variants"][0]["variant_id"] == "v1"
+    # No graph published ⇒ no view, rather than an empty shell.
+    assert "view" not in env
+
+
+@respx.mock
+def test_get_carries_the_entry_view_when_the_entry_publishes_a_graph(_api_env):
+    """PLAN §4.2: "what IS this strategy" is answered before the fork.
+
+    The library's graph is its own render-only shape (`{name, steps}`,
+    the generated content package) — the view is built from it exactly
+    as it is built from keel-api's GraphModel.
+    """
+    graph = json.loads(
+        (
+            SDK_ROOT.parents[2] / "libs/strategy_library/data/entries/funding-carry/graph.json"
+        ).read_text()
+    )
+    respx.get(f"{API}/v1/library/funding-carry").mock(
+        return_value=Response(
+            200,
+            json={
+                "slug": "funding-carry",
+                "name": "Funding Carry",
+                "entry_version": "3",
+                "graph": graph,
+            },
+        )
+    )
+    env = (
+        OUTCOMES["keel_library_get"].handler({"slug": "funding-carry"}, ToolContext()).to_envelope()
+    )
+    view = env["view"]
+    assert view["name"] == "Funding Carry"
+    assert view["status"] == "PUBLISHED"
+    assert view["size"] == "structure"
+    assert view["url_line"].endswith("/library/funding-carry")
+    # Every component the entry declares is named in the markdown.
+    assert "FundingDataLoader" in view["markdown"]
 
 
 @respx.mock
@@ -154,10 +194,14 @@ def test_fork_envelope_and_created_via(_api_env):
     )
     assert env["run_id"] == "str_new1"
     assert env["strategy_id"] == "str_new1"
-    assert env["hero_url"].endswith("/strategies/str_new1")
+    # V-6 (ratified 2026-09-19): every strategy link lands in the editor.
+    assert env["hero_url"].endswith("/strategies/str_new1/edit")
     assert env["share_url"] is None
 
-    # created_via is ALWAYS sent explicitly (server would default to "app")
+    # created_via is ALWAYS sent explicitly (server would default to "app").
+    # `route` is the fork POST route, so `.last` is still that call — the
+    # read-back this fork now attempts for its `view` (PLAN §4.2) is a
+    # different route, and being unmocked here it is simply advisory.
     import json as _json
 
     body = _json.loads(route.calls.last.request.content)
@@ -232,11 +276,156 @@ def test_strategy_creation_skill_stays_library_free():
     """The from-thesis path is untouched — the founder's over-indexing
     boundary. A library mention appearing here is a ruling violation,
     not a feature."""
-    skill = (SDK_ROOT / "keel" / "skills" / "strategy-creation.md").read_text()
+    skill = (SDK_ROOT / "keel" / "skills" / "strategy-creation" / "SKILL.md").read_text()
     assert "keel_library" not in skill
 
 
 def test_fork_and_iterate_skill_gained_the_verbs():
-    skill = (SDK_ROOT / "keel" / "skills" / "strategy-fork-and-iterate.md").read_text()
+    skill = (SDK_ROOT / "keel" / "skills" / "strategy-fork-and-iterate" / "SKILL.md").read_text()
     assert "keel_library_fork" in skill
     assert "keel_library_list" in skill
+
+
+# ─── Q-1843: the facts the description promises reach the model ────────
+
+
+def _real_entry_payload(slug: str) -> dict:
+    """`GET /v1/library/{slug}` for a REAL entry of the generated package,
+    shaped as `routers/library.py::get_library_entry` shapes it (the fields
+    this tool reads), so the facts line is proven against real data."""
+    root = SDK_ROOT.parents[2] / "libs/strategy_library/data/entries" / slug
+    entry = json.loads((root / "entry.json").read_text())
+    grid = json.loads((root / "config_grid.json").read_text())
+    return {
+        "slug": slug,
+        "name": entry.get("name") or slug,
+        "headline": entry["headline"],
+        "entry_version": str(entry.get("artifact_version")),
+        "data_as_of": entry["data_as_of"],
+        "stale": True,
+        "backtest_window": entry["backtest_window"],
+        "variants": [
+            {
+                "variant_id": v["variant_id"],
+                "label": v.get("label"),
+                "metrics": v.get("metrics"),
+                "is_default": bool(v.get("is_default")),
+                "publishable": bool(v.get("publishable")),
+                "forkable": bool(v.get("forkable")),
+            }
+            for v in grid["variants"]
+        ],
+        "graph": json.loads((root / "graph.json").read_text()),
+    }
+
+
+@respx.mock
+def test_get_puts_the_verified_facts_in_the_text_the_model_reads(_api_env):
+    """R3 probe: "keel_library_get promises headline metrics, window,
+    freshness, variants — it returned only the pipeline structure". The
+    envelope carried them; the text block (the model's only channel on
+    claude.ai) was the view's markdown, which draws only the structure.
+
+    SEED (2026-09-23, reverted): `library_facts_line` returning None — this
+    arm reds; the control below stays green."""
+    from keel.tools.outcomes._mcp_adapter import view_tool_result
+
+    payload = _real_entry_payload("adx-trend-crypto")
+    # Non-vacuity: the real entry carries every fact the line must say.
+    assert payload["headline"]["trades"] > 0 and len(payload["variants"]) > 3
+    respx.get(f"{API}/v1/library/adx-trend-crypto").mock(return_value=Response(200, json=payload))
+    env = (
+        OUTCOMES["keel_library_get"]
+        .handler({"slug": "adx-trend-crypto"}, ToolContext())
+        .to_envelope()
+    )
+    text = view_tool_result(json.dumps(env), "keel_library_get").content[0].text
+    (facts,) = [line for line in text.splitlines() if line.startswith("facts: ")]
+
+    # Expected text is derived from the entry on disk (a library refresh moves
+    # these numbers), with the formatting written out independently here.
+    def day(iso: str) -> str:
+        d = date.fromisoformat(iso[:10])
+        return f"{d.strftime('%b')} {d.day}, {d.year}"
+
+    w, h = payload["backtest_window"], payload["headline"]
+    assert f"verified run {day(w['start'])} – {day(w['end'])}" in facts
+    assert (
+        f"Sharpe {h['sharpe']:.2f} · return +{h['total_return_pct']:.1f}% · "
+        f"max drawdown −{h['max_drawdown_pct']:.1f}% · {h['trades']:,} trades"
+    ) in facts
+    assert f"data as of {day(payload['data_as_of'])} (stale)" in facts
+    assert f"{len(payload['variants'])} variants — " in facts
+    assert "(default)" in facts or "; default " in facts
+    # The structure is still the view — the facts ride beside it.
+    assert env["view"]["size"] == "structure"
+
+
+def test_facts_line_names_only_variants_a_fork_can_take():
+    """Q-2498: the facts line steered agents to its best-Sharpe variants, and
+    keel-api refused 14 of the 54 it named. A variant marked `forkable: false`
+    is counted but never named."""
+    from keel.tools.outcomes.library import MAX_FACT_VARIANTS, library_facts_line
+
+    payload = _real_entry_payload("momentum-funding-hyperliquid")
+    ranked = sorted(
+        (v for v in payload["variants"] if not v["is_default"]),
+        key=lambda v: -v["metrics"]["sharpe_ratio"],
+    )
+    best = ranked[0]
+    # Non-vacuity: with every variant forkable, the best one is named.
+    assert all(v["forkable"] for v in payload["variants"])
+    assert (best["label"] or best["variant_id"]) + ":" in library_facts_line(payload)
+    best["forkable"] = False
+    facts = library_facts_line(payload)
+    assert (best["label"] or best["variant_id"]) + ":" not in facts
+    assert f"{len(payload['variants'])} variants — " in facts
+    assert facts.count(": Sharpe") == MAX_FACT_VARIANTS
+
+
+def test_listed_variant_projection_carries_forkable():
+    from keel.tools.outcomes._listed_projection import LISTED_LIBRARY_VARIANT_FIELDS
+
+    assert "forkable" in LISTED_LIBRARY_VARIANT_FIELDS
+
+
+def test_control_an_entry_with_no_facts_carries_no_facts_line():
+    from keel.tools.outcomes.library import library_facts_line
+
+    assert library_facts_line({"slug": "x", "name": "X"}) is None
+    assert library_facts_line(None) is None
+
+
+# ─── Q-1901: a default library_get makes zero price reads ───────────────
+
+
+@respx.mock
+def test_get_is_one_package_read_with_no_hold_line(_api_env):
+    """Founder, 2026-09-23: no BTC/ETH/SOL hold read on every call. The tool
+    makes ONE request — the entry — without `references`, and projects no
+    hold line even when an older keel-api sends one unasked.
+
+    SEED (2026-09-23, reverted): the handler re-projecting
+    `result["reference"]` into `extra["reference"]` → this arm reds on the
+    envelope assertion while the request-count assertions above it hold
+    (the SDK never asks for the read; keel-api's default owns it, guarded in
+    services/keel-api/tests/test_library_reference.py)."""
+    payload = _real_entry_payload("adx-trend-crypto")
+    # An older keel-api computed and sent this unasked.
+    payload["reference"] = {"label": "BTC hold", "basis": "price only", "ret_pct": 12.3}
+    route = respx.route(host="api.test.keel").mock(return_value=Response(200, json=payload))
+    env = (
+        OUTCOMES["keel_library_get"]
+        .handler({"slug": "adx-trend-crypto"}, ToolContext())
+        .to_envelope()
+    )
+    # ONE read, the entry itself, never asking for references.
+    assert route.call_count == 1
+    (call,) = route.calls
+    assert call.request.url.path == "/v1/library/adx-trend-crypto"
+    assert "references" not in call.request.url.params
+    assert "reference" not in env
+    # Non-vacuity: the facts line is present (the real entry carries facts),
+    # it simply names no hold.
+    assert env["library_facts"] and "Sharpe" in env["library_facts"]
+    assert "BTC" not in env["library_facts"]

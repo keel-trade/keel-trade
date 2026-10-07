@@ -103,12 +103,25 @@ def test_audit_list_last_reads_canonical_shape():
     from keel.tools.outcomes._base import ToolContext
     from keel.tools.outcomes import audit as _audit  # noqa: F401
 
-    canonical_audit_response = _canonical([
-        {"id": "evt_1", "action": "backtest.create", "decision": "permit",
-         "metadata": {}, "created_at": "2026-05-20T10:00:00Z"},
-        {"id": "evt_2", "action": "strategy.update", "decision": "permit",
-         "metadata": {}, "created_at": "2026-05-20T09:00:00Z"},
-    ], cursor="cur_xyz")
+    canonical_audit_response = _canonical(
+        [
+            {
+                "id": "evt_1",
+                "action": "backtest.create",
+                "decision": "permit",
+                "metadata": {},
+                "created_at": "2026-05-20T10:00:00Z",
+            },
+            {
+                "id": "evt_2",
+                "action": "strategy.update",
+                "decision": "permit",
+                "metadata": {},
+                "created_at": "2026-05-20T09:00:00Z",
+            },
+        ],
+        cursor="cur_xyz",
+    )
 
     with patch("keel.client.KeelClient.get", return_value=canonical_audit_response):
         tool = OUTCOMES["keel_audit_list_last"]
@@ -126,12 +139,22 @@ def test_accounts_list_reads_canonical_shape():
     from keel.tools.outcomes._base import ToolContext
     from keel.tools.outcomes import accounts as _accounts  # noqa: F401
 
-    canonical_accounts = _canonical([
-        {"account_id": "acc_a", "wallet_address": "0xaaa", "status": "active",
-         "account_mode": "unified"},
-        {"account_id": "acc_b", "wallet_address": "0xbbb", "status": "pending",
-         "account_mode": "cross"},
-    ])
+    canonical_accounts = _canonical(
+        [
+            {
+                "account_id": "acc_a",
+                "wallet_address": "0xaaa",
+                "status": "active",
+                "account_mode": "unified",
+            },
+            {
+                "account_id": "acc_b",
+                "wallet_address": "0xbbb",
+                "status": "pending",
+                "account_mode": "cross",
+            },
+        ]
+    )
 
     with patch("keel.client.KeelClient.get", return_value=canonical_accounts):
         tool = OUTCOMES["keel_accounts_list"]
@@ -150,12 +173,12 @@ def test_strategy_search_reads_canonical_shape():
     from keel.tools.outcomes._base import ToolContext
     from keel.tools.outcomes import strategy_search as _ss  # noqa: F401
 
-    canonical_strategies = _canonical([
-        {"strategy_id": "str_1", "name": "Carry", "tags": ["momentum"],
-         "current_sequence": 3},
-        {"strategy_id": "str_2", "name": "Vol",  "tags": ["vol"],
-         "current_sequence": 1},
-    ])
+    canonical_strategies = _canonical(
+        [
+            {"strategy_id": "str_1", "name": "Carry", "tags": ["momentum"], "current_sequence": 3},
+            {"strategy_id": "str_2", "name": "Vol", "tags": ["vol"], "current_sequence": 1},
+        ]
+    )
 
     with patch("keel.client.KeelClient.get", return_value=canonical_strategies):
         tool = OUTCOMES["keel_strategy_search"]
@@ -184,7 +207,7 @@ def test_strategy_memory_read_reads_canonical_shape():
     }
 
     with patch("keel.client.KeelClient.get", return_value=canonical_memory):
-        tool = OUTCOMES["keel_strategy_memory_read"]
+        tool = OUTCOMES["keel_strategy_notes_read"]
         result = tool.handler({"strategy_id": "str_abc"}, ToolContext(is_tty=False))
 
     env = result.to_envelope()

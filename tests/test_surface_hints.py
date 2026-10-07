@@ -3,11 +3,12 @@
 Three mismatch classes, one hint each, shipped inside existing outputs:
 
 * local CLI / local MCP → charts live in the web app (`keel open` /
-  `keel_open_in_app`);
-* hosted full endpoint → file/workspace work needs the CLI;
-* listed connector → live management needs the full endpoint or CLI.
+  `keel_app_link`);
+* hosted endpoint → file/workspace work needs the CLI;
+* listed connector → live management is the web-app handoff
+  (`keel_app_link`); the local toolset is on the CLI.
 
-The hints must appear in `keel_status`, `keel_doctor`, and the MCP
+The hints must appear in `keel_account_status`, `keel_connection_check`, and the MCP
 server instructions for the matching surface — and never leak the wrong
 surface's hint.
 """
@@ -55,7 +56,7 @@ def test_listed_surface_gets_live_hint(clean_surface_env):
 
 def test_local_hint_points_at_keel_open():
     assert "keel open" in LOCAL_CHARTS_HINT
-    assert "keel_open_in_app" in LOCAL_CHARTS_HINT
+    assert "keel_app_link" in LOCAL_CHARTS_HINT
 
 
 def test_hosted_hint_points_at_cli_install():
@@ -66,12 +67,13 @@ def test_hosted_hint_points_at_cli_install():
 def test_listed_hint_routes_to_web_app():
     # One-endpoint model (decision 2026-07-19/20): mcp.usekeel.io IS the
     # listed endpoint — there is no separate "full endpoint". Live
-    # management routes to the web app via keel_open_in_app; the CLI holds
-    # the full local toolset.
-    assert "keel_open_in_app" in LISTED_LIVE_HINT
+    # management routes to the web app via keel_app_link. The directory
+    # connector's copy names no CLI or other client (Q-2268, round 3).
+    assert "keel_app_link" in LISTED_LIVE_HINT
     assert "web app" in LISTED_LIVE_HINT
     assert "https://mcp.usekeel.io/mcp" not in LISTED_LIVE_HINT
-    assert "CLI" in LISTED_LIVE_HINT
+    assert "CLI" not in LISTED_LIVE_HINT
+    assert "keel open" not in LISTED_LIVE_HINT and "pipx" not in LISTED_LIVE_HINT
 
 
 def test_listed_hint_passes_research08_string_rules():
@@ -94,10 +96,13 @@ def test_listed_hint_passes_research08_string_rules():
     assert not forbidden.search(LISTED_LIVE_HINT)
 
 
-# ─── keel_status carries the hints ──────────────────────────────────────
+# ─── keel_account_status carries the hints ──────────────────────────────────────
 
 
-def test_status_payload_carries_local_hint(clean_surface_env):
+def test_status_payload_carries_no_hints_and_says_what_this_server_carries(clean_surface_env):
+    """Retired from `keel_account_status` (agent-surface-cleanup spec 02 §2.5): the
+    status view's line 3, derived from the loaded tools, is the fact the
+    hints restated. `keel_connection_check` keeps its hints (below)."""
     # conftest's autouse _isolate_user_config redirects ~/.keel to tmp,
     # so with KEEL_API_KEY unset there is no auth and the handler skips
     # the identity/entitlement probes.
@@ -106,10 +111,11 @@ def test_status_payload_carries_local_hint(clean_surface_env):
 
     clean_surface_env.delenv("KEEL_API_KEY", raising=False)
     result = STATUS.handler({}, ToolContext())
-    assert result.extra["surface_hints"] == [LOCAL_CHARTS_HINT]
+    assert "surface_hints" not in result.extra
+    assert "This server: research" in result.extra["view"]["markdown"]
 
 
-# ─── keel_doctor carries the hints (success and failure payloads) ───────
+# ─── keel_connection_check carries the hints (success and failure payloads) ───────
 
 
 def test_doctor_failure_payload_carries_hints(clean_surface_env):
@@ -145,14 +151,23 @@ def _restore_env(saved):
 
 def test_listed_instructions_route_beyond_chat_to_the_web_app():
     """The listed connector routes 'act beyond chat' to the web-app handoff
-    (`keel_open_in_app`), not to a phantom 'full endpoint'. mcp.usekeel.io
+    (`keel_app_link`), not to a phantom 'full endpoint'. mcp.usekeel.io
     serves THIS same 23-tool surface, so the old copy claiming live
     management lived on a full endpoint there was stale/false — it is gone;
     the operating core carries the correct routing."""
     from keel.mcp.server import LISTED_INSTRUCTIONS
 
-    assert "keel_open_in_app" in LISTED_INSTRUCTIONS
-    assert "https://usekeel.io/agents" in LISTED_INSTRUCTIONS
+    assert "keel_app_link" in LISTED_INSTRUCTIONS
+    # The per-surface guide URL is on the FULL profiles' SURFACE block.
+    # It left the listed string on 2026-09-22 (W2 §2.1) to fit the 2 KB
+    # host limit: a URL is not a route a tools-only agent can follow, and
+    # `keel_app_link` — asserted above — is the listed route beyond
+    # chat. The URL is still asserted where it is served.
+    from pipeline_engine.reference.system import assemble
+
+    assert "https://usekeel.io/agents" not in LISTED_INSTRUCTIONS
+    for profile in ("full-hosted", "full-local"):
+        assert "https://usekeel.io/agents" in assemble.instructions(profile)
     # The stale/false full-endpoint claim must not reappear.
     assert "mcp.usekeel.io" not in LISTED_INSTRUCTIONS
     assert "Live strategy management" not in LISTED_INSTRUCTIONS
@@ -172,7 +187,7 @@ def test_local_full_instructions_carry_charts_hint():
 
     text = _full_instructions(False, hosted=False)
     assert "keel open" in text
-    assert "keel_open_in_app" in text
+    assert "keel_app_link" in text
     assert "https://usekeel.io/agents" in text
 
 
@@ -194,7 +209,49 @@ def test_created_server_instructions_match_surface(clean_surface_env):
         listed_server = create_server()
         # Listed surface routes 'act beyond chat' to the web app, not a
         # phantom full endpoint (the stale claim is gone).
-        assert "keel_open_in_app" in (listed_server.instructions or "")
+        assert "keel_app_link" in (listed_server.instructions or "")
         assert "mcp.usekeel.io" not in (listed_server.instructions or "")
     finally:
         _restore_env(saved)
+
+
+# ── tool_ref: how this surface names another outcome (Q-1743) ──────────
+
+
+@pytest.mark.parametrize(
+    "tool",
+    ["keel_backtest_run", "keel_backtest_watch", "keel_strategy_search"],
+)
+def test_tool_ref_names_the_mcp_tool_off_the_cli(tool, monkeypatch):
+    import keel.surface as surface
+    from keel.tools.outcomes import _bootstrap
+    from keel.tools.outcomes._surface_hints import tool_ref
+
+    _bootstrap()
+    monkeypatch.setattr(surface, "_SURFACE", "local-mcp")
+    assert tool_ref(tool) == f"`{tool}`"
+
+
+@pytest.mark.parametrize(
+    ("tool", "cli"),
+    [
+        ("keel_backtest_run", "`keel backtest run`"),
+        ("keel_backtest_watch", "`keel backtest watch`"),
+        ("keel_strategy_search", "`keel strategy search`"),
+    ],
+)
+def test_tool_ref_names_the_mounted_cli_command_on_the_cli(tool, cli, monkeypatch):
+    """The CLI spelling is read off the tool's cli_path — and it resolves to a
+    command the CLI actually mounts (non-vacuous: a real click lookup)."""
+    import keel.surface as surface
+    from keel.cli.main import cli as root
+    from keel.tools.outcomes._surface_hints import tool_ref
+
+    monkeypatch.setattr(surface, "_SURFACE", "cli")
+    ref = tool_ref(tool)
+    assert ref == cli
+    words = ref.strip("`").split()[1:]
+    node = root
+    for word in words:
+        node = node.commands[word]
+    assert node.name == words[-1]

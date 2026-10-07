@@ -6,6 +6,7 @@ Covers `keel_backtest_run` (submit + optional polling) and
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from unittest.mock import patch
 
@@ -199,13 +200,19 @@ def test_sdk_backtest_config_vendor_copy_matches_canonical_source():
     ).read_bytes()
 
 
-def test_backtest_run_defaults_start_date_when_omitted(ctx):
-    """Omitting start_date defaults to 2024-08-15 (earliest cached HL data).
+def test_backtest_run_omits_start_date_so_the_platform_floors_it(ctx):
+    """An omitted start_date is sent as OMITTED, never as a constant (Q-1701).
 
-    Regression — v0.5.3 had start_date in required[] which forced agents
-    to interrogate the user for dates before running anything. New
-    behavior: agent calls keel_backtest_run with just strategy_id, gets
-    a real backtest back, and reports the dates used in its reply.
+    keel-api resolves the window from the universe's own coverage and the
+    clock's era (`max(universe_floor, series_era(timeframe))`); a date
+    invented here would arrive as an EXPLICIT start and defeat both, naming
+    a 2024 start for a 5-minute run the loader can only serve from the 1m
+    grid era. The agent still calls with just `strategy_id` — that is what
+    v0.5.3's required[] broke and this keeps.
+
+    # SEED: restore `start_date = args.get("start_date") or "2024-08-15"` in
+    # backtest_run._handler and this goes red on the first assertion.
+    # Revert by reversing that edit.
     """
     submitted = {"id": "bt_def", "status": "queued", "strategy_id": "s_def"}
 
@@ -214,9 +221,15 @@ def test_backtest_run_defaults_start_date_when_omitted(ctx):
         tool.handler({"strategy_id": "s_def", "wait": False}, ctx)
 
     body = mock_post.call_args.kwargs["json"]
-    assert body["start_date"] == "2024-08-15"
-    # end_date also defaults — anything that looks like a date is fine
+    assert "start_date" not in body
+    # Non-vacuity: the payload was really built (the seed cannot remove these).
+    assert body["strategy_id"] == "s_def"
     assert body["end_date"]
+
+    # An explicit start still wins, unchanged.
+    with patch("keel.client.KeelClient.post", return_value=submitted) as mock_post:
+        tool.handler({"strategy_id": "s_def", "start_date": "2025-01-01", "wait": False}, ctx)
+    assert mock_post.call_args.kwargs["json"]["start_date"] == "2025-01-01"
 
 
 def test_backtest_run_schema_does_not_require_start_date():
@@ -282,12 +295,27 @@ def test_backtest_run_polls_when_wait_true(ctx):
         },
     }
 
+    # Path-based rather than a call-ordered list: since the render
+    # cadence build a completed run also reads its curve and the
+    # strategy's recent runs (both best-effort), and an ordered
+    # side_effect would make every future read a test edit.
+    polls = {"n": 0}
+
+    def fake_get(path, **_kw):
+        if path == "/v1/backtests/bt_done":
+            polls["n"] += 1
+            return running if polls["n"] == 1 else completed
+        if path == "/v1/backtests/bt_done/curve":
+            return {}
+        if path == "/v1/backtests":
+            return {"data": [], "pagination": {}}
+        if path.startswith("/v1/strategy-work"):
+            return {}
+        raise AssertionError(f"unexpected GET {path}")
+
     with (
         patch("keel.client.KeelClient.post", return_value=submitted),
-        patch(
-            "keel.client.KeelClient.get",
-            side_effect=[running, completed],
-        ),
+        patch("keel.client.KeelClient.get", side_effect=fake_get),
     ):
         tool = OUTCOMES["keel_backtest_run"]
         result = tool.handler(
@@ -296,6 +324,7 @@ def test_backtest_run_polls_when_wait_true(ctx):
                 "start_date": "2025-01-01",
                 "end_date": "2025-06-30",
                 "wait": True,
+                "skip_readiness": True,
             },
             ctx,
         )
@@ -671,6 +700,110 @@ def test_backtest_run_returns_status_url_on_timeout(ctx):
     assert "info" in env and "still running" in env["info"].lower()
 
 
+# ─── split polling budgets (Q-0573) ──────────────────────────────────────
+
+
+def test_poll_budget_selected_by_surface():
+    """Interactive terminals get the long budget, everything else the MCP
+    budget — and the interactive budget covers the ~141s healthy runs
+    observed in prod (register: cli-backtest-wait-budget-too-short).
+    Non-vacuous: the two budgets must actually differ."""
+    from keel.tools.outcomes import backtest_run as m
+
+    tty_budget = m._poll_budget_s(ToolContext(is_tty=True))
+    mcp_budget = m._poll_budget_s(ToolContext(is_tty=False))
+    assert tty_budget == m._POLL_MAX_INTERACTIVE_S
+    assert mcp_budget == m._POLL_MAX_S
+    assert tty_budget != mcp_budget
+    # _POLL_MAX_INTERACTIVE_S is NOT touched by the _fast_poll fixture, so
+    # this reads the real shipped value.
+    assert m._POLL_MAX_INTERACTIVE_S > 141, "must cover observed ~141s healthy runs"
+
+
+def test_backtest_run_tty_outlives_mcp_budget(monkeypatch, capsys):
+    """The old failure mode, gone: a healthy run that outlasts the MCP
+    budget used to time out for terminal users too. With split budgets a
+    tty session keeps polling (with a stderr progress line) and returns
+    the completed result."""
+    monkeypatch.setattr("keel.tools.outcomes.backtest_run._POLL_MAX_S", 0.05)
+    monkeypatch.setattr("keel.tools.outcomes.backtest_run._POLL_MAX_INTERACTIVE_S", 5.0)
+    monkeypatch.setattr("keel.tools.outcomes.backtest_run._POLL_INTERVAL_S", 0.01)
+
+    import time as _time
+
+    start = _time.monotonic()
+    submitted = {"id": "bt_141", "status": "queued", "strategy_id": "s_tty"}
+
+    def slow_get(path, **_kw):
+        # The run "takes" 0.3s of wall clock — past the (scaled) MCP
+        # budget, comfortably inside the tty budget.
+        if _time.monotonic() - start < 0.3:
+            return {"id": "bt_141", "status": "RUNNING"}
+        return {"id": "bt_141", "status": "COMPLETED", "metrics": {"sharpe": 1.0}}
+
+    tty_ctx = ToolContext(is_tty=True, app_url="https://app.usekeel.io")
+    with (
+        patch("keel.client.KeelClient.post", return_value=submitted),
+        patch("keel.client.KeelClient.get", side_effect=slow_get),
+    ):
+        result = OUTCOMES["keel_backtest_run"].handler(
+            {
+                "strategy_id": "s_tty",
+                "start_date": "2025-01-01",
+                "end_date": "2025-06-30",
+                "wait": True,
+            },
+            tty_ctx,
+        )
+
+    env = result.to_envelope()
+    assert env["status"] == "completed", "tty budget must outlive the MCP budget"
+    assert env["summary_metrics"]["sharpe"] == 1.0
+    # Liveness: the interactive wait showed a progress line on stderr.
+    assert "Ctrl-C to stop waiting" in capsys.readouterr().err
+
+
+def test_backtest_run_timeout_reports_budget_actually_used(monkeypatch):
+    """The timeout message names the budget of the surface that hit it,
+    not a hardcoded 90s."""
+    monkeypatch.setattr("keel.tools.outcomes.backtest_run._POLL_MAX_S", 7.0)
+    monkeypatch.setattr(
+        "keel.tools.outcomes.backtest_run.time.monotonic",
+        _FakeMonotonic(step=4.0),
+    )
+    submitted = {"id": "bt_to", "status": "queued", "strategy_id": "s_to"}
+    running = {"id": "bt_to", "status": "RUNNING"}
+
+    with (
+        patch("keel.client.KeelClient.post", return_value=submitted),
+        patch("keel.client.KeelClient.get", return_value=running),
+    ):
+        result = OUTCOMES["keel_backtest_run"].handler(
+            {
+                "strategy_id": "s_to",
+                "start_date": "2025-01-01",
+                "end_date": "2025-06-30",
+                "wait": True,
+            },
+            ToolContext(is_tty=False, app_url="https://app.usekeel.io"),
+        )
+
+    assert "after 7s" in result.to_envelope()["info"]
+
+
+class _FakeMonotonic:
+    """Deterministic monotonic clock advancing `step` seconds per call."""
+
+    def __init__(self, step: float):
+        self._now = 0.0
+        self._step = step
+
+    def __call__(self) -> float:
+        now = self._now
+        self._now += self._step
+        return now
+
+
 # ─── keel_backtest_summarize ─────────────────────────────────────────────
 
 
@@ -701,12 +834,25 @@ def test_backtest_summarize_returns_metrics(ctx):
         "presigned_url": "https://s3.example/results.json?sig=abc",
         "expires_in": 3600,
     }
+    curve = {
+        "job_id": "bt_sum",
+        "points": [
+            {"t": "2024-08-15T00:00:00+00:00", "equity": 10000.0, "drawdown_pct": 0.0},
+            {"t": "2025-06-01T00:00:00+00:00", "equity": 9100.0, "drawdown_pct": -9.0},
+            {"t": "2026-02-27T00:00:00+00:00", "equity": 81750.0, "drawdown_pct": 0.0},
+        ],
+        "start": "2024-08-15T00:00:00+00:00",
+        "end": "2026-02-27T00:00:00+00:00",
+        "source_points": 54000,
+    }
 
     def fake_get(path, **_kw):
         if path == "/v1/backtests/bt_sum":
             return detail
         if path == "/v1/backtests/bt_sum/results":
             return results
+        if path == "/v1/backtests/bt_sum/curve":
+            return curve
         raise AssertionError(f"unexpected GET {path}")
 
     with patch("keel.client.KeelClient.get", side_effect=fake_get):
@@ -726,9 +872,94 @@ def test_backtest_summarize_returns_metrics(ctx):
     assert env["strategy_name"] == "Momentum XS"
     assert env["results_url"] == "https://s3.example/results.json?sig=abc"
     assert env["resource_uri"] == "keel://backtest/bt_sum/results"
+    # The card chart's series rides the envelope as compact triples (Q-1505).
+    assert env["curve"]["points"] == [
+        ["2024-08-15T00:00:00+00:00", 10000.0, 0.0],
+        ["2025-06-01T00:00:00+00:00", 9100.0, -9.0],
+        ["2026-02-27T00:00:00+00:00", 81750.0, 0.0],
+    ]
+    assert env["curve"]["start"] == "2024-08-15T00:00:00+00:00"
+    assert env["curve"]["source_points"] == 54000
+    # No embed route since Q-1505: the card draws from `curve`.
+    assert "embed_url" not in env["render"]
 
 
-def test_backtest_summarize_carries_every_stored_metric_key(ctx):
+def test_backtest_summarize_curve_is_best_effort(ctx):
+    """A curve fetch failure (or an empty series) never fails the
+    summary — the envelope simply carries no `curve`."""
+    detail = {"id": "bt_nc", "status": "COMPLETED", "strategy_id": "s", "metrics": {"sharpe": 1.0}}
+
+    def fake_get_error(path, **_kw):
+        if path == "/v1/backtests/bt_nc":
+            return detail
+        if path == "/v1/backtests/bt_nc/results":
+            return {}
+        if path == "/v1/backtests/bt_nc/curve":
+            raise KeelError("curve down")
+        raise AssertionError(f"unexpected GET {path}")
+
+    with patch("keel.client.KeelClient.get", side_effect=fake_get_error):
+        env = (
+            OUTCOMES["keel_backtest_summarize"].handler({"backtest_id": "bt_nc"}, ctx).to_envelope()
+        )
+    assert "curve" not in env
+    assert env["summary_metrics"]["sharpe"] == 1.0
+
+    def fake_get_empty(path, **_kw):
+        if path == "/v1/backtests/bt_nc":
+            return detail
+        if path == "/v1/backtests/bt_nc/results":
+            return {}
+        if path == "/v1/backtests/bt_nc/curve":
+            return {"job_id": "bt_nc", "points": [], "start": None, "end": None, "source_points": 0}
+        raise AssertionError(f"unexpected GET {path}")
+
+    with patch("keel.client.KeelClient.get", side_effect=fake_get_empty):
+        env = (
+            OUTCOMES["keel_backtest_summarize"].handler({"backtest_id": "bt_nc"}, ctx).to_envelope()
+        )
+    assert "curve" not in env
+
+
+def test_backtest_summarize_not_completed_never_fetches_curve(ctx):
+    detail = {"id": "bt_run", "status": "RUNNING", "strategy_id": "s", "metrics": None}
+
+    def fake_get(path, **_kw):
+        if path == "/v1/backtests/bt_run":
+            return detail
+        raise AssertionError(f"unexpected GET {path}")
+
+    with patch("keel.client.KeelClient.get", side_effect=fake_get):
+        env = (
+            OUTCOMES["keel_backtest_summarize"]
+            .handler({"backtest_id": "bt_run"}, ctx)
+            .to_envelope()
+        )
+    assert "curve" not in env and "results_url" not in env
+
+
+#: The Q-0415 drift guard's stored blocks, one per measurement era
+#: (trade-metrics spec 01 §4): Era C is today's `_STATS_KEYS`; Era B the
+#: 2026-08-25 → spec-01 shape, whose churn rode `rebalance_legs`.
+_ERA_C_TRADE_KEYS = {
+    "total_trades": 1198,
+    "positions": 87,
+    "position_win_rate": 40.2,
+    "resizes": 233,
+    "avg_holding_duration": "6 days 12:00:00",
+    "turnover": 12.4,
+    "trade_model": "reducing_order",
+}
+_ERA_B_TRADE_KEYS = {
+    "total_trades": 87,
+    "rebalance_legs": 233,
+    "turnover": 12.4,
+    "trade_model": "position_round_trip",
+}
+
+
+@pytest.mark.parametrize("era", ["C", "B"])
+def test_backtest_summarize_carries_every_stored_metric_key(ctx, era):
     """Drift guard (Q-0398 residue): the envelope must carry EVERY key the
     worker stores — canonical keys in summary_metrics, everything verbatim
     in metrics_raw. Pre-fix, the hand whitelist dropped 16 of 21 keys,
@@ -747,15 +978,23 @@ def test_backtest_summarize_carries_every_stored_metric_key(ctx):
         "win_rate": 51.2,
         "profit_factor": 1.4,
         "expectancy": 0.02,
-        "total_trades": 87,
+        # The era's trade keys (spec 01 §3): C records trades AND positions,
+        # B stored positions under the trade keys.
+        **(_ERA_C_TRADE_KEYS if era == "C" else _ERA_B_TRADE_KEYS),
         "total_orders": 120,
         "total_fees_paid": 55.1,
         "fees_pct_of_initial": 13.3911,
         "fees_pct_of_net_profit": 107.10,
+        # Q-0581: fee drag vs gross PnL — derived by the worker's
+        # build_enriched_metrics, present on every enriched payload.
+        "fees_pct_of_gross_profit": 51.71,
         "max_drawdown_duration": "12 days 04:00:00",
         "end_value": 14250.0,
         "wipeout_bar": None,
         "wipeout_date": None,
+        # Q-0489: explicit funding-inclusion fact — never inferred from the
+        # funding key's absence.
+        "funding_included": False,
         "warnings": [
             {
                 "code": "SYMBOL_DELISTED",
@@ -775,6 +1014,8 @@ def test_backtest_summarize_carries_every_stored_metric_key(ctx):
             return detail
         if path == "/v1/backtests/bt_drift/results":
             return {}
+        if path == "/v1/backtests/bt_drift/curve":
+            return {}
         raise AssertionError(f"unexpected GET {path}")
 
     with patch("keel.client.KeelClient.get", side_effect=fake_get):
@@ -783,11 +1024,36 @@ def test_backtest_summarize_carries_every_stored_metric_key(ctx):
 
     env = result.to_envelope()
     raw = env["metrics_raw"]
-    # Verbatim passthrough: 21/21 keys survive, values untouched.
+    # Verbatim passthrough: 22/22 keys survive, values untouched.
     assert raw == worker_metrics
     assert raw["fees_pct_of_initial"] == 13.3911
     assert raw["fees_pct_of_net_profit"] == 107.10
+    assert raw["fees_pct_of_gross_profit"] == 51.71
+    # Q-0581: fee drag is FIRST-CLASS — canonical summary, not only raw.
+    summary = env["summary_metrics"]
+    assert summary["total_fees_paid"] == 55.1
+    assert summary["fees_pct_of_initial"] == 13.3911
+    assert summary["fees_pct_of_gross_profit"] == 51.71
+    assert summary["fees_pct_of_net_profit"] == 107.10
     assert raw["warnings"][0]["code"] == "SYMBOL_DELISTED"
+    assert raw["funding_included"] is False
+    assert raw["turnover"] == 12.4 and summary["turnover"] == 12.4
+    # The stamp rides metrics_raw verbatim and is never a summary key.
+    assert raw["trade_model"] == worker_metrics["trade_model"]
+    assert "trade_model" not in summary
+    if era == "C":
+        assert summary["total_trades"] == 1198 and summary["win_rate"] == 51.2
+        assert summary["positions"] == 87 and summary["position_win_rate"] == 40.2
+        assert summary["resizes"] == 233
+        assert summary["avg_holding_duration"] == "6 days 12:00:00"
+    else:
+        # Era B's stored count and win rate are POSITION numbers: summary
+        # names them so, and `rebalance_legs` stays readable beside `resizes`.
+        assert summary["positions"] == 87 and summary["position_win_rate"] == 51.2
+        assert summary["position_profit_factor"] == 1.4
+        assert summary["resizes"] == 233 and summary["rebalance_legs"] == 233
+        assert not {"total_trades", "win_rate", "profit_factor"} & set(summary)
+        assert raw["rebalance_legs"] == 233 and raw["total_trades"] == 87
 
 
 def test_backtest_run_success_populates_metrics_raw(ctx):
@@ -804,6 +1070,10 @@ def test_backtest_run_success_populates_metrics_raw(ctx):
         if path == "/v1/backtests/bt_raw":
             calls["n"] += 1
             return final
+        if path == "/v1/backtests/bt_raw/curve":
+            return {}
+        if path == "/v1/backtests":
+            return {"data": [], "pagination": {}}
         raise AssertionError(f"unexpected GET {path}")
 
     def fake_post(path, **_kw):
@@ -816,12 +1086,69 @@ def test_backtest_run_success_populates_metrics_raw(ctx):
     ):
         tool = OUTCOMES["keel_backtest_run"]
         result = tool.handler(
-            {"strategy_id": "strat_q", "commit_id": "c_1", "wait": True},
+            {
+                "strategy_id": "strat_q",
+                "commit_id": "c_1",
+                "wait": True,
+                "skip_readiness": True,
+            },
             ctx,
         )
 
     env = result.to_envelope()
     assert env["metrics_raw"] == final["metrics"]
+
+
+def _window_422(code: str, message: str, **fields):
+    import json
+
+    from keel.errors import translate_http_error
+
+    return translate_http_error(
+        422, json.dumps({"detail": {"code": code, "message": message, **fields}})
+    )
+
+
+def test_backtest_run_inverted_window_suggests_the_swapped_call(ctx):
+    """Q-1741: the server names the inversion; the envelope's next action is
+    the same run with the dates swapped — not "choose a wider range"."""
+    refusal = _window_422(
+        "WINDOW_INVERTED",
+        "Cannot backtest — start_date 2025-06-01 is after end_date 2025-01-01.",
+        requested_start="2025-06-01",
+        requested_end="2025-01-01",
+    )
+    with patch("keel.client.KeelClient.post", side_effect=refusal):
+        with pytest.raises(KeelError) as exc:
+            OUTCOMES["keel_backtest_run"].handler(
+                {"strategy_id": "strat_xyz", "start_date": "2025-06-01", "end_date": "2025-01-01"},
+                ctx,
+            )
+    env = exc.value.to_envelope()
+    assert env["message"].endswith("start_date 2025-06-01 is after end_date 2025-01-01.")
+    assert env["detail"]["code"] == "WINDOW_INVERTED"
+    assert env["code"] == "WINDOW_INVERTED"  # Q-1751: survives to the envelope
+    assert env["suggested_next_action"]["tool"] == "keel_backtest_run"
+    assert env["suggested_next_action"]["args"] == {
+        "strategy_id": "strat_xyz",
+        "start_date": "2025-01-01",
+        "end_date": "2025-06-01",
+    }
+
+
+def test_backtest_run_other_window_refusals_carry_no_invented_next_call(ctx):
+    """Control arm: a genuinely empty window has no mechanical fix, so it
+    re-raises with no tool named."""
+    refusal = _window_422("WINDOW_EMPTY", "Cannot backtest — the window is empty.")
+    with patch("keel.client.KeelClient.post", side_effect=refusal):
+        with pytest.raises(KeelError) as exc:
+            OUTCOMES["keel_backtest_run"].handler(
+                {"strategy_id": "strat_xyz", "start_date": "2026-09-01", "end_date": "2026-09-01"},
+                ctx,
+            )
+    env = exc.value.to_envelope()
+    assert env["suggested_next_action"]["tool"] is None
+    assert env["detail"]["code"] == "WINDOW_EMPTY"
 
 
 def test_backtest_summarize_404_raises_NotFoundError(ctx):
@@ -858,6 +1185,10 @@ def test_backtest_watch_polls_until_complete(ctx):
             return running if calls == 0 else completed
         if path == "/v1/backtests/bt_watch/results":
             return results
+        if path == "/v1/backtests/bt_watch/curve":
+            return {}
+        if path == "/v1/backtests":
+            return {"data": [], "pagination": {}}
         raise AssertionError(f"unexpected GET {path}")
 
     fake_get.calls = 0
@@ -866,7 +1197,12 @@ def test_backtest_watch_polls_until_complete(ctx):
         env = (
             OUTCOMES["keel_backtest_watch"]
             .handler(
-                {"backtest_id": "bt_watch", "interval_s": 1, "timeout_s": 5},
+                {
+                    "backtest_id": "bt_watch",
+                    "interval_s": 1,
+                    "timeout_s": 5,
+                    "skip_readiness": True,
+                },
                 ctx,
             )
             .to_envelope()
@@ -927,7 +1263,7 @@ def test_backtest_run_passes_through_remaining_when_present(ctx):
         env = (
             OUTCOMES["keel_backtest_run"]
             .handler(
-                {"strategy_id": "strat_xyz", "wait": False, "no_ownership_hint": True},
+                {"strategy_id": "strat_xyz", "wait": False, "skip_readiness": True},
                 ctx,
             )
             .to_envelope()
@@ -942,7 +1278,7 @@ def test_backtest_run_omits_remaining_when_absent(ctx):
         env = (
             OUTCOMES["keel_backtest_run"]
             .handler(
-                {"strategy_id": "strat_xyz", "wait": False, "no_ownership_hint": True},
+                {"strategy_id": "strat_xyz", "wait": False, "skip_readiness": True},
                 ctx,
             )
             .to_envelope()
@@ -970,10 +1306,321 @@ def test_backtest_run_keeps_remaining_through_wait_path(ctx):
         env = (
             OUTCOMES["keel_backtest_run"]
             .handler(
-                {"strategy_id": "strat_xyz", "wait": True, "no_ownership_hint": True},
+                {"strategy_id": "strat_xyz", "wait": True, "skip_readiness": True},
                 ctx,
             )
             .to_envelope()
         )
     assert env["status"] == "completed"
     assert env["remaining"] == {"backtest_runs": 2}
+
+
+# ─── the quota ladder + rendered sentence (mcp-conversion M1.1/M1.2) ─────
+
+
+def _quota_block(**over) -> dict:
+    """One served block, exactly as `QuotaView.to_dict() | {"tier": …}`."""
+    block = {
+        "unit": "backtest_runs",
+        "label": "backtests",
+        "limit": 50,
+        "used": 44,
+        "remaining": 6,
+        "unlimited": False,
+        "period": "weekly",
+        "resets_at": "2026-09-22T00:00:00Z",
+        "seconds_to_reset": 24300,
+        "tier": "warn",
+    }
+    block.update(over)
+    return block
+
+
+def test_backtest_run_renders_one_sentence_from_the_served_quota_block(ctx):
+    """M1.2 / D-10: the API carries numbers, the SDK renders the line.
+
+    The block is passed through PROJECTED to the caller's own numbers
+    (D-12, 04 §4.4 — `{unit, limit, used, remaining, resets_at}`) AND one
+    factual sentence is rendered — both halves of the fraction, the window,
+    the reset.
+    """
+    submitted = {
+        "id": "bt_q",
+        "status": "queued",
+        "strategy_id": "strat_xyz",
+        "quota": [_quota_block()],
+    }
+    with patch("keel.client.KeelClient.post", return_value=submitted):
+        env = (
+            OUTCOMES["keel_backtest_run"]
+            .handler({"strategy_id": "strat_xyz", "wait": False, "skip_readiness": True}, ctx)
+            .to_envelope()
+        )
+    assert env["quota"] == [
+        {
+            "unit": "backtest_runs",
+            "limit": 50,
+            "used": 44,
+            "remaining": 6,
+            "resets_at": "2026-09-22T00:00:00Z",
+        }
+    ], "the served block rides through projected to its allow-list"
+    assert env["quota_notice"] == (
+        "6 of 50 backtests left this week; they reset Tue 22 Sep 00:00 UTC."
+    )
+
+
+def test_backtest_run_headline_is_the_most_urgent_unit(ctx):
+    """Two notable units → the sentence names the binding one, and BOTH
+    still ride in `quota` so nothing is dropped."""
+    runs = _quota_block(tier="notice", used=25, remaining=25)
+    compute = _quota_block(
+        unit="backtest_compute_seconds",
+        label="backtest compute time",
+        limit=1500,
+        used=1450,
+        remaining=50,
+        tier="critical",
+    )
+    submitted = {"id": "bt_q2", "status": "queued", "quota": [runs, compute]}
+    with patch("keel.client.KeelClient.post", return_value=submitted):
+        env = (
+            OUTCOMES["keel_backtest_run"]
+            .handler({"strategy_id": "strat_xyz", "wait": False, "skip_readiness": True}, ctx)
+            .to_envelope()
+        )
+    assert env["quota_notice"].startswith("50 of 1500 backtest compute time left this week")
+    assert len(env["quota"]) == 2
+
+
+def test_backtest_run_omits_quota_keys_when_nothing_is_notable(ctx):
+    """Control arm: a comfortable org gets neither key — an empty `quota`
+    would read as "you have none"."""
+    submitted = {"id": "bt_ok", "status": "queued", "strategy_id": "strat_xyz"}
+    with patch("keel.client.KeelClient.post", return_value=submitted):
+        env = (
+            OUTCOMES["keel_backtest_run"]
+            .handler({"strategy_id": "strat_xyz", "wait": False, "skip_readiness": True}, ctx)
+            .to_envelope()
+        )
+    assert "quota" not in env and "quota_notice" not in env
+
+
+def test_backtest_run_quota_survives_the_wait_path(ctx):
+    """The block comes off the SUBMIT response, so it must survive polling."""
+    submitted = {"id": "bt_q3", "status": "queued", "quota": [_quota_block(tier="critical")]}
+    final = {"id": "bt_q3", "status": "completed", "metrics": {"sharpe": 1.2}}
+    with (
+        patch("keel.client.KeelClient.post", return_value=submitted),
+        patch("keel.client.KeelClient.get", return_value=final),
+    ):
+        env = (
+            OUTCOMES["keel_backtest_run"]
+            .handler({"strategy_id": "strat_xyz", "wait": True, "skip_readiness": True}, ctx)
+            .to_envelope()
+        )
+    assert env["status"] == "completed"
+    assert env["quota_notice"].startswith("6 of 50 backtests left this week")
+
+
+def test_backtest_run_critical_notice_is_the_same_line_for_every_plan(ctx):
+    """D-12 §4.2: near the wall the server attaches `plan` and the plans
+    with a higher limit (`higher_plans`, D-10) — the notice renders NEITHER.
+    It is the one line, identical for the free plan and a paid one, and the
+    projected `quota` carries no `plan`/`higher_plans`.
+
+    SEEDS (run 2026-09-28, each reverted by reversing the edit): append
+    "Plans are listed at <billing link>." to the notice (bypassing the D-12
+    scan) — the equality reds while the most-urgent-unit test stays green;
+    restore the passthrough (`"quota": notable`) — this and the
+    one-sentence test red while the omit-when-nothing-notable control
+    stays green."""
+    paths = [
+        {"plan": "starter", "limit": 500, "period": "weekly"},
+        {"plan": "trader", "unlimited": True},
+    ]
+    notices = {}
+    for plan in ("free", "starter"):
+        submitted = {
+            "id": "bt_q5",
+            "status": "queued",
+            "quota": [
+                _quota_block(tier="critical", used=46, remaining=4, plan=plan, higher_plans=paths)
+            ],
+        }
+        with patch("keel.client.KeelClient.post", return_value=submitted):
+            env = (
+                OUTCOMES["keel_backtest_run"]
+                .handler({"strategy_id": "strat_xyz", "wait": False, "skip_readiness": True}, ctx)
+                .to_envelope()
+            )
+        notices[plan] = env["quota_notice"]
+        assert set(env["quota"][0]) == {"unit", "limit", "used", "remaining", "resets_at"}
+        assert "higher_plans" not in json.dumps(env) and "Starter" not in json.dumps(env)
+    assert (
+        notices["free"]
+        == notices["starter"]
+        == ("4 of 50 backtests left this week; they reset Tue 22 Sep 00:00 UTC.")
+    )
+    from keel.tools.outcomes._handoff import _FORBIDDEN_UPSELL_RE
+
+    assert not _FORBIDDEN_UPSELL_RE.search(notices["free"]), "facts, not a pitch (D-12 guard)"
+
+
+def test_backtest_run_quota_notice_never_invents_numbers(ctx):
+    """A block with no finite allowance renders no sentence at all — the
+    null-number line ("you have  left") is the Q-1590 shape one layer up —
+    and, having no allowance to report, no `quota` block either (its
+    projection would be a bare unit)."""
+    submitted = {
+        "id": "bt_q4",
+        "status": "queued",
+        "quota": [{"unit": "backtest_runs", "label": "backtests", "unlimited": True}],
+    }
+    with patch("keel.client.KeelClient.post", return_value=submitted):
+        env = (
+            OUTCOMES["keel_backtest_run"]
+            .handler({"strategy_id": "strat_xyz", "wait": False, "skip_readiness": True}, ctx)
+            .to_envelope()
+        )
+    assert "quota" not in env
+    assert "quota_notice" not in env
+
+
+# ─── the first-week allowance (connect-onboarding spec 01 §1.8/§1.9) ─────
+
+#: A served first-week block (spec 01 §1.8), plus a field no agent surface
+#: was reviewed for — the projection must drop it.
+_FIRST_WEEK = {
+    "granted": 200,
+    "remaining": 40,
+    "ends_at": "2026-10-13T15:02:11Z",
+    "grant_id": "grt_unreviewed",
+}
+
+_FIRST_WEEK_SENTENCE = "40 of 200 first-week backtests left; they end Tue 13 Oct 15:02 UTC."
+
+
+def _submit(ctx, quota: list[dict]) -> dict:
+    submitted = {"id": "bt_fw", "status": "queued", "strategy_id": "strat_xyz", "quota": quota}
+    with patch("keel.client.KeelClient.post", return_value=submitted):
+        return (
+            OUTCOMES["keel_backtest_run"]
+            .handler({"strategy_id": "strat_xyz", "wait": False, "skip_readiness": True}, ctx)
+            .to_envelope()
+        )
+
+
+def test_first_week_rides_a_notice_that_renders_without_it(ctx):
+    """Spec 01 §1.9: the sentence follows the quota line it rides, verbatim,
+    and the block's `first_week` is projected to granted/remaining/ends_at."""
+    runs = _quota_block(
+        limit=250, used=210, remaining=40, tier="critical", first_week=dict(_FIRST_WEEK)
+    )
+    env = _submit(ctx, [runs])
+    assert env["quota_notice"] == (
+        "40 of 250 backtests left this week; they reset Tue 22 Sep 00:00 UTC. "
+        + _FIRST_WEEK_SENTENCE
+    )
+    assert env["quota"][0]["first_week"] == {
+        "granted": 200,
+        "remaining": 40,
+        "ends_at": "2026-10-13T15:02:11Z",
+    }
+    # Only in the quota line: never `next`, never a second key.
+    blob = json.dumps(env)
+    assert blob.count("first-week") == 1, blob
+    assert "next" not in env
+    assert "grt_unreviewed" not in blob
+
+
+def test_first_week_never_makes_a_response_carry_a_quota_line(ctx):
+    """The bonus is never what makes a response carry a quota line (§1.9).
+
+    A block whose allowance renders no sentence (no finite limit/remaining)
+    carries `first_week` — the notice stays absent, and the first-week
+    sentence does not appear on its own.
+
+    SEED (run 2026-10-06, reverted by reversing the edit): render the
+    first-week sentence before the `if sentence:` gate — this test reds
+    while the rides-a-notice test (control) stays green."""
+    bare = {"unit": "backtest_runs", "label": "backtests", "first_week": dict(_FIRST_WEEK)}
+    env = _submit(ctx, [bare])
+    assert "quota_notice" not in env
+    assert "first-week" not in json.dumps(env)
+
+
+def test_first_week_below_the_runs_threshold_adds_nothing(ctx):
+    """The runs unit is still in the `ok` tier, so keel-api sent only the
+    compute block — which carries its own `first_week` (§1.8). The compute
+    line renders as before, and no first-week sentence rides it: the
+    sentence counts backtests, and the runs block is not in the response."""
+    compute = _quota_block(
+        unit="backtest_compute_seconds",
+        label="backtest compute time",
+        limit=7500,
+        used=6900,
+        remaining=600,
+        tier="critical",
+        first_week={"granted": 6000, "remaining": 600, "ends_at": "2026-10-13T15:02:11Z"},
+    )
+    env = _submit(ctx, [compute])
+    assert env["quota_notice"] == (
+        "600 of 7500 backtest compute time left this week; they reset Tue 22 Sep 00:00 UTC."
+    )
+    assert "first-week" not in json.dumps(env)
+
+
+def test_first_week_absent_when_the_submit_carries_no_quota(ctx):
+    """Every unit in the `ok` tier: keel-api attaches no `quota` at all, so
+    a first-week account's submit carries no quota line and no sentence."""
+    submitted = {"id": "bt_fw", "status": "queued", "strategy_id": "strat_xyz"}
+    with patch("keel.client.KeelClient.post", return_value=submitted):
+        env = (
+            OUTCOMES["keel_backtest_run"]
+            .handler({"strategy_id": "strat_xyz", "wait": False, "skip_readiness": True}, ctx)
+            .to_envelope()
+        )
+    assert "quota_notice" not in env and "quota" not in env
+    assert "first-week" not in json.dumps(env)
+
+
+def test_no_first_week_block_leaves_the_notice_unchanged(ctx):
+    """Control arm: the same critical block without `first_week` renders the
+    pre-existing line and the pre-existing projection, byte for byte."""
+    env = _submit(ctx, [_quota_block(limit=250, used=210, remaining=40, tier="critical")])
+    assert env["quota_notice"] == (
+        "40 of 250 backtests left this week; they reset Tue 22 Sep 00:00 UTC."
+    )
+    assert set(env["quota"][0]) == {"unit", "limit", "used", "remaining", "resets_at"}
+
+
+def test_headroom_blocks_carry_first_week_from_the_entitlements_read():
+    """The compare-hint headroom arm reads `/v1/entitlements`, whose balances
+    carry `first_week` (§1.8); the notice it renders rides the sentence."""
+    from keel.tools.outcomes.backtest_run import _headroom_blocks, _quota_envelope_fields
+
+    class _Client:
+        def get(self, path):
+            assert path == "/v1/entitlements"
+            return {
+                "balances": [
+                    {
+                        "unit": "backtest_runs",
+                        "granted": 250,
+                        "spent": 210,
+                        "available": 40,
+                        "period": "weekly",
+                        "resets_at": "2026-09-22T00:00:00Z",
+                        "first_week": dict(_FIRST_WEEK),
+                    }
+                ]
+            }
+
+    fields = _quota_envelope_fields(_headroom_blocks(_Client()))
+    # A balance carries no label, so the unit name reads mechanically.
+    assert fields["quota_notice"] == (
+        "40 of 250 backtest runs left this week; they reset Tue 22 Sep 00:00 UTC. "
+        + _FIRST_WEEK_SENTENCE
+    )
+    assert fields["quota"][0]["first_week"]["remaining"] == 40

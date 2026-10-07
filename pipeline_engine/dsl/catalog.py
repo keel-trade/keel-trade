@@ -5,8 +5,9 @@ One frozen :class:`Rule` per issue code minted anywhere in the platform:
 - the 49 write-time codes emitted by the Python DSL validator
   (``pipeline_engine.dsl.validator`` — static ``emit(...)`` sites + 6 dynamic
   resampler codes assigned by the ValueError→code dispatch),
-- the 7 runtime-only structured codes (Layer C ``PipelineValidator`` +
-  ``LookaheadValidator``),
+- the 7 retired Layer C runtime-only codes (``PipelineValidator`` +
+  ``LookaheadValidator``, all ``status="reserved"`` tombstones since the
+  2026-08-26 Layer C retirement, Q-0689),
 - the 12 engine-boundary structured codes minted by ``StructuredError``
   subclasses at compile/serialize/load/verify boundaries (specs 01/03 plus
   the C4 slot value_type pair, intake per §1.4),
@@ -59,6 +60,8 @@ from dataclasses import dataclass, field, replace
 from enum import Enum
 from string import Formatter
 from typing import Iterable
+
+from timeframes import token_for_minutes
 
 
 class RuleCategory(str, Enum):
@@ -873,25 +876,14 @@ PARITY_BOUNDARY: dict[str, object] = {
     "revisit_triggers": ("parse-semantics-change", "text-shape-divergence"),
 }
 
-#: THE engine-divergence set (spec 04 §6). Seeded with the TS pass-7 skip: the
-#: editor entrypoint deliberately never runs phase-ordering (too noisy with
-#: multi-signal factories); the Python-side data-driven rule stays
-#: authoritative and the server re-validates on save. This divergence OUTLIVES
-#: the deleted ``pass7-phases.ts`` file — it lives here as data, not as dormant
-#: rule logic on disk (spec 04 §1.3).
-_ALL_ENGINE_DIVERGENCES: tuple[EngineDivergence, ...] = (
-    EngineDivergence(
-        key="ts-pass7-skip",
-        surface="phase-ordering",
-        reason=(
-            "editor UX: branch-reset false positives too noisy; AI tools have "
-            "registry access (index.ts policy, pre-collapse); Python-side rule "
-            "remains authoritative and the server re-validates on save"
-        ),
-        codes=("PHASE_ORDER_VIOLATION",),
-        since="2026-07-22",
-    ),
-)
+#: THE engine-divergence set (spec 04 §6). EMPTY since 2026-08-26: its one
+#: seed entry, ``ts-pass7-skip`` (the editor deliberately never ran pass-7
+#: phase ordering), retired WITH the rule itself — PHASE_ORDER_VIOLATION is
+#: now a reserved tombstone (founder ruling 2026-08-26 on the Q-0685 census),
+#: so the two engines genuinely emit the same code set and no divergence
+#: needs declaring. New entries require the spec 04 §6 coherence rules
+#: (codes must resolve with ``ts_mirrored=False``).
+_ALL_ENGINE_DIVERGENCES: tuple[EngineDivergence, ...] = ()
 
 
 def parity_contract_to_jsonable(
@@ -979,19 +971,365 @@ _PY_TS_RT = (Surface.PY_DSL, Surface.TS_EDITOR, Surface.RUNTIME)
 _RT_ONLY = (Surface.RUNTIME,)
 _GATE_ONLY = (Surface.GATE,)
 
-_TS_RUNTIME_ONLY_REASON = (
-    "Runtime-only structured code (Layer C/D): minted by the runtime "
-    "PipelineValidator/LookaheadValidator over live step instances, which the "
-    "browser editor never has."
-)
 _TS_GATE_ONLY_REASON = (
     "Gate-minted code: produced by a keel-api request gate, not by any "
     "validator pass; there is no editor-side emission to mirror."
+)
+_TS_PARSE_ABSENT_REASON = (
+    "Parse-tier code: the browser editor persists a GraphModel and never "
+    "parses DSL text — the text path is keel-api's and the SDK's. Its TS "
+    "consumers RENDER these codes (they arrive on the wire) but no TS "
+    "validator pass can mint one."
 )
 _TS_ENGINE_BOUNDARY_REASON = (
     "Engine-boundary structured code: minted by a StructuredError subclass "
     "(pipeline_engine.exceptions) at a server-side compile/serialize/load/"
     "verify boundary the browser editor never crosses."
+)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# THE POSITION LAYER (position-layer specs 01-04, Q-2448)
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# Every code the binding facet mints (spec 03 §2.D), the live look-back
+# refusal (spec 02-R9), the upgrade offer (spec 04-R9) and the D-42 deploy
+# refusal: the 22 codes of reconciliation X-28. (spec 02's
+# LIVE_WINDOW_SHORTER_THAN_TRADES is a run-summary note, not a catalog code.) All are born UNSTAGED: each
+# needs a position component (TradeManager, a reader, an action, Exposure()),
+# so none can fire on any strategy that predates the position layer — the
+# COMPONENT_NOT_RUNNABLE precedent. Messages and fixes are the binding
+# module's SHAPES (``pipeline_engine.binding``), rendered into ``{detail}`` and
+# ``{fix}``, so the static walk, the TS engine and the runtime lift say the
+# same words. Lane L1's components are registered, so each code's coverage
+# is its conformance/<CODE>/ reject + accept fixtures (written from
+# dsl/fixtures/position_stub_corpus.py, the cases' source); the scope
+# machine's unit table (binding_test.py) stays as the row-level proof. The
+# pre-landing fixture_waiver lines went with the move (Q-2448 integration).
+
+
+def _binding_rule(
+    code: str,
+    category: RuleCategory,
+    summary: str,
+    explain: str,
+    *,
+    runtime: bool,
+    ceiling: str = "",
+) -> Rule:
+    surfaces = _PY_TS_RT if runtime else _PY_TS
+    return Rule(
+        code=code,
+        category=category,
+        summary=summary,
+        message_template="{detail}",
+        template_params=("detail", "fix"),
+        explain=explain,
+        passes=("6",),
+        surfaces=surfaces,
+        ts_mirrored=True,
+        suggestion_template="{fix}",
+        applicability=Applicability.MAYBE_INCORRECT,
+        severity_ceiling=ceiling,
+    )
+
+
+_POSITION_LAYER_RULES: tuple[Rule, ...] = (
+    _binding_rule(
+        "POSITION_ACTION_NEEDS_MASK",
+        RuleCategory.CORRECTNESS,
+        "A position action (Exit, Reduce, ScaleIn, AllowEntry) received something other than a 0/1 mask.",
+        "An action fires where its mask is exactly 1. It refuses the Position "
+        "itself or a record of branches (start the rule with a reader, a "
+        "filter, then the action) and a series whose static domain holds a "
+        "value outside {0, 1}. A -1/+1 direction gets its own wording "
+        "(D-39.7): Exit fires on 1 only, so shorts would never exit. A ⊤ "
+        "domain passes statically; the runtime lift asserts the values are "
+        "in {0, 1, NaN}. Actions declare no input_domain, so "
+        "VALUE_DOMAIN_MISMATCH never double-fires (spec 03-R20).",
+        runtime=True,
+    ),
+    _binding_rule(
+        "POSITION_REQUIRED",
+        RuleCategory.CORRECTNESS,
+        "A trade reader, trade operator, action, Exposure() or RiskSizer runs with no open TradeManager.",
+        "Readers, SinceEntry, actions, Exposure() and RiskSizer read a trade, "
+        "so they need a Position: they sit between TradeManager(...) and "
+        "Exposure(). Placing one after the sizer (or after Exposure()) is "
+        "Q-2448's shape as a type error; the message then names the step "
+        "that already closed the scope (spec 03-R21). The step's output "
+        "carries the recovery lineage, so the mistake fires once.",
+        runtime=True,
+    ),
+    _binding_rule(
+        "POSITION_LINEAGE_MISMATCH",
+        RuleCategory.CORRECTNESS,
+        "Values of two TradeManagers meet.",
+        "Every Position and every value read from it belongs to the "
+        "TradeManager that minted it (its lineage). A rule of one "
+        "TradeManager cannot act on another's trade values, a reader cannot "
+        "read another's Position, and a Load of another's trade value is "
+        "refused (D-15, review B1 E1/E2). The message names both "
+        "TradeManagers by location (spec 03-R22).",
+        runtime=True,
+    ),
+    _binding_rule(
+        "TRADE_SERIES_LEAK",
+        RuleCategory.CORRECTNESS,
+        "A trade value is used where a market value is required.",
+        "Trade values are bound to their TradeManager's trade windows and "
+        "exist only inside its rules. They may not feed a TradeManager's "
+        "entries or prices, a reader's or sizer's market slot, be loaded "
+        "outside the TradeManager's scope, or end the pipeline (spec 03-R23, "
+        "option A §1.5).",
+        runtime=True,
+    ),
+    _binding_rule(
+        "POSITION_BRANCH_MIXED",
+        RuleCategory.CORRECTNESS,
+        "Some branches of a rule stage end in an action and some do not.",
+        "Inside a TradeManager's scope, a Parallel whose branches end in "
+        "actions is one rule stage; a branch that does not end in an action "
+        "is reported once, on that branch (D-39.7, gut check P5). A "
+        "between-trade branch is told to end with AllowEntry(); any other "
+        "with Exit(), Reduce() or ScaleIn() (spec 03-R24).",
+        runtime=True,
+    ),
+    _binding_rule(
+        "TRADE_SCOPE_MIX",
+        RuleCategory.CORRECTNESS,
+        "Trade and between-trade values are combined, or an action reads the wrong scope.",
+        "Trade readers (TradeReturn, BarsHeld, ...) describe an open trade; "
+        "between-trade readers (BarsSinceExit, LastTradeReturn, ...) describe "
+        "the bars between trades. One rule reads one of them: Exit, Reduce "
+        "and ScaleIn act during a trade, AllowEntry gates entries between "
+        "trades, and SinceEntry aggregates over an open trade (spec 03-R25).",
+        runtime=True,
+    ),
+    _binding_rule(
+        "POSITION_NEEDS_READER",
+        RuleCategory.CORRECTNESS,
+        "A rule-building component received the Position itself.",
+        "A rule starts with a reader (TradeReturn(), BarsHeld(), ...) or with "
+        "Load('<slot>'), never with the Position: a filter, transform or "
+        "composer cannot read it. Storing the Position is refused for the "
+        "same reason (store a reader's value). The upgrade's most common trap "
+        "(review B1 rule 3, gut check P2; spec 03-R26).",
+        runtime=True,
+    ),
+    _binding_rule(
+        "POSITION_NEEDS_EXPOSURE",
+        RuleCategory.CORRECTNESS,
+        "A Position is never turned into exposure.",
+        "Exposure() is the only way a Position becomes exposure (D-39.1); "
+        "RiskSizer sizes it directly. A Position reaching a sizer, a forecast "
+        "step or a combiner, a branch that ends with its own TradeManager "
+        "open, a second TradeManager while one is open, or a pipeline that "
+        "ends with one open is refused. At the terminal it replaces "
+        "TERMINAL_NOT_WEIGHTS (single fire; spec 03-R27).",
+        runtime=True,
+    ),
+    _binding_rule(
+        "POSITION_FEEDBACK",
+        RuleCategory.CORRECTNESS,
+        "A rule acts on its own TradeManager's realised exposure.",
+        "Exposure() realises the plan once, jointly; a rule of the same "
+        "TradeManager cannot read the exposure it decides (review B1 rule 4). "
+        "Read the trade with a reader instead (spec 03-R28).",
+        runtime=True,
+    ),
+    _binding_rule(
+        "POSITION_STATE_NOT_UPSTREAM",
+        RuleCategory.CORRECTNESS,
+        "A state reader reads a leg no earlier stage can produce.",
+        "SoldFraction() needs a Reduce() rule and AddCount() a ScaleIn() rule "
+        "in an EARLIER stage of the same Position: a reader sees the rules of "
+        "the stages above it (its anchor), never its own stage (review M1, "
+        "spec 03-R29).",
+        runtime=True,
+    ),
+    _binding_rule(
+        "READER_WINDOW_INVALID",
+        RuleCategory.CORRECTNESS,
+        "A windowed reader's or factory's window is not valid on this strategy's clock.",
+        "A window is a timeframe token ("
+        + ", ".join(f"'{token_for_minutes(m)}'" for m in (30, 240, 1440))
+        + ", '1w') that is a whole number of the strategy's bars; "
+        "anchor='calendar' takes only the reader's calendar windows "
+        f"('{token_for_minutes(1440)}', '1w', D-24); and a window "
+        "needs Globals(target_timeframe=...) to be declared (D-45). Static "
+        "only: the runtime refuses the same windows with a ValueError at "
+        "construction or first run (spec 03-R30).",
+        runtime=False,
+    ),
+    _binding_rule(
+        "WINDOW_EXCEEDS_LIVE_LOOKBACK",
+        RuleCategory.CORRECTNESS,
+        "A windowed rule's window is at or above the live look-back (365 days).",
+        "Live re-evaluates a strategy over its last 365 days at every bar, so "
+        "a window of 365 days or more asks a question live can never answer "
+        "and the backtest and live would differ (spec 02-R9, D-46). Use a "
+        "window under 365 days.",
+        runtime=False,
+    ),
+    _binding_rule(
+        "TRADE_OP_NOT_TRADE_SAFE",
+        RuleCategory.CORRECTNESS,
+        "A component that is not certified trade-safe runs on trade values.",
+        "Only components certified to run on a trade window (prefix-stable, "
+        "column-independent, index-preserving, no context reads; verified in "
+        "CI by libs/components/trade_safety_test.py) may take a trade value. "
+        "Certification is fail-closed and keyed by (name, pinned version, "
+        "parameter values) (D-16): an uncertified component, a value outside "
+        "the certified narrowing, or an older uncertified pin of a certified "
+        "component is refused, each with its own wording. Compute the value "
+        "on the market before the TradeManager and Load it instead "
+        "(spec 03-R31).",
+        runtime=True,
+    ),
+    _binding_rule(
+        "SIZER_ERASES_SIZE",
+        RuleCategory.CORRECTNESS,
+        "A sizer that sizes by sign receives an exposure with partial or added units.",
+        "A sizer version without preserves_size sizes by sign, so a Reduce() "
+        "or ScaleIn() rule would do nothing. The message names the newest "
+        "version of the sizer that keeps units (review M2, spec 03-R32).",
+        runtime=True,
+    ),
+    _binding_rule(
+        "TRADE_RULE_WARMUP",
+        RuleCategory.HYGIENE,
+        "A rule's window needs more bars after entry than the trade can last.",
+        "A rule's mask has a warm-up lower bound W (the sum of its steps' "
+        "declared warm-ups). When a full-exit hold rule of the same Position "
+        "closes every trade by bar H and W >= H, the rule can never fire "
+        "(PLAN A, review M12.1; spec 03-R33).",
+        runtime=False,
+    ),
+    _binding_rule(
+        "REENTRY_ANY_BAR_NO_GATE",
+        RuleCategory.SUSPICIOUS,
+        "TradeManager(reentry='any_bar') has no AllowEntry() rule.",
+        "reentry='any_bar' drops the wait-for-reset default, so with no "
+        "AllowEntry() gate the TradeManager re-enters on any bar its entry "
+        "signal is on, right after every exit (D-26; spec 03-R34).",
+        runtime=False,
+    ),
+    _binding_rule(
+        "RETURN_THRESHOLD_SCALE",
+        RuleCategory.SUSPICIOUS,
+        "A fraction (a trade return) is compared with a threshold of magnitude 1 or more.",
+        "TradeReturn() and the other fraction readers are fractions: 0.05 is "
+        "5%. A threshold of -5 means -500%, which a stop never reaches "
+        "(D-39.7, gut check P3). Read from the comparator's declared "
+        "`compares` and the reader's declared `scale`, never from a name "
+        "(spec 03-R35).",
+        runtime=False,
+    ),
+    _binding_rule(
+        "MARKET_EXPANDING_IN_POSITION",
+        RuleCategory.SUSPICIOUS,
+        "An expanding (non-causal) market calculation sits inside a trade rule.",
+        "A market calculation inside a rule keeps its full-history meaning "
+        "(D-33): a cumulative sum counts from the start of the data, not "
+        "from the entry. For 'since entry' use SinceEntry() (PLAN A, review "
+        "M12.3; spec 03-R36).",
+        runtime=False,
+    ),
+    _binding_rule(
+        "MAX_UNITS_STATED",
+        RuleCategory.HYGIENE,
+        "The TradeManager can hold more than one unit per trade.",
+        "max_units is derived from the ScaleIn rules (1 + every add they can "
+        "make) unless set (D-39.3). Above 1 it is stated leverage: exposure "
+        "up to that many times the sizer's weight per position. The number "
+        "is positions.limits' effective_max_units, the function the engine "
+        "caps with, so the statement and the cap cannot drift (spec 03-R37). "
+        "Info only.",
+        runtime=False,
+        ceiling="info",
+    ),
+    _binding_rule(
+        "SCALE_IN_NO_ROOM",
+        RuleCategory.HYGIENE,
+        "An explicit max_units leaves a ScaleIn rule no room to add.",
+        "With max_units set explicitly below 1 + the rule's units and no "
+        "Reduce() rule to make room, the ScaleIn rule can never add (gut "
+        "check X5b, P8; spec 03-R38, reconciliation X-11).",
+        runtime=False,
+    ),
+    Rule(
+        code="POSITION_UPGRADE_AVAILABLE",
+        category=RuleCategory.SUSPICIOUS,
+        summary="Deprecated position components can be upgraded to TradeManager.",
+        message_template=(
+            "'{manager}' and its exits use deprecated position components "
+            "({components}){known_issue_note}. A {mode} upgrade to TradeManager is available."
+        ),
+        template_params=("manager", "components", "known_issue_note", "mode"),
+        explain=(
+            "One issue per position group (spec 04-R9, D-19/D-29): a deprecated "
+            "position manager (PositionStateMachine, TradeLevelRiskExit, "
+            "ScalingPositionManager) with every deprecated exit that reaches it "
+            "and every deprecated sizer downstream of it, or a deprecated exit "
+            "or sizer that reaches no deprecated manager. Every deprecated "
+            "instance belongs to exactly one issue; DEPRECATED_COMPONENT still "
+            "fires per instance. The upgrade planner (dsl/upgrade.py) classifies "
+            "the group as mechanical (machine-applicable: the issue carries the "
+            "rewritten source), assisted (questions to answer) or manual. The "
+            "suggestion names no tool; each surface adds its own."
+        ),
+        passes=("4u",),
+        surfaces=_PY_ONLY,
+        ts_mirrored=False,
+        ts_absent_reason=(
+            "Needs the unexpanded strategy and the dsl/upgrade.py planner, which "
+            "the browser validator does not carry. The editor gets it through "
+            "/lock/status."
+        ),
+        suggestion_template=(
+            "Apply this issue's suggested edit. It keeps your rule names and comments. "
+            "Save it as a new version, then compare the two versions' backtests."
+        ),
+        applicability=Applicability.MACHINE_APPLICABLE,
+        # Corpus: conformance/POSITION_UPGRADE_AVAILABLE/ (spec 04 A10): the
+        # pre-landing fixture_waiver went once pass 4u emitted and the flip
+        # made the nine deprecated.
+    ),
+    Rule(
+        code="KNOWN_ISSUE_UPGRADE_REQUIRED",
+        category=RuleCategory.CORRECTNESS,
+        summary="Deploy, update or resume refused: the strategy pins a component with a known issue.",
+        message_template=(
+            "{action} blocked: this strategy pins components with a known issue "
+            "({known_issue}: {summary}). Upgrade this strategy first."
+        ),
+        template_params=("action", "known_issue", "summary"),
+        explain=(
+            "D-42 (founder): deploying, updating or resuming a strategy that "
+            "pins a component with a known issue (the five Q-2448 exits and the "
+            "deprecated StopDistanceRiskSizer) is refused, with no acknowledgement and no "
+            "override. The upgrade is one step: the web button, `keel "
+            "strategy upgrade`, or the agent (keel_strategy_upgrade). "
+            "Deprecated components WITHOUT a known issue (PositionStateMachine, "
+            "TradeLevelRiskExit, ScalingPositionManager) deploy normally. "
+            "Minted by keel-api's deploy/update/resume gate (live.py, spec "
+            "04); it replaces spec 04's acknowledgement codes, which are "
+            "never minted."
+        ),
+        passes=(),
+        surfaces=_GATE_ONLY,
+        ts_mirrored=False,
+        ts_absent_reason=(
+            "A keel-api request gate on deploy/update/resume; the editor "
+            "receives it on the wire and renders it, it never mints it."
+        ),
+        suggestion_template=(
+            "Upgrade the strategy (keel strategy upgrade, keel_strategy_upgrade, "
+            "or the Upgrade button), then try again."
+        ),
+        applicability=Applicability.MAYBE_INCORRECT,
+    ),
 )
 
 
@@ -1011,8 +1349,8 @@ _ALL_RULES: tuple[Rule, ...] = (
             "pre-pass lock generator (where the message is the raw LockError "
             "text when auto-generating a lock fails on an unknown name). The "
             "suggestion carries fuzzy-match candidates when any score above the "
-            "threshold; otherwise it points at component search "
-            "(`keel components list` / `strategy_components_search`)."
+            "threshold; otherwise it points at searching the component catalog, "
+            "naming no one surface's tool."
         ),
         passes=("pre", "4"),
         surfaces=_PY_TS,
@@ -1238,18 +1576,24 @@ _ALL_RULES: tuple[Rule, ...] = (
         category=RuleCategory.SUSPICIOUS,
         summary="Component is registered but marked deprecated.",
         message_template=(
-            "Component '{name}' is deprecated and may be removed in a future version."
+            "Component '{name}' is deprecated and may be removed in a future version.{known_issue_note}"
         ),
-        template_params=("name",),
+        template_params=("name", "alternative", "known_issue_note"),
         explain=(
             "The component still resolves and runs, but its registry status is "
             "'deprecated'. Prefer the supported alternative before the version "
-            "is phased out (see the deprecation-window policy, decision D2)."
+            "is phased out (see the deprecation-window policy, decision D2). "
+            "When the deprecation names a single successor — the class's "
+            '`replacement = "<ComponentName>"`, carried in the generated '
+            "registry metadata — the suggestion names it (e.g. "
+            "RollingNotionalProxyMask -> RollingDollarVolumeMask, dollar-volume "
+            "DV6a); otherwise it says 'a supported alternative'. {alternative} "
+            "is the quoted successor name or that phrase."
         ),
         passes=("4",),
         surfaces=_PY_TS,
         ts_mirrored=True,
-        suggestion_template="Consider replacing '{name}' with a supported alternative.",
+        suggestion_template="Consider replacing '{name}' with {alternative}.",
         applicability=Applicability.MAYBE_INCORRECT,
     ),
     Rule(
@@ -1361,9 +1705,14 @@ _ALL_RULES: tuple[Rule, ...] = (
         message_template=("Parameter '{param}' of '{component}' expects {expected}, got {actual}."),
         template_params=("param", "component", "expected", "actual"),
         explain=(
-            "The literal value's runtime type is not acceptable for the "
-            "registry-declared parameter type (int satisfies float params; "
-            "bool never satisfies numeric params)."
+            "The literal value's structure is not acceptable for the "
+            "registry-declared parameter type, checked over the full "
+            "declared-type grammar (spec 08): Literal shape (values are "
+            "PARAM_INVALID_OPTION's job), Optional/Union arms, list/dict/"
+            "tuple containers incl. element types, plain classes. int "
+            "satisfies float params and vice versa; bool never satisfies "
+            "numeric params. Both languages check the same serialized "
+            "descriptor (registry param type_structure)."
         ),
         passes=("5",),
         surfaces=_PY_TS,
@@ -1374,28 +1723,43 @@ _ALL_RULES: tuple[Rule, ...] = (
     Rule(
         code="PARAM_TYPE_CHECK_SKIPPED",
         category=RuleCategory.SUSPICIOUS,
-        summary="Parameter type could not be checked (non-isinstance-checkable).",
+        summary="Parameter type could not be checked (outside the structural grammar).",
         message_template=(
             "Cannot validate type of parameter '{param}' of '{component}': "
             "complex type {type} is not isinstance-checkable."
         ),
         template_params=("param", "component", "type"),
         explain=(
-            "Generic alias types (list[int], dict[str, float], ...) are not "
-            "isinstance-checkable, so the type check is skipped and recorded "
-            "at info severity. severity_override='info' preserves the "
-            "pre-catalog literal: this is a notice that a check did NOT run, "
-            "not a suspected authoring mistake — warning would overstate it."
+            "TRIPWIRE ONLY (spec 08, Q-0514): param values are structurally "
+            "checked against the declared-type grammar derived from the type "
+            "authority (param_type_structure — Literal/Optional/Union/"
+            "list/dict/tuple/Sequence/class), so this fires only for a future "
+            "exotic declared type outside that grammar. Structurally "
+            "unreachable for every current registry param (the deep-sweep "
+            "test in validator_test.py proves zero opaque descriptors). "
+            "severity_override='info' preserved: a notice that a check did "
+            "NOT run, not a suspected authoring mistake."
         ),
         passes=("5",),
         surfaces=_PY_ONLY,
         ts_mirrored=False,
         ts_absent_reason=(
-            "The TS pass-5 type switch silently accepts unknown/complex "
-            "declared types (pass5-params.ts) instead of emitting a "
-            "check-skipped notice."
+            "TS pass-5 now checks the same structural grammar from the "
+            "serialized type_structure descriptor (rules/params.ts); only "
+            "this tripwire notice for out-of-grammar declared types stays "
+            "Python-only — the generated descriptor cannot carry a shape "
+            "the builder does not produce."
         ),
         severity_override="info",
+        fixture_waiver=(
+            "libs/pipeline_engine/dsl/validator_test.py::"
+            "TestParamStructuralTypeChecking::"
+            "test_opaque_type_tripwire_emits_notice — no real registry "
+            "component can produce an opaque descriptor (the deep-sweep test "
+            "asserts that), so a corpus fixture cannot express this rule; "
+            "the tripwire is driven through the real validator with a "
+            "monkeypatched exotic param type."
+        ),
     ),
     Rule(
         code="PARAM_INVALID_VALUE",
@@ -1407,9 +1771,15 @@ _ALL_RULES: tuple[Rule, ...] = (
             "Two current shapes under one code: (1) non-finite numbers — "
             "\"Parameter '{param}' of '{component}' has invalid value "
             '{value}. Infinity and NaN are not allowed." (these fail at '
-            'compile otherwise); (2) the weights-sum heuristic — "Parameter '
-            "'weights' of '{component}' must sum to 1.0, got {sum}.\" for "
-            "dict-valued params literally named 'weights'."
+            "compile otherwise); (2) the declared `sum_eq` constraint "
+            "(schema v2, spec 02 §2.5) — \"Parameter '{param}' of "
+            "'{component}' must sum to {value}, got {sum}.\" Driven by an "
+            'explicit {"rule": "sum_eq", "params_dict": ..., "value": ...} '
+            "declaration since S5/M5 (2026-08-26); it previously fired via "
+            "a name-based heuristic over dict params literally named "
+            "'weights', which sum_eq replaced with byte-identical messages "
+            "(census-gated: every heuristic adopter carries the "
+            "declaration)."
         ),
         passes=("5",),
         surfaces=_PY_TS,
@@ -1422,14 +1792,23 @@ _ALL_RULES: tuple[Rule, ...] = (
         message_template="{detail}",
         template_params=("detail",),
         explain=(
-            "Three current shapes under one code: pass-5 registry constraints — "
-            "\"Parameter '{param}' of '{component}' value {value} below "
-            'minimum {min}." / "... above maximum {max}." — and the '
-            'pass-9 Execution-block range checks — "{param}={value} out of '
-            'range [{min}, {max}]" (buffer_threshold, min_trade_size, '
-            "on_change_tolerance; range literals move into EXECUTION_PARAM_META "
-            "in spec 02 T-15). Pass-5 sites attach a 'Change {param} to a "
-            "value in range [...]' suggestion; pass-9 sites don't."
+            "Fires only on the HARD bounds of a param's constraints (`min` / "
+            "`max`, each optionally absent = unbounded, each optionally "
+            "exclusive via `min_exclusive` / `max_exclusive` — Q-2242); the "
+            "`typical` range is guidance and never an issue. Pass-5 registry "
+            "constraints — \"Parameter '{param}' of '{component}' value "
+            '{value} below minimum {min}." / "... above maximum {max}." for '
+            'inclusive bounds, "... must be greater than {min}." / "... must '
+            'be less than {max}." for exclusive ones — and the pass-9 '
+            'Execution-block range checks — "{param}={value} out of range '
+            '[{min}, {max}]" (bracket per exclusivity) with both bounds, '
+            '"{param}={value} must be greater than {min}" / "... no less '
+            'than {min}" / "... less than {max}" / "... no greater than '
+            '{max}" with one (buffer_threshold, min_trade_size, '
+            "on_change_tolerance; bounds live in EXECUTION_PARAM_META since "
+            "spec 02 T-15). Pass-5 sites attach a 'Change {param} to a value "
+            "in range [...]' / '... greater than X.' suggestion; pass-9 sites "
+            "don't."
         ),
         passes=("5", "9"),
         surfaces=_PY_TS,
@@ -1457,30 +1836,24 @@ _ALL_RULES: tuple[Rule, ...] = (
     Rule(
         code="PARAM_GROUP_MISSING",
         category=RuleCategory.CORRECTNESS,
-        summary="An exactly-one parameter group has no member provided.",
+        summary="A required parameter group has no member provided.",
         message_template=(
-            "Component '{component}' requires exactly one of [{group}], but none provided."
+            "Component '{component}' requires {arity} of [{group}], but none provided."
         ),
-        template_params=("component", "group"),
+        template_params=("component", "arity", "group"),
         explain=(
-            "Cross-parameter constraint (schema v1, rule 'exactly_one'): the "
-            "component requires exactly one member of the group and the call "
-            "provides none."
+            "Cross-parameter constraint: the component requires {arity} "
+            "('exactly one' for rule 'exactly_one'; 'at least one' for the "
+            "schema-v2 dual rule 'at_least_one', S5 2026-08-26) member of "
+            "the group and the call provides none. The {arity} template "
+            "parameter renders the exactly_one message byte-identically to "
+            "its pre-v2 fixed text."
         ),
         passes=("5",),
         surfaces=_PY_TS,
         ts_mirrored=True,
         suggestion_template="Provide one of: {group}.",
         applicability=Applicability.MAYBE_INCORRECT,
-        fixture_waiver=(
-            "libs/pipeline_engine/dsl/validator_test.py::TestParamGroupConstraints"
-            "::test_exactly_one_group_missing_errors — no LIVE component "
-            "declares an exactly_one/at_most_one group (the slot-pair shape "
-            "that used them was retired), so a conformance fixture cannot fire "
-            "this through the real registry; covered by an injected probe "
-            "component on both sides (TS mirror: keel-app validator/__tests__/"
-            "validator.unit.test.ts 'param group constraints')."
-        ),
     ),
     Rule(
         code="PARAM_GROUP_CONFLICT",
@@ -1530,6 +1903,40 @@ _ALL_RULES: tuple[Rule, ...] = (
         suggestion_template="Set {missing} or change {when_params}.",
         applicability=Applicability.MAYBE_INCORRECT,
     ),
+    Rule(
+        code="PARAM_RELATION_VIOLATION",
+        category=RuleCategory.CORRECTNESS,
+        summary="A declared pairwise parameter relation (le/lt/ge/gt) fails.",
+        message_template=(
+            "Component '{component}' requires {param_a} {op_text} {param_b}, "
+            "but got {param_a}={value_a}, {param_b}={value_b}."
+        ),
+        template_params=("component", "param_a", "op_text", "param_b", "value_a", "value_b"),
+        explain=(
+            "Cross-parameter constraint (schema v2, dsl-type-system spec 02 "
+            "§2.5, armed at M5/S5 2026-08-26): the component declares a "
+            "pairwise relational constraint ('le' ≤ / 'lt' < / 'ge' ≥ / "
+            "'gt' >) between two numeric __init__ params, and the effective "
+            "(explicit-or-default) values violate it. One code for all four "
+            "operators — {op_text} parameterizes the operator exactly as "
+            "PARAM_GROUP_CONFLICT parameterizes {arity}. The relation binds "
+            "only when both effective operands are literal numbers: a "
+            "VariableRef operand skips the constraint (the standing pass-5 "
+            "static-check exemption), and an unset Optional operand means "
+            "the relation does not bind (ForecastClipper(lower=None, "
+            "upper=5) must not fire lower ≤ upper). Every S5 adopter "
+            "relation mirrors an existing __init__/library ValueError, so "
+            "this is strictly earlier diagnosis of a failure that already "
+            "blocked compile/run (the §4 zero-flip sweep evidence in the "
+            "relational-constraints staged entry)."
+        ),
+        passes=("5",),
+        surfaces=_PY_TS,
+        ts_mirrored=True,
+        suggestion_template="Adjust {param_a} or {param_b} so {param_a} {op_text} {param_b}.",
+        applicability=Applicability.MAYBE_INCORRECT,
+        staged_by="relational-constraints",
+    ),
     # ═══════════════════════════════════════════════════════════════════════
     # Pass 6: type flow
     # ═══════════════════════════════════════════════════════════════════════
@@ -1546,11 +1953,10 @@ _ALL_RULES: tuple[Rule, ...] = (
             "\"'Extract'\". Declared context override: the Extract site emits "
             "at warning (validation continues with type Any), the composer "
             "site at error — one code, two declared severities (spec 02 §5.3, "
-            "founder question Q1 resolution pending). The runtime Layer C "
-            "validator emits the same code at warning."
+            "founder question Q1 resolution pending)."
         ),
         passes=("6",),
-        surfaces=_PY_TS_RT,
+        surfaces=_PY_TS,
         ts_mirrored=True,
         severity_context_overrides={"extract": "warning"},
         suggestion_template="Place a Parallel block before {step}.",
@@ -1568,11 +1974,10 @@ _ALL_RULES: tuple[Rule, ...] = (
         explain=(
             "Parallel outputs dict[branch → result]; only Composers, Extract, "
             "and Load (slot readers exempted both sides) can follow it. "
-            "Error at write time; the runtime Layer C validator emits the same "
-            "code at warning."
+            "Error at write time."
         ),
         passes=("6",),
-        surfaces=_PY_TS_RT,
+        surfaces=_PY_TS,
         ts_mirrored=True,
         suggestion_template=("Use a Composer to join branch results, or Extract to select one."),
         applicability=Applicability.MAYBE_INCORRECT,
@@ -1590,12 +1995,10 @@ _ALL_RULES: tuple[Rule, ...] = (
             "is_compatible + the TYPE_TRANSITIONS graph) with what the previous "
             "step produces. Blocking: the pipeline would crash or silently "
             "mis-compute. The write-time suggestion is computed dynamically "
-            "(insert-a-converter guidance); the runtime Layer C validator "
-            "emits the same code with its own phrasing (\"Step '<s>' expects X "
-            'but receives Y from previous step").'
+            "(insert-a-converter guidance)."
         ),
         passes=("6",),
-        surfaces=_PY_TS_RT,
+        surfaces=_PY_TS,
         ts_mirrored=True,
     ),
     Rule(
@@ -1611,10 +2014,10 @@ _ALL_RULES: tuple[Rule, ...] = (
             "The component's declared output_type is not among what "
             "TYPE_TRANSITIONS allows for its category after the previous "
             "output. Usually a component-authoring smell rather than a strategy "
-            "bug, hence warning. Also emitted by the runtime Layer C validator."
+            "bug, hence warning."
         ),
         passes=("6",),
-        surfaces=_PY_TS_RT,
+        surfaces=_PY_TS,
         ts_mirrored=True,
         suggestion_template="Check that '{step}' produces one of: {expected_outputs}.",
         applicability=Applicability.MAYBE_INCORRECT,
@@ -1627,11 +2030,10 @@ _ALL_RULES: tuple[Rule, ...] = (
         template_params=("key", "branches"),
         explain=(
             "Extract selects one branch result by name; the requested key is "
-            "not a branch of the preceding Parallel. Also emitted by the "
-            "runtime Layer C validator."
+            "not a branch of the preceding Parallel."
         ),
         passes=("6",),
-        surfaces=_PY_TS_RT,
+        surfaces=_PY_TS,
         ts_mirrored=True,
         suggestion_template="Use one of: {branches}.",
         applicability=Applicability.MAYBE_INCORRECT,
@@ -1677,38 +2079,37 @@ _ALL_RULES: tuple[Rule, ...] = (
         ts_mirrored=True,
     ),
     # ═══════════════════════════════════════════════════════════════════════
-    # Pass 7: phase ordering
+    # Pass 7 (RETIRED 2026-08-26): phase ordering
     # ═══════════════════════════════════════════════════════════════════════
+    # PHASE_ORDER_VIOLATION was the pass-7 linear phase-ladder check
+    # (DATA→UNIVERSE→SIGNAL→FORECAST→POSITION→OUTPUT backward jumps).
+    # Retired by founder ruling 2026-08-26 (S4/F2, re-affirmed on the
+    # corrected Q-0685 census): 932 fires across 701 of 1,380 stored
+    # strategies — 57 % of prod — with ZERO cases where it was the sole
+    # catcher of a real defect (every genuine misordering is co-caught by an
+    # error-tier type/terminal rule), while every solo-fire subject was a
+    # deliberate, correct pattern (post-forecast vol-targeting, funding-
+    # carry mid-chain loads, multi-timeframe resamples — including the live
+    # HRP book). The TS editor never ran it (`ts-pass7-skip`, removed with
+    # it) and production loading forced BACKTEST mode specifically to skip
+    # its runtime arm. Pass 7 deleted from dsl/validator.py; the Layer C
+    # `_validate_phases` arm deleted from pipeline/validator.py; the
+    # `is_universe_mask_phase_exempt` carve-out retired with them. Phase
+    # METADATA (PHASE_INDEX / PHASE_GROUPS) stays — palette ordering,
+    # /components/metadata, SDK registry, and the test synthesizer consume
+    # it. Reserved, never re-minted (protobuf discipline); acknowledged
+    # active→reserved in fixtures/BREAKING_CHANGES.md.
     Rule(
         code="PHASE_ORDER_VIOLATION",
         category=RuleCategory.SUSPICIOUS,
-        summary="Step category appears after a later pipeline phase.",
-        message_template=(
-            "Phase ordering: '{step}' ({category}) appears after the {expected_group} phase."
-        ),
-        template_params=("step", "category", "expected_group"),
-        explain=(
-            "Cross-group backward jumps in the DATA→SIGNAL→FORECAST→PORTFOLIO→"
-            "EXECUTION phase ordering. Warning at write time (multi-timeframe "
-            "patterns legitimately reorder); the runtime Layer C validator "
-            "promotes it to error in STRICT mode."
-        ),
-        passes=("7",),
-        surfaces=(Surface.PY_DSL, Surface.RUNTIME),
+        summary="",
+        message_template="",
+        template_params=(),
+        explain="",
+        passes=(),
+        surfaces=(),
         ts_mirrored=False,
-        ts_absent_reason=(
-            "pass7-phases.ts implements the check but the editor entrypoint "
-            "(index.ts validate()) deliberately does not run pass 7 — too "
-            "noisy with multi-signal factories (false positives from branch "
-            "resets). ts_mirrored is the parity-assertion scope and must "
-            "reflect what validate() actually emits, not what dead-in-"
-            "production code could emit (flipped by spec 02 T-9; the pass "
-            "function keeps its direct unit tests)."
-        ),
-        suggestion_template=(
-            "Move '{step}' earlier in the pipeline, before the {expected_group} phase."
-        ),
-        applicability=Applicability.MAYBE_INCORRECT,
+        status="reserved",
     ),
     # ═══════════════════════════════════════════════════════════════════════
     # Pass 8: slots
@@ -1736,12 +2137,18 @@ _ALL_RULES: tuple[Rule, ...] = (
         message_template="Load('{slot}'): no prior Store('{slot}') found.",
         template_params=("slot",),
         explain=(
-            "A Load() reads a slot name that no earlier Store() wrote. Also "
-            "emitted by the runtime Layer C validator (\"Step '<s>' reads slot "
-            "'<slot>' but no prior step writes to it\")."
+            "A Load() reads a slot name that no earlier Store() wrote. Slots "
+            'are a single flat namespace written by Store("name") and read '
+            'back by Load("name") or by a slot-reference parameter. Two '
+            "shapes reach this rule: a typo, and a Store that is there but "
+            "cannot be SEEN — Parallel branches type from a snapshot of the "
+            "slot table taken before the block, so a branch never sees a "
+            "sibling branch's Store (the sibling's writes merge only after "
+            "every branch is typed). Store above the Parallel when more than "
+            "one branch needs the value."
         ),
         passes=("8",),
-        surfaces=_PY_TS_RT,
+        surfaces=_PY_TS,
         ts_mirrored=True,
         suggestion_template='Add Store("{slot}") before this Load.',
         applicability=Applicability.MAYBE_INCORRECT,
@@ -1757,11 +2164,26 @@ _ALL_RULES: tuple[Rule, ...] = (
         template_params=("component", "param", "slot"),
         explain=(
             "A slot_reference parameter (or *_slot-convention read) points at a "
-            "slot with no prior Store()."
+            "slot with no prior Store(). Branch isolation is the shape that "
+            "surprises: a Parallel's branches each type from a SNAPSHOT of the "
+            "slot table taken before the block and their writes merge only "
+            "after every branch is typed, so a reader in branch B cannot see a "
+            "Store in branch A no matter what order they are written in. "
+            "Adding a second Store of the same name inside B is NOT the fix — "
+            "two branches writing one slot is a runtime SlotOverwriteError. "
+            "Move the Store (and the steps that produce it) above the Parallel. "
+            "The suggestion says which of the two cases this is: it names the "
+            "sibling branch when the slot is stored in one."
         ),
         passes=("8",),
         surfaces=_PY_TS,
         ts_mirrored=True,
+        # The RENDERED fix is context-selected at the emission site from the
+        # EMIT_TEMPLATES `slot-ref-fix` family (judgments.py) — `sibling` when
+        # the slot is stored in a sibling Parallel branch, `none` otherwise.
+        # This template is the `none` member's text and the documentation of
+        # the default; it is not what renders (the J-SLOTREAD.ref-present row
+        # declares `suggestion`, so every emission passes one explicitly).
         suggestion_template='Add Store("{slot}") before this component.',
         applicability=Applicability.MAYBE_INCORRECT,
     ),
@@ -1828,6 +2250,90 @@ _ALL_RULES: tuple[Rule, ...] = (
         ts_mirrored=True,
     ),
     Rule(
+        code="DEPRECATED_UNIVERSE_FIELD",
+        category=RuleCategory.HYGIENE,
+        summary="Universe uses a deprecated field name that has a replacement.",
+        message_template=(
+            "Universe field '{field}' is deprecated; use '{replacement}' (same meaning)."
+        ),
+        template_params=("field", "replacement"),
+        explain=(
+            "A deprecated Universe field name is still accepted with EXACTLY "
+            "its replacement's meaning, so the strategy parses, compiles and "
+            "resolves as before — this is a naming warning, never an error. "
+            "The one alias today (dollar-volume DV6b, 2026-09-24): "
+            "`min_trailing_notional_proxy` → `min_trailing_dollar_volume`. The "
+            "old name said 'proxy' because the floor was candle volume × close; "
+            "since DV1 it is traded dollar volume (Σ trade price × size, "
+            "`SUM(pv_sum)` over `bars_1m`; none exists before 2025-03-23) under "
+            "either name. Every writer (the DSL printer, the editor, MCP, SDK "
+            "and chat tools) emits the new name, so rewriting the Universe "
+            "through any of them clears the warning. Declaring BOTH names is "
+            "INVALID_UNIVERSE. Minted unstaged: no committed conformance "
+            "fixture, pinned trace or library strategy uses the alias "
+            "(measured 2026-09-24), so no pinned population moves."
+        ),
+        passes=("9",),
+        surfaces=_PY_TS,
+        ts_mirrored=True,
+        suggestion_template="Rename '{field}' to '{replacement}'.",
+        applicability=Applicability.MACHINE_APPLICABLE,
+    ),
+    Rule(
+        code="UNSUPPORTED_MARKET",
+        category=RuleCategory.CORRECTNESS,
+        summary=(
+            "The strategy names a market, dex or venue Keel does not trade "
+            "(Keel trades native Hyperliquid perps only)."
+        ),
+        message_template=(
+            "{field}={value} is not supported{yet} — Keel trades {scope} "
+            "only. Remove {field}= or use {field}={supported}.{valid_note}"
+        ),
+        template_params=("field", "value", "yet", "scope", "supported", "valid_note"),
+        explain=(
+            "Keel trades Hyperliquid perpetuals and nothing else, so `perp` is "
+            "the only market and the default (Q-2363; founder ruling "
+            "2026-10-04). Shapes under one code: `Universe(market=...)` "
+            "naming anything but `perp`, and a data loader whose static "
+            "`market_type` is set to anything but `perp`. The owner of the "
+            "supported sets is `pipeline_engine.dsl.spec` (`SUPPORTED_MARKETS`, "
+            "`SUPPORTED_DEXES`, `SUPPORTED_EXCHANGES`). "
+            '`market="spot"` (a market Hyperliquid lists) gets the sentence '
+            "alone; an unknown value adds `Valid: perp.`.\n\n"
+            "The same code refuses a data loader whose static `dex_name` is "
+            'anything but `"native"` — a HIP-3 builder dex such as `"xyz"`, or '
+            '`None` ("every dex") — and one whose `exchange` / `source` names '
+            'a venue other than `"hyperliquid"` (Q-2414 / Q-2415; founder '
+            'ruling 2026-10-04). Those say "not supported yet": HIP-3 may be '
+            "supported later, but today the backtest store holds native perps "
+            "only and execution trades native Hyperliquid perps only, so such a "
+            "loader ran native-perp data under a false label. Omitting the "
+            "parameter is the default (`native` / `hyperliquid`) and is "
+            "valid. Saved strategies meet the loader refusal at backtest "
+            "submit, deploy and deployment update, where keel-api's "
+            "`assert_strategy_valid` re-validates the stored source.\n\n"
+            "Why an error and not a label: until Q-2363 `Universe.market` only "
+            "chose which listings the resolver checked names against. The "
+            "simulation took its market from the data loaders, which the "
+            "workers default to perps, and live execution maps coins through "
+            'the perp universe only — so a `market="spot"` strategy was '
+            "backtested as the perp, charged perp funding, and would have "
+            "traded the perp live. Saved strategies that predate the rule "
+            "meet the same code and sentence at backtest submit and deploy "
+            "(keel-api `assert_universe_resolved`, before any symbol is "
+            "classified), and the universe resolver refuses such a "
+            "declaration the same way. Removing `market=` or writing "
+            '`market="perp"` is the whole fix; it changes nothing else about '
+            "the strategy. Minted unstaged: no committed conformance fixture, "
+            "pinned trace or library strategy names a market other than perp "
+            "(measured 2026-10-04)."
+        ),
+        passes=("9",),
+        surfaces=(Surface.PY_DSL, Surface.TS_EDITOR, Surface.GATE),
+        ts_mirrored=True,
+    ),
+    Rule(
         code="EMPTY_UNIVERSE",
         category=RuleCategory.CORRECTNESS,
         summary="Resolved universe is empty.",
@@ -1852,24 +2358,42 @@ _ALL_RULES: tuple[Rule, ...] = (
         category=RuleCategory.SUSPICIOUS,
         summary="Universe criteria never resolved into a baked asset list.",
         message_template=(
-            "Universe has not been resolved. Call universe_resolve (MCP tool or "
-            "`keel universe resolve <file>`) or, in the web editor, open the "
-            "Universe block and change any field — the editor auto-resolves and "
-            "bakes the asset list into the source."
+            "Universe has not been resolved. Save the strategy — the server "
+            "resolves the criteria and bakes the asset list into the source on "
+            "every save; in the web editor, open the Universe block and change "
+            "any field and it re-resolves in place."
         ),
         template_params=(),
         explain=(
             "Non-manual universes must be resolved to a concrete asset list "
-            "before production paths. Warning normally; promoted to error under "
-            "production_mode (promote_in_production=True encodes that hook as "
-            "data — wiring it into gates is out of this spec's scope). Known "
+            "before production paths. THE SAVE IS THE RESOLVER: keel-api bakes "
+            "an unresolved Universe on create and update "
+            "(universe_bake.bake_universe_resolution, Q-1504) — the typed "
+            "basket for manual, the server resolver for the criteria modes — "
+            "because the save is the one moment every surface passes through "
+            "and the hosted MCP surface has no resolve step of its own. The "
+            "message therefore names the SAVE, not a tool: naming a tool sends "
+            "an agent looking for one its host may not expose (D6, "
+            "mcp-strategy-view W4 §4). Warning normally; promoted to error "
+            "under production_mode (promote_in_production=True). Known "
             "condition divergence: the TS trigger is narrower than Python's "
-            "(research/03 §1B; spec 02 Q2 proposes forcing the port)."
+            "(research/03 §1B; spec 02 Q2 proposes forcing the port).\n\n"
+            "**Pre-save context (`pre_save`).** A caller validating a source "
+            "it is ABOUT to save (the MCP compose dry run) declares "
+            "`pre_save=True`: an unresolved CRITERIA universe (top_volume / "
+            "category) is then info, not a warning — the save it precedes is "
+            "the resolver, so a warning there was present on every dry run "
+            "and taught agents to skim warnings (agent-surface-cleanup "
+            "review 06 §3.2 #4). Never under production_mode (the run and "
+            "deploy gates still refuse with this code at error), never for a "
+            "manual universe the save cannot resolve, and never the "
+            "default: a stored source is judged as before."
         ),
         passes=("9",),
         surfaces=_PY_TS,
         ts_mirrored=True,
         promote_in_production=True,
+        severity_context_overrides={"pre_save": "info"},
     ),
     Rule(
         code="STALE_UNIVERSE",
@@ -1881,18 +2405,30 @@ _ALL_RULES: tuple[Rule, ...] = (
             "Structural staleness check between `resolved` and the declared "
             "criteria. Two current shapes: manual-mode symbol/exclusion "
             "arithmetic mismatch, and top_volume expected-count range mismatch "
-            '("resolved has N items but top_n=K implies X–Y"). Both direct '
-            "the user to re-resolve. Warning normally; promoted to error under "
-            "production_mode (promote_in_production=True). mode='category' "
-            "staleness is left to eval-worker/runtime checks."
+            '("resolved has N items but top_n=K implies X–Y"). The count arm '
+            "cannot tell a hand-edited list from moved criteria or an "
+            "under-supplying venue, so its copy leads with the manual-basket "
+            'remedy (Universe(mode="manual", symbols=[…])), names re-resolving '
+            'second, and gives "lower top_n" only conditionally (Q-2434). '
+            "Warning normally; promoted to error under production_mode "
+            "(promote_in_production=True). APPROXIMATE: it reads the list's "
+            "shape, never whether the list answers the criteria. "
+            "mode='category' is not checked here, and no later runtime check "
+            "exists — the workers trade `resolved` as stored. A list carried "
+            "across a criteria change is caught at the save instead (keel-api's "
+            "carried-list backstop, Q-2435)."
         ),
         passes=("9",),
         surfaces=_PY_ONLY,
         ts_mirrored=False,
         ts_absent_reason=(
-            "Never ported to the TS editor validator; the editor auto-resolves "
-            "on any Universe edit, so a stale baked list is primarily a "
-            "server-side (CLI/agent-authored source) concern today."
+            "Never ported to the TS editor validator. The visual Universe "
+            "editor re-resolves on every criteria edit (its D-12 criteria-key "
+            "machine), so it cannot produce a stale list. Code mode does NOT "
+            "auto-resolve: the save re-resolves a list carried across a "
+            "criteria change (Q-2435), and the code editor warns in place on a "
+            "hand-edited top_volume/category list and offers to make it a "
+            "manual basket (Q-2434), outside the validator."
         ),
         promote_in_production=True,
     ),
@@ -2026,15 +2562,22 @@ _ALL_RULES: tuple[Rule, ...] = (
         category=RuleCategory.HYGIENE,
         summary="Globals field declared but consumed by no component.",
         message_template=(
-            "Globals '{field}' is declared but not referenced by any component. "
-            "Either remove the Globals declaration, or add a component that "
-            "consumes it (e.g. TargetTimeframeResampler reads target_timeframe)."
+            "Globals '{field}' is declared but nothing in the pipeline consumes "
+            "it. Either remove the Globals declaration, or add a step that "
+            "consumes it (a loader serving coarser than its source applies "
+            "bar_offset itself; a TargetTimeframeResampler applies it when the "
+            "loader serves its own grain)."
         ),
         template_params=("field",),
         explain=(
             "Dead configuration: the Globals field feeds nothing. The message "
             "names both fix paths (remove, or add a consumer) by design — see "
-            "validator_resampler_test.py::TestUnusedGlobalMessage."
+            "validator_resampler_test.py::TestUnusedGlobalMessage. The "
+            "bar_offset arm counts a CLOCK TRANSFER that consumed the offset "
+            "(the interpreter walk's offset_consumed fact), not a component "
+            "that merely declares a reference to it: since PriceDataLoader v3 "
+            "references globals.bar_offset on every strategy, a reference-based "
+            "arm would never fire again (new-data-loaders spec 05 §1b)."
         ),
         passes=("9",),
         surfaces=_PY_TS,
@@ -2043,19 +2586,25 @@ _ALL_RULES: tuple[Rule, ...] = (
     Rule(
         code="RESAMPLER_NOOP",
         category=RuleCategory.HYGIENE,
-        summary="TargetTimeframeResampler resamples to the source timeframe.",
+        summary="A re-clocking step targets the clock its input already sits on.",
         message_template=(
-            "TargetTimeframeResampler is a no-op when target_timeframe "
-            "({target_tf}) equals the data loader's timeframe ({source_tf}). "
-            "Remove the TargetTimeframeResampler() step (and the redundant "
-            "Globals(target_timeframe=...) line if nothing else uses it)."
+            "{step} is a no-op: '{origin_step}' already serves {source_clock}, "
+            "which is exactly the {target_tf} clock this step would produce. "
+            "Remove the {step}() step. Keep Globals(target_timeframe=...) — it "
+            "declares the execution clock."
         ),
-        template_params=("target_tf", "source_tf"),
+        template_params=("step", "target_tf", "source_clock", "origin_step"),
         explain=(
-            "Same-timeframe resampling is a wasted step and a redundant Globals "
-            "line (the 2026-06-06 jeff5908 case). The runtime short-circuits it "
-            "cleanly, so this is hygiene, not correctness. Suppressed when the "
-            "resampler config already errored."
+            "Same-clock re-clocking is a wasted step (the 2026-06-06 jeff5908 "
+            "case). The runtime short-circuits it cleanly, so this is hygiene, "
+            "not correctness. Suppressed when the resampler config already "
+            "errored. The message names the ORIGIN step that already serves the "
+            "clock — with its phase, so PriceDataLoader() under "
+            "Globals(target_timeframe='1d', bar_offset='12h') reads as 'already "
+            "serves 1d@12h' — and no longer suggests dropping the Globals line: "
+            "since PriceDataLoader v3 the loader FOLLOWS Globals, so that advice "
+            "broke the strategy it was given for (Q-1497; new-data-loaders spec "
+            "05 §3)."
         ),
         passes=("6", "9"),
         surfaces=_PY_TS,
@@ -2112,6 +2661,94 @@ _ALL_RULES: tuple[Rule, ...] = (
         applicability=Applicability.MAYBE_INCORRECT,
     ),
     Rule(
+        code="LOADER_FINER_THAN_NATIVE",
+        category=RuleCategory.CORRECTNESS,
+        summary="A loader is asked to serve a grain finer than its native data.",
+        # Byte-identical to validation_shared.finer_than_native_message — the
+        # one sentence the runtime refusal renders too (spec 05 §2b); pinned
+        # by dsl/clocks_synth_offset_test.py::TestFloorRefusal.
+        message_template=(
+            "{loader} serves hourly data; {target_desc} is finer than its "
+            "{native_tf} native grain. Set timeframe='{native_tf}' on the loader "
+            "and add TargetSignalProjector() at the end of the branch — the last "
+            "completed hour is held on the {target_tf} grid."
+        ),
+        template_params=("loader", "native_tf", "target_tf", "target_desc", "fix_component"),
+        suggestion_template=(
+            "Two edits: timeframe='{native_tf}' on {loader}, then {fix_component} "
+            "as the branch's last step (projection holds the last COMPLETED "
+            "{native_tf} bar on the {target_tf} grid; no method)."
+        ),
+        explain=(
+            "The native-grain floor of a stream loader (new-data-loaders spec "
+            "05 §2b): the funding, open-interest and premium partitions are "
+            "ingested hourly and nothing finer exists, so a served grain below "
+            "the loader's declared clock_transfer 'floor' is refused at write "
+            "time rather than at run time. The fix is the one shape the "
+            "platform supports for a finer target: serve the native grain "
+            "explicitly (the explicit timeframe= IS the override of Globals) "
+            "and project at the end of the branch. Two edits are needed "
+            "(set_param + insert_step at the branch end, which the synth site "
+            "cannot locate), and the suggested_edit vocabulary carries ONE "
+            "edit, so no machine edit is attached: both halves ride "
+            "valid_options and the issue is has_placeholders. Fires from the "
+            "pass-6 judgment row J-SYNTH.floor (conformance fixtures under "
+            "LOADER_FINER_THAN_NATIVE/; the row-level proofs live in "
+            "clocks_synth_offset_test.py::TestFloorRefusal)."
+        ),
+        passes=("6",),
+        surfaces=_PY_TS,
+        ts_mirrored=True,
+        staged_by="loader-native-floor",
+        applicability=Applicability.HAS_PLACEHOLDERS,
+    ),
+    Rule(
+        code="LOADER_TIMEFRAME_UNBOUND",
+        category=RuleCategory.CORRECTNESS,
+        summary="A Globals-bound loader has no timeframe: no literal, no Globals(target_timeframe).",
+        # Byte-identical to the D2 runtime refusal in
+        # components/data_loaders/price/loader_v3.py (_served_timeframe) —
+        # pinned by dsl/clocks_synth_offset_test.py::TestUnboundRefusal.
+        message_template=(
+            "{loader}: no timeframe to serve — declare Globals(target_timeframe=...) "
+            "so the loader follows the strategy's clock, or pass {src}=... for a "
+            "branch on its own clock."
+        ),
+        template_params=("loader", "src"),
+        suggestion_template=(
+            "Add Globals(target_timeframe=...) above the Pipeline so {loader} "
+            "follows the strategy's clock, or set {src}=... on {loader} for a "
+            "branch on its own clock."
+        ),
+        explain=(
+            "The write-time half of new-data-loaders spec 05 D2 (Q-1510): a "
+            "clock-source loader whose timeframe binds to "
+            "Globals.target_timeframe (PriceDataLoader v3, the served-grain "
+            "stream family, the flow loaders) serves NOTHING when the strategy "
+            "declares no Globals(target_timeframe=...) and passes no literal — "
+            "there is no silent default any more, so the runtime refuses the "
+            "very first step of the backtest. This row refuses the same shape "
+            "at write time, in the same sentence. Fires from the pass-6 "
+            "judgment row J-SYNTH.unbound, the synth transfer's first check: "
+            "the src param is absent (a VariableRef or a non-string stays "
+            "clock-less under R-8 — its own codes own it), its declaration "
+            "ref is globals.target_timeframe, no Globals supplies a string, "
+            "and the RESOLVED signature carries no string default (a strategy "
+            "locked to PriceDataLoader v2 resolves its '15min' default and is "
+            "untouched). The output stays clock-less (recovery none); with no "
+            "Globals there is no kappa_exec, so no terminal premise stacks on "
+            "it. Two fixes, either alone sufficient (declare the Globals, or "
+            "pass the literal), both with placeholder values, so no single "
+            "machine edit is claimed: has_placeholders. Conformance fixtures "
+            "under LOADER_TIMEFRAME_UNBOUND/."
+        ),
+        passes=("6",),
+        surfaces=_PY_TS,
+        ts_mirrored=True,
+        staged_by="loader-timeframe-unbound",
+        applicability=Applicability.HAS_PLACEHOLDERS,
+    ),
+    Rule(
         code="BAR_OFFSET_AT_SAME_TF",
         category=RuleCategory.CORRECTNESS,
         summary="bar_offset set while target timeframe equals the source.",
@@ -2124,7 +2761,13 @@ _ALL_RULES: tuple[Rule, ...] = (
         explain=(
             "At source == target there is no valid offset range; the offset "
             "would be a silent no-op or wrap. Part of the shared resampler rule "
-            "table (validation_shared.validate_resample_config)."
+            "table (validation_shared.validate_resample_config). Two firing "
+            "sites: the coarsen row J-COARSEN.offset-same-tf (a resampler "
+            "targeting the clock it receives with a different phase) and, since "
+            "new-data-loaders spec 05 §3, the synth row J-SYNTH.offset-same-tf "
+            "(a loader serving its own roll grain under an offset finer than "
+            "one of its bars — no downstream coarsen could ever take it). Quiet "
+            "when the loader CONSUMED the offset by serving a coarser grain."
         ),
         passes=("6", "9.resampler"),
         surfaces=_PY_TS,
@@ -2141,7 +2784,12 @@ _ALL_RULES: tuple[Rule, ...] = (
         template_params=("bar_offset", "source_tf"),
         explain=(
             "Offsets that don't align to source bars would shift labels between "
-            "bars. Part of the shared resampler rule table."
+            "bars. Part of the shared resampler rule table. Two firing sites: "
+            "the coarsen row J-COARSEN.offset-multiple and, since new-data-"
+            "loaders spec 05 §3, the synth row J-SYNTH.offset-multiple (a "
+            "loader that would roll its source grain onto an offset the source "
+            "bars do not tile — the roll validate_resample_config refuses at "
+            "run time, named at write time)."
         ),
         passes=("6", "9.resampler"),
         surfaces=_PY_TS,
@@ -2247,10 +2895,8 @@ _ALL_RULES: tuple[Rule, ...] = (
             "COMPLETED bar, no method). "
             "Two values meet at one step but tick on "
             "different clocks — combining them as-is silently re-times the "
-            "strategy. The completed-bar rule in industry terms: the projected "
-            "value at fine time t is the coarse bar whose close time ≤ t (the "
-            "same rule as Nautilus's ts_init-at-close, LEAN's EndTime "
-            "transmission, and vectorbt's realign-closing). Projection therefore "
+            "strategy. The completed-bar rule: the projected value at fine "
+            "time t is the coarse bar whose close time ≤ t. Projection therefore "
             "HOLDS: a 1d value is held constant across 24 consecutive 1h "
             "execution bars — the hold length is period_coarse / period_fine "
             "bars. What this rule refuses to let happen silently is exactly the "
@@ -2568,161 +3214,93 @@ _ALL_RULES: tuple[Rule, ...] = (
         # stage and fires exactly one permanent WARNING at terminal.
     ),
     # ═══════════════════════════════════════════════════════════════════════
-    # Runtime-only structured codes (Layer C PipelineValidator + Lookahead).
-    # Dormant on production paths today (execution.py skips them in BACKTEST
-    # mode); they enter the corpus mandate when the verify-spine work revives
-    # them (final report §4.2).
+    # TOMBSTONES (2026-08-26): the Layer C runtime-only codes. Layer C — the
+    # runtime PipelineValidator + LookaheadValidator in pipeline/validator.py
+    # and pipeline/lookahead.py — was RETIRED by founder-delegated ruling on
+    # the Q-0689 research verdict (07-loader-validation-posture.md): its
+    # linear type-threading walk predated the DSL's slot/Parallel semantics
+    # and false-positived on 44% of shipped valid strategies (8/18 library
+    # entries, 3/6 golden blobs — the same FP population that retired
+    # PHASE_ORDER_VIOLATION, Q-0685); every execution surface forced it off
+    # via BACKTEST mode; and the incident sweep found ZERO historical defects
+    # where it would have been the catching layer. The ruling deliberately
+    # forecloses the verify-spine reservation these codes were parked for —
+    # a future runtime-verification revival gets a FRESH spec and fresh
+    # codes, not dead code kept warm. Reserved, never re-minted (protobuf
+    # discipline); acknowledged in fixtures/BREAKING_CHANGES.md +
+    # METADATA_EVENTS.md.
     # ═══════════════════════════════════════════════════════════════════════
     Rule(
         code="TYPE_HINTS_UNAVAILABLE",
-        recoverable=False,  # platform-intervention (spec 05 §3.1 #15)
         category=RuleCategory.SUSPICIOUS,
-        summary="Runtime validator cannot resolve a step's type information.",
-        message_template="{detail}",
-        template_params=("detail",),
-        explain=(
-            "Layer C only: get_type_hints failed or the step class declares no "
-            'Generic[In, Out]/typed run(). Two shapes: "Cannot extract type '
-            "hints for step '{step}': {error}\" and \"Step '{step}' "
-            '({class}) has no resolvable type information...". NO covering '
-            "test exists today (verified 2026-07-09) — coverage arrives with "
-            "the verify-spine revival; not waivered because the write-time "
-            "corpus mandate never binds RUNTIME-only codes."
-        ),
+        summary="",
+        message_template="",
+        template_params=(),
+        explain="",
         passes=(),
-        surfaces=_RT_ONLY,
+        surfaces=(),
         ts_mirrored=False,
-        ts_absent_reason=_TS_RUNTIME_ONLY_REASON,
+        status="reserved",
     ),
     Rule(
         code="VALIDATION_DEPTH_EXCEEDED",
         category=RuleCategory.SUSPICIOUS,
-        summary="Runtime validation recursion cap reached.",
-        message_template="Validation depth limit ({limit}) exceeded at {context}",
-        template_params=("limit", "context"),
-        explain=(
-            "Layer C only: nested Pipeline/Parallel recursion exceeded the "
-            "validator's depth cap — usually a circular pipeline reference."
-        ),
+        summary="",
+        message_template="",
+        template_params=(),
+        explain="",
         passes=(),
-        surfaces=_RT_ONLY,
+        surfaces=(),
         ts_mirrored=False,
-        ts_absent_reason=_TS_RUNTIME_ONLY_REASON,
-        suggestion_template=("Reduce nesting depth or check for circular pipeline references"),
-        applicability=Applicability.MAYBE_INCORRECT,
-        fixture_waiver=(
-            "libs/pipeline_engine/pipeline/validator_test.py::"
-            "TestRecursiveValidation::test_depth_limit — runtime-only code, out "
-            "of the write-time corpus's reach (spec 02 §3.3)."
-        ),
+        status="reserved",
     ),
     Rule(
         code="TRANSITION_INVALID",
         category=RuleCategory.SUSPICIOUS,
-        summary="Step category is not a valid transition from the previous type.",
-        message_template=(
-            "Step '{step}' ({category}) is not a valid transition from type '{prev_type}'"
-        ),
-        template_params=("step", "category", "prev_type", "valid_categories"),
-        explain=(
-            "Layer C only: the category-level cousin of TYPE_MISMATCH — the "
-            "step's category has no TYPE_TRANSITIONS entry for the previous "
-            "output type, regardless of declared input types."
-        ),
+        summary="",
+        message_template="",
+        template_params=(),
+        explain="",
         passes=(),
-        surfaces=_RT_ONLY,
+        surfaces=(),
         ts_mirrored=False,
-        ts_absent_reason=_TS_RUNTIME_ONLY_REASON,
-        suggestion_template=("Valid categories after '{prev_type}': {valid_categories}"),
-        applicability=Applicability.MAYBE_INCORRECT,
-        fixture_waiver=(
-            "libs/pipeline_engine/pipeline/validator_test.py::"
-            "TestTypeTransitionIntegration::test_invalid_category_transition_warns "
-            "— runtime-only code, out of the write-time corpus's reach "
-            "(spec 02 §3.3)."
-        ),
+        status="reserved",
     ),
     Rule(
         code="COMPOSER_MISSING_KEYS",
         category=RuleCategory.SUSPICIOUS,
-        summary="Composer expects branch keys the preceding Parallel lacks.",
-        message_template=(
-            "Composer '{composer}' expects keys {expected} but Parallel "
-            "provides {provided}. Missing: {missing}"
-        ),
-        template_params=("composer", "expected", "provided", "missing"),
-        explain=(
-            "Layer C only: the inverse of write-time COMPOSER_KEY_MISMATCH — "
-            "the composer's dict param names branches the Parallel does not "
-            "provide."
-        ),
+        summary="",
+        message_template="",
+        template_params=(),
+        explain="",
         passes=(),
-        surfaces=_RT_ONLY,
+        surfaces=(),
         ts_mirrored=False,
-        ts_absent_reason=_TS_RUNTIME_ONLY_REASON,
-        suggestion_template="Add branches {missing} to the preceding Parallel",
-        applicability=Applicability.MAYBE_INCORRECT,
-        fixture_waiver=(
-            "libs/pipeline_engine/pipeline/validator_test.py::"
-            "TestComposerKeyValidation::test_composer_missing_keys_warning — "
-            "runtime-only code, out of the write-time corpus's reach "
-            "(spec 02 §3.3)."
-        ),
+        status="reserved",
     ),
     Rule(
         code="SLOT_SELF_CYCLE",
         category=RuleCategory.SUSPICIOUS,
-        summary="Step both reads and writes the same slot.",
-        message_template="Step '{step}' both reads and writes slot '{slot}'",
-        template_params=("step", "slot"),
-        explain=(
-            "Layer C only: a step whose slot reads and writes intersect — a "
-            "potential circular dependency."
-        ),
+        summary="",
+        message_template="",
+        template_params=(),
+        explain="",
         passes=(),
-        surfaces=_RT_ONLY,
+        surfaces=(),
         ts_mirrored=False,
-        ts_absent_reason=_TS_RUNTIME_ONLY_REASON,
-        suggestion_template=(
-            "Consider using separate slots for input and output to avoid "
-            "potential circular dependencies"
-        ),
-        applicability=Applicability.MAYBE_INCORRECT,
-        fixture_waiver=(
-            "libs/pipeline_engine/pipeline/validator_test.py::"
-            "TestValidateNoCycles::test_self_cycle_detected — runtime-only "
-            "code, out of the write-time corpus's reach (spec 02 §3.3)."
-        ),
+        status="reserved",
     ),
     Rule(
         code="USES_FUTURE_DATA",
         category=RuleCategory.CORRECTNESS,
-        summary="Step flags itself as using future data (look-ahead bias).",
-        message_template=(
-            "Step '{step}' has uses_future=True, which indicates potential look-ahead bias"
-        ),
-        template_params=("step",),
-        explain=(
-            "LookaheadValidator static analysis: a step attribute declares "
-            "uses_future=True. Error severity — look-ahead invalidates every "
-            "backtest number downstream. Currently skipped in BACKTEST mode "
-            "(execution.py) — i.e. effectively dormant until the verify-spine "
-            "work."
-        ),
+        summary="",
+        message_template="",
+        template_params=(),
+        explain="",
         passes=(),
-        surfaces=_RT_ONLY,
+        surfaces=(),
         ts_mirrored=False,
-        ts_absent_reason=_TS_RUNTIME_ONLY_REASON,
-        suggestion_template=(
-            "Remove uses_future=True from '{step}' or verify this is "
-            "intentional for research/debugging only"
-        ),
-        applicability=Applicability.MAYBE_INCORRECT,
-        fixture_waiver=(
-            "libs/pipeline_engine/pipeline/lookahead_test.py::"
-            "TestLookaheadStaticAnalysis::test_uses_future_error — runtime-only "
-            "code, out of the write-time corpus's reach (spec 02 §3.3)."
-        ),
+        status="reserved",
     ),
     # TOMBSTONE (dsl-mtf-clocks spec 02 §2.5, flipped with the R-22.2 emitter
     # deletion at T-M4f-5): RESAMPLE_CHECK was a name-substring advisory
@@ -3073,6 +3651,489 @@ _ALL_RULES: tuple[Rule, ...] = (
             "out of the write-time corpus's reach (spec 02 §3.3)."
         ),
     ),
+    # ═══════════════════════════════════════════════════════════════════════
+    # PASS 0 — the PARSER's own vocabulary (Q-1695, W4 §2), 2026-09-22.
+    #
+    # `DSLParseError` was the bootstrap class: an Exception with a line and a
+    # column, built for a human reading a CLI. When the rule catalog arrived
+    # (2026-07-10) it catalogued what the VALIDATOR minted and modelled the
+    # parser's failure as an API-gate wrapper — `PARSE_ERROR`, whose message
+    # is `str(exc)` verbatim — because the parser RAISES instead of emitting
+    # and there was no issue list to render into. The intake tripwire scans
+    # the validator files, so no test ever asked the parser for a code.
+    #
+    # The consequence: the tier MIGRATION lands in was the one tier with no
+    # code, no fix, no explain channel and a different shape on every surface.
+    # Eighteen families, enumerated from the 86 real raise sites in parser.py
+    # rather than guessed — one code per family, with `{detail}` carrying the
+    # site's own prose so the sixty distinct messages stay distinct while the
+    # code is stable.
+    #
+    # THE FIX PROSE LIVES HERE, not at the raise site: `_error` reads
+    # `RULES[code].suggestion_template`, so `keel_help rule:<CODE>` and the
+    # raised suggestion are the same string by construction. The one
+    # site-computed fix is UNKNOWN_DECLARATION_KEY's, which renders a per-key
+    # migration when it knows one.
+    #
+    # `passes=("0",)` is a new pass token — the parse tier precedes pass 1.
+    # `ts_mirrored=False` by construction: the browser editor persists a
+    # GraphModel and never parses DSL text.
+    # ═══════════════════════════════════════════════════════════════════════
+    Rule(
+        code="SYNTAX_ERROR",
+        category=RuleCategory.CORRECTNESS,
+        summary="The strategy source is not valid Python.",
+        message_template="{detail}",
+        template_params=("detail",),
+        explain=(
+            "The strategy DSL is a RESTRICTED Python grammar, so the file "
+            "must first be valid Python. The message is CPython's own, "
+            "verbatim, with its line and column — no rewording, because "
+            "nothing a strategy-specific layer could add beats the "
+            "interpreter's own diagnosis of an unclosed bracket. This is "
+            "the one parse code with no fix prose: there is no migration "
+            "and no grammar rule to state, only the syntax error itself."
+        ),
+        passes=("0",),
+        surfaces=_PY_ONLY,
+        ts_mirrored=False,
+        ts_absent_reason=_TS_PARSE_ABSENT_REASON,
+        applicability=Applicability.NONE,
+    ),
+    Rule(
+        code="IMPORT_NOT_ALLOWED",
+        category=RuleCategory.CORRECTNESS,
+        summary="A strategy file may not import anything.",
+        message_template="{detail}",
+        template_params=("detail",),
+        explain=(
+            "Every component is already in scope by name — the parser "
+            "resolves names against the live registry, so an import is "
+            "never needed and never honoured. It is also a SAFETY boundary: "
+            "a strategy is parsed, never executed as Python, and an import "
+            "is the first thing an author reaches for when they are trying "
+            "to do something the DSL deliberately cannot."
+        ),
+        passes=("0",),
+        surfaces=_PY_ONLY,
+        ts_mirrored=False,
+        ts_absent_reason=_TS_PARSE_ABSENT_REASON,
+        suggestion_template=(
+            "Remove the import. A strategy file declares "
+            "Globals/Universe/Execution and one Pipeline; every component "
+            "is already in scope by name."
+        ),
+        applicability=Applicability.HAS_PLACEHOLDERS,
+    ),
+    Rule(
+        code="LEGACY_STRATEGY_CALL",
+        category=RuleCategory.CORRECTNESS,
+        summary="The pre-2026 Strategy(...) form, with its migration.",
+        message_template="{detail}",
+        template_params=("detail",),
+        explain=(
+            "Strategy(name=..., asset_class=..., max_assets=..., "
+            "pipeline=[...]) was the form before the four declarations. It "
+            "is the shape migration ARRIVES in — from Keel's own history "
+            "and from other platforms — and until 2026-09-22 it fell into "
+            "the generic expression-statement message, which states the "
+            "grammar rule and not the translation. "
+            "\n\nThe fix carries the four-declaration skeleton verbatim (the "
+            "compose description's skeleton, decision #23) and the field- "
+            "by-field map: asset_class becomes Universe(market=...), "
+            "max_assets becomes Universe(mode='top_volume', top_n=N), "
+            "pipeline becomes Pipeline([...]), and name moves to the "
+            "strategy's metadata rather than its source."
+        ),
+        passes=("0",),
+        surfaces=_PY_ONLY,
+        ts_mirrored=False,
+        ts_absent_reason=_TS_PARSE_ABSENT_REASON,
+        suggestion_template=(
+            "Split it into the four declarations:\n"
+            'Globals(target_timeframe="1d")\n'
+            'Universe(mode="manual", symbols=["BTC", "ETH"], market="perp")\n'
+            'Execution(rebalance="every_bar")\n'
+            "Pipeline([...])\n"
+            "Field by field: asset_class=... becomes Universe(market=...); "
+            'max_assets=N becomes Universe(mode="top_volume", top_n=N); '
+            "pipeline=[...] becomes Pipeline([...]); name=... moves to the "
+            "strategy's metadata, not its source."
+        ),
+        applicability=Applicability.HAS_PLACEHOLDERS,
+    ),
+    Rule(
+        code="UNKNOWN_TOP_LEVEL_STATEMENT",
+        category=RuleCategory.CORRECTNESS,
+        summary="A top-level statement the grammar does not admit.",
+        message_template="{detail}",
+        template_params=("detail",),
+        explain=(
+            "The file's top level admits exactly: Globals(...), "
+            "Universe(...), Execution(...), factory defs, variable "
+            "assignments, and one Pipeline(...). Anything else is this "
+            "code. The legacy Strategy(...) call is split out into "
+            "LEGACY_STRATEGY_CALL so its author gets the migration rather "
+            "than the rule."
+        ),
+        passes=("0",),
+        surfaces=_PY_ONLY,
+        ts_mirrored=False,
+        ts_absent_reason=_TS_PARSE_ABSENT_REASON,
+        suggestion_template=(
+            "Only Globals(...), Universe(...), Execution(...), factory "
+            "defs, variable assignments and one Pipeline(...) may appear at "
+            "top level."
+        ),
+        applicability=Applicability.HAS_PLACEHOLDERS,
+    ),
+    Rule(
+        code="CONTROL_FLOW_NOT_ALLOWED",
+        category=RuleCategory.CORRECTNESS,
+        summary="if / for / while / with / try / class / async in a strategy file.",
+        message_template="{detail}",
+        template_params=("detail",),
+        explain=(
+            "A strategy is DECLARATIVE: the source states a pipeline, the "
+            "platform compiles and runs it, and a deterministic compile is "
+            "what makes a saved strategy reproducible. Control flow has "
+            "three declarative answers and the fix names all three: branch "
+            "with a Parallel dict, parameterize with a factory, repeat with "
+            "a variable."
+        ),
+        passes=("0",),
+        surfaces=_PY_ONLY,
+        ts_mirrored=False,
+        ts_absent_reason=_TS_PARSE_ABSENT_REASON,
+        suggestion_template=(
+            "Strategies are declarative. Branch with a Parallel dict "
+            '({{"a": [...], "b": [...]}}), parameterize with a factory (def '
+            "f(x): return Pipeline([...])), repeat with a variable."
+        ),
+        applicability=Applicability.HAS_PLACEHOLDERS,
+    ),
+    Rule(
+        code="DECLARATION_ORDER",
+        category=RuleCategory.CORRECTNESS,
+        summary="A declaration appears after something it must precede.",
+        message_template="{detail}",
+        template_params=("detail",),
+        explain=(
+            "Order is Globals, Universe, Execution, then factories and "
+            "variables, then Pipeline. It is a READING order rather than a "
+            "technical one — a reader meets the clock, then the assets, "
+            "then the execution policy, then the logic — and the parser "
+            "enforces it so every stored strategy reads the same way."
+        ),
+        passes=("0",),
+        surfaces=_PY_ONLY,
+        ts_mirrored=False,
+        ts_absent_reason=_TS_PARSE_ABSENT_REASON,
+        suggestion_template=(
+            "Order: Globals, Universe, Execution, then factories and variables, then Pipeline."
+        ),
+        applicability=Applicability.HAS_PLACEHOLDERS,
+    ),
+    Rule(
+        code="DECLARATION_DUPLICATE",
+        category=RuleCategory.CORRECTNESS,
+        summary="Two of a declaration that may appear once.",
+        message_template="{detail}",
+        template_params=("detail",),
+        explain=(
+            "Globals, Universe, Execution and Pipeline appear at most once "
+            "each. A second one is never a merge and never a last-wins: it "
+            "is an edit that landed twice, so the parser refuses rather "
+            "than silently choosing one."
+        ),
+        passes=("0",),
+        surfaces=_PY_ONLY,
+        ts_mirrored=False,
+        ts_absent_reason=_TS_PARSE_ABSENT_REASON,
+        suggestion_template=("Merge the two calls into one."),
+        applicability=Applicability.HAS_PLACEHOLDERS,
+    ),
+    Rule(
+        code="MISSING_PIPELINE",
+        category=RuleCategory.CORRECTNESS,
+        summary="The file declares no Pipeline(...).",
+        message_template="{detail}",
+        template_params=("detail",),
+        explain=(
+            "The declarations describe the run; the Pipeline IS the run. A "
+            "file with declarations and no Pipeline is the shape a half- "
+            "applied edit leaves behind. It carries no line number because "
+            "the absence has no position."
+        ),
+        passes=("0",),
+        surfaces=_PY_ONLY,
+        ts_mirrored=False,
+        ts_absent_reason=_TS_PARSE_ABSENT_REASON,
+        suggestion_template=(
+            "Add Pipeline([PriceDataLoader(), ...]) after the declarations "
+            "— the pipeline is what a run executes; the loader reads its "
+            "clock from Globals(target_timeframe=...)."
+        ),
+        applicability=Applicability.HAS_PLACEHOLDERS,
+    ),
+    Rule(
+        code="UNKNOWN_DECLARATION_KEY",
+        category=RuleCategory.CORRECTNESS,
+        summary="A declaration parameter that does not exist.",
+        message_template="{detail}",
+        template_params=("detail",),
+        explain=(
+            "The message lists the declaration's Available keys. The "
+            "SUGGESTION does more when it can: a small migration map turns "
+            "the keys the pre-2026 form used into the ones that exist — "
+            "asset_class into market, max_assets into mode='top_volume' "
+            "plus top_n, assets/tickers into symbols, a Globals-level "
+            "timeframe into target_timeframe. Those were named as 'removed' "
+            "in one skill file and nowhere the parser could reach."
+        ),
+        passes=("0",),
+        surfaces=_PY_ONLY,
+        ts_mirrored=False,
+        ts_absent_reason=_TS_PARSE_ABSENT_REASON,
+        suggestion_template=(
+            "Check the Available list in the message for the declaration's "
+            "keys; a key that MOVED is named with its replacement."
+        ),
+        applicability=Applicability.HAS_PLACEHOLDERS,
+    ),
+    Rule(
+        code="DECLARATION_ARG_SHAPE",
+        category=RuleCategory.CORRECTNESS,
+        summary="A declaration called with the wrong argument shape.",
+        message_template="{detail}",
+        template_params=("detail",),
+        explain=(
+            "Declarations take keyword arguments with LITERAL values: no "
+            "positional args, no **kwargs, no expressions. The literal "
+            "requirement is what lets the save bake a resolved universe "
+            "back into the source as text."
+        ),
+        passes=("0",),
+        surfaces=_PY_ONLY,
+        ts_mirrored=False,
+        ts_absent_reason=_TS_PARSE_ABSENT_REASON,
+        suggestion_template=("Write Declaration(key=value, ...) with literal values."),
+        applicability=Applicability.HAS_PLACEHOLDERS,
+    ),
+    Rule(
+        code="PIPELINE_ARG_SHAPE",
+        category=RuleCategory.CORRECTNESS,
+        summary="Pipeline(...) called with the wrong argument shape.",
+        message_template="{detail}",
+        template_params=("detail",),
+        explain=(
+            "Pipeline takes one list of steps and an optional name. The "
+            "list is positional and required; a keyword that belongs to the "
+            "RUN rather than the strategy (a backtest window, a fee model) "
+            "is refused here with its own sentence naming where it belongs."
+        ),
+        passes=("0",),
+        surfaces=_PY_ONLY,
+        ts_mirrored=False,
+        ts_absent_reason=_TS_PARSE_ABSENT_REASON,
+        suggestion_template=('Pipeline([...]) takes one list of steps and an optional name="...".'),
+        applicability=Applicability.HAS_PLACEHOLDERS,
+    ),
+    Rule(
+        code="STEP_NOT_A_CALL",
+        category=RuleCategory.CORRECTNESS,
+        summary="A pipeline step that is not a component call or a structure.",
+        message_template="{detail}",
+        template_params=("detail",),
+        explain=(
+            "A step is Component(param=value), a slot op (Store / Load / "
+            "Extract), a Parallel dict, or a nested Pipeline([...]). The "
+            "refusals an author actually meets are np./pd. prefixes and "
+            "inline expressions — both of which mean the same thing: the "
+            "computation belongs in a component, where it can be versioned, "
+            "typed and reused."
+        ),
+        passes=("0",),
+        surfaces=_PY_ONLY,
+        ts_mirrored=False,
+        ts_absent_reason=_TS_PARSE_ABSENT_REASON,
+        suggestion_template=(
+            'A step is Component(param=value), Store("slot")/Load/Extract, '
+            'a {{"branch": [...]}} Parallel, or a nested Pipeline([...]). '
+            "No pd./np. prefixes, no expressions."
+        ),
+        applicability=Applicability.HAS_PLACEHOLDERS,
+    ),
+    Rule(
+        code="POSITIONAL_ARGS_NOT_ALLOWED",
+        category=RuleCategory.CORRECTNESS,
+        summary="A component or factory called with positional arguments.",
+        message_template="{detail}",
+        template_params=("detail",),
+        explain=(
+            "Every parameter is named. Positional arguments make a "
+            "strategy's meaning depend on a component's parameter ORDER, "
+            "which a version bump may change; naming them is what lets a "
+            "stored strategy survive one."
+        ),
+        passes=("0",),
+        surfaces=_PY_ONLY,
+        ts_mirrored=False,
+        ts_absent_reason=_TS_PARSE_ABSENT_REASON,
+        suggestion_template=("Name every argument: Component(param=value)."),
+        applicability=Applicability.HAS_PLACEHOLDERS,
+    ),
+    Rule(
+        code="PARAM_EXPRESSION_NOT_ALLOWED",
+        category=RuleCategory.CORRECTNESS,
+        summary="A parameter value that is not a literal or a variable name.",
+        message_template="{detail}",
+        template_params=("detail",),
+        explain=(
+            "Parameter values are literals (numbers, strings, lists, dicts) "
+            "or the name of a variable defined above. No f-strings, no "
+            "arithmetic, no calls, no comprehensions, no attribute access. "
+            "The restriction is what makes the compile deterministic: the "
+            "value in the source IS the value at run time."
+        ),
+        passes=("0",),
+        surfaces=_PY_ONLY,
+        ts_mirrored=False,
+        ts_absent_reason=_TS_PARSE_ABSENT_REASON,
+        suggestion_template=(
+            "Parameter values are literals (numbers, strings, lists, dicts) "
+            "or the name of a variable defined above."
+        ),
+        applicability=Applicability.HAS_PLACEHOLDERS,
+    ),
+    Rule(
+        code="SLOT_OP_ARG_SHAPE",
+        category=RuleCategory.CORRECTNESS,
+        summary="A slot operation called with the wrong arguments.",
+        message_template="{detail}",
+        template_params=("detail",),
+        explain=(
+            "Store and Load take exactly one string literal; Extract takes "
+            "one; StoreValue takes two. The slot NAME must be a literal "
+            "because the slot table is resolved at parse time — a computed "
+            "name has nothing to resolve against."
+        ),
+        passes=("0",),
+        surfaces=_PY_ONLY,
+        ts_mirrored=False,
+        ts_absent_reason=_TS_PARSE_ABSENT_REASON,
+        suggestion_template=(
+            'Store("slot") and Load("slot") take one string literal; '
+            'Extract("key") takes one; StoreValue("slot", value) takes two.'
+        ),
+        applicability=Applicability.HAS_PLACEHOLDERS,
+    ),
+    Rule(
+        code="PARALLEL_BRANCH_SHAPE",
+        category=RuleCategory.CORRECTNESS,
+        summary="A Parallel block whose branch keys are not string literals.",
+        message_template="{detail}",
+        template_params=("detail",),
+        explain=(
+            "A Parallel's branch keys are string literals: they become the "
+            "record's field names and are referenced by composers and by "
+            "Extract, so they must exist at parse time. Dict unpacking is "
+            "refused for the same reason."
+        ),
+        passes=("0",),
+        surfaces=_PY_ONLY,
+        ts_mirrored=False,
+        ts_absent_reason=_TS_PARSE_ABSENT_REASON,
+        suggestion_template=('Write {{"name": [step, ...], ...}} with string keys.'),
+        applicability=Applicability.HAS_PLACEHOLDERS,
+    ),
+    Rule(
+        code="FACTORY_DEF_SHAPE",
+        category=RuleCategory.CORRECTNESS,
+        summary="A factory def that is not a single return Pipeline([...]).",
+        message_template="{detail}",
+        template_params=("detail",),
+        explain=(
+            "A factory is `def name(param=default): return Pipeline([...])` "
+            "— exactly one return statement, no decorators, no *args, no "
+            "**kwargs. It is a TEMPLATE the parser expands at each call "
+            "site, not a function the platform executes, which is why its "
+            "body is a shape rather than code."
+        ),
+        passes=("0",),
+        surfaces=_PY_ONLY,
+        ts_mirrored=False,
+        ts_absent_reason=_TS_PARSE_ABSENT_REASON,
+        suggestion_template=(
+            "A factory is `def name(param=default): return Pipeline([...])` "
+            "— no decorators, no *args, no **kwargs, no other statements."
+        ),
+        applicability=Applicability.HAS_PLACEHOLDERS,
+    ),
+    Rule(
+        code="VARIABLE_ASSIGN_SHAPE",
+        category=RuleCategory.CORRECTNESS,
+        summary="A top-level assignment that is neither a sub-pipeline nor a literal.",
+        message_template="{detail}",
+        template_params=("detail",),
+        explain=(
+            "A variable holds a sub-pipeline or a literal value. A bare "
+            "component call is the mistake that actually arrives — x = "
+            "EWMA(window=20) — and its message names the Pipeline form for "
+            "that exact variable rather than the general rule."
+        ),
+        passes=("0",),
+        surfaces=_PY_ONLY,
+        ts_mirrored=False,
+        ts_absent_reason=_TS_PARSE_ABSENT_REASON,
+        suggestion_template=(
+            "A variable holds a sub-pipeline or a literal: x = "
+            "Pipeline([Component(...)]), or x = 20."
+        ),
+        applicability=Applicability.HAS_PLACEHOLDERS,
+    ),
+    Rule(
+        code="PIPELINE_NOT_BACKTEST_READY",
+        category=RuleCategory.CORRECTNESS,
+        summary="A valid pipeline that cannot produce weights, refused at the run gate.",
+        message_template="{detail}",
+        template_params=("detail",),
+        explain=(
+            "Minted by keel-api's run/deploy gate (`utils/strategy_validation."
+            "_assert_backtest_ready`, Q-0675) when a strategy is VALID DSL and "
+            "still cannot run: a two-step PriceDataLoader -> "
+            "TargetTimeframeResampler pipeline terminates at OHLCV, so "
+            "Pipeline.run() returns a dict and the worker dies with a bare "
+            "TypeError AFTER the quota unit and the compute reservation have "
+            "been debited.\n\n"
+            "**Why it is catalogued only now (Q-1698).** It was minted outside "
+            "the catalog from 2026-08-24 until 2026-09-22 — the standing "
+            "intake rule ('any PR that mints a new structured code MUST add "
+            "its catalog entry in the same PR') is enforced by a scan of the "
+            "VALIDATOR files, and a keel-api gate mint is outside that scan. "
+            "The scan now covers `services/keel-api/src/utils/*.py` gate "
+            "mints, so the next one cannot repeat it.\n\n"
+            "**Retirement.** TERMINAL_NOT_WEIGHTS / TERMINAL_DICT_NOT_CONSUMED "
+            "are the same verdict computed at write time with an explain "
+            "channel, a TS mirror and a conformance corpus. While their ramps "
+            "are DORMANT this gate code is the only refusal and stays active; "
+            "when they arm, the gate reads them from a production_mode "
+            "validation and this code retires to `reserved` (the sanctioned "
+            "active -> reserved path)."
+        ),
+        passes=(),
+        surfaces=_GATE_ONLY,
+        ts_mirrored=False,
+        ts_absent_reason=_TS_GATE_ONLY_REASON,
+        fixture_waiver=(
+            "services/keel-api/tests/test_run_gate_backtest_ready.py::"
+            "TestScaffoldIsRefusedAtSubmit — gate code, out of the write-time "
+            "corpus's reach (spec 02 §3.3). The CLASS is the node id because "
+            "every arm in it covers the code and the waiver resolver's leaf "
+            "pattern (`^(\\s*def|class) <name>`) does not match an `async "
+            "def`, which every arm here is."
+        ),
+    ),
     Rule(
         code="LOCK_ERROR",
         category=RuleCategory.CORRECTNESS,
@@ -3247,7 +4308,7 @@ _ALL_RULES: tuple[Rule, ...] = (
         category=RuleCategory.SUSPICIOUS,  # warning by policy
         severity_ceiling="warning",  # the D10-clarification permanence encoded
         #                              as catalog data (spec 05 §2.1/§2.3 inv 4)
-        summary="A soft (interval-tier) value convention is unproven or exceeded.",
+        summary="A soft (interval-tier) value convention is provably exceeded.",
         message_template=(
             "'{consumer}' conventionally expects {expected_display} values in "
             "{expected_domain}; the values reaching it{via} {finding}. This is a "
@@ -3261,18 +4322,33 @@ _ALL_RULES: tuple[Rule, ...] = (
             "finding",
         ),
         explain=(
-            "The catalog name of BOTH soft-tier outcome rows of spec 01 §2.4 "
-            "(`eq/sub × unproven × soft` and `eq/sub × viol × soft`) — one "
-            "code, two documented message shapes (multi-shape pattern, see "
-            "catalog header), because the tier doctrine makes them one class: "
-            "soft `Interval`/Bounds domains are conventions, not laws (GOAL "
-            "non-goal 3; D10-clarification: warnings by design, never "
-            "scheduled for error promotion).\n\n"
+            "The catalog name of the soft-tier `eq/sub × viol × soft` outcome "
+            "row of spec 01 §2.4: a statically-KNOWN value description that "
+            "provably leaves a soft `Interval`/Bounds convention. Soft "
+            "domains are conventions, not laws (GOAL non-goal 3; "
+            "D10-clarification: warnings by design, never scheduled for "
+            "error promotion).\n\n"
+            "**The unproven shape is RETIRED** (claims model, founder-"
+            "ratified 2026-08-23; spec 09 §3.4, staged change "
+            "`soft-unproven-silence` at 'post'). The sibling row "
+            "`eq/sub × unproven × soft` — 'the values reaching this "
+            "convention are not statically known' — is now SILENT, because "
+            "it fired on the NORMAL use of the components it guarded (prod "
+            "census: essentially no ThresholdCross feed is provably "
+            "in-interval), and a permanent warning on ordinary code trains "
+            "users to ignore warnings. Absence of proof is no longer "
+            "reported at the soft tier; only a witnessed contradiction is. "
+            "The HARD tier is untouched — an unproven feed into a `Set` "
+            "demand still reports VALUE_DOMAIN_UNPROVEN.\n\n"
             "**The `{finding}` shapes.** Rendered by the emitting site as a "
-            "pre-formatted clause: `are not statically known` (the unproven "
-            "row) · `are known to include <actual_domain>-values outside it` "
-            "(the violated row). The machine-readable distinction rides the "
-            "envelope's expected/actual fields, never the prose.\n\n"
+            "pre-formatted clause. In the shipped configuration only the "
+            "violated shape occurs: `are known to include <actual_domain>-"
+            "values outside it`. The unproven clause (`are not statically "
+            "known`) remains in the template for the pre-flip configuration "
+            "the staging machinery can still select (rollback / "
+            "`staged_stage_override` in tests). The machine-readable "
+            "distinction rides the envelope's expected/actual fields, never "
+            "the prose.\n\n"
             "**Permanently warning-class.** This rule carries "
             "`severity_ceiling='warning'` and its staged change "
             "(`soft-bounds-advisory`) terminates at WARNING — no PROMOTED "
@@ -3289,6 +4365,71 @@ _ALL_RULES: tuple[Rule, ...] = (
         ts_mirrored=True,
         applicability=Applicability.NONE,  # no suggestion_template: advisory
         staged_by="soft-bounds-advisory",  # STAGED_CHANGES §2.4 entry 3
+        recoverable=True,
+    ),
+    Rule(
+        code="REFINED_ROLE_MISMATCH",
+        category=RuleCategory.CORRECTNESS,
+        summary="A signal of one refined role feeds a demand for a different one.",
+        message_template=(
+            "'{consumer}' expects {expected_display} values in {expected_domain}, "
+            "but '{producer}' supplies {actual_role}{via} — a different signal "
+            "role, and nothing proves its values are in {expected_domain}."
+        ),
+        template_params=(
+            "consumer",
+            "expected_display",
+            "expected_domain",
+            "producer",
+            "actual_role",
+            "via",
+        ),
+        explain=(
+            "The D-1 role judgment (founder-ratified 2026-08-23; "
+            "dsl-type-system decisions.md, ledger Q-0543). A refined base "
+            "name states a ROLE — what a series is FOR — and two DISTINCT "
+            "refined names are incomparable siblings in the base order "
+            "(spec 01 §1.3), so neither can stand in for the other.\n\n"
+            "**Why this exists.** The claims model deleted the ladder step "
+            "that let a type NAME mint a value FACT, which was right: the "
+            "fact was fiction. But one verdict it had carried was TRUE — a "
+            "forecast series is not a binary signal — and feeding one to "
+            "`TradeManager(entries=...)` is a guaranteed runtime raise (its "
+            "{-1, 0, 1} entry contract). With an "
+            "honest `⊤` domain the checker cannot PROVE a violation, so the "
+            "domain half can only say `unproven`. This code recovers the "
+            "verdict from the DECLARED NAMES, minting nothing.\n\n"
+            "**Strict precedence — this is what makes it 0-FP.** A proven "
+            "domain always outranks a role mismatch:\n"
+            "- values PROVABLY in the demanded domain (`sat`) ⇒ accept, role "
+            "irrelevant. `ConstantForecast(value=1)` into a BinarySignal "
+            "demand proves `Set{1.0} ⊑ Set{-1,0,1}` and stays clean.\n"
+            "- values provably OUTSIDE it (`viol`) ⇒ VALUE_DOMAIN_MISMATCH, "
+            "which is the stronger, older statement.\n"
+            "- values UNPROVEN + a conflicting role ⇒ this code.\n"
+            "- values UNPROVEN + a matching or ABSENT role ⇒ "
+            "VALUE_DOMAIN_UNPROVEN's warning, unchanged. A bare carrier "
+            "declares no role: `Clip` outputs `SignalSeries`, so a "
+            "`ThresholdCross → Clip(0,1) → Store → TradeManager(entries=...)` chain stays a "
+            "warning — its values really may be binary.\n\n"
+            "**Hard demands only.** Soft (`Interval`) domains are "
+            "conventions, permanently advisory by GOAL non-goal 3, so a "
+            "role conflict at a soft demand is never an error.\n\n"
+            "**Remediation.** Convert the role: threshold the signal "
+            "(ThresholdCross / AboveThresholdFilter / RangeSelector) before "
+            "the consumer, or feed the consumer a series that declares the "
+            "role it demands."
+        ),
+        passes=("6", "8"),
+        surfaces=_PY_TS_RT,
+        ts_mirrored=True,
+        suggestion_template=(
+            "Convert the {actual_role} to {expected_display} before "
+            "'{consumer}' — threshold it via ThresholdCross / "
+            "AboveThresholdFilter / RangeSelector."
+        ),
+        applicability=Applicability.MAYBE_INCORRECT,
+        staged_by="role-mismatch-rule",
         recoverable=True,
     ),
     # ═══════════════════════════════════════════════════════════════════════
@@ -3521,6 +4662,576 @@ _ALL_RULES: tuple[Rule, ...] = (
         staged_by="nondense-terminal-weights",  # STAGED_CHANGES (P2 (c) mint)
         recoverable=True,
     ),
+    # ═══════════════════════════════════════════════════════════════════════
+    # Threshold-composition + executor-seam advisories (Q-0580) — minted
+    # 2026-08-24. Founder authorizations: the F2 batch-2 dossier's
+    # unreachable-threshold-arm candidate (dsl-type-system decisions.md
+    # 2026-08-23: "dead-threshold-arm rule queued as an independent lane")
+    # and the Q-0570 D3 ruling's stage-3 PRICE_MARKS_AUTO follow-up. Both
+    # ship UNSTAGED at their category/override-derived severities: neither
+    # ever blocks, neither is scheduled for promotion, and neither needs an
+    # evidence ramp (warning-tier hygiene + an info notice).
+    # ═══════════════════════════════════════════════════════════════════════
+    Rule(
+        code="UNREACHABLE_THRESHOLD_ARM",
+        category=RuleCategory.HYGIENE,  # dead config — warning by policy
+        summary="A configured threshold arm provably can never fire.",
+        message_template=(
+            "The {arm} threshold arm of '{component}' ({param}={value}) can never fire: {reason}."
+        ),
+        template_params=("arm", "component", "param", "value", "reason"),
+        explain=(
+            "The F2 batch-2 dossier's dead-arm finding (2026-08-23; queued as "
+            "an independent lane in dsl-type-system decisions.md, executed as "
+            "Q-0580): the library idiom `ThresholdCross(upper=0.0, "
+            "lower=-3.0)` carried a `lower` arm whose -1 output was provably "
+            "discarded downstream — a real bug class no other rule sees. A "
+            "user who configures an arm that cannot fire believes they have "
+            "short (or long) signals they do not have.\n\n"
+            "**Two provable shapes, both static.**\n"
+            "1. *Mode-gated (dead config):* `mode='long_only'` never "
+            "evaluates the lower threshold and `mode='short_only'` never "
+            "evaluates the upper one (threshold.py run()); an EXPLICITLY "
+            "written opposite-arm param is dead configuration regardless of "
+            "its value. Unwritten params (registry defaults) never fire this "
+            "— only config the author actually typed can be dead config.\n"
+            "2. *Clip-collapsed:* ThresholdCross emits only {-1, 0, +1}, and "
+            "for an IMMEDIATELY adjacent Clip, `clip(-1) == clip(0)` exactly "
+            "when `clip.lower >= 0` (the lower arm's -1 becomes "
+            "indistinguishable from flat) and `clip(+1) == clip(0)` exactly "
+            "when `clip.upper <= 0`. Fires only for arms the declared mode "
+            "actually evaluates — a mode-disabled arm is shape 1's verdict, "
+            "never a double report.\n\n"
+            "**Conservative by construction.** Adjacency is strict: any "
+            "intervening component, slot op (a Store between them exposes "
+            "the un-clipped values to other readers), Parallel boundary, or "
+            "statically-unresolvable param (VariableRef / non-literal) means "
+            "no verdict. The rule fires only on proof, so it can under-"
+            "report but never false-positive. Component anchors "
+            "(`ThresholdCross`, `Clip`) are documented per-component "
+            "constants in validator.py, the UNIVERSE_MASK_APPLIERS "
+            "precedent — no registry metadata isolates 'discrete threshold "
+            "with mode-gated arms' today.\n\n"
+            "**Hygiene, permanently warning-class by category policy.** The "
+            "strategy still runs; the arm is inert. The remediation is to "
+            "delete the dead config or express the intent directly "
+            "(`mode='long_only'` instead of a clip that discards shorts)."
+        ),
+        passes=("7",),
+        surfaces=_PY_TS,
+        ts_mirrored=True,
+        suggestion_template=(
+            "Remove the dead '{param}' configuration from '{component}', or "
+            "change the mode/clip combination so the {arm} arm can take "
+            "effect."
+        ),
+        applicability=Applicability.MAYBE_INCORRECT,
+        recoverable=True,
+    ),
+    Rule(
+        code="PRICE_MARKS_AUTO",
+        category=RuleCategory.SUSPICIOUS,
+        summary="No PriceDataLoader declared — the signal reads no prices (notice).",
+        message_template=(
+            "This pipeline's signal reads no prices, which is fine: every "
+            "backtest's simulation prices are loaded by the platform at the "
+            "strategy clock from {venue}. Add PriceDataLoader() only if your "
+            "signal should read prices."
+        ),
+        template_params=("venue",),
+        explain=(
+            "The Q-0570 stage-3 advisory (founder ruling 2026-08-24), "
+            "reworded by release-fixes-2026-10 spec 01 (Q-2284): the prices "
+            "a backtest trades at — and the funding a perp backtest charges "
+            "— are loaded by the platform for EVERY run, at the Globals "
+            "clock, from the market the data loaders name; no loader's "
+            "output ever reaches the simulation. A pipeline that declares no "
+            "PriceDataLoader is therefore an ordinary shape, not an "
+            "exception: PriceDataLoader is a SIGNAL input, never a simulator "
+            "dependency, and this notice is where a DSL author first learns "
+            "that.\n\n"
+            "**When it fires.** The expanded pipeline contains at least one "
+            "stream-donor data loader (data_loader category producing the "
+            "stream carrier type), no PriceDataLoader anywhere (nested "
+            "pipelines, Parallel branches, factory bodies, and named "
+            "Pipeline variables included), and the donors agree on a venue. "
+            "It never fires when a PriceDataLoader is declared, and never "
+            "fires on a pipeline whose loaders name no venue (that shape "
+            "raises the executor's own venue error).\n\n"
+            "**severity_override='info' (the PARAM_TYPE_CHECK_SKIPPED "
+            "precedent, spec 02 §5.3).** This is a notice about platform-"
+            "supplied behavior, not a suspected authoring mistake — the "
+            "funding-only shape is first-class and correct. Correctness "
+            "never depends on this rule; downstream consumers that "
+            "serialize only errors+warnings may drop it, by design.\n\n"
+            "**Why no suggestion.** The message's second sentence IS the "
+            "guidance; a structured fix would wrongly imply the shape needs "
+            "fixing."
+        ),
+        passes=("9",),
+        surfaces=_PY_TS,
+        ts_mirrored=True,
+        severity_override="info",
+        applicability=Applicability.NONE,
+        recoverable=True,
+    ),
+    # ═══════════════════════════════════════════════════════════════════════
+    # COMPOSITION ADVISORIES (Q-1694, mcp-strategy-view W4 §1.4-§1.7) — minted
+    # 2026-09-22. Four SEMANTIC composition facts the type system is silent
+    # on by construction (spec 01 scoped it to types + value domains): a
+    # forecast's magnitude discarded by a selection sizer, per-branch leverage
+    # normalization summed by a concatenator, a fixed per-position weight with
+    # no cap, and a boolean mask over a directional signal. Each was measured
+    # to validate clean AND compile on 2026-09-22 (`4cc05d665`).
+    #
+    # Three run at the consumer's J-STEP / J-COMPOSER position in
+    # interpreter.py (they are facts about a step GIVEN what flows into it);
+    # FIXED_WEIGHT_UNCAPPED is a path fact and runs in validator.py's pass 7d.
+    # All four read the LIVE registry for their discriminators (a
+    # `target_leverage` / `weight_per_position` / `max_leverage` parameter, an
+    # `output_domain`), with one documented per-component anchor set each
+    # where no registry declaration isolates the concept — the
+    # UNIVERSE_MASK_APPLIERS / _THRESHOLD_ARM_COMPONENT precedent.
+    # ═══════════════════════════════════════════════════════════════════════
+    Rule(
+        code="FORECAST_MAGNITUDE_DISCARDED",
+        category=RuleCategory.SUSPICIOUS,
+        summary="A selection sizer receives a ForecastSeries — the conviction is discarded.",
+        message_template=(
+            "'{step}' sizes by membership, but it receives a ForecastSeries "
+            "from '{producer}' — the forecast's magnitude (conviction) is "
+            "discarded."
+        ),
+        template_params=("step", "producer"),
+        explain=(
+            "ForecastSeries values carry conviction (a scaled, capped "
+            "expected return). Equal-weight, fixed-weight and binary sizers "
+            "treat their input as a SELECTION: sign or membership only. "
+            "Feeding them a forecast silently throws the magnitude away — "
+            "the strategy runs and reports a number, and the number is not "
+            "the strategy you wrote. The type system cannot see it: "
+            "ForecastSeries subsumes into a SignalSeries demand "
+            "(type_compat_meta.json), which is exactly why every seed of "
+            "this mistake validates clean.\n\n"
+            "**Forecast to weights** goes through ForecastWeightNormalizer "
+            "(simple) or VolTargetWeightConverter (vol-targeted). Equal "
+            "weighting IS right after a SELECTOR (TopNAssetSelector, a "
+            "filter) where membership is the signal — there the incoming "
+            "type is a BinarySignal and this rule does not fire.\n\n"
+            "**The anchor set.** The selection sizers are a documented "
+            "per-component constant in interpreter.py "
+            "(`_SELECTION_SIZERS`): the sizers whose registry input_type is "
+            "SignalSeries/BinarySignal and whose semantics size by "
+            "membership or a fixed weight. The magnitude-using sizers "
+            "(VolWeightSizer, RiskBudgetSizer, RiskParityAllocator, "
+            "the deprecated StopDistanceRiskSizer, MarketRiskScaler, MarketLeverageScaler, "
+            "BetaEstimator) are excluded. Durable form: an "
+            '`input_role="selection"` registry declaration on those '
+            "components, at which point the constant is deleted."
+        ),
+        passes=("6",),
+        surfaces=_PY_TS,
+        ts_mirrored=True,
+        suggestion_template=(
+            "Replace '{step}' with ForecastWeightNormalizer(target_leverage=...) "
+            "or VolTargetWeightConverter(return_vol_slot=...), or threshold "
+            "the forecast first (ThresholdCross) if selection is the intent."
+        ),
+        applicability=Applicability.HAS_PLACEHOLDERS,
+        severity_ceiling="warning",
+        staged_by="forecast-magnitude-discarded",
+        recoverable=True,
+    ),
+    Rule(
+        code="NORMALIZER_BEFORE_CONCAT",
+        category=RuleCategory.CORRECTNESS,
+        summary="Concatenated branch targets sum past a fully-invested book.",
+        message_template=(
+            "Branch '{branch}' ends with '{producer}' "
+            "(target_leverage={target}), and '{step}' concatenates {n} such "
+            "branches — the book's leverage is the SUM of the branches' "
+            "targets ({sum}), not the target."
+        ),
+        template_params=("branch", "producer", "target", "step", "n", "sum"),
+        explain=(
+            "WeightConcatenator stacks branch weight books side by side, and "
+            "it takes WeightSeries branches only — each branch sizes itself "
+            "BEFORE the concatenator (a normalizer after it is a "
+            "TYPE_MISMATCH: it takes forecasts, not weights). A sizer with "
+            "target_leverage inside a branch makes that branch sum to its "
+            "own target, so the concatenated book's gross leverage is the "
+            "SUM of the branch targets.\n\n"
+            "**The discriminator is the fully-invested book.** The DSL "
+            "declares no book target, so the rule fires when the branches' "
+            "literal targets sum to MORE than 1.0 and no later step re-levels "
+            "the book — a step carrying `target_leverage` or `max_leverage` "
+            "(LeverageCap) after the concatenator, found on the same path "
+            "transparently through nested Pipeline bodies and variables and "
+            "never past a later Parallel. Targets that split one book "
+            "(0.5 + 0.5, the shipped long-hype-short-alts-index) are the "
+            "deliberate per-sleeve design and stay clean; a non-literal "
+            "target is no verdict. Any registered component carrying a "
+            "`target_leverage` parameter counts as a normalizing branch "
+            "(today: EqualWeightSizer, ForecastWeightNormalizer, "
+            "VolWeightSizer); a branch ending in a sizer WITHOUT one "
+            "(FixedWeightSizer) does not, and never fires this.\n\n"
+            "**Staged (`normalizer-before-concat`), born DORMANT.** At the "
+            "mint E-LIB0FP read one fire and it was a false positive — the "
+            "0.5 + 0.5 library book above. The sum discriminator is what "
+            "separates the two."
+        ),
+        passes=("6",),
+        surfaces=_PY_TS,
+        ts_mirrored=True,
+        suggestion_template=(
+            "Each branch sizes to WeightSeries before '{step}'; the book's "
+            "gross leverage is the sum of the branch targets ({sum}) — split "
+            "the target across the branches (their target_leverage values "
+            "summing to the book you want, e.g. 1.0) or cap after '{step}' "
+            "with LeverageCap(max_leverage=1.0)."
+        ),
+        applicability=Applicability.HAS_PLACEHOLDERS,
+        staged_by="normalizer-before-concat",
+        recoverable=True,
+    ),
+    Rule(
+        code="FIXED_WEIGHT_UNCAPPED",
+        category=RuleCategory.SUSPICIOUS,
+        summary="A fixed per-position weight with no leverage cap after it.",
+        message_template=(
+            "'{step}' allocates {weight} per position with no leverage cap "
+            "after it — with k open positions the book is {weight}xk of "
+            "equity."
+        ),
+        template_params=("step", "weight"),
+        explain=(
+            "FixedWeightSizer assigns the same fraction of equity to every "
+            "active position, so total exposure scales with how many are "
+            "active — weight_per_position=1.0 and five positions is 5x "
+            "leverage. Nothing downstream bounds it unless a LeverageCap "
+            "does.\n\n"
+            "**How the verdict is computed.** Pass 7d walks the TOP-LEVEL "
+            "path, transparent through nested Pipeline bodies and named "
+            "Pipeline variables (the C11 rule from pass 7b). A position "
+            "sizer carrying a `weight_per_position` parameter fires when no "
+            "LATER step on the same path is a risk_manager carrying a "
+            "`max_leverage` parameter — both discriminators read from the "
+            "live registry, never a component name. A Parallel block is a "
+            "BOUNDARY: its branches are not walked and the search for a cap "
+            "ends there (multiple consumers — the pass-7c conservatism), so "
+            "the rule under-reports rather than false-positives.\n\n"
+            "**Warning, permanently.** The shape is deliberate when the "
+            "maximum position count is known and the product weight x k is "
+            "what you want; the remediation is to pair it with a cap anyway "
+            "so the bound is written down."
+        ),
+        passes=("7",),
+        surfaces=_PY_TS,
+        ts_mirrored=True,
+        suggestion_template=(
+            "Add LeverageCap(max_leverage=...) after '{step}', or use "
+            "EqualWeightSizer(target_leverage=...), which divides the target "
+            "by the position count."
+        ),
+        applicability=Applicability.HAS_PLACEHOLDERS,
+        severity_ceiling="warning",
+        staged_by="fixed-weight-uncapped",
+        recoverable=True,
+    ),
+    Rule(
+        code="CALENDAR_HOLD_NOOP",
+        category=RuleCategory.HYGIENE,
+        summary="A calendar hold whose window is no longer than the clock it runs on.",
+        message_template=(
+            "{step}(duration='{duration}') holds nothing on the {clock} clock: "
+            "every bar starts a new window, so the weights pass through "
+            "unchanged."
+        ),
+        template_params=("step", "duration", "clock"),
+        explain=(
+            "A calendar hold (a WEIGHT-to-WEIGHT step carrying a `duration`, "
+            "`WeightCadence` today) samples the intended weights at each "
+            "calendar boundary and holds them until the next one. When the "
+            "window is no longer than the bar period of the clock the step "
+            "runs on, every bar is a boundary and the step changes nothing "
+            "but the first, partial window: `duration='1d'` on a daily clock "
+            "is a daily rebalance, not a hold (Q-2436, 10 stored strategies "
+            "read as a Monday rebalance). The strategy still runs correctly, "
+            "so this is hygiene, never an error.\n\n"
+            "**How the verdict is computed.** Pass 7e reads the clock the "
+            "pass-6 walk resolved at the hold's input and compares its bar "
+            "period with the shortest length the duration can have ('Nd' is "
+            "N days, 'NM' at least 28·N days). It fires when the duration is "
+            "at most the period. A duration given through a variable is not "
+            "judged."
+        ),
+        suggestion_template=(
+            "Remove the {step} step to rebalance every bar, or use a longer "
+            "duration (e.g. '7d') for a slower rebalance than the clock."
+        ),
+        passes=("7",),
+        surfaces=_PY_ONLY,
+        ts_mirrored=False,
+        ts_absent_reason=(
+            "The TS editor validator does not thread a per-step input clock to "
+            "a post-walk pass; the warning is advisory and the Python "
+            "validator gates every save, so the editor learns of it on save. "
+            "Mirror when a measured editor need exists."
+        ),
+        applicability=Applicability.HAS_PLACEHOLDERS,
+    ),
+    Rule(
+        code="MASK_ON_DIRECTIONAL_SIGNAL",
+        category=RuleCategory.SUSPICIOUS,
+        summary="A boolean mask combiner over a signal that can be -1.",
+        message_template=(
+            "'{step}' converts its inputs to True/False, but branch "
+            "'{branch}' ('{producer}') emits -1/0/+1 — the short side "
+            "becomes indistinguishable from the long side."
+        ),
+        template_params=("step", "branch", "producer"),
+        explain=(
+            "MaskAnd/MaskOr/AndCombinator/OrCombinator are BOOLEAN: every "
+            "input becomes True/False before combining, so a -1 (short) and "
+            "a +1 (long) both read as True. Combining two directional "
+            "signals this way yields a mask with no direction, and the sizer "
+            "after it goes long on everything. Use ApplyMask with one "
+            "directional source and one filter for entries; the mask "
+            "combiners are right for EXITS (non-directional 0/1) and for "
+            "boolean universe filters.\n\n"
+            "**How the verdict is computed.** The combiner is identified by "
+            "its declared `output_domain` of Set{0, 1} on a "
+            "signal_composer — registry data, not a name list. A branch "
+            "fires when its PRODUCING component declares -1 in its own "
+            "output_domain set. ThresholdCross is read one step further: "
+            "its declared domain is [-1, 0, 1] regardless of mode, so the "
+            "rule consults the effective `mode` parameter and stays silent "
+            "for `long_only` (which emits {0, 1}); that precision is what "
+            "keeps the shipped library's long_only exit branch quiet.\n\n"
+            "**Warning, permanently.** The mask combiners ARE correct for "
+            "exit conditions and boolean filters, and the entry/exit intent "
+            "is not statically provable. The rule names the risk and the "
+            "alternative."
+        ),
+        passes=("6",),
+        surfaces=_PY_TS,
+        ts_mirrored=True,
+        suggestion_template=(
+            "For directional entries keep one branch as the signal and use "
+            'the other as a filter: {{"signal": [...], "filter": [...]}} '
+            '-> ApplyMask(score_signal="signal", filter_signal="filter"). '
+            "Keep '{step}' for exit conditions and boolean filters."
+        ),
+        applicability=Applicability.HAS_PLACEHOLDERS,
+        recoverable=True,
+    ),
+    # ═══════════════════════════════════════════════════════════════════════
+    # Terminal + declaration completeness (Q-1694, W4 §1.1-§1.3), 2026-09-22.
+    #
+    # The platform's most-repeated rule — "a pipeline MUST reach the weight
+    # carrier" — was prose in seven places and a rule in none. Measured on
+    # `4cc05d665`: a pipeline ending at a SignalSeries, at a ForecastSeries or
+    # at a Parallel dict validates clean AND compiles, and the only refusal is
+    # a keel-api run gate minting a code the catalog does not contain
+    # (PIPELINE_NOT_BACKTEST_READY, Q-1698) — after the quota unit is debited,
+    # with a bare TypeError.
+    #
+    # WHY NO RULE EXISTED. The validator is a TYPE-FLOW checker: passes 6/8
+    # are the spec-01 judgments, executed as judgment-table rows. "Complete"
+    # is not a judgment in that grammar — J-PIPE folds left and has no
+    # terminal premise besides the clock check — so a pipeline that ends
+    # anywhere is well-typed. DICT_NOT_CONSUMED is the J-REC consumption row
+    # and judges the CONSUMER; a record nothing follows has no judge at all.
+    #
+    # All three are SUSPICIOUS (decision D-b, the UNRESOLVED_UNIVERSE
+    # precedent): the editor/WIP contract and the chat persist gate
+    # (stream.py:3488 persists only when `valid`) mean an ERROR here would
+    # make every intermediate state of an incremental build un-persistable —
+    # loader, then signal, then sizer is the journey the product teaches.
+    # Category is the TRUTH and severity is policy, so the two terminal codes
+    # carry `promote_in_production` and become errors at the run and deploy
+    # gates. MISSING_UNIVERSE left this family on 2026-09-23: the founder's
+    # ruling (superseding D-d) makes a universe-less strategy an ERROR at
+    # every surface. It is a DECLARATION, above the Pipeline — the
+    # incremental loader → signal → sizer journey never passes through its
+    # absence, so the WIP argument above does not apply to it.
+    Rule(
+        code="TERMINAL_NOT_WEIGHTS",
+        category=RuleCategory.SUSPICIOUS,
+        summary="The pipeline does not reach the weight carrier the engines trade.",
+        message_template=(
+            "Pipeline ends at '{step}' with {actual}; a run needs {carrier} "
+            "(the position weights the executor trades)."
+        ),
+        template_params=("step", "actual", "carrier", "bridge", "examples"),
+        explain=(
+            "The backtest kernel and the live executor consume the weight "
+            "carrier (or the executor's own output): every pipeline must end "
+            "there. A pipeline that ends at OHLCV, a signal or a forecast "
+            "validates as TYPES and cannot run — the worker fails after the "
+            "quota unit is debited.\n\n"
+            "**How the verdict is computed.** Pass 7d reads the WALK's "
+            "terminal value, never `type_flow[-1]`: the walk records no "
+            "TypeFlowEntry for a Parallel, so the type-flow tail of a "
+            "dict-terminal pipeline is its last BRANCH step and reads as a "
+            "signal (the misreport this rule's twin, "
+            "TERMINAL_DICT_NOT_CONSUMED, exists to catch). The carrier and "
+            "the executor output are both DERIVED from the generated "
+            "type_transitions table, never spelled. A terminal `Any` (an "
+            "unresolved signature) is a skip, not a fire, and the check is "
+            "suppressed entirely when the walk already emitted a gating "
+            "error on the path — a rejected input makes the terminal type "
+            "junk and a second verdict on it is noise.\n\n"
+            "**The start state is not a fire.** A pipeline that has only "
+            "LOADED data — every top-level step a data_loader or a slot op, "
+            "e.g. the `PriceDataLoader()` canvas the app seeds for every new "
+            "strategy — has computed nothing yet, so there is nothing to "
+            "judge; the run gate still refuses it. Nested bodies, Parallels "
+            "and variables are not a start state.\n\n"
+            "**Warning while authoring, error at the gates.** Every "
+            "incremental build passes through this state and the chat "
+            "persists an agent edit only when the payload is valid; an error "
+            "would make the intermediate steps un-persistable. "
+            "production_mode promotes it, so the run and deploy gates refuse "
+            "with this code.\n\n"
+            "Signals reach weights through a position sizer; forecasts "
+            "through ForecastWeightNormalizer or VolTargetWeightConverter; a "
+            "Parallel dict needs a composer first. The suggestion names the "
+            "bridging CATEGORY from the type-transition table and up to "
+            "three real components of it, searched in the full latest "
+            "registry."
+        ),
+        passes=("7",),
+        surfaces=_PY_TS,
+        ts_mirrored=True,
+        suggestion_template=(
+            "Add a {bridge} after '{step}' so the last step outputs {carrier} — e.g. {examples}."
+        ),
+        applicability=Applicability.HAS_PLACEHOLDERS,
+        promote_in_production=True,
+        # NO severity_ceiling, deliberately: `promote_in_production` is
+        # resolved BEFORE the staging cap and AFTER nothing else, so a
+        # permanent warning ceiling would make the flag unreachable and the
+        # run/deploy gates could never refuse. The ramp's PROMOTED terminal
+        # is what arms the gate half (the NONDENSE_TERMINAL_WEIGHTS shape);
+        # the SHIPPED severity stays warning at every stage because the cap
+        # is a min and SUSPICIOUS's base is warning.
+        staged_by="terminal-not-weights",
+        recoverable=True,
+    ),
+    Rule(
+        code="TERMINAL_DICT_NOT_CONSUMED",
+        category=RuleCategory.SUSPICIOUS,
+        summary="The pipeline ends at a Parallel block; a dict is not tradable.",
+        message_template=(
+            "Pipeline ends at a Parallel block with branches {branches}; a "
+            "dict is not a tradable output."
+        ),
+        template_params=("branches",),
+        explain=(
+            "A Parallel block emits dict[branch -> result]. Only a composer, "
+            "Extract or a slot reader can consume it; when it is the LAST "
+            "step nothing does, and the run cannot produce weights.\n\n"
+            "**Why DICT_NOT_CONSUMED cannot see this.** That rule is the "
+            "J-REC consumption row and fires on the step AFTER the record — "
+            "a non-composer following a dict. A record with NO consumer has "
+            "no judge, in either engine. DICT_NOT_CONSUMED stays CORRECTNESS "
+            "because there a consumer EXISTS and is the wrong kind: a "
+            "mistake, not an unfinished state.\n\n"
+            "**Warning while authoring, error at the gates.** The composer "
+            "is usually the next edit; production_mode promotes it, so the "
+            "run and deploy gates refuse."
+        ),
+        passes=("7",),
+        surfaces=_PY_TS,
+        ts_mirrored=True,
+        suggestion_template=(
+            "Follow the Parallel with a composer that joins the branches "
+            "(WeightConcatenator for weight branches, a signal composer such "
+            'as ApplyMask/Crossover for signals) or Extract("<branch>") to '
+            "select one."
+        ),
+        applicability=Applicability.HAS_PLACEHOLDERS,
+        promote_in_production=True,
+        # NO severity_ceiling, deliberately: `promote_in_production` is
+        # resolved BEFORE the staging cap and AFTER nothing else, so a
+        # permanent warning ceiling would make the flag unreachable and the
+        # run/deploy gates could never refuse. The ramp's PROMOTED terminal
+        # is what arms the gate half (the NONDENSE_TERMINAL_WEIGHTS shape);
+        # the SHIPPED severity stays warning at every stage because the cap
+        # is a min and SUSPICIOUS's base is warning.
+        staged_by="terminal-dict-not-consumed",
+        recoverable=True,
+    ),
+    Rule(
+        code="MISSING_UNIVERSE",
+        category=RuleCategory.CORRECTNESS,
+        summary="No Universe(...) declaration: every strategy must name the assets it trades.",
+        message_template=(
+            "No Universe(...) declaration: every strategy must name the assets it trades."
+        ),
+        template_params=(),
+        explain=(
+            "Universe(...) is the one declaration every runtime reads for "
+            "the asset list: a manual basket holds its symbols; criteria "
+            "modes are resolved and baked into `resolved` on save. Without "
+            "it a data loader falls back to EVERY asset the store holds — "
+            "a run nobody asked for — and a deployment has no resolved list "
+            "to schedule against.\n\n"
+            "**An error, at every surface.** Founder ruling 2026-09-23 "
+            '(superseding decision D-d): "it needs a universe, since data '
+            "loader falls back to all assets, we mainly don't want to fail "
+            "if can be resolved we auto resolve, but if there is not a valid "
+            "universe it should fail\". So the validator, compose's dry run, "
+            "the editor and the chat persist gate report it as an error; "
+            "keel-api's backtest-submit and deploy gates refuse a stored "
+            "strategy without one (`MISSING_UNIVERSE`, 422), and "
+            "backtest-worker refuses rather than let the loader substitute "
+            "every asset. The editor still saves a draft that carries it "
+            "(a save never refuses on validation errors), and every new "
+            "editor strategy starts with a Universe.\n\n"
+            "**What still resolves automatically, and never fails.** Declare "
+            "the set and the platform does the rest: a criteria universe "
+            "(`top_volume`, `category`) is resolved and baked into "
+            "`resolved` on save (UNRESOLVED_UNIVERSE is info before a save, "
+            "never an error), and a manual basket of real tickers is baked "
+            "as typed. Only a universe that cannot name a tradable set "
+            "fails: none at all (this rule), a manual one with no symbols "
+            "(INVALID_UNIVERSE), criteria that resolved to nothing "
+            "(EMPTY_UNIVERSE), or a basket none of whose tickers exist on "
+            "the venue (UNKNOWN_UNIVERSE_SYMBOLS at the run gates).\n\n"
+            "**Choosing the set.** Use the assets the user named; otherwise "
+            "a criteria universe that fits the idea (`top_volume` for a "
+            "liquid cross-section, `category` for a sector); otherwise ask. "
+            "Existing live deployments without a universe keep trading — "
+            "scheduled evaluation does not re-validate — but deploying or "
+            "updating one requires a Universe.\n\n"
+            "**Why UNRESOLVED_UNIVERSE could not cover it.** "
+            "_validate_universe runs only `if strategy.universe is not "
+            "None`, so the 'criteria never resolved' rule is structurally "
+            "unreachable for the ABSENT case. Put asset selection in "
+            "Universe — never in StoreValue, VolumeUniverseReducer or a "
+            "loader's symbols=."
+        ),
+        passes=("9",),
+        # GATE too: keel-api's backtest-submit and deploy guard
+        # (utils/universe_validation) mints this code for a stored blob with
+        # no universe, from these same templates.
+        surfaces=(Surface.PY_DSL, Surface.TS_EDITOR, Surface.GATE),
+        ts_mirrored=True,
+        suggestion_template=(
+            'Add Universe(mode="manual", symbols=["BTC", "ETH"], market="perp") '
+            "above the Pipeline with the assets to trade — or a criteria "
+            'universe, Universe(mode="top_volume", top_n=20, market="perp") / '
+            'Universe(mode="category", categories=[...], market="perp"), which '
+            "the save resolves and bakes. If the request names no assets, ask."
+        ),
+        applicability=Applicability.HAS_PLACEHOLDERS,
+        staged_by="missing-universe",
+        recoverable=True,
+    ),
+    # The position layer (Q-2448): defined above, appended here.
+    *_POSITION_LAYER_RULES,
 )
 
 
@@ -4270,7 +5981,7 @@ _ALL_STAGED_CHANGES: tuple[StagedChange, ...] = (
         kind="severity-ramp",
         codes=("NONDENSE_TERMINAL_WEIGHTS",),
         decision="rolling-universe Contract D (01-contracts.md §5, founder-approved 2026-08-01)",
-        stage=Stage.DORMANT,
+        stage=Stage.PROMOTED,
         terminal_stage=Stage.PROMOTED,
         target_milestone="M5",
         evidence=_ERROR_PROMOTION_EVIDENCE,
@@ -4285,6 +5996,631 @@ _ALL_STAGED_CHANGES: tuple[StagedChange, ...] = (
                 "validation blocks (live ffill resurrects NaN-masked exits "
                 "at stale weights, contracts §5/§7); the stage cap keeps it "
                 "warning until then.",
+            ),
+            (
+                "2026-08-26",
+                "promoted",
+                "FLIP to the PROMOTED terminal, straight from DORMANT "
+                "(founder-approved 2026-08-26; the S2 companion move named "
+                "in projects/fable/q4-customer-focus-2026/dsl-core-engine/"
+                "03-nan-weight-seam-deferred.md §4 — the authoring-time "
+                "fence closes the universe-mask NaN-exit hole for NEW "
+                "strategies while the runtime guard stays deferred by "
+                "ruling R1). Evidence at flip: 0 of the 18 library "
+                "strategies uses a universe mask (measured, the doc's §1 "
+                "blast-radius census), so the shipped corpus is "
+                "structurally silent; the rule's own reject fixture folds "
+                "expected_at_terminal → shipped expected_warnings and is "
+                "the sole trace mover. At PROMOTED the category-derived "
+                "severity is warning (SUSPICIOUS) at authoring; "
+                "promote_in_production=True makes deploy/production "
+                "validation emit it at ERROR — the Contract-D deploy gate "
+                "is now armed. The sibling P2 (c) keys stay DORMANT.",
+            ),
+        ),
+    ),
+    StagedChange(
+        key="soft-unproven-silence",
+        kind="flow-shape",
+        codes=("VALUE_BOUNDS_ADVISORY",),  # firing-surface RETIREMENT: the
+        #                                    eq/sub × unproven × soft row only;
+        #                                    the viol × soft row keeps firing
+        #                                    under soft-bounds-advisory.
+        decision=(
+            "Claims model, founder-ratified 2026-08-23 (dsl-type-system "
+            "decisions.md item 4; spec 09 §3.4 / "
+            "specs/review/09-counterproposal-claims-model.md §2.1 item 3)"
+        ),
+        stage="post",
+        terminal_stage="post",
+        target_milestone="M5",
+        evidence=_FLOW_FLIP_EVIDENCE,
+        states=("pre", "post"),
+        log=(
+            (
+                "2026-08-23",
+                "pre",
+                "born at 'pre' (today's behavior byte-for-byte: the "
+                "unproven-soft row emits VALUE_BOUNDS_ADVISORY gated by "
+                "soft-bounds-advisory as before). At 'post' the row is "
+                "SILENT — both engines' emission gates divert the verdict "
+                "to the staged_outcomes measurement channel (spec 09 §3.4: "
+                "the advisory fired on the NORMAL use of the component — "
+                "prod census: essentially no ThresholdCross feed is "
+                "provably in-interval — so a permanent warning there "
+                "trains users to ignore warnings; the viol shape, which "
+                "witnesses a real contradiction, keeps firing).",
+            ),
+            (
+                "2026-08-23",
+                "post",
+                "FLIP to the 'post' terminal — founder-ordered silence-"
+                "first sequencing (dsl-type-system decisions.md 2026-08-23 "
+                "item 4: the flip lands before the Wave-A1 honesty "
+                "widenings so the interim advisory-noise spike on the "
+                "most-travelled prod paths never appears). Realized library "
+                "fire inventory (dsl_type_harness --tiers library, pre-flip "
+                "run 2026-08-23): exactly the ratified C1 class retires — "
+                "ai-trading-bot-hyperliquid ×1 / mean-reversion-hyperliquid "
+                "×1 / momentum-funding-hyperliquid ×2 (all unproven-shape) "
+                "— zero error-tier deltas, 18/18 library strategies stay "
+                "valid. Conformance: unproven-shape expectations retire "
+                "(fixtures re-pointed/renamed in this commit); the viol "
+                "reject (reject_set_outside_interval) keeps firing "
+                "unchanged. Schema-1 pins restamped (config 'post' + "
+                "retired emissions); 0 schema-0 edits (their recorded "
+                "vectors replay pre-key configurations). Armed behavior "
+                "CORRECTED at recovery (orchestrator, 2026-08-23): a plain "
+                "silent accept, NOT a staged_outcomes diversion — that "
+                "channel means 'withheld pending arming', and a flow-shape "
+                "flip is not a staged OUTCOME (the shadow-parity invariant, "
+                "interpreter_test.py `_assert_shadow_parity`); this row is "
+                "RETIRED, not withheld, and the schema-1 trace still "
+                "records the edge via `_sink_check`.",
+            ),
+        ),
+    ),
+    StagedChange(
+        key="role-mismatch-rule",
+        kind="severity-ramp",
+        codes=("REFINED_ROLE_MISMATCH",),
+        decision=(
+            "D-1, founder-ratified 2026-08-23 (dsl-type-system decisions.md; "
+            "ledger Q-0543) — new coverage, so the CODE rides a severity ramp "
+            "while the flow-shape half rides `role-survival`"
+        ),
+        stage=Stage.PROMOTED,
+        terminal_stage=Stage.PROMOTED,
+        target_milestone="M5",
+        evidence=_ERROR_PROMOTION_EVIDENCE,
+        log=(
+            (
+                "2026-08-23",
+                "dormant",
+                "born dormant with the D-1 amendment. TWO keys govern this "
+                "one change by construction, because the catalog forbids a "
+                "flow-shape from governing a whole code (a row/flow scope "
+                "never does): `role-survival` decides whether the ROLE "
+                "INFORMATION EXISTS (soft names survive `norm`), and this "
+                "ramp decides whether the resulting verdict EMITS. They are "
+                "flipped together and a lockstep test pins that — but note "
+                "the coupling is safe in one direction by construction: at "
+                "`role-survival` = 'pre', `norm` demotes every soft name, so "
+                "no actual can carry a conflicting role into the "
+                "`unproven × hard` row and the code is unreachable however "
+                "this ramp is set.",
+            ),
+            (
+                "2026-08-23",
+                "promoted",
+                "ARMED to PROMOTED with the D-1 flip (same-day birth+flip, "
+                "the `soft-unproven-silence` precedent). Enumerated fire "
+                "inventory below on the `role-survival` entry — the two keys "
+                "are flipped together and a lockstep test pins that.",
+            ),
+        ),
+    ),
+    StagedChange(
+        key="role-survival",
+        kind="flow-shape",
+        codes=("REFINED_ROLE_MISMATCH",),
+        decision=(
+            "D-1, founder-ratified 2026-08-23 (dsl-type-system decisions.md "
+            "'Founder authorizes the whole open-items register'; ledger "
+            "Q-0543; orchestration/claims-model-open-items.md §D-1)"
+        ),
+        stage="post",
+        terminal_stage="post",
+        target_milestone="M5",
+        evidence=_FLOW_FLIP_EVIDENCE,
+        states=("pre", "post"),
+        log=(
+            (
+                "2026-08-23",
+                "pre",
+                "born at 'pre' (today's behavior byte-for-byte: `norm` still "
+                "demotes soft refined names, and REFINED_ROLE_MISMATCH never "
+                "fires). At 'post' the D-1 amendment is live in BOTH halves: "
+                "(1) a SOFT refined name survives `norm` with any domain "
+                "including ⊤ — it is a ROLE plus a CAP, not a law, so there "
+                "is nothing for an unproven domain to falsify; HARD names "
+                "keep full demotion because they DO assert a law. (2) At a "
+                "HARD refined demand whose domain half is `unproven`, an "
+                "incompatible declared role on the actual becomes an ERROR. "
+                "Why both halves are one key: before (1), "
+                "norm('ForecastSeries', ⊤) returned ('SignalSeries', ⊤) — "
+                "byte-identical to Clip's output — so the role was destroyed "
+                "at exactly the moment (2) would need to read it. Restores "
+                "the TRUE verdict the ladder step-4 deletion lost (Q-0543: a "
+                "forecast into a position manager's entries — TradeManager "
+                "today — is a guaranteed runtime raise) without re-admitting any axiom — it reads declared "
+                "names and mints nothing.",
+            ),
+            (
+                "2026-08-23",
+                "post",
+                "FLIP to 'post' (same-day birth+flip, the "
+                "`soft-unproven-silence` precedent). FIRE INVENTORY, measured "
+                "before arming — see the commit message for the full table. "
+                "The two D-1 keys flip TOGETHER (`role-mismatch-rule` to "
+                "PROMOTED) and `catalog_test` pins the lockstep.",
+            ),
+        ),
+    ),
+    # ── S5/M5: the constraint-schema-v2 relational arming (spec 02 §2.5;
+    # S5 arming spec, R2 ruling 2026-08-26) ───────────────────────────────
+    StagedChange(
+        key="relational-constraints",
+        kind="severity-ramp",
+        codes=("PARAM_RELATION_VIOLATION",),
+        decision="R2 2026-08-26 / D8",
+        stage=Stage.PROMOTED,
+        terminal_stage=Stage.PROMOTED,
+        target_milestone="M5",
+        evidence=_ERROR_PROMOTION_EVIDENCE,
+        log=(
+            (
+                "2026-08-26",
+                "promoted",
+                "born PROMOTED at the S5/M5 arming (founder-delegated ruling "
+                "2, S5 spec §1.5): every relation the first adopters declare "
+                "mirrors an existing __init__/library ValueError — a program "
+                "the new error rejects was never runnable, so error-tier is "
+                "strictly EARLIER diagnosis of the same failure, and a "
+                "WARNING bake-in would knowingly report deployable-but-"
+                "crashing configs at the wrong severity. Zero-flip evidence "
+                "(S5 §4 sweep, the claims-model re-measure pattern): the "
+                "full stored population — prod + staging strategy heads, the "
+                "strategy-library entries, and the conformance _valid corpus "
+                "— validated at pre-S5 HEAD and at S5 with FULL issue-set "
+                "diffs; zero error-tier verdict flips, including on the two "
+                "watch-flagged no-runtime-guard adopters (VolatilityFilter "
+                "min_periods≤window; RegimeWeightedBlender min_weight_a≤"
+                "max_weight_a). The same run proved the weights-heuristic→"
+                "sum_eq handover byte-identical on every subject (§1.3). "
+                "Subject counts recorded in the commit; the §4.3 founder-"
+                "visibility rule (any flip blocks the land) was satisfied "
+                "vacuously.",
+            ),
+        ),
+    ),
+    StagedChange(
+        key="loader-native-floor",
+        kind="severity-ramp",
+        codes=("LOADER_FINER_THAN_NATIVE",),
+        decision="new-data-loaders spec 05 §2b (D8 principles, founder 2026-09-17)",
+        stage=Stage.PROMOTED,
+        terminal_stage=Stage.PROMOTED,
+        target_milestone="M5",
+        evidence=_ERROR_PROMOTION_EVIDENCE,
+        log=(
+            (
+                "2026-09-17",
+                "promoted",
+                "born PROMOTED with the synth-site clock rows (new-data-loaders "
+                "spec 05 §3): the row J-SYNTH.floor fires only for a loader "
+                "whose clock_transfer declares a served 'floor', and no "
+                "registered loader declared one before this commit — the "
+                "funding, open-interest and premium family's new versions "
+                "(spec 05 M2) are the first adopters, and a strategy that "
+                "asks one of them for a finer-than-native grain was never "
+                "runnable (the hourly partition is the only one ingested; "
+                "the old interval= knob selected a partition that does not "
+                "exist, Q-1496). Error-tier is strictly EARLIER diagnosis of "
+                "the same failure, with the one supported repair named. "
+                "Protects no pre-existing population, so a bake-in stage "
+                "would report deployable-but-crashing shapes at the wrong "
+                "severity.",
+            ),
+        ),
+    ),
+    StagedChange(
+        key="loader-timeframe-unbound",
+        kind="severity-ramp",
+        codes=("LOADER_TIMEFRAME_UNBOUND",),
+        decision="new-data-loaders spec 05 §2 D2 (founder 2026-09-17), write-time half (Q-1510)",
+        stage=Stage.PROMOTED,
+        terminal_stage=Stage.PROMOTED,
+        target_milestone="M5",
+        evidence=_ERROR_PROMOTION_EVIDENCE,
+        log=(
+            (
+                "2026-09-17",
+                "promoted",
+                "born PROMOTED with the synth-site row J-SYNTH.unbound (Q-1510): "
+                "a Globals-bound loader with no literal and no "
+                "Globals(target_timeframe=...) has had no silent default since "
+                "PriceDataLoader v3 (spec 05 D2, a7b42c5fb) and the stream/flow "
+                "families were born without one, so every strategy the row "
+                "refuses is one the runtime already refuses at step 0 of the "
+                "backtest, in the very same sentence. A strategy locked to v2 "
+                "resolves its '15min' default and never fires. Error-tier is "
+                "strictly EARLIER diagnosis of the same failure; protects no "
+                "pre-existing runnable population, so a bake-in stage would "
+                "report unrunnable shapes at the wrong severity.",
+            ),
+        ),
+    ),
+    StagedChange(
+        key="forecast-magnitude-discarded",
+        kind="severity-ramp",
+        codes=("FORECAST_MAGNITUDE_DISCARDED",),
+        decision=(
+            "mcp-strategy-view GUIDANCE-ARCHITECTURE-SPEC §3 L4 / decision #25 "
+            "(2026-09-22): the seven silent structural mistakes become coded "
+            "rules; the catalog's own protocol (a new firing surface is born "
+            "through STAGED_CHANGES) governs the arming"
+        ),
+        stage=Stage.WARNING,
+        terminal_stage=Stage.WARNING,
+        target_milestone="M5",
+        evidence=_WARNING_FLIP_EVIDENCE,
+        log=(
+            (
+                "2026-09-22",
+                "dormant",
+                "born dormant at the W4 composition mint (Q-1694). E-LIB0FP "
+                "is CLEAN at the mint — 0 of the 18 library heads fire, once "
+                "the uniform-magnitude proof discharges the two "
+                "ConstantForecast(10.0) -> RegimeGate -> EqualWeightSizer "
+                "baskets (regime-gated-crypto-index, regime-rotation-crypto), "
+                "whose flowing domain is Set{0.0, 10.0} and therefore carries "
+                "no conviction to discard. E-CORPUS is NOT: 25 of the 239 "
+                "committed conformance fixtures pair a ForecastScaler (domain "
+                "top) with EqualWeightSizer and would gain the warning, and "
+                "each of those fixtures is a PINNED golden-trace subject. A "
+                "new always-on code that moves a pinned trace is only legal "
+                "through a flip record + an m3-flip ALLOWLIST entry + a "
+                "re-pin (traces/ALLOWLIST.md, spec 06 §2.4 / spec 04 §2.6), "
+                "and a flip record is keyed on a STAGED_CHANGES id — so the "
+                "ramp is what MAKES the arming expressible. Flip-on is its "
+                "own PR: sweep the 25 fixtures' expected_warnings, re-pin the "
+                "schema-1 traces, record the shape.",
+            ),
+            (
+                "2026-09-22",
+                "warning",
+                "flip record: DORMANT -> WARNING. The four criteria, "
+                "re-measured at the flip on the same tree. E-LIB0FP = 0 fires "
+                "over all 18 shipped library heads (the uniform-magnitude proof "
+                "holds: the two ConstantForecast(10.0) baskets stay silent). "
+                "E-CONF = the reject fixture fires and all three controls stay "
+                "clean (the normalizer fix, the post-threshold selection shape, "
+                "the uniform-magnitude domain). E-CORPUS = 26 conformance "
+                "subjects fire, every one a real instance of the shape (a "
+                "ForecastScaler at domain top feeding a membership sizer); they "
+                "are swept into shipped expected_warnings in this commit and "
+                "their schema-1 traces re-pinned under the m3-flip entry "
+                "staged:forecast-magnitude-discarded. E-PARITY = both harnesses "
+                "assert the same 26 in the shipped configuration. Terminal is "
+                "WARNING and permanent: the rule names a discarded conviction, "
+                "not a crash, and the deliberate selection-from-forecast design "
+                "is exactly what the domain proof separates out.",
+            ),
+        ),
+    ),
+    StagedChange(
+        key="fixed-weight-uncapped",
+        kind="severity-ramp",
+        codes=("FIXED_WEIGHT_UNCAPPED",),
+        decision=(
+            "mcp-strategy-view GUIDANCE-ARCHITECTURE-SPEC §3 L4 / decision #25 "
+            "(2026-09-22): the seven silent structural mistakes become coded "
+            "rules; the catalog's own protocol governs the arming"
+        ),
+        stage=Stage.WARNING,
+        terminal_stage=Stage.WARNING,
+        target_milestone="M5",
+        evidence=_WARNING_FLIP_EVIDENCE,
+        log=(
+            (
+                "2026-09-22",
+                "dormant",
+                "born dormant at the W4 composition mint (Q-1694). E-LIB0FP "
+                "is clean (no library head uses a fixed per-position weight); "
+                "E-CORPUS is not — 4 committed conformance fixtures "
+                "(VALUE_DOMAIN_MISMATCH x3, VALUE_DOMAIN_UNPROVEN x1) end at "
+                "a FixedWeightSizer with no LeverageCap and are pinned "
+                "golden-trace subjects. Same reason as "
+                "forecast-magnitude-discarded: moving a pinned trace needs a "
+                "flip record, and a flip record needs a staged key.",
+            ),
+            (
+                "2026-09-22",
+                "warning",
+                "flip record: DORMANT -> WARNING. E-LIB0FP = 0 (no shipped "
+                "library head uses a fixed per-position weight). E-CONF = the "
+                "reject fires and the three controls stay clean (the cap, the "
+                "equal-weight twin, the Parallel boundary). E-CORPUS = 5 "
+                "conformance subjects fire (the reject plus the four "
+                "VALUE_DOMAIN_* subjects that end at an uncapped "
+                "FixedWeightSizer), swept into shipped expected_warnings here "
+                "with their traces re-pinned under the m3-flip entry "
+                "staged:fixed-weight-uncapped. E-PARITY = both harnesses agree. "
+                "Terminal is WARNING and permanent: the shape is deliberate "
+                "when the maximum position count is known, and the rule's job "
+                "is to make that bound written down rather than assumed.",
+            ),
+        ),
+    ),
+    # ── Composition advisories (Q-1694, W4 §1.5), 2026-09-22 ──────────────
+    StagedChange(
+        key="normalizer-before-concat",
+        kind="severity-ramp",
+        codes=("NORMALIZER_BEFORE_CONCAT",),
+        decision=(
+            "mcp-strategy-view KICKOFF.md decision D-c (2026-09-22): "
+            "NORMALIZER_BEFORE_CONCAT is born DORMANT and flips on with the "
+            "four warning-flip evidences — the catalog's protocol, no exception"
+        ),
+        stage=Stage.WARNING,
+        terminal_stage=Stage.PROMOTED,
+        target_milestone="M5",
+        evidence=_ERROR_PROMOTION_EVIDENCE,
+        log=(
+            (
+                "2026-09-22",
+                "dormant",
+                "born dormant at the W4 composition mint (Q-1694). The "
+                "verdict is CORRECTNESS — a book at N x the declared target "
+                "leverage is a wrong number the user reads as their own "
+                "strategy — but E-LIB0FP at the mint is ONE fire and it is a "
+                "FALSE POSITIVE: long-hype-short-alts-index deliberately "
+                "pairs two ForecastWeightNormalizer(target_leverage=0.5) "
+                "branches under a WeightConcatenator so the book lands at "
+                "1.0. Flipping on therefore needs the per-sleeve design "
+                "distinguished (a declared intent, or the branch targets "
+                "summing to a declared book target) before E-LIB0FP can "
+                "read zero; until then the code emits nothing and its "
+                "reject fixture pins the fire under expected_at_terminal.",
+            ),
+            (
+                "2026-09-23",
+                "warning",
+                "flip record: DORMANT -> WARNING, after the refinement the "
+                "mint named (agent-surface-cleanup spec 04 §2.6, review 06 "
+                "M-1): the verdict is now the fully-invested book — the "
+                "concatenated normalizing branches' literal targets sum to "
+                "MORE than 1.0 and no later step re-levels the book (a step "
+                "carrying target_leverage or max_leverage on the downstream "
+                "tail, transparent through nested bodies and variables, "
+                "stopping at a later Parallel); a non-literal target is no "
+                "verdict. E-LIB0FP = 0 fires over all 18 shipped library "
+                "heads — long-hype-short-alts-index's 0.5 + 0.5 book is clean "
+                "by construction — and expected_issues.json is unchanged. "
+                "E-CONF = both rejects fire (1.0 + 1.0; a cap only inside a "
+                "later Parallel) and every control stays clean (the 0.5 + 0.5 "
+                "book, LeverageCap after, the cap through a variable, one "
+                "normalizing branch, unnormalized branches). E-CORPUS = 2 "
+                "conformance subjects, both the rule's own rejects, folded "
+                "into shipped expected_warnings with their schema-1 traces "
+                "re-pinned under the m3-flip entry "
+                "staged:normalizer-before-concat. E-PARITY = both harnesses "
+                "agree in the shipped configuration. WARNING is a stage cap: "
+                "the terminal stays PROMOTED, which needs E-WINDOW and E-GATE.",
+            ),
+        ),
+    ),
+    # ── Terminal + declaration completeness (Q-1694, W4 §1.1-§1.3) ────────
+    # All three are born DORMANT, and the reason is mechanical rather than a
+    # judgement about the rules: each fires on a LARGE, PINNED slice of the
+    # committed corpus, and moving a pinned golden trace is legal only
+    # through a flip record + an m3-flip ALLOWLIST entry + a re-pin
+    # (traces/ALLOWLIST.md, spec 06 §2.4 / spec 04 §2.6). A flip record is
+    # KEYED ON A STAGED_CHANGES ID, so the ramp is what makes the arming
+    # expressible at all — the same argument the Q-1694 composition mint
+    # made, at ten times the population. Each log carries its own measured
+    # counts; arming is a separate flip PR that sweeps the fixtures, re-pins
+    # the schema-1 traces and records the shape.
+    StagedChange(
+        key="terminal-not-weights",
+        kind="severity-ramp",
+        codes=("TERMINAL_NOT_WEIGHTS",),
+        decision=(
+            "mcp-strategy-view KICKOFF.md decision D-b (2026-09-22): the "
+            "terminal completeness codes take the UNRESOLVED_UNIVERSE "
+            "precedent — SUSPICIOUS at WARNING with promote_in_production, "
+            "the mode the catalog already uses for a rule that must not "
+            "block a work-in-progress save"
+        ),
+        stage=Stage.WARNING,
+        terminal_stage=Stage.PROMOTED,
+        target_milestone="M5",
+        evidence=_ERROR_PROMOTION_EVIDENCE,
+        log=(
+            (
+                "2026-09-22",
+                "dormant",
+                "born dormant at the W4 terminal mint (Q-1694). E-LIB0FP is "
+                "CLEAN: 0 of the 18 shipped library heads end short of the "
+                "weight carrier — all 18 declare a sizer. E-CORPUS is not: "
+                "128 of the 257 committed conformance fixtures end at a "
+                "signal (59), a forecast (58), an unresolved Any (4), a "
+                "BinarySignal (3), a GlobalSeries (2), a dict (1) or OHLCV "
+                "(1), and every one of them is a PINNED golden-trace "
+                "subject. That is not a defect in the corpus — a fixture for "
+                "PARAM_INVALID_OPTION has no reason to carry a sizer — which "
+                "is exactly why the arming has to sweep them deliberately "
+                "rather than ride a mint. 7 further fixtures already carry a "
+                "gating walk error and are suppressed by construction.",
+            ),
+            (
+                "2026-09-23",
+                "warning",
+                "flip record: DORMANT -> WARNING (agent-surface-cleanup review "
+                "06 §3.2 #2, Gate-1 approved 2026-09-23: arm the minted rules "
+                "instead of keeping their prose). E-LIB0FP = 0 fires over all "
+                "18 shipped library heads; expected_issues.json unchanged. "
+                "E-CONF = both rejects fire (signal and forecast terminals); "
+                "the sizer terminal, the gated-walk suppression and the "
+                "START STATE stay silent. The arming needed one refinement, "
+                "found by checking legitimate use before arming: a pipeline "
+                "that has only LOADED data (every top-level step a "
+                "data_loader or a slot op) is the start state — the blank "
+                "canvas keel-app seeds for every new strategy and the first "
+                "step of every incremental build — and firing there would be "
+                "a warning on every user's first render; the run gate still "
+                "refuses it (PIPELINE_NOT_BACKTEST_READY). E-CORPUS = 144 "
+                "conformance subjects end short of the carrier, folded into "
+                "shipped expected_warnings with their schema-1 traces "
+                "re-pinned under the m3-flip entry staged:terminal-not-weights "
+                "(31 schema-0 anchors join PINNED_ANCHOR_DRIFT). E-PARITY = "
+                "both harnesses agree. WARNING is a stage cap: the PROMOTED "
+                "terminal (the gate half) needs E-WINDOW and E-GATE.",
+            ),
+        ),
+    ),
+    StagedChange(
+        key="terminal-dict-not-consumed",
+        kind="severity-ramp",
+        codes=("TERMINAL_DICT_NOT_CONSUMED",),
+        decision=(
+            "mcp-strategy-view KICKOFF.md decision D-b (2026-09-22): the "
+            "UNRESOLVED_UNIVERSE precedent, SUSPICIOUS at WARNING with "
+            "promote_in_production"
+        ),
+        stage=Stage.WARNING,
+        terminal_stage=Stage.PROMOTED,
+        target_milestone="M5",
+        evidence=_ERROR_PROMOTION_EVIDENCE,
+        log=(
+            (
+                "2026-09-22",
+                "dormant",
+                "born dormant at the W4 terminal mint (Q-1694). BOTH "
+                "evidences are clean at the mint: 0 of the 18 library heads "
+                "and 0 of the 257 conformance fixtures end at a Parallel — "
+                "measured, not assumed. It is born dormant anyway, on its "
+                "TWIN's schedule: TERMINAL_NOT_WEIGHTS and this code are one "
+                "verdict split by the shape of the terminal value (a record "
+                "or not), they are read from the same walk terminal in the "
+                "same pass, and arming one without the other would leave the "
+                "dict half of 'the pipeline does not reach weights' silent "
+                "while the signal half fires. Its own reject fixture pins "
+                "the fire under expected_at_terminal.",
+            ),
+            (
+                "2026-09-23",
+                "warning",
+                "flip record: DORMANT -> WARNING on its twin's schedule (review "
+                "06 §3.2 #2, 2026-09-23). E-LIB0FP = 0 over the 18 library "
+                "heads; E-CORPUS = 1 (its own reject — no other fixture ends "
+                "at a Parallel), folded into shipped expected_warnings under "
+                "the m3-flip entry staged:terminal-dict-not-consumed; E-CONF = "
+                "the reject fires, the Parallel-then-composer accept is clean "
+                "and TERMINAL_NOT_WEIGHTS does not also fire on the dict "
+                "terminal; E-PARITY = both harnesses agree.",
+            ),
+        ),
+    ),
+    StagedChange(
+        key="missing-universe",
+        kind="severity-ramp",
+        codes=("MISSING_UNIVERSE",),
+        decision=(
+            "founder ruling 2026-09-23 (agent-surface-cleanup decisions.md, "
+            "superseding mcp-strategy-view KICKOFF.md D-d): a strategy "
+            "without a valid universe FAILS — CORRECTNESS at error on every "
+            "surface; criteria and real-ticker manual universes still "
+            "resolve on save and never fail"
+        ),
+        stage=Stage.PROMOTED,
+        terminal_stage=Stage.PROMOTED,
+        target_milestone="M5",
+        evidence=_ERROR_PROMOTION_EVIDENCE,
+        log=(
+            (
+                "2026-09-22",
+                "dormant",
+                "born dormant at the W4 declaration mint (Q-1694). E-LIB0FP "
+                "is CLEAN: 0 of the 18 shipped library heads omit "
+                "Universe(...). E-CORPUS is the largest in the catalog's "
+                "history: 189 of the 257 committed conformance fixtures "
+                "carry no universe key, every one a pinned golden-trace "
+                "subject. W4 §1.3 offered a scripted always-on sweep as the "
+                "honest alternative; it is not available, because an "
+                "always-on mint that moves 189 pinned traces needs a flip "
+                "record and a flip record needs a staged key. So the ramp is "
+                "the mechanism, and the sweep happens at the flip. Note the "
+                "asymmetry with the two terminal codes: this one does NOT "
+                "carry promote_in_production (D-d), so arming it can never "
+                "make the run gate refuse a strategy it accepts today.",
+            ),
+            (
+                "2026-09-23",
+                "warning",
+                "flip record: DORMANT -> WARNING (agent-surface-cleanup review "
+                "06 M-2, the preferred fix: the compose copy said an omitted "
+                "universe takes a default, which nothing implements — a "
+                "universe-less strategy validated clean with no issue at "
+                "all). E-LIB0FP = 0 fires over all 18 shipped library heads "
+                "(every head declares a Universe); expected_issues.json "
+                "unchanged. E-CONF = the reject fires at the universe "
+                "location, the manual-universe accept is clean, a declared "
+                "but unresolved universe stays UNRESOLVED_UNIVERSE's, and "
+                "production_mode does not promote it. E-CORPUS = 199 "
+                "conformance subjects carry no universe key, folded into "
+                "shipped expected_warnings under the m3-flip entry "
+                "staged:missing-universe (32 schema-0 anchors join "
+                "PINNED_ANCHOR_DRIFT). E-PARITY = both harnesses agree. "
+                "Checked against legitimate use first: the app's blank canvas "
+                "always carries a universe, no product surface validates a "
+                "pipeline with its universe held elsewhere, and keel-api's "
+                "tolerance of a missing universe is for legacy rows, which "
+                "now read the warning they always deserved. Terminal is this "
+                "WARNING, permanently (D-d).",
+            ),
+            (
+                "2026-09-23",
+                "promoted",
+                "flip record: WARNING -> PROMOTED, terminal WARNING -> "
+                "PROMOTED, category SUSPICIOUS -> CORRECTNESS, the permanent "
+                "warning ceiling dropped. E-GATE = the founder ruling, "
+                'verbatim: "it needs a universe, since data loader falls '
+                "back to all assets, we mainly don't want to fail if can be "
+                "resolved we auto resolve, but if there is not a valid "
+                'universe it should fail" (superseding D-d). E-WINDOW = '
+                "waived by that ruling: the window exists to find FALSE "
+                "positives, and the ruling defines every fire (no Universe "
+                "at all) as a true one. E-LIB0FP = 0 fires over all 18 "
+                "shipped library heads (each declares a Universe); "
+                "expected_issues.json unchanged. E-CONF = the reject is an "
+                "error at the universe location; the manual accept is "
+                "clean; a declared criteria universe that is not yet baked "
+                "stays UNRESOLVED_UNIVERSE (warning; info pre-save), never "
+                "this. E-CORPUS = the 207 conformance subjects that carried "
+                "no universe (written for other rules) each gained a minimal "
+                'Universe(mode="manual", symbols=["BTC", "ETH"], '
+                'market="perp") and shed the folded MISSING_UNIVERSE '
+                "warning, so every one still tests what it was written for; "
+                "the rule's own reject is now an error. E-PARITY = both "
+                "harnesses agree, the schema-1 corpus re-pinned under the "
+                "m3-flip entry staged:missing-universe (promoted). Run and "
+                "deploy gates: keel-api refuses a stored strategy without a "
+                "universe (MISSING_UNIVERSE 422) and backtest-worker refuses "
+                "instead of letting the loader fall back to every asset; "
+                "scheduled evaluation of an EXISTING deployment is not "
+                "re-validated, so universe-less deployments keep trading.",
             ),
         ),
     ),

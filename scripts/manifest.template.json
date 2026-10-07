@@ -1,10 +1,10 @@
 {
   "manifest_version": "0.3",
   "name": "keel-trade",
-  "display_name": "Keel — Hyperliquid trading agent",
+  "display_name": "Keel — Hyperliquid strategy builder",
   "version": "{{VERSION}}",
-  "description": "MCP server for AI-driven Hyperliquid strategy development: typed strategy composition, deterministic backtests on real HL funding + price, live execution with bit-for-bit parity.",
-  "long_description": "Keel is an MCP server that gives agents the ability to compose, backtest, and deploy crypto trading strategies on Hyperliquid. Strategies are graphs of typed, versioned components; the backtester and live executor share one engine with bit-for-bit parity, so what an agent backtests is exactly what runs in production. Sign in once with one tool call (`keel_auth_login` opens a browser, captures the OAuth callback, persists tokens for 30 days). Then compose, backtest, and (if you opt in) deploy from the same MCP surface across Claude Code, Cursor, Codex, Windsurf, or any MCP-capable agent host. Live-write tools require explicit toolset opt-in plus a local arming step — agents cannot deploy without you authorizing it twice.\n\nFirst launch takes ~10-30 seconds while the bootstrap pip-installs runtime deps to ~/.keel/mcpb-lib/py3.X/; subsequent launches reuse the cache and start instantly. Requires system Python 3.11+ with pip and internet access on first run.",
+  "description": "Build and backtest Hyperliquid perpetual-futures strategies with your AI assistant: typed strategy composition and deterministic backtests on real Hyperliquid market history.",
+  "long_description": "Keel is an MCP server for building and testing systematic strategies for Hyperliquid perpetual futures. Your assistant composes strategies from typed, versioned components, validates them, and runs deterministic backtests on real Hyperliquid history, with fees, slippage, and perp carry costs modeled. You can also browse the verified strategy library, compare runs, keep notes on strategies, and share results.\n\nSign in once with `keel_auth_login`: it opens your browser, completes the OAuth sign-in, and keeps you signed in for 30 days.\n\nBy default, this bundle cannot place orders or move funds: running a strategy with real capital happens in the Keel web app. The local tools that act on a live account stay off unless you enable them yourself and arm them on your machine.\n\nKeel measures the strategies you design. It is not investment advice, and backtest results do not predict future returns.\n\nFirst launch takes about 10–30 seconds while the bundle installs its runtime dependencies to ~/.keel/mcpb-lib/py3.X/; later launches reuse them and start instantly. Requires system Python 3.11+ with pip, and internet access on first run.",
   "author": {
     "name": "Keel",
     "email": "team@usekeel.io",
@@ -20,7 +20,15 @@
   "icon": "icon.png",
   "license": "MIT",
   "privacy_policies": ["https://usekeel.io/privacy"],
-  "keywords": ["mcp", "hyperliquid", "trading", "backtesting", "crypto", "claude", "ai-agents"],
+  "keywords": [
+    "mcp",
+    "hyperliquid",
+    "backtesting",
+    "strategy",
+    "crypto",
+    "quant",
+    "claude"
+  ],
   "compatibility": {
     "claude_desktop": ">=1.0.0",
     "platforms": ["darwin", "win32", "linux"],

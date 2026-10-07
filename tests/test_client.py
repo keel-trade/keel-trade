@@ -69,7 +69,7 @@ class TestAuth:
             lambda c: c.post("/v1/backtests", json={}),
             lambda c: c.patch("/v1/strategies/str_1", json={}),
             lambda c: c.put("/v1/strategies/str_1", json={}),
-            lambda c: c.delete("/v1/live/dep_1"),
+            lambda c: c.delete("/v1/deployments/dep_1"),
         ],
         ids=["get", "post", "patch", "put", "delete"],
     )
@@ -145,10 +145,10 @@ class TestHTTPMethods:
 
     @respx.mock
     def test_delete(self, client):
-        respx.delete("https://api.test.io/v1/live/dep_1").mock(
+        respx.delete("https://api.test.io/v1/deployments/dep_1").mock(
             return_value=httpx.Response(200, json={"stopped": True})
         )
-        result = client.delete("/v1/live/dep_1")
+        result = client.delete("/v1/deployments/dep_1")
         assert result["stopped"] is True
 
 

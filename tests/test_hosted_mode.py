@@ -254,3 +254,65 @@ def test_hosted_refuses_in_terminal_direct_deploy(monkeypatch):
     with pytest.raises(KeelError) as exc_info:
         _handler({"strategy_id": "str_test1234567", "direct": True}, MagicMock())
     assert exc_info.value.error_code == "direct_deploy_disabled"
+
+
+# ---------------------------------------------------------------------------
+# keel_account_status on the hosted surface (Q-1744)
+# ---------------------------------------------------------------------------
+
+IN_CLUSTER = "http://keel-api.dev.svc.cluster.local:8080"
+
+
+def _status_body(monkeypatch, *, mode: str) -> dict:
+    from keel.tools.outcomes import OUTCOMES, _bootstrap
+    from keel.tools.outcomes._base import ToolContext
+
+    _bootstrap()
+    monkeypatch.delenv("KEEL_TOOLSETS", raising=False)
+    monkeypatch.setenv("KEEL_EXECUTION_MODE", mode)
+    # The binding wins in any mode (test_binding_wins_in_any_mode), so both
+    # arms read the same in-cluster api_url. The identity/entitlement probes
+    # are stubbed — nothing leaves the process.
+    monkeypatch.setattr("keel.auth.get_identity", lambda: {})
+    monkeypatch.setattr("keel.client.KeelClient.get", lambda self, *a, **k: {"balances": []})
+    reset = bind_request_credentials(token="caller-abc", api_url=IN_CLUSTER)
+    try:
+        ctx = ToolContext(is_tty=False, app_url="https://staging-app.example")
+        return OUTCOMES["keel_account_status"].handler({}, ctx).to_envelope()
+    finally:
+        clear_request_credentials(reset)
+
+
+def test_hosted_status_never_shows_the_in_cluster_api_url(monkeypatch):
+    body = _status_body(monkeypatch, mode="hosted")
+    assert IN_CLUSTER not in json.dumps(body)
+    assert "api_url" not in body
+    assert body["app_url"] == "https://staging-app.example"
+
+
+def test_hosted_status_routes_live_actions_to_the_web_app(monkeypatch):
+    """Spec 02 §2.5: the fact lives in `capabilities` and the status view's
+    line 3; a route is `{name, when, tools}` only, naming loaded tools."""
+    body = _status_body(monkeypatch, mode="hosted")
+    assert "KEEL_TOOLSETS" not in json.dumps(body["workflow_routes"])
+    assert body["capabilities"]["live_actions"] == "web app"
+    assert "strategies that are running are managed in the Keel web app" in body["view"]["markdown"]
+    for route in body["workflow_routes"]:
+        assert set(route) == {"name", "when", "tools"}, route
+        assert "keel_live_deploy" not in route["tools"]
+
+
+def test_local_status_wording_is_unchanged(monkeypatch):
+    """Control arm: the CLI/local surface keeps its API URL; live actions
+    are the web app's unless live-write is loaded."""
+    body = _status_body(monkeypatch, mode="local")
+    assert body["api_url"] == IN_CLUSTER
+    assert body["capabilities"]["live_actions"] == "web app"
+    from keel.tools.outcomes import OUTCOMES
+    from keel.tools.outcomes._base import ToolContext
+
+    monkeypatch.setenv("KEEL_TOOLSETS", "read-only,backtest,share,live-read,live-write")
+    ctx = ToolContext(is_tty=False, app_url="https://staging-app.example")
+    loaded = OUTCOMES["keel_account_status"].handler({}, ctx).to_envelope()
+    assert loaded["capabilities"]["live_actions"] == "here"
+    assert loaded["capabilities"]["monitor"] == "read-write"

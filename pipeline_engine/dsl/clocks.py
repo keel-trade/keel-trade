@@ -42,6 +42,7 @@ from pipeline_engine.validation_shared import (
     ValidOption,
     parse_bar_offset_minutes,
     render_clock,
+    synth_offset_consumed,
 )
 
 
@@ -136,11 +137,20 @@ class ClockFire:
 
 @dataclass(frozen=True)
 class TransferResult:
-    """Clock output + at most one fire (single-fire per site, §6.6)."""
+    """Clock output + at most one fire (single-fire per site, §6.6).
+
+    ``offset_consumed`` is the walk-level fact ``UNUSED_GLOBAL``'s
+    ``bar_offset`` arm reads (new-data-loaders spec 05 §1b/§3): this
+    transfer took ``Globals.bar_offset`` — a coarsen resolved it through the
+    globals ref (whatever its verdict: the error IS the feedback), or a
+    synth loader applied it in-loader / refused it at its own site. A
+    reference alone no longer counts as a use.
+    """
 
     clock: Clock | None
     origin: str | None
     fire: ClockFire | None = None
+    offset_consumed: bool = False
 
 
 def _resolve_literal(sig, params: dict, globals_, name: str) -> tuple[str | None, bool]:
@@ -170,6 +180,28 @@ def _resolve_literal(sig, params: dict, globals_, name: str) -> tuple[str | None
     if isinstance(default, str):
         return default, False
     return None, False
+
+
+def timeframe_unbound(sig, params: dict, globals_, name: str) -> bool:
+    """Is a Globals-bound clock param bound to NOTHING (Q-1510)?
+
+    True exactly when the runtime's D2 refusal fires
+    (``loader_v3._served_timeframe``, ``flow/base.effective_timeframe``): the
+    param is absent (present-but-non-``None`` — a literal, a VariableRef —
+    is never unbound; R-8 owns the non-literal), its declaration ref is
+    ``globals.target_timeframe``, no ``Globals`` supplies a string for it,
+    and the RESOLVED signature carries no string default (v2's ``"15min"``
+    keeps a locked strategy runnable, so it keeps it clean here too).
+    """
+    if params.get(name) is not None:
+        return False
+    ref = sig.declaration_refs.get(name) or sig.optional_declaration_refs.get(name)
+    if ref != "globals.target_timeframe":
+        return False
+    if globals_ is not None and isinstance(globals_.target_timeframe, str):
+        return False
+    default = getattr(sig.parameters.get(name), "default", None)
+    return not isinstance(default, str)
 
 
 def _offset_minutes(off_literal: str | None) -> int | None:
@@ -306,13 +338,7 @@ def evaluate_transfer(
         raise ValueError(f"unknown clock-transfer op {op!r}")
 
     if op == "synth":
-        literal, _ = _resolve_literal(sig, params, globals_, _src_param(sig, op))
-        if literal is None:
-            return TransferResult(None, None)
-        period = TIMEFRAME_MINUTES.get(literal)
-        if period is None:  # off-alphabet: clock-less, DEFINED, no raise (R-8)
-            return TransferResult(None, None)
-        return TransferResult((period, 0), step_name)
+        return _evaluate_synth(step_name, sig, params, globals_)
 
     literal, via_globals = _resolve_literal(sig, params, globals_, _src_param(sig, op))
     if literal is None:
@@ -322,16 +348,22 @@ def evaluate_transfer(
         return TransferResult(None, None)
 
     if op == "coarsen":
-        off_literal, _ = _resolve_literal(sig, params, globals_, "bar_offset")
+        off_literal, off_via_globals = _resolve_literal(sig, params, globals_, "bar_offset")
         off_min = _offset_minutes(off_literal)
+        # The coarsen TOOK the global offset whatever it does with it: a
+        # resolved globals ref here is a use of Globals.bar_offset even on
+        # the error arms and the unparseable arm (the error is the feedback),
+        # which is what the historical "any component references it" arm
+        # counted too.
+        consumed = off_via_globals and off_literal is not None
         if off_min is None:  # unparseable offset: grammar codes own it
-            return TransferResult(None, None)
+            return TransferResult(None, None, None, consumed)
         declared = (p_out, off_min % p_out)
         if clock_in is None:
             # §5.4 totality: side conditions SKIPPED, declared target
             # synthesized, no emission (clock-less-ness is downstream of an
             # already-emitted error or an Any frontier).
-            return TransferResult(declared, step_name)
+            return TransferResult(declared, step_name, None, consumed)
         p_in, o_in = clock_in
         common = {"row_staged_by": "clock-transform-rebase"}
         src_tok = _humanize_minutes(p_in)
@@ -354,7 +386,7 @@ def evaluate_transfer(
                 },
                 **common,
             )
-            return TransferResult(declared, step_name, fire)
+            return TransferResult(declared, step_name, fire, consumed)
         if p_out == p_in:
             if off_min != o_in:
                 fire = ClockFire(
@@ -363,14 +395,14 @@ def evaluate_transfer(
                     {"bar_offset": off_disp, "source_tf": src_tok},
                     **common,
                 )
-                return TransferResult(declared, step_name, fire)
+                return TransferResult(declared, step_name, fire, consumed)
             fire = ClockFire(
                 "J-TRANSFORM.noop",
                 "RESAMPLER_NOOP",
-                {"target_tf": literal, "source_tf": src_tok},
+                noop_kwargs(step_name, literal, clock_in, origin_in),
                 **common,
             )
-            return TransferResult(clock_in, origin_in, fire)
+            return TransferResult(clock_in, origin_in, fire, consumed)
         if p_out % p_in != 0:
             fire = ClockFire(
                 "J-COARSEN.harmonic",
@@ -381,7 +413,7 @@ def evaluate_transfer(
                     "resample", clock_in, declared, sig, op, via_globals, step_path
                 ),
             )
-            return TransferResult(declared, step_name, fire)
+            return TransferResult(declared, step_name, fire, consumed)
         if (off_min - o_in) % p_in != 0:
             # General Theorem-1 phase form (R-7): o_in-relative, never
             # assumed 0 — the chained-offset shape is LEGAL here while
@@ -393,7 +425,7 @@ def evaluate_transfer(
                 {"bar_offset": off_disp, "source_tf": src_tok},
                 **common,
             )
-            return TransferResult(declared, step_name, fire)
+            return TransferResult(declared, step_name, fire, consumed)
         if off_min >= p_out:
             fire = ClockFire(
                 "J-COARSEN.offset-too-large",
@@ -401,8 +433,8 @@ def evaluate_transfer(
                 {"bar_offset": off_disp, "target_tf": literal},
                 **common,
             )
-            return TransferResult(declared, step_name, fire)
-        return TransferResult((p_out, off_min), step_name)
+            return TransferResult(declared, step_name, fire, consumed)
+        return TransferResult((p_out, off_min), step_name, None, consumed)
 
     # op == "project"
     if clock_in is None:
@@ -439,7 +471,7 @@ def evaluate_transfer(
         fire = ClockFire(
             "J-TRANSFORM.noop",
             "RESAMPLER_NOOP",
-            {"target_tf": literal, "source_tf": _humanize_minutes(p_in)},
+            noop_kwargs(step_name, literal, clock_in, origin_in),
             row_staged_by="clock-transform-rebase",
         )
         return TransferResult(clock_in, origin_in, fire)
@@ -455,6 +487,163 @@ def evaluate_transfer(
         )
         return TransferResult(declared, step_name, fire)
     return TransferResult((p_out, o_in % p_out), step_name)
+
+
+def noop_kwargs(step_name: str, literal: str, clock_in: Clock, origin_in: str | None) -> dict:
+    """RESAMPLER_NOOP's template params (spec 05 §3 / Q-1497): the message
+    names the STEP that is redundant and the ORIGIN that already serves the
+    clock — with its phase, so a bound loader under an offset global reads
+    as "already serves 1d@12h" — and no longer suggests dropping Globals
+    (the loader follows Globals; the declaration is load-bearing)."""
+    return {
+        "step": step_name,
+        "target_tf": literal,
+        "source_clock": render_clock(clock_in),
+        "origin_step": origin_in or "the previous step",
+    }
+
+
+def _evaluate_synth(step_name: str, sig, params: dict, globals_) -> TransferResult:
+    """The synth op (spec 01 §5.1) with new-data-loaders spec 05 §3's offset arm.
+
+    A clock-SOURCE loader's output clock is ``(served period, phase)`` where
+    the phase is ``Globals.bar_offset`` iff the loader CONSUMES it — the
+    shared rule ``validation_shared.synth_offset_consumed`` over the served
+    period, the offset and the transfer's declared ``grain`` (roll source).
+    Otherwise phase 0, exactly as before: an identity serving leaves the
+    offset to a downstream coarsen (today's ``PriceDataLoader(timeframe=
+    "15min") → TargetTimeframeResampler()`` shape stays byte-identical).
+
+    Check order, single fire (§6.6):
+
+    1. src UNBOUND (Q-1510, spec 05 D2's write-time half: no literal, a
+       ``globals.target_timeframe`` ref with no such Globals, no string
+       default on the RESOLVED signature) ⇒ ``LOADER_TIMEFRAME_UNBOUND``
+       in the runtime's own sentence, clock-less; any other unresolvable
+       src (a VariableRef, a non-string) or an off-alphabet token ⇒
+       clock-less, no raise (R-8) — its own codes own it;
+    2. ``floor`` declared and served finer than it ⇒
+       ``LOADER_FINER_THAN_NATIVE`` (the funding family's refusal, spec 05
+       §2b: set ``timeframe=`` to the native grain and project at the end
+       of the branch); recovery = the declared served clock;
+    3. ``off`` declared and resolved, with a ``grain``:
+       - served == grain, the loader BOUND to Globals, and an offset finer
+         than a served bar ⇒ ``BAR_OFFSET_AT_SAME_TF`` (the declared target
+         IS the loader's own grain, and no coarsen downstream could ever
+         take a sub-bar offset); recovery = the declared ``(period, offset)``.
+         An explicit literal at the grain stays phase 0 — today's shape, the
+         downstream coarsen owns the verdict;
+       - served > grain, offset < served, not a multiple of the grain ⇒
+         ``BAR_OFFSET_NOT_MULTIPLE`` (the roll the loader would attempt is
+         the one ``validate_resample_config`` refuses at run time);
+    4. consumed ⇒ ``(period, offset)``, ``offset_consumed``; else
+       ``(period, 0)``.
+
+    A fire on the offset arms also reports the offset as consumed: the
+    error is the feedback, and a second ``UNUSED_GLOBAL`` beside it would
+    point the author at the wrong fix (removing the declaration).
+    """
+    spec = getattr(sig, "clock_transfer", None) or {}
+    src = _src_param(sig, "synth")
+    literal, src_via_globals = _resolve_literal(sig, params, globals_, src)
+    if literal is None:
+        if timeframe_unbound(sig, params, globals_, src):
+            fire = ClockFire(
+                "J-SYNTH.unbound",
+                "LOADER_TIMEFRAME_UNBOUND",
+                {"loader": step_name, "src": src},
+                row_staged_by=None,
+                envelope=FireEnvelope(applicability_override="has_placeholders"),
+            )
+            return TransferResult(None, None, fire)
+        return TransferResult(None, None)
+    period = TIMEFRAME_MINUTES.get(literal)
+    if period is None:  # off-alphabet: clock-less, DEFINED, no raise (R-8)
+        return TransferResult(None, None)
+
+    floor_tok = spec.get("floor")
+    floor = TIMEFRAME_MINUTES.get(floor_tok) if floor_tok else None
+    if floor is not None and period < floor:
+        declared_desc = (
+            f"Globals(target_timeframe='{literal}')"
+            if src_via_globals
+            else f"{_src_param(sig, 'synth')}='{literal}'"
+        )
+        fire = ClockFire(
+            "J-SYNTH.floor",
+            "LOADER_FINER_THAN_NATIVE",
+            {
+                "loader": step_name,
+                "native_tf": floor_tok,
+                "target_tf": literal,
+                "target_desc": declared_desc,
+                "fix_component": fix_component_for((period, 0), kappa_exec(globals_)),
+            },
+            row_staged_by=None,
+            envelope=FireEnvelope(
+                valid_options=(
+                    ValidOption(
+                        "value",
+                        floor_tok,
+                        f"set {_src_param(sig, 'synth')}='{floor_tok}' on {step_name} — "
+                        f"its native grain; the branch then carries {floor_tok} data",
+                    ),
+                    ValidOption(
+                        "component",
+                        fix_component_for((period, 0), kappa_exec(globals_)),
+                        f"and end the branch with it: the last COMPLETED {floor_tok} "
+                        f"bar is held on the {literal} grid",
+                    ),
+                ),
+                applicability_override="has_placeholders",
+            ),
+        )
+        return TransferResult((period, 0), step_name, fire)
+
+    off_param = spec.get("off")
+    if not off_param:
+        return TransferResult((period, 0), step_name)
+    off_literal, off_via_globals = _resolve_literal(sig, params, globals_, off_param)
+    if off_literal is None:
+        return TransferResult((period, 0), step_name)
+    off_min = _offset_minutes(off_literal)
+    if off_min is None:
+        # Unparseable: the grammar codes own it (INVALID_GLOBAL /
+        # INVALID_BAR_OFFSET); phase 0, and the declaration counts as taken
+        # so no UNUSED_GLOBAL is stacked on the grammar error.
+        return TransferResult((period, 0), step_name, None, off_via_globals)
+
+    grain_tok = spec.get("grain")
+    grain = TIMEFRAME_MINUTES.get(grain_tok) if grain_tok else None
+    if grain is not None and off_min < period:
+        if period == grain and src_via_globals:
+            # The loader BOUND to Globals serves the declared target at its
+            # own grain, so "target_timeframe equals the loader's timeframe"
+            # is literally true and no downstream coarsen can take a sub-bar
+            # offset. An EXPLICIT literal equal to the grain is today's shape
+            # (the target lies elsewhere): phase 0, and the downstream
+            # coarsen owns the verdict exactly as before v3.
+            fire = ClockFire(
+                "J-SYNTH.offset-same-tf",
+                "BAR_OFFSET_AT_SAME_TF",
+                {"bar_offset": off_literal, "source_tf": grain_tok},
+                row_staged_by=None,
+            )
+            return TransferResult((period, off_min), step_name, fire, off_via_globals)
+        if period == grain:
+            return TransferResult((period, 0), step_name)
+        if period > grain and off_min % grain != 0:
+            fire = ClockFire(
+                "J-SYNTH.offset-multiple",
+                "BAR_OFFSET_NOT_MULTIPLE",
+                {"bar_offset": off_literal, "source_tf": grain_tok},
+                row_staged_by=None,
+            )
+            return TransferResult((period, off_min), step_name, fire, off_via_globals)
+
+    if synth_offset_consumed(period, off_min, grain):
+        return TransferResult((period, off_min), step_name, None, off_via_globals)
+    return TransferResult((period, 0), step_name)
 
 
 def _src_param(sig, op: str) -> str:

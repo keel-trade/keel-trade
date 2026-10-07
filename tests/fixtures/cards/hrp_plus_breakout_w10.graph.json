@@ -1,0 +1,1226 @@
+{
+  "_fixture": {
+    "captured": "2026-09-19",
+    "note": "The founder's HRP: 55 blocks, a six-way parallel, depth 3, nine parametrised factories, slots. Acceptance fixture for mcp-strategy-view V-13/V-14 (PLAN \u00a74.4). Resolved list trimmed to 8 of resolved_total.",
+    "parsed_with": "pipeline_engine.dsl.parser.parse_strategy \u2192 dsl.emitter.spec_to_graph",
+    "source": "Nebula/projects/carver-lab/workspaces/vbol-hrp-integration/hrp_plus_breakout_w10.strategy"
+  },
+  "blocks": [
+    {
+      "component": "PriceDataLoader",
+      "id": "324ed07278ce",
+      "params": {
+        "cache_freshness_hours": 12.0,
+        "timeframe": "15min",
+        "use_cache": true
+      },
+      "type": "component"
+    },
+    {
+      "component": "TargetTimeframeResampler",
+      "id": "7ea1f58e0773",
+      "params": {},
+      "type": "component"
+    },
+    {
+      "id": "7af65f71abfb",
+      "slotName": "ohlcv_1d",
+      "type": "slot_store"
+    },
+    {
+      "id": "d26040726b31",
+      "slotName": "ohlcv_1d",
+      "type": "slot_load"
+    },
+    {
+      "component": "ReturnVolatility",
+      "id": "b5179aa77d3e",
+      "params": {
+        "window": "36d"
+      },
+      "type": "component"
+    },
+    {
+      "id": "22a7990fd6e5",
+      "slotName": "return_vol",
+      "type": "slot_store"
+    },
+    {
+      "branches": {
+        "accel_bucket": [
+          {
+            "branches": {
+              "accel_4_16": [
+                {
+                  "factoryArgs": {
+                    "fast": 4,
+                    "n": 16,
+                    "slow": 16
+                  },
+                  "factoryName": "accel_signal",
+                  "id": "0e1f64be4d0f",
+                  "type": "factory_call"
+                }
+              ],
+              "accel_8_32": [
+                {
+                  "factoryArgs": {
+                    "fast": 8,
+                    "n": 32,
+                    "slow": 32
+                  },
+                  "factoryName": "accel_signal",
+                  "id": "2bc180553c54",
+                  "type": "factory_call"
+                }
+              ]
+            },
+            "id": "e17e67348e5a",
+            "type": "parallel"
+          },
+          {
+            "component": "ForecastCombiner",
+            "id": "886ece58d784",
+            "params": {
+              "weights": {
+                "accel_4_16": 0.5,
+                "accel_8_32": 0.5
+              }
+            },
+            "type": "component"
+          },
+          {
+            "component": "EmpiricalFDM",
+            "id": "a540bba4113d",
+            "params": {},
+            "type": "component"
+          }
+        ],
+        "breakout_bucket": [
+          {
+            "branches": {
+              "bb_10": [
+                {
+                  "id": "039ce1cd8ea6",
+                  "slotName": "ohlcv_1d",
+                  "type": "slot_load"
+                },
+                {
+                  "component": "BollingerBands",
+                  "id": "2ee6c7049acf",
+                  "params": {
+                    "num_std": 2.0,
+                    "period": 10
+                  },
+                  "type": "component"
+                },
+                {
+                  "factoryArgs": {},
+                  "factoryName": "xs_post_trend",
+                  "id": "77814ddcff6a",
+                  "type": "factory_call"
+                }
+              ],
+              "bb_20": [
+                {
+                  "id": "87774923a8e2",
+                  "slotName": "ohlcv_1d",
+                  "type": "slot_load"
+                },
+                {
+                  "component": "BollingerBands",
+                  "id": "6d7dbee4f64d",
+                  "params": {
+                    "num_std": 2.0,
+                    "period": 20
+                  },
+                  "type": "component"
+                },
+                {
+                  "factoryArgs": {},
+                  "factoryName": "xs_post_trend",
+                  "id": "3f583b831db3",
+                  "type": "factory_call"
+                }
+              ],
+              "bb_40": [
+                {
+                  "id": "b3e837df2e91",
+                  "slotName": "ohlcv_1d",
+                  "type": "slot_load"
+                },
+                {
+                  "component": "BollingerBands",
+                  "id": "6f925da38eb0",
+                  "params": {
+                    "num_std": 2.0,
+                    "period": 40
+                  },
+                  "type": "component"
+                },
+                {
+                  "factoryArgs": {},
+                  "factoryName": "xs_post_trend",
+                  "id": "bd97be4d6957",
+                  "type": "factory_call"
+                }
+              ]
+            },
+            "id": "ef6cddcd26b2",
+            "type": "parallel"
+          },
+          {
+            "component": "ForecastCombiner",
+            "id": "13c32724aacc",
+            "params": {
+              "weights": {
+                "bb_10": 0.3333,
+                "bb_20": 0.3334,
+                "bb_40": 0.3333
+              }
+            },
+            "type": "component"
+          },
+          {
+            "component": "EmpiricalFDM",
+            "id": "1ef09fc6dffd",
+            "params": {},
+            "type": "component"
+          }
+        ],
+        "carry_bucket": [
+          {
+            "branches": {
+              "raw_sub": [
+                {
+                  "branches": {
+                    "carry_out_14": [
+                      {
+                        "factoryArgs": {
+                          "window": 14
+                        },
+                        "factoryName": "carry_signal_outright",
+                        "id": "6ff1fb239f6d",
+                        "type": "factory_call"
+                      }
+                    ],
+                    "carry_out_30": [
+                      {
+                        "factoryArgs": {
+                          "window": 30
+                        },
+                        "factoryName": "carry_signal_outright",
+                        "id": "15c41b9dc5c2",
+                        "type": "factory_call"
+                      }
+                    ],
+                    "carry_out_60": [
+                      {
+                        "factoryArgs": {
+                          "window": 60
+                        },
+                        "factoryName": "carry_signal_outright",
+                        "id": "603749428722",
+                        "type": "factory_call"
+                      }
+                    ],
+                    "carry_out_90": [
+                      {
+                        "factoryArgs": {
+                          "window": 90
+                        },
+                        "factoryName": "carry_signal_outright",
+                        "id": "0457feec7b28",
+                        "type": "factory_call"
+                      }
+                    ]
+                  },
+                  "id": "0a4dce1c075d",
+                  "type": "parallel"
+                },
+                {
+                  "component": "ForecastCombiner",
+                  "id": "5b4bf5130364",
+                  "params": {
+                    "weights": {
+                      "carry_out_14": 0.25,
+                      "carry_out_30": 0.25,
+                      "carry_out_60": 0.25,
+                      "carry_out_90": 0.25
+                    }
+                  },
+                  "type": "component"
+                },
+                {
+                  "component": "EmpiricalFDM",
+                  "id": "ac5c5a32dd85",
+                  "params": {},
+                  "type": "component"
+                }
+              ],
+              "xs_sub": [
+                {
+                  "branches": {
+                    "carry_xs_14": [
+                      {
+                        "factoryArgs": {
+                          "window": 14
+                        },
+                        "factoryName": "carry_signal_xs",
+                        "id": "39f229c49dd6",
+                        "type": "factory_call"
+                      }
+                    ],
+                    "carry_xs_30": [
+                      {
+                        "factoryArgs": {
+                          "window": 30
+                        },
+                        "factoryName": "carry_signal_xs",
+                        "id": "9633577d60ac",
+                        "type": "factory_call"
+                      }
+                    ],
+                    "carry_xs_60": [
+                      {
+                        "factoryArgs": {
+                          "window": 60
+                        },
+                        "factoryName": "carry_signal_xs",
+                        "id": "e27e43b15081",
+                        "type": "factory_call"
+                      }
+                    ],
+                    "carry_xs_90": [
+                      {
+                        "factoryArgs": {
+                          "window": 90
+                        },
+                        "factoryName": "carry_signal_xs",
+                        "id": "b539037cfce0",
+                        "type": "factory_call"
+                      }
+                    ]
+                  },
+                  "id": "45c57f1e1a52",
+                  "type": "parallel"
+                },
+                {
+                  "component": "ForecastCombiner",
+                  "id": "ee7360c6273e",
+                  "params": {
+                    "weights": {
+                      "carry_xs_14": 0.25,
+                      "carry_xs_30": 0.25,
+                      "carry_xs_60": 0.25,
+                      "carry_xs_90": 0.25
+                    }
+                  },
+                  "type": "component"
+                },
+                {
+                  "component": "EmpiricalFDM",
+                  "id": "adc90d28c373",
+                  "params": {},
+                  "type": "component"
+                }
+              ]
+            },
+            "id": "72fe5bcadebf",
+            "type": "parallel"
+          },
+          {
+            "component": "ForecastCombiner",
+            "id": "d98ab44a488e",
+            "params": {
+              "weights": {
+                "raw_sub": 0.2,
+                "xs_sub": 0.8
+              }
+            },
+            "type": "component"
+          },
+          {
+            "component": "EmpiricalFDM",
+            "id": "0124cdf390b1",
+            "params": {},
+            "type": "component"
+          }
+        ],
+        "funding_accel_bucket": [
+          {
+            "branches": {
+              "funding_accel_14": [
+                {
+                  "factoryArgs": {
+                    "h": 14
+                  },
+                  "factoryName": "funding_accel_signal",
+                  "id": "fde2db4f1a75",
+                  "type": "factory_call"
+                }
+              ],
+              "funding_accel_30": [
+                {
+                  "factoryArgs": {
+                    "h": 30
+                  },
+                  "factoryName": "funding_accel_signal",
+                  "id": "fa15a61e934f",
+                  "type": "factory_call"
+                }
+              ]
+            },
+            "id": "6946ab1169fd",
+            "type": "parallel"
+          },
+          {
+            "component": "ForecastCombiner",
+            "id": "b05367884b98",
+            "params": {
+              "weights": {
+                "funding_accel_14": 0.5,
+                "funding_accel_30": 0.5
+              }
+            },
+            "type": "component"
+          },
+          {
+            "component": "EmpiricalFDM",
+            "id": "1717b237c9c4",
+            "params": {},
+            "type": "component"
+          }
+        ],
+        "mom_bucket": [
+          {
+            "branches": {
+              "mom_res_126d": [
+                {
+                  "factoryArgs": {
+                    "window": 126
+                  },
+                  "factoryName": "mom_res_signal",
+                  "id": "a7bab6a1c050",
+                  "type": "factory_call"
+                }
+              ],
+              "mom_res_14d": [
+                {
+                  "factoryArgs": {
+                    "window": 14
+                  },
+                  "factoryName": "mom_res_signal",
+                  "id": "ce1c949efdf1",
+                  "type": "factory_call"
+                }
+              ],
+              "mom_res_21d": [
+                {
+                  "factoryArgs": {
+                    "window": 21
+                  },
+                  "factoryName": "mom_res_signal",
+                  "id": "d6680f9152e5",
+                  "type": "factory_call"
+                }
+              ],
+              "mom_res_63d": [
+                {
+                  "factoryArgs": {
+                    "window": 63
+                  },
+                  "factoryName": "mom_res_signal",
+                  "id": "dea539d38c93",
+                  "type": "factory_call"
+                }
+              ]
+            },
+            "id": "b81c8b777e3d",
+            "type": "parallel"
+          },
+          {
+            "component": "ForecastCombiner",
+            "id": "b6711981110f",
+            "params": {
+              "weights": {
+                "mom_res_126d": 0.25,
+                "mom_res_14d": 0.25,
+                "mom_res_21d": 0.25,
+                "mom_res_63d": 0.25
+              }
+            },
+            "type": "component"
+          },
+          {
+            "component": "EmpiricalFDM",
+            "id": "6b1be199729a",
+            "params": {},
+            "type": "component"
+          }
+        ],
+        "trend_bucket": [
+          {
+            "branches": {
+              "ewmac_16_64": [
+                {
+                  "factoryArgs": {
+                    "fast": 16,
+                    "slow": 64
+                  },
+                  "factoryName": "ewmac_signal",
+                  "id": "9d458dd6e21e",
+                  "type": "factory_call"
+                }
+              ],
+              "ewmac_2_8": [
+                {
+                  "factoryArgs": {
+                    "fast": 2,
+                    "slow": 8
+                  },
+                  "factoryName": "ewmac_signal",
+                  "id": "360111cd5820",
+                  "type": "factory_call"
+                }
+              ],
+              "ewmac_4_16": [
+                {
+                  "factoryArgs": {
+                    "fast": 4,
+                    "slow": 16
+                  },
+                  "factoryName": "ewmac_signal",
+                  "id": "bf49759a8f33",
+                  "type": "factory_call"
+                }
+              ],
+              "ewmac_8_32": [
+                {
+                  "factoryArgs": {
+                    "fast": 8,
+                    "slow": 32
+                  },
+                  "factoryName": "ewmac_signal",
+                  "id": "5eb42dbda80a",
+                  "type": "factory_call"
+                }
+              ]
+            },
+            "id": "5a1328655936",
+            "type": "parallel"
+          },
+          {
+            "component": "ForecastCombiner",
+            "id": "fb5eab2c36ef",
+            "params": {
+              "weights": {
+                "ewmac_16_64": 0.25,
+                "ewmac_2_8": 0.25,
+                "ewmac_4_16": 0.25,
+                "ewmac_8_32": 0.25
+              }
+            },
+            "type": "component"
+          },
+          {
+            "component": "EmpiricalFDM",
+            "id": "c7ee83b53df0",
+            "params": {},
+            "type": "component"
+          }
+        ]
+      },
+      "id": "2790f6746de1",
+      "type": "parallel"
+    },
+    {
+      "component": "ForecastCombiner",
+      "id": "804cfd7447cd",
+      "params": {
+        "weights": {
+          "accel_bucket": 0.09,
+          "breakout_bucket": 0.1,
+          "carry_bucket": 0.18,
+          "funding_accel_bucket": 0.09,
+          "mom_bucket": 0.252,
+          "trend_bucket": 0.288
+        }
+      },
+      "type": "component"
+    },
+    {
+      "component": "EmpiricalFDM",
+      "id": "77806784abf8",
+      "params": {},
+      "type": "component"
+    },
+    {
+      "id": "975cd9d58680",
+      "slotName": "forecast_combined",
+      "type": "slot_store"
+    },
+    {
+      "factoryArgs": {
+        "idm_cap": 2.5,
+        "idm_min": 1,
+        "idm_rolling": true,
+        "idm_shrinkage": "oas",
+        "idm_window": "180d",
+        "pct_target": 2.9
+      },
+      "factoryName": "position_pipeline",
+      "id": "53d0e2418278",
+      "type": "factory_call"
+    }
+  ],
+  "execution": {
+    "buffer_mode": "relative",
+    "buffer_threshold": 0.4,
+    "rebalance": "buffered",
+    "rebalance_method": "to_edge"
+  },
+  "factories": [
+    {
+      "body": [
+        {
+          "id": "6bf258c4c125",
+          "slotName": "ohlcv_1d",
+          "type": "slot_load"
+        },
+        {
+          "branches": {
+            "fast": [
+              {
+                "component": "EWMA",
+                "id": "84d1ca5fd1f3",
+                "params": {
+                  "min_periods": {
+                    "$ref": "fast"
+                  },
+                  "window": {
+                    "$ref": "fast"
+                  }
+                },
+                "type": "component"
+              }
+            ],
+            "slow": [
+              {
+                "component": "EWMA",
+                "id": "34ce7ada5d8c",
+                "params": {
+                  "min_periods": {
+                    "$ref": "slow"
+                  },
+                  "window": {
+                    "$ref": "slow"
+                  }
+                },
+                "type": "component"
+              }
+            ]
+          },
+          "id": "6fc243326779",
+          "type": "parallel"
+        },
+        {
+          "component": "Crossover",
+          "id": "8d99f723e412",
+          "params": {},
+          "type": "component"
+        },
+        {
+          "component": "VolAttenuator",
+          "id": "7ab1aa1229ce",
+          "params": {
+            "history_window": 90,
+            "return_vol_slot": "return_vol",
+            "smooth_span": 10
+          },
+          "type": "component"
+        },
+        {
+          "component": "VolumeWeightedMultiplier",
+          "id": "4fb6ee67b5ac",
+          "params": {
+            "hi": 1.4,
+            "lo": 0.6,
+            "lookback": 60,
+            "method": "quantile_3tier",
+            "ohlcv_slot": "ohlcv_1d"
+          },
+          "type": "component"
+        },
+        {
+          "component": "VolatilityStandardizer",
+          "id": "0dd5aab61745",
+          "params": {
+            "ohlcv_slot": "ohlcv_1d",
+            "returns": "pct",
+            "signal_type": "price_points",
+            "window": "36d"
+          },
+          "type": "component"
+        },
+        {
+          "factoryArgs": {},
+          "factoryName": "xs_post_trend",
+          "id": "d82f1f7c9065",
+          "type": "factory_call"
+        }
+      ],
+      "name": "ewmac_signal",
+      "params": [
+        {
+          "name": "fast"
+        },
+        {
+          "name": "slow"
+        }
+      ]
+    },
+    {
+      "body": [
+        {
+          "id": "4a7af8982312",
+          "slotName": "ohlcv_1d",
+          "type": "slot_load"
+        },
+        {
+          "branches": {
+            "fast": [
+              {
+                "component": "EWMA",
+                "id": "d0e30cdad459",
+                "params": {
+                  "min_periods": {
+                    "$ref": "fast"
+                  },
+                  "window": {
+                    "$ref": "fast"
+                  }
+                },
+                "type": "component"
+              }
+            ],
+            "slow": [
+              {
+                "component": "EWMA",
+                "id": "81099c770ea7",
+                "params": {
+                  "min_periods": {
+                    "$ref": "slow"
+                  },
+                  "window": {
+                    "$ref": "slow"
+                  }
+                },
+                "type": "component"
+              }
+            ]
+          },
+          "id": "cad3b725d04e",
+          "type": "parallel"
+        },
+        {
+          "component": "Crossover",
+          "id": "d35000b35132",
+          "params": {},
+          "type": "component"
+        },
+        {
+          "component": "Difference",
+          "id": "0409de3080cf",
+          "params": {
+            "period": {
+              "$ref": "n"
+            }
+          },
+          "type": "component"
+        },
+        {
+          "component": "VolatilityStandardizer",
+          "id": "4a307b9c8b26",
+          "params": {
+            "ohlcv_slot": "ohlcv_1d",
+            "returns": "pct",
+            "signal_type": "price_points",
+            "window": "36d"
+          },
+          "type": "component"
+        },
+        {
+          "factoryArgs": {},
+          "factoryName": "xs_post_trend",
+          "id": "175105c77cd2",
+          "type": "factory_call"
+        }
+      ],
+      "name": "accel_signal",
+      "params": [
+        {
+          "name": "fast"
+        },
+        {
+          "name": "slow"
+        },
+        {
+          "name": "n"
+        }
+      ]
+    },
+    {
+      "body": [
+        {
+          "component": "FundingDataLoader",
+          "id": "26eb316aa28d",
+          "params": {
+            "use_cache": true
+          },
+          "type": "component"
+        },
+        {
+          "component": "TargetSignalResampler",
+          "id": "80f40496e990",
+          "params": {
+            "method": "mean"
+          },
+          "type": "component"
+        },
+        {
+          "component": "EWMATransform",
+          "id": "a841d1dd747d",
+          "params": {
+            "window": 5
+          },
+          "type": "component"
+        },
+        {
+          "component": "Difference",
+          "id": "754e34fc9ade",
+          "params": {
+            "period": {
+              "$ref": "h"
+            }
+          },
+          "type": "component"
+        },
+        {
+          "component": "Difference",
+          "id": "1e3aed66b4c4",
+          "params": {
+            "period": {
+              "$ref": "h"
+            }
+          },
+          "type": "component"
+        },
+        {
+          "factoryArgs": {},
+          "factoryName": "xs_post_trend",
+          "id": "a1e3c89763d3",
+          "type": "factory_call"
+        }
+      ],
+      "name": "funding_accel_signal",
+      "params": [
+        {
+          "name": "h"
+        }
+      ]
+    },
+    {
+      "body": [
+        {
+          "component": "FundingDataLoader",
+          "id": "1a0327b20296",
+          "params": {
+            "use_cache": true
+          },
+          "type": "component"
+        },
+        {
+          "component": "TargetSignalResampler",
+          "id": "fbfb1c94ec5b",
+          "params": {
+            "method": "mean"
+          },
+          "type": "component"
+        },
+        {
+          "component": "NegateTransform",
+          "id": "296285b3c805",
+          "params": {},
+          "type": "component"
+        },
+        {
+          "component": "EWMATransform",
+          "id": "3e3f5a216b6c",
+          "params": {
+            "window": {
+              "$ref": "window"
+            }
+          },
+          "type": "component"
+        },
+        {
+          "factoryArgs": {},
+          "factoryName": "xs_post_carry_bn",
+          "id": "75ba84bc740f",
+          "type": "factory_call"
+        }
+      ],
+      "name": "carry_signal_xs",
+      "params": [
+        {
+          "name": "window"
+        }
+      ]
+    },
+    {
+      "body": [
+        {
+          "component": "FundingDataLoader",
+          "id": "885a5f063b5c",
+          "params": {
+            "use_cache": true
+          },
+          "type": "component"
+        },
+        {
+          "component": "TargetSignalResampler",
+          "id": "6a94df62665b",
+          "params": {
+            "method": "mean"
+          },
+          "type": "component"
+        },
+        {
+          "component": "NegateTransform",
+          "id": "e81158641e70",
+          "params": {},
+          "type": "component"
+        },
+        {
+          "component": "EWMATransform",
+          "id": "29d27f990a36",
+          "params": {
+            "window": {
+              "$ref": "window"
+            }
+          },
+          "type": "component"
+        },
+        {
+          "component": "VolatilityStandardizer",
+          "id": "be0bb25db497",
+          "params": {
+            "ohlcv_slot": "ohlcv_1d",
+            "returns": "pct",
+            "signal_type": "percentage",
+            "window": "36d"
+          },
+          "type": "component"
+        },
+        {
+          "component": "ForecastScaler",
+          "id": "23804cb3b91a",
+          "params": {
+            "avg_abs_target": 10.0,
+            "method": "mean",
+            "pool": "global",
+            "rolling": true,
+            "window": "60d"
+          },
+          "type": "component"
+        },
+        {
+          "component": "ForecastCapper",
+          "id": "f7c5019d2d3d",
+          "params": {
+            "limit": 20.0
+          },
+          "type": "component"
+        }
+      ],
+      "name": "carry_signal_outright",
+      "params": [
+        {
+          "name": "window"
+        }
+      ]
+    },
+    {
+      "body": [
+        {
+          "component": "ResidualMomentum",
+          "id": "c50f05c9b93d",
+          "params": {
+            "benchmarks": ["BTC", "ETH", "SOL"],
+            "beta_window": 90,
+            "momentum_window": {
+              "$ref": "window"
+            },
+            "ohlcv_slot": "ohlcv_1d"
+          },
+          "type": "component"
+        },
+        {
+          "component": "VolAttenuator",
+          "id": "57f466cd2fe8",
+          "params": {
+            "history_window": 90,
+            "return_vol_slot": "return_vol",
+            "smooth_span": 10
+          },
+          "type": "component"
+        },
+        {
+          "factoryArgs": {},
+          "factoryName": "xs_post_trend",
+          "id": "582be82f6b91",
+          "type": "factory_call"
+        }
+      ],
+      "name": "mom_res_signal",
+      "params": [
+        {
+          "name": "window"
+        }
+      ]
+    },
+    {
+      "body": [
+        {
+          "id": "9573232c2bf2",
+          "slotName": "ohlcv_1d",
+          "type": "slot_load"
+        },
+        {
+          "component": "ReturnVolatility",
+          "id": "a82f6c21e329",
+          "params": {
+            "window": "36d"
+          },
+          "type": "component"
+        },
+        {
+          "id": "9e3562f1269e",
+          "slotName": "return_vol",
+          "type": "slot_store"
+        },
+        {
+          "id": "27dec1d2ffb0",
+          "slotName": "forecast_combined",
+          "type": "slot_load"
+        },
+        {
+          "component": "VolTargetWeightConverterHV",
+          "id": "99cd8f67c6e6",
+          "params": {
+            "pct_target": {
+              "$ref": "pct_target"
+            },
+            "return_vol_slot": "return_vol"
+          },
+          "type": "component"
+        },
+        {
+          "component": "IDMPortfolioAggregatorHV",
+          "id": "6114ddf27a2f",
+          "params": {
+            "cap": {
+              "$ref": "idm_cap"
+            },
+            "forecast_slot": "forecast_combined",
+            "min_idm": {
+              "$ref": "idm_min"
+            },
+            "ohlcv_slot": "ohlcv_1d",
+            "return_vol_slot": "return_vol",
+            "rolling": {
+              "$ref": "idm_rolling"
+            },
+            "shrinkage": {
+              "$ref": "idm_shrinkage"
+            },
+            "target_vol": {
+              "$ref": "pct_target"
+            },
+            "window": {
+              "$ref": "idm_window"
+            }
+          },
+          "type": "component"
+        },
+        {
+          "component": "RealizedVolCap",
+          "id": "43db26003ef3",
+          "params": {
+            "ohlcv_slot": "ohlcv_1d",
+            "ratio": 2.0,
+            "recent_window": 30,
+            "target_vol": 1.0
+          },
+          "type": "component"
+        },
+        {
+          "component": "AdverseVolCap",
+          "id": "9bbd0f2791d0",
+          "params": {
+            "ratio": 6.5,
+            "return_vol_slot": "return_vol",
+            "target_vol": 1.0
+          },
+          "type": "component"
+        },
+        {
+          "component": "DVOLRegimeCap",
+          "id": "f1d12afc8be1",
+          "params": {
+            "a": 1.0,
+            "b": 0.75,
+            "driver": "dvol_level",
+            "hi": 1.0,
+            "lo": 0.25
+          },
+          "type": "component"
+        },
+        {
+          "component": "DVOLRegimeCap",
+          "id": "28567823e554",
+          "params": {
+            "a": 1.0,
+            "b": 0.75,
+            "driver": "dvol_roc",
+            "hi": 1.0,
+            "lo": 0.25,
+            "roc_span": 10
+          },
+          "type": "component"
+        },
+        {
+          "component": "LeverageCap",
+          "id": "db0fbd297023",
+          "params": {
+            "max_leverage": 15.0
+          },
+          "type": "component"
+        }
+      ],
+      "name": "position_pipeline",
+      "params": [
+        {
+          "default": 1.3,
+          "name": "pct_target"
+        },
+        {
+          "default": "180d",
+          "name": "idm_window"
+        },
+        {
+          "default": "oas",
+          "name": "idm_shrinkage"
+        },
+        {
+          "default": 2.5,
+          "name": "idm_cap"
+        },
+        {
+          "default": 1,
+          "name": "idm_min"
+        },
+        {
+          "default": true,
+          "name": "idm_rolling"
+        }
+      ]
+    },
+    {
+      "body": [
+        {
+          "component": "CrossSectionalZScore",
+          "id": "76d30f608ab7",
+          "params": {},
+          "type": "component"
+        },
+        {
+          "component": "BenchmarkDemean",
+          "id": "f0d5c6cfb651",
+          "params": {
+            "benchmarks": ["BTC", "ETH", "SOL"]
+          },
+          "type": "component"
+        },
+        {
+          "component": "ForecastScaler",
+          "id": "d6893fdf0d8e",
+          "params": {
+            "avg_abs_target": 10.0,
+            "method": "mean",
+            "pool": "global",
+            "rolling": true,
+            "window": "60d"
+          },
+          "type": "component"
+        },
+        {
+          "component": "ForecastCapper",
+          "id": "8a2d5eb06e91",
+          "params": {
+            "limit": 20.0
+          },
+          "type": "component"
+        }
+      ],
+      "name": "xs_post_carry_bn",
+      "params": []
+    },
+    {
+      "body": [
+        {
+          "component": "CrossSectionalZScore",
+          "id": "6b436b30da18",
+          "params": {},
+          "type": "component"
+        },
+        {
+          "component": "ForecastScaler",
+          "id": "62f9685a30a7",
+          "params": {
+            "avg_abs_target": 10.0,
+            "method": "mean",
+            "pool": "global",
+            "rolling": true,
+            "window": "60d"
+          },
+          "type": "component"
+        },
+        {
+          "component": "ForecastCapper",
+          "id": "d641305af05e",
+          "params": {
+            "limit": 20.0
+          },
+          "type": "component"
+        }
+      ],
+      "name": "xs_post_trend",
+      "params": []
+    }
+  ],
+  "globals": {
+    "bar_offset": "12h",
+    "target_timeframe": "1d"
+  },
+  "universe": {
+    "lookback": "90d",
+    "market": "perp",
+    "mode": "top_volume",
+    "resolved": ["AAVE", "ADA", "APE", "ARB", "ASTER", "AVAX", "BCH", "BNB"],
+    "resolved_at": "2026-07-04T11:30:04.027Z",
+    "resolved_total": 50,
+    "top_n": 50
+  }
+}

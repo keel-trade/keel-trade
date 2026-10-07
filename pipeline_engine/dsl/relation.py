@@ -23,6 +23,7 @@ default branch).
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 
 from pipeline_engine.dsl.catalog import RULES, STAGED_CHANGES, Stage, severity_for
@@ -212,6 +213,48 @@ def refinement(name: str) -> dict | None:
     return _BASE_REFINEMENTS.get(canon_base(name))
 
 
+def is_soft_refined(name: str) -> bool:
+    """A soft (Interval-tier) refined name — a ROLE, not a law (D-1).
+
+    The tier split is the whole of the D-1 amendment's first half. A HARD
+    (``Set``-tier) name asserts a LAW about values, so ``norm`` must still
+    demote it the moment the domain stops proving that law. A SOFT name
+    asserts a CONVENTION — `GOAL` non-goal 3 makes soft domains permanently
+    advisory — so it carries no law to be falsified, and survives ``norm``
+    with any domain including ⊤ (spec 01 §1.5 as amended 2026-08-23).
+    """
+    ref = _BASE_REFINEMENTS.get(canon_base(name))
+    return bool(ref) and ref.get("tier") == "soft"
+
+
+def role_conflict(actual_base: str, demand_base: str) -> bool:
+    """Do the ACTUAL and DEMANDED refined names name different roles? (D-1)
+
+    The rule, stated once for both engines (the TS twin mirrors this
+    function):
+
+    * Both sides must carry a refined name. A bare carrier (``SignalSeries``)
+      declares NO role — ``Clip`` is the canonical case — and **absence of a
+      role is never a conflict.** That is precisely what keeps the benign
+      ``ThresholdCross → Clip(0,1) → Store → PSM`` library chains quiet: the
+      values there really may be binary, and nothing declared otherwise.
+    * Two DISTINCT refined names conflict. They are incomparable siblings in
+      the base order (spec 01 §1.3: no edge joins two refined names; each
+      only reaches their shared parent), so neither can stand in for the
+      other by construction.
+    * A name never conflicts with itself.
+
+    This reads DECLARED NAMES ONLY and mints nothing — that is what makes it
+    admissible under the claims model, which deleted the fact-minting ladder
+    step precisely so a name could stop testifying about values. A role says
+    what a series IS FOR, not what it contains.
+    """
+    a, d = canon_base(actual_base), canon_base(demand_base)
+    if not (is_refined(a) and is_refined(d)):
+        return False
+    return a != d
+
+
 def decl_type(name: str) -> Pair:
     """Synthesis side: the declared name IS the base (spec 01 §1.5)."""
     c = canon_base(name)
@@ -322,7 +365,11 @@ def _left_birth(key: str) -> bool:
 
 
 def shipped_staged_active() -> dict[str, bool]:
-    """The shipped configuration vector (all DORMANT/pre at HEAD = m2-compat)."""
+    """The shipped configuration vector — each key's LIVE birth stage.
+
+    Not m2-compat: 19 of the 21 staged changes have fired at HEAD, and only
+    `xs-before-universe-mask` / `mask-slot-not-wired` are still DORMANT.
+    """
     return {key: _left_birth(key) for key in STAGED_CHANGES}
 
 
@@ -344,6 +391,23 @@ def _armed_kind(kind: str, code: str, staged_by: str) -> str:
     if change is None or change.kind == "flow-shape" or Stage(change.stage) is Stage.DORMANT:
         return kind
     return "error" if severity_for(RULES[code], row_staged_by=staged_by) == "error" else "advisory"
+
+
+def _held_below_error(v: Verdict) -> bool:
+    """A variant ERROR whose staged change currently caps it below error.
+
+    The same stage resolution ``_armed_kind`` applies to domain rows, applied
+    to an error verdict that carries its own ``staged_by`` (spec 05 §2.2:
+    severity is the stage's, never the relation's). Domain rows reach here
+    already resolved, so only base-level staged rows can be held; a DORMANT or
+    unstaged error never is.
+    """
+    return (
+        v.outcome == "error"
+        and v.staged_by is not None
+        and v.code is not None
+        and _armed_kind("error", v.code, v.staged_by) == "advisory"
+    )
 
 
 def _domain_verdict(dom_cls: str, tier: str, staged: dict[str, bool], base_class: str) -> Verdict:
@@ -420,6 +484,36 @@ def decide(
 # ═══════════════════════════════════════════════════════════════════════════
 
 
+def union_demand_verdict(verdicts: Iterable[Verdict], mode: str) -> Verdict:
+    """S3's ∃-rule over the variants' verdicts, in canonical order (spec 01 §2.1).
+
+    Verdict-preferential by STAGE-RESOLVED severity (spec 05 §2.2): clean
+    accept (or the S7 skip) ≻ advisory ≻ HELD error ≻ unconditional error;
+    the first of the best class wins. A held error is a base-level staged row
+    (the carrier / slot-sib retirements — ``decide`` leaves their stage to the
+    emitter) whose stage currently caps it below error. It is returned WITH
+    its ``staged_by``, so the union takes the severity that arm has as a plain
+    demand (Q-2208: the fresh base error this used to return dropped it). At a
+    promoted stage no arm is held and the result is the base error, unchanged.
+    """
+    first_advisory: Verdict | None = None
+    first_held: Verdict | None = None
+    for v in verdicts:
+        # S7 inside a union demand: a stored NoneType sentinel skips the read
+        # in slot mode (StoreValue(None)) regardless of the demand shape — the
+        # skip surfaces per-variant and satisfies the ∃ (spec 01 §2.1, S7).
+        # Without this the whole union would fall through to a spurious base
+        # error.
+        if v.outcome in ("skip", "accept"):
+            return v
+        if v.outcome == "advisory":
+            if first_advisory is None:
+                first_advisory = v
+        elif first_held is None and _held_below_error(v):
+            first_held = v
+    return first_advisory or first_held or Verdict("error", code=_BASE_ERROR_CODE[mode])
+
+
 def _canonical_union_variants(variants) -> list:
     """Canonical union order (spec 01 §2.1): canonicalize, dedup, byte-sort."""
     seen: dict[str, object] = {}
@@ -438,7 +532,8 @@ def subsumes(
     ``TypeVarRef``, or the ``ANY``/``NONE`` sentinels). ``mode`` ∈ {strict,
     slot} (transition mode is a separate advisory query — ``transition_check``).
     ``staged`` is the active-configuration vector; the default is the shipped
-    stages (m2-compat at HEAD).
+    stages — 19 of the 21 staged changes fired at HEAD, NOT m2-compat (which
+    fires none and is a test/pinning profile only).
     """
     if staged is None:
         staged = shipped_staged_active()
@@ -457,23 +552,17 @@ def subsumes(
     # S6: actual is a record — route to §5.4.
     if isinstance(actual, Record):
         return Verdict("route-record")
-    # S3: expected union — ∃-rule over verdicts, canonical order, first-match.
+    # S3: expected union — ∃-rule over verdicts, canonical order, first-match
+    # (`union_demand_verdict`; variants evaluated lazily, so the first clean
+    # accept still short-circuits).
     if isinstance(expected, Union):
-        first_advisory: Verdict | None = None
-        for variant in _canonical_union_variants(expected.variants):
-            v = subsumes(actual, variant, mode, staged=staged)
-            # S7 inside a union demand: a stored NoneType sentinel skips the
-            # read in slot mode (StoreValue(None)) regardless of the demand
-            # shape — the skip surfaces per-variant and satisfies the ∃ (spec
-            # 01 §2.1, S7). Without this the whole union would fall through to
-            # a spurious base error.
-            if v.outcome == "skip":
-                return v
-            if v.outcome == "accept":
-                return v
-            if v.outcome == "advisory" and first_advisory is None:
-                first_advisory = v
-        return first_advisory or Verdict("error", code=_BASE_ERROR_CODE[mode])
+        return union_demand_verdict(
+            (
+                subsumes(actual, variant, mode, staged=staged)
+                for variant in _canonical_union_variants(expected.variants)
+            ),
+            mode,
+        )
     # S4: actual union — ∀-rule (severity-max across variants).
     if isinstance(actual, Union):
         worst = Verdict("accept")

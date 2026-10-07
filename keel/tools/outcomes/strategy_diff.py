@@ -18,6 +18,7 @@ from keel.errors import KeelError
 
 from . import register
 from ._base import OutcomeResult, OutcomeTool, ToolContext
+from .open_in_app import app_url_for
 
 
 def _summarize_changes(
@@ -68,6 +69,47 @@ def _summarize_changes(
     return "; ".join(parts) + "."
 
 
+def diff_sources(source_a: str, source_b: str) -> dict[str, Any]:
+    """The structural diff between two DSL sources, in envelope keys.
+
+    The ONE source-pair diff in the SDK. `keel_strategy_diff`'s file
+    mode is this function, and `keel_strategy_compose` calls it to learn
+    what an update changed — neither re-implements the translation from
+    `pipeline_engine.dsl.differ`'s shape to the envelope's
+    `added/removed/changed/reordered/summary_text` keys.
+
+    Raises whatever the local differ raises; callers that treat a diff
+    as advisory catch it.
+    """
+    from keel.tools.local import strategy_diff as local_diff
+
+    result = local_diff(source_a=source_a, source_b=source_b)
+    added = result.get("added", []) or []
+    removed = result.get("removed", []) or []
+    modified = result.get("changed", []) or result.get("modified", []) or []
+    reordered = result.get("reordered", []) or []
+    version_bumps = result.get("component_version_changes", {}) or {}
+    return {
+        "added": added,
+        "removed": removed,
+        "changed": modified,
+        "reordered": reordered,
+        "component_version_changes": version_bumps,
+        "summary_text": (
+            result.get("summary_text")
+            or result.get("summary")
+            or _summarize_changes(
+                added=added,
+                removed=removed,
+                modified=modified,
+                reordered=reordered,
+                version_bumps=version_bumps,
+            )
+        ),
+        "error": result.get("error"),
+    }
+
+
 def _step_name(step) -> str:
     if isinstance(step, dict):
         return str(step.get("step_name") or step.get("name") or step.get("component") or "?")
@@ -97,7 +139,7 @@ def _read_path_or_source(value: str) -> str:
                 "On the hosted server each ref must be either multi-line DSL "
                 "text, or (with `strategy_id=...`) a server version ref "
                 "(sequence number, commit_id, or tag — find via "
-                "`keel_strategy_log`)."
+                "`keel_strategy_history`)."
             ),
         )
     raise KeelError(
@@ -126,7 +168,7 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
                 "Two modes: (a) file-pair → both refs are .py paths or DSL "
                 "strings; (b) version-pair → also pass `strategy_id` and set "
                 "both refs to sequence numbers / commit_ids / tags "
-                "(find via `keel_strategy_log`)."
+                "(find via `keel_strategy_history`)."
             ),
         )
 
@@ -144,7 +186,7 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
             raise KeelError(
                 f"Failed to compute version diff: {e}",
                 suggestion=(
-                    "Verify both refs exist via `keel_strategy_log "
+                    "Verify both refs exist via `keel_strategy_history "
                     f"{strategy_id}`. Common cause: one ref is a stale "
                     "sequence_number from before a restore reset HEAD."
                 ),
@@ -181,9 +223,25 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
                 version_bumps=version_bumps,
             ),
         }
+        # The declaration half (Q-1898): the server's diff compares steps only,
+        # so a Globals/Universe/Execution edit read "Identical". Both versions'
+        # sources are read once and diffed with the same `_declarations` the
+        # compose change view uses.
+        source_a = _version_source(client, strategy_id, ref_a)
+        source_b = _version_source(client, strategy_id, ref_b)
+        if source_a and source_b:
+            _add_declarations(extra, source_a, source_b)
+        # `?compare=a..b` was never read by any page; `version` is a param the
+        # editor genuinely honours, so the link opens the side it diffed TO.
+        hero_url = app_url_for("strategy", strategy_id, ctx, query={"version": ref_b})
+        view = _version_view(
+            source_b, ref_a, ref_b, extra, hero_url, name=_strategy_name(client, strategy_id)
+        )
+        if view is not None:
+            extra["view"] = view
         return OutcomeResult(
             run_id=strategy_id,
-            hero_url=f"{ctx.app_url}/strategies/{strategy_id}?compare={ref_a}..{ref_b}",
+            hero_url=hero_url,
             share_url=None,
             extra=extra,
         )
@@ -192,18 +250,19 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
     source_a = _read_path_or_source(ref_a)
     source_b = _read_path_or_source(ref_b)
     try:
-        from keel.tools.local import strategy_diff as local_diff
-    except Exception as e:  # noqa: BLE001
+        # Local diff has its own shape (top-level lists); `diff_sources`
+        # translates it to the same envelope keys the version-diff
+        # branch produces, so callers get one shape regardless of mode.
+        result = diff_sources(source_a, source_b)
+    except ImportError as e:
         raise KeelError(
             f"Local diff unavailable: {e}",
             suggestion=(
                 "The local diff helper failed to import — likely a missing "
                 "dependency in the SDK install. Pass `strategy_id=...` to "
-                "use the server-side diff instead, or run `keel_doctor`."
+                "use the server-side diff instead, or run `keel_connection_check`."
             ),
         )
-    try:
-        result = local_diff(source_a=source_a, source_b=source_b)
     except Exception as e:  # noqa: BLE001
         raise KeelError(
             f"Diff failed: {e}",
@@ -215,35 +274,18 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
             ),
         )
 
-    # Local diff has its own shape (top-level lists). Translate to the
-    # same envelope keys the version-diff branch produces so callers get
-    # one consistent shape regardless of mode.
-    added = result.get("added", []) or []
-    removed = result.get("removed", []) or []
-    modified = result.get("changed", []) or result.get("modified", []) or []
-    reordered = result.get("reordered", []) or []
-    version_bumps = result.get("component_version_changes", {}) or {}
-    extra = {
-        "mode": "file",
-        "ref_a": ref_a,
-        "ref_b": ref_b,
-        "added": added,
-        "removed": removed,
-        "changed": modified,
-        "reordered": reordered,
-        "component_version_changes": version_bumps,
-        "summary_text": (
-            result.get("summary_text")
-            or result.get("summary")
-            or _summarize_changes(
-                added=added,
-                removed=removed,
-                modified=modified,
-                reordered=reordered,
-                version_bumps=version_bumps,
-            )
-        ),
-    }
+    extra = {"mode": "file", "ref_a": ref_a, "ref_b": ref_b}
+    extra.update({k: v for k, v in result.items() if k != "error"})
+    _add_declarations(extra, source_a, source_b)
+    result = {**result, **{k: extra[k] for k in ("declarations", "summary_text") if k in extra}}
+
+    # The change, drawn (PLAN §4.2). The "after" source is the subject:
+    # a diff answers "did it change the way I meant", which is a
+    # question about what the strategy IS now.
+    view = _diff_view(source_b, result)
+    if view is not None:
+        extra["view"] = view
+
     return OutcomeResult(
         run_id=None,
         hero_url=None,
@@ -252,30 +294,178 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
     )
 
 
+def _version_source(client: Any, strategy_id: str, ref: str) -> str | None:
+    """One version's DSL source, or None — advisory, never fails the diff."""
+    try:
+        payload = client.get(f"/v1/strategies/{strategy_id}/versions/{ref}/source")
+    except Exception:  # noqa: BLE001 — a render nicety never fails a tool call
+        return None
+    source = payload.get("source") if isinstance(payload, dict) else None
+    return source if isinstance(source, str) and source else None
+
+
+def _add_declarations(extra: dict, source_a: str, source_b: str) -> None:
+    """Put the declaration half of the diff on the envelope (Q-1898).
+
+    The step differ compares the PIPELINE only, so two strategies that
+    differed only in `Globals(bar_offset=…)` — R4's −7.1% vs +44.6% pair —
+    came back "Identical". `declarations` is `_declarations`' own
+    `{section: {key: {a, b}}}` block (the shape compose's change view and
+    `keel_backtest_compare`'s `spec_diff` carry), and the summary names each
+    moved declaration beside the step tally. Advisory: a source that does
+    not parse leaves the step diff as it was.
+    """
+    try:
+        from ._declarations import declarations_between
+        from ._strategy_view import _change_summary
+
+        declarations = declarations_between(source_a, source_b)
+    except Exception:  # noqa: BLE001 — the step half still stands
+        return
+    if not declarations:
+        return
+    extra["declarations"] = declarations
+    blocks_touched = sum(len(extra.get(k) or []) for k in ("added", "removed", "changed"))
+    summary = _change_summary(extra, declarations, blocks_touched)
+    if summary:
+        extra["summary_text"] = summary
+
+
+def _strategy_name(client: Any, strategy_id: str) -> str | None:
+    """The strategy's name for the card title — advisory, never fails the
+    diff (the card read "Untitled" because no name reached it, Q-2273)."""
+    try:
+        row = client.get(f"/v1/strategies/{strategy_id}")
+    except Exception:  # noqa: BLE001 — a render nicety never fails a tool call
+        return None
+    name = row.get("name") if isinstance(row, dict) else None
+    return name if isinstance(name, str) and name.strip() else None
+
+
+def _version_view(
+    source: str | None,
+    ref_a: str,
+    ref_b: str,
+    diff: dict,
+    hero_url: str,
+    *,
+    name: str | None = None,
+) -> dict | None:
+    """The view for a version-pair diff: `ref_b`'s own graph, marked up.
+
+    `ref_b` is read explicitly rather than taken from the strategy's
+    HEAD — a diff between two old versions must not draw the current
+    one and mark it with someone else's change.
+    """
+    if not source:
+        return None
+    try:
+        from pipeline_engine.dsl.emitter import spec_to_graph
+        from pipeline_engine.dsl.parser import parse_strategy
+
+        from ._strategy_view import build_view, change_from_diff
+
+        graph = spec_to_graph(parse_strategy(source)).to_dict()
+    except Exception:  # noqa: BLE001 — a render nicety never fails a tool call
+        return None
+    # A ref may be a sequence number, a tag, or a commit id. Only a
+    # sequence number is a VERSION a reader can be shown — a commit id
+    # in the header would be exactly the id the header must not carry.
+    numbered = ref_a.isdigit() and ref_b.isdigit()
+    change = change_from_diff(
+        diff,
+        graph,
+        from_version=int(ref_a) if numbered else None,
+        to_version=int(ref_b) if numbered else None,
+    )
+    metadata: dict[str, Any] = {"version": int(ref_b)} if ref_b.isdigit() else {}
+    if name:
+        metadata["name"] = name
+    return build_view(graph, metadata, change=change, url=hero_url)
+
+
+def _diff_view(source_after: str, diff: dict) -> dict | None:
+    """The view for a file-pair diff: the "after" graph, marked up.
+
+    Local-mode only — the graph is derived here because there is no
+    stored strategy to read one from. Advisory: a source the parser
+    rejects yields no view, and the diff envelope is unchanged.
+    """
+    try:
+        from pipeline_engine.dsl.emitter import spec_to_graph
+        from pipeline_engine.dsl.parser import parse_strategy
+
+        from ._strategy_view import build_view, change_from_diff
+
+        graph = spec_to_graph(parse_strategy(source_after)).to_dict()
+    except Exception:  # noqa: BLE001 — a render nicety never fails a tool call
+        return None
+    return build_view(graph, {}, change=change_from_diff(diff, graph))
+
+
+#: The listed (hosted, file-free) parameter copy (Q-1898): the shared
+#: schema says "File path (file mode)", which a hosted caller cannot use —
+#: the hosted refs are version refs (with `strategy_id`) or DSL source text,
+#: and the source-text mode is how two DIFFERENT strategies are compared.
+LISTED_INPUT_SCHEMA: dict = {
+    "type": "object",
+    "required": ["ref_a", "ref_b"],
+    "properties": {
+        "ref_a": {
+            "type": "string",
+            "description": (
+                "The 'before' side: a version ref (sequence number, tag or commit id) "
+                "with `strategy_id`, else DSL source text."
+            ),
+        },
+        "ref_b": {
+            "type": "string",
+            "description": (
+                "The 'after' side: a version ref with `strategy_id`, else DSL source text."
+            ),
+        },
+        "strategy_id": {
+            "type": "string",
+            "description": "If set, diff two versions of this strategy.",
+        },
+    },
+}
+
+
 STRATEGY_DIFF = register(
     OutcomeTool(
         name="keel_strategy_diff",
         required_action="strategy.read",
         cli_path=("strategy", "diff"),
         toolset="read-only",
-        # grounded-in: collaboration.md §4 (iterate, one change at a time —
-        # confirm you changed ONLY what you intended); component_versioning.md
-        # (note when a component version changed); tool_usage.md:8 (state
-        # analysis — what actually differs between two versions).
+        # grounded-in: system/chat/collaboration.md:52-69 (§4 iterate, one
+        # change at a time — confirm you changed ONLY what you intended);
+        # system/chat/component_versioning.md:13-end ("Component Version
+        # Awareness" — note when a component version changed);
+        # system/chat/tool_usage.md:8 (state analysis — what actually differs
+        # between two versions).
         description=(
-            "Compute the structural diff between two strategy versions or two "
-            "sources: added, removed, and modified steps, per-parameter "
-            "changes (such as `ROC.period 20→42`), reordering, and component "
-            "version changes, plus a one-line summary. With `strategy_id` set, "
-            "both refs are commit/tag refs on that strategy (find them via "
-            "`keel_strategy_log`); without it, both refs are local file paths. "
-            "Use it to confirm an iteration changed ONLY what you intended — "
-            "one change at a time — or to see exactly what moved between two "
-            "commits before restoring or forking. "
-            "Do NOT use to fetch the actual source — call `keel_strategy_get`. "
-            "Do NOT use to merge or apply a change — call "
-            "`keel_strategy_compose`."
+            "What changed between two strategies or two versions of one (versions: "
+            "`keel_strategy_history`; several runs' results: `keel_backtest_compare`). "
+            "Reports added, removed and modified steps, "
+            "parameter and declaration changes (`ROC.period 20→42`) and reordering, "
+            "drawn as a diff card. With `strategy_id` the refs are "
+            "versions; without it each is a local file path or DSL source, so two "
+            "strategies diff by their sources (from `keel_strategy_get`)."
         ),
+        # Listed-profile copy (agent-surface-cleanup spec 01 §2.5, R-4): the same
+        # text minus one surface fact — the hosted server has no local files, so file mode is not offered
+        # there.
+        listed_description=(
+            "What changed between two strategies or two versions of one (versions: "
+            "`keel_strategy_history`; several runs' results: `keel_backtest_compare`). "
+            "Reports added, removed and modified steps, "
+            "parameter and declaration changes (`ROC.period 20→42`) and reordering, "
+            "drawn as a diff card. With `strategy_id` the refs are "
+            "versions; without it each is DSL source, so two strategies diff by their "
+            "sources (from `keel_strategy_get`)."
+        ),
+        listed_input_schema=LISTED_INPUT_SCHEMA,
         input_schema={
             "type": "object",
             "required": ["ref_a", "ref_b"],
@@ -299,7 +489,7 @@ STRATEGY_DIFF = register(
             "readOnlyHint": True,
             "destructiveHint": False,
             "idempotentHint": True,
-            "openWorldHint": True,
+            "openWorldHint": False,
         },
         handler=_handler,
     )

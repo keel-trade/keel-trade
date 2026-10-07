@@ -8,9 +8,12 @@ Layers:
   - **project**: `<cwd>/keel.md` (preferred) or the `## Keel` block in
     `<cwd>/CLAUDE.md` — per-repo
   - **strategy**: server-side, fetched lazily via the
-    `keel_strategy_memory_read` outcome tool
+    `keel_strategy_notes_read` outcome tool
 
-The MCP server exposes layers 1 + 2 as resources:
+A LOCAL MCP server (CLI / stdio / .mcpb) exposes layers 1 + 2 as
+resources — a hosted or listed server does not register them, because
+there the filesystem is the pod's, not the user's
+(`keel.mcp.server.serves_local_filesystem_context`):
   - `keel://context/user`
   - `keel://context/project`
 Strategy memory has its own resource `keel://context/strategy/{id}`.

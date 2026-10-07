@@ -317,11 +317,15 @@ _NON_CLOCK_CONTROL_QUERIES = (
 #: The subset of the control set where the ×3 name weight contributes
 #: nothing to the leaders, so the top-3 SET is provably unchanged by
 #: fix #1. See the module note on the other three.
-_ORDER_STABLE_CONTROL_QUERIES = (
-    "bollinger bands",
-    "regime detector",
-    "moving average",
-)
+#:
+#: "bollinger bands" and "moving average" left this set with Q-1098: their
+#: legacy top-3 was an alphabetical slice of a tie (``Aroon`` and ``CCI``
+#: for "moving average"; ``DonchianChannel`` over ``SuperTrend`` on a
+#: 1-point tie), and the phrase arm + summary tie-break exist to break
+#: exactly those ties. Both stay in `_NON_CLOCK_CONTROL_QUERIES` (monotone
+#: recall still holds: the new arms only add score), and what they should
+#: return is pinned positively in `_BUILDING_BLOCK_QUERIES` below.
+_ORDER_STABLE_CONTROL_QUERIES = ("regime detector",)
 
 
 def _legacy_rank(components: list[dict], query: str) -> list[str]:
@@ -381,6 +385,166 @@ def test_control_queries_top_three_unchanged(query):
     assert set(_legacy_rank(comps, query)[:3]) == set(_order(comps, query)[:3])
 
 
+# ─── basic building blocks (Q-1098) ──────────────────────────────────────
+#
+# A live claude.ai/ChatGPT session (2026-09-23) asked
+# `keel_components_search("price above 50 day moving average bullish
+# filter")` and got ``FairValueGap`` and ``LiquiditySweep`` — two ICT/SMC
+# indicators — above ``SMA``. All three scored 6.0: the SMC docstrings run
+# 6–9 KB and match six of the eight words by coincidence, and the tie fell
+# to the name. The fix is the phrase arm (an adjacent query pair found
+# adjacent in the description) and the summary tie-break (the first
+# paragraph, which says what the component IS). These assertions pin what
+# a novice's plain-words query for a building block should reach.
+
+_SMC = "smc"
+
+
+def _entries(query: str, top_k: int = 8) -> list[dict]:
+    return search_components(query=query, top_k=top_k)
+
+
+def test_price_above_moving_average_filter_puts_sma_first_and_no_smc_in_top_three():
+    entries = _entries("price above 50 day moving average bullish filter")
+    names = [e["name"] for e in entries]
+    assert len(names) == 8  # non-vacuity: the field is full, the order is the claim
+    assert names[0] == "SMA", names
+    assert not [e["name"] for e in entries[:3] if e.get("sub_category") == _SMC], names
+
+
+def test_simple_moving_average_is_sma():
+    assert _order(_live_components(), "simple moving average")[0] == "SMA"
+
+
+def test_price_above_moving_average_reaches_sma_in_top_three():
+    assert "SMA" in _order(_live_components(), "price above moving average")[:3]
+
+
+def test_moving_average_crossover_is_crossover():
+    assert _order(_live_components(), "moving average crossover")[0] == "Crossover"
+
+
+def test_threshold_filter_is_a_threshold_filter():
+    """Control arm: a name-led query neither new arm decides.
+
+    Green before and after Q-1098 and under both seeds, which is what shows
+    the queries above react to the two new arms rather than to the fixture
+    always passing.
+    """
+    top2 = set(_order(_live_components(), "threshold filter")[:2])
+    assert top2 == {"AboveThresholdFilter", "BelowThresholdFilter"}
+
+
+def test_the_smc_population_is_real():
+    """Non-vacuity for the "no SMC" assertion: the sub-category exists and
+    its members DO score on the query, so their absence from the top three
+    is an ordering fact, not an empty set."""
+    entries = _entries("price above 50 day moving average bullish filter", top_k=40)
+    assert len([e for e in entries if e.get("sub_category") == _SMC]) >= 2
+
+
+# ─── the words a user types for long-only and for a hold (spec 04 G3) ────
+#
+# agent-surface-cleanup spec 04 §2.3c / §2.4, review 06 §4. Measured on the
+# registry of 2026-09-23 before the change: "long only" → LongShortWeight-
+# Converter first (name token "long"), ThresholdCross second; "index basket"
+# → IndexShiftTransform (name token "index", a row shift) above
+# ConstantForecast; "buy and hold" → WeightCadence, ConstantForecast outside
+# the top eight; bare "moving average" → AveragePairwiseCorrelationRegime
+# (name token "average", 5.0) above every moving average (3.0). Two changes
+# decide these together: the first paragraphs of ThresholdCross and
+# ConstantForecast now say what they are for (long-only; the hold / index-
+# basket entry), and the scorer's half-compound rule
+# (`compound_partners`, `pipeline_engine.component_ranking`) stops half of a
+# compound the corpus defines ("moving average", "long only", "index
+# basket") from earning the ×3 name weight.
+#
+# SEED (recorded 2026-09-23): replacing `compound_partners` with a function
+# that returns `{}` — the rule off, the docstrings unchanged — reds "long
+# only", "index basket" and "moving average" (the three the rule decides);
+# "long or cash", "hold a basket" and "buy and hold" stay green because the
+# docstrings alone decide them. `test_the_compound_rule_is_what_decides_...`
+# below re-runs that seed on every run, and "threshold filter" (a name-led
+# query no compound touches) is the control arm that stays green under it.
+#
+# 2026-10-05 (position layer, Q-2448): the registered ``MaxHold`` factory
+# (spec 03-R48) carries the name token "hold". With the rule OFF it takes
+# "buy and hold" (name ×3 at 4.0, the position-first tie-break over
+# ConstantForecast's 4.0); with the rule ON its "hold" is half of the
+# corpus compound "and hold" and scores ×1, so ConstantForecast keeps the
+# query. "buy and hold" therefore moved from the docstring-decided set to
+# the rule-decided set, and the seed below now pins it there.
+#
+# 2026-10-06 (Q-2489): IndexShiftTransform is deprecated, so default search no
+# longer draws it, and "index basket" left the rule-decided set — with the
+# rule off ConstantForecast still leads it (measured: on and off both give
+# ConstantForecast, AssetSelect, Crossover). The seed pins that move too.
+
+_MOVING_AVERAGES = frozenset({"SMA", "EWMA", "DEMA", "TEMA", "EWMATransform"})
+
+_LONG_ONLY_QUERIES = ("long only", "long or cash")
+_HOLD_QUERIES = ("index basket", "hold a basket", "buy and hold")
+
+
+@pytest.mark.parametrize("query", _LONG_ONLY_QUERIES)
+def test_long_only_words_rank_threshold_cross_above_the_long_short_converter(query):
+    names = _order(_live_components(), query)
+    assert len(names) >= 5  # non-vacuity: a scored field, the order is the claim
+    assert _rank_of(names, "ThresholdCross") < _rank_of(names, "LongShortWeightConverter"), names[
+        :8
+    ]
+
+
+@pytest.mark.parametrize("query", _HOLD_QUERIES)
+def test_hold_and_basket_words_rank_constant_forecast_first(query):
+    names = _order(_live_components(), query)
+    assert len(names) >= 5
+    assert names[0] == "ConstantForecast", names[:8]
+
+
+def test_bare_moving_average_is_a_moving_average():
+    names = _order(_live_components(), "moving average")
+    assert len(names) >= 5
+    assert names[0] in _MOVING_AVERAGES, names[:8]
+    assert "AveragePairwiseCorrelationRegime" not in names[:3], names[:8]
+    # non-vacuity: the component the rule demotes still scores (it is
+    # ranked lower, not dropped), and at least three moving averages score.
+    assert "AveragePairwiseCorrelationRegime" in names
+    assert len(_MOVING_AVERAGES & set(names)) >= 3
+
+
+def test_the_compound_rule_is_what_decides_the_three_name_led_queries(monkeypatch):
+    """The standing seed: with the half-compound rule off, the queries it
+    decides go back to their name-led answers (the three measured pre-change
+    ones, and "buy and hold" to the MaxHold factory since 2026-10-05), while
+    the control arm does not move."""
+    import pipeline_engine.component_ranking as ranking
+
+    comps = _live_components()
+    control_before = _order(comps, "threshold filter")[:2]
+    buy_hold_before = _order(comps, "buy and hold")[0]
+
+    monkeypatch.setattr(ranking, "compound_partners", lambda *_a, **_k: {})
+
+    assert _order(comps, "long only")[0] == "LongShortWeightConverter"
+    # Q-2489: the deprecated IndexShiftTransform no longer competes, so the
+    # docstring alone decides "index basket" — unmoved by the seed.
+    assert _order(comps, "index basket")[0] == "ConstantForecast"
+    assert _order(comps, "moving average")[0] == "AveragePairwiseCorrelationRegime"
+    assert _order(comps, "threshold filter")[:2] == control_before
+    assert buy_hold_before == "ConstantForecast"
+    assert _order(comps, "buy and hold")[0] == "MaxHold"
+
+
+def test_a_name_carrying_the_whole_compound_keeps_its_weight():
+    """The rule's other arm: "risk parity" is a compound (RiskParityAllocator's
+    first paragraph carries it) AND RiskParityAllocator's name carries both
+    halves, so it still leads; MarketRiskScaler's name carries half and is
+    scored like a description word."""
+    names = _order(_live_components(), "risk parity")
+    assert names[0] == "RiskParityAllocator", names[:5]
+
+
 # ─── clock_direction filter (§9.2 item 4) ────────────────────────────────
 
 
@@ -400,21 +564,96 @@ def test_unknown_clock_op_raises_rather_than_defaulting_to_keep():
 
 
 def test_clock_direction_filter_returns_exactly_the_transform_set():
+    """Each direction is a PROPERTY plus a floor, never a hand-kept set.
+
+    `synth == {"PriceDataLoader", "FundingDataLoader"}` was pinned by hand
+    and went red the day the W3 flow loaders landed (2026-09-02) — a
+    legitimate addition, and the pin stayed red on `main` for two days
+    while saying nothing about the failure that matters (Q-1080). Widening
+    the set just re-arms the same trap for the next loader.
+
+    What the equality was actually buying is two statements, and both
+    survive corpus growth:
+
+    * **no accidental members** — every member satisfies the property that
+      makes its direction meaningful. `synth` means the component
+      synthesises its own bar clock, which is a property of having no
+      upstream clock to inherit, i.e. of being a data LOADER. A signal
+      transform that declared `synth` would be the real defect, and this
+      catches it.
+    * **no silent losses** — the founding members are a floor. One of them
+      disappearing is a regression, not an edit.
+    """
     project = {c["name"] for c in search_components(clock_direction="project", top_k=50)}
     resample = {c["name"] for c in search_components(clock_direction="resample", top_k=50)}
     synth = {c["name"] for c in search_components(clock_direction="synth", top_k=50)}
+    by_name = {c["name"]: c for c in _live_components()}
 
+    # Non-vacuity: a property assertion over an empty set is free.
+    assert project and resample and synth
+    assert not (project & resample)
+    assert not (project & synth)
+    assert not (resample & synth)
+
+    # Floors — the spec 01 §8.1 founding membership.
     assert set(PAIR) <= project
     assert set(LEGACY) <= project
-    assert resample == {
+    assert {"PriceDataLoader", "FundingDataLoader"} <= synth
+    assert {
         "RealizedVolatility",
         "SignalResampler",
         "TargetSignalResampler",
         "TimeframeResampler",
         "TargetTimeframeResampler",
-    }
-    assert synth == {"PriceDataLoader", "FundingDataLoader"}
-    assert not (project & resample)
+    } <= resample
+
+    # Properties.
+    for name in synth:
+        assert by_name[name]["category"] == "data_loader", (
+            f"{name} declares clock_transfer op 'synth' — it synthesises its own "
+            f"bar clock — but its category is {by_name[name]['category']!r}. Only a "
+            f"data loader has no upstream clock to inherit; anything else "
+            f"declaring synth is a registration bug, not a new member."
+        )
+
+    # `bar_offset` is the coarsening side's alignment choice: a fine → coarse
+    # operator must be able to say WHICH sub-bar it closes on, and a
+    # coarse → fine projector has no sub-bar to choose. So the offset key is
+    # exactly the resample direction's signature.
+    for name in resample:
+        assert by_name[name]["clock_transfer"].get("off"), (
+            f"{name} coarsens the bar clock but declares no offset key — a "
+            f"fine → coarse operator that cannot express bar alignment"
+        )
+    for name in project:
+        assert not by_name[name]["clock_transfer"].get("off"), (
+            f"{name} does not coarsen the bar clock, so an offset key is meaningless on it"
+        )
+    # A synth loader coarsens IN-LOADER exactly when it names the grain it
+    # rolls from (new-data-loaders spec 05 §2/§2b: PriceDataLoader v3 rolls
+    # 15min bars onto the Globals grid, the hourly stream family rolls its 1h
+    # partition) — then it consumes the offset and must say so. A loader with
+    # no roll source serves its native grain and has no sub-bar to choose.
+    for name in synth:
+        transfer = by_name[name]["clock_transfer"]
+        assert bool(transfer.get("off")) == bool(transfer.get("grain")), (
+            f"{name}: a synth loader declares an offset key iff it declares the "
+            f"grain it rolls from — got {transfer}"
+        )
+    assert any(by_name[name]["clock_transfer"].get("grain") for name in synth), (
+        "no synth loader rolls in-loader — the iff above is vacuous on the offset arm"
+    )
+    # Since ingestion-unification T4.2 (2026-09-21) EVERY synth loader names
+    # the grain it rolls from: the native floor is declared, never inferred,
+    # and each loader refuses finer and rolls coarser (GOAL invariant 3 —
+    # PredictedFundingLoader v2 joined the ctx family with grain "1h" /
+    # floor "5min"). The native arm of the iff is therefore empty BY DESIGN
+    # at the latest version; pin that rather than keep a floor that can only
+    # rot (a loader with no roll source would be the regression now).
+    assert all(by_name[name]["clock_transfer"].get("grain") for name in synth), (
+        "a synth loader with no roll grain — every loader declares its native "
+        "floor and rolls coarser (ingestion-unification GOAL invariant 3)"
+    )
 
 
 def test_clock_direction_filter_composes_with_query():
@@ -458,14 +697,58 @@ def test_emitted_clock_direction_is_fresh():
             )
 
 
+#: spec 01 §8.1's founding transform set. The count pin that used to stand
+#: here (`len(non_keep) == 11`) reds on a legitimate addition and cannot
+#: catch the failure it was written for anyway: a component that SHOULD be
+#: non-keep silently reading as `keep` leaves the count unchanged if
+#: anything else was added the same day. The membership floor does catch it.
+SPEC_01_TRANSFORM_SET = (
+    *PAIR,
+    *LEGACY,
+    "RealizedVolatility",
+    "SignalResampler",
+    "TargetSignalResampler",
+    "TimeframeResampler",
+    "TargetTimeframeResampler",
+    "PriceDataLoader",
+    "FundingDataLoader",
+)
+
+
 def test_clock_transfer_is_present_for_every_non_keep_component():
-    non_keep = [
-        c for c in _load_json("registry.json")["components"] if c["clock_direction"] != "keep"
-    ]
-    assert len(non_keep) == 11, "spec 01 §8.1 — the transform set has 11 members"
+    """Well-formedness for every member, plus the founding floor.
+
+    The hazard is a non-keep component whose `clock_transfer` is missing,
+    malformed, or disagrees with the emitted `clock_direction` — the filter
+    would then hide a clock-changing component from the very query that
+    exists to find it. That is a per-member property, so it is asserted per
+    member and holds however many members there are.
+    """
+    comps = _load_json("registry.json")["components"]
+    non_keep = [c for c in comps if c["clock_direction"] != "keep"]
+
+    # Non-vacuity, both ends: the filter must actually filter. A predicate
+    # that selected everything, or nothing, would satisfy the loop below.
+    assert 0 < len(non_keep) < len(comps)
+
+    assert set(SPEC_01_TRANSFORM_SET) <= {c["name"] for c in non_keep}, (
+        f"spec 01 §8.1's transform set lost a member: "
+        f"{sorted(set(SPEC_01_TRANSFORM_SET) - {c['name'] for c in non_keep})}"
+    )
+
     for comp in non_keep:
         assert comp["clock_transfer"]["op"] in ("synth", "coarsen", "project")
         assert comp["clock_transfer"]["src"]
+        # The emitted word and the declaration it is derived from must agree —
+        # otherwise the filter and the registration surface answer differently.
+        assert comp["clock_direction"] == clock_direction_of(comp)
+
+    for comp in comps:
+        if comp["clock_direction"] == "keep":
+            assert not comp.get("clock_transfer"), (
+                f"{comp['name']} carries a clock_transfer but reads as 'keep' — "
+                f"a clock-changing component invisible to the clock_direction filter"
+            )
 
 
 # ─── the agent-facing surface (§9.2 items 4 and 6) ───────────────────────

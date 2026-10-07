@@ -9,14 +9,14 @@ The most common path from data to weights. Use when signal values carry convicti
 ## Component Sequence
 
 1. **PriceDataLoader** - Load OHLCV data
-2. **Indicator** (ROC, EWMACrossover, EWMA+Crossover) - Generate raw signal
+2. **Indicator** (ROC, or two EWMA branches + Crossover) - Generate raw signal
 3. **VolatilityStandardizer** - Remove volatility scaling from signal (optional but recommended)
 4. **CrossSectionalZScore** - Normalize across assets so signals are comparable
 5. **ForecastScaler** (avg_abs_target=10.0) - Scale to standard forecast range
 6. **ForecastCapper** (limit=20.0) - Clip extreme values
 7. **ForecastWeightNormalizer** (target_leverage=1.0) - Convert forecast to portfolio weights
 
-For production vol-targeted sizing (Level 3+), replace step 7 with:
+For vol-targeted sizing (Level 3+), replace step 7 with:
 ReturnVolatility → VolTargetWeightConverter (requires return_vol slot).
 
 ## Why Each Step Matters
@@ -32,7 +32,10 @@ ReturnVolatility → VolTargetWeightConverter (requires return_vol slot).
 ## Minimal Example
 
 ```python
-Globals(target_timeframe="1d"),
+Globals(target_timeframe="1d")
+Universe(mode="manual", symbols=["BTC", "ETH", "SOL", "AVAX", "LINK"])
+Execution(rebalance="buffered", buffer_threshold=0.2, buffer_mode="relative", rebalance_method="to_edge")
+
 Pipeline([
     PriceDataLoader(),
     ROC(period=20),
@@ -45,10 +48,7 @@ Pipeline([
 
 ## Common Mistakes
 
-- **M-01**: Using EqualWeightAllocator after ForecastSeries discards conviction
-  magnitude. Use ForecastWeightNormalizer (simple) or VolTargetWeightConverter (production).
-  EqualWeightAllocator is correct for TopN/filter scenarios (Path 3).
 - Skipping CrossSectionalZScore when combining multiple signals — signals at
   different scales will dominate unpredictably.
 - Double normalization (VolatilityStandardizer AND CrossSectionalZScore AND
-  RollingZScore) — pick one normalization method.
+  RollingZScoreTransform) — pick one normalization method.

@@ -53,8 +53,8 @@ def test_live_deploy_preview_returns_preview_data(tmp_path, monkeypatch):
 
     # Preview runs first; the deploy-intent mint (spec 03 R2) follows.
     assert client.post.call_args_list == [
-        call("/v1/live/preview", json={"strategy_id": "strat_abc"}),
-        call("/v1/live/deploy-intents", json={"strategy_id": "strat_abc"}),
+        call("/v1/deployments/preview", json={"strategy_id": "strat_abc"}),
+        call("/v1/deployments/deploy-intents", json={"strategy_id": "strat_abc"}),
     ]
     env = result.to_envelope()
     # The mocked mint response carries no handoff_url → the preview
@@ -138,10 +138,10 @@ def test_live_deploy_actual_returns_deployment_id(tmp_path, monkeypatch):
     )
 
     assert client.post.call_args_list == [
-        call("/v1/live/preview", json={"strategy_id": "strat_abc"}),
-        call("/v1/live/deploy-intents", json={"strategy_id": "strat_abc"}),
+        call("/v1/deployments/preview", json={"strategy_id": "strat_abc"}),
+        call("/v1/deployments/deploy-intents", json={"strategy_id": "strat_abc"}),
         call(
-            "/v1/live",
+            "/v1/deployments",
             json={
                 "strategy_id": "strat_abc",
                 "account_id": "acct_1",
@@ -206,9 +206,9 @@ def test_live_deploy_confirmation_token_must_match_request(tmp_path, monkeypatch
     assert exc.value.error_code == "confirmation_token_mismatch"
     # Preview post + deploy-intent mint only — the mismatch stops the deploy.
     assert client.post.call_args_list[0] == call(
-        "/v1/live/preview", json={"strategy_id": "strat_abc"}
+        "/v1/deployments/preview", json={"strategy_id": "strat_abc"}
     )
-    assert all(c.args[0] != "/v1/live" for c in client.post.call_args_list)
+    assert all(c.args[0] != "/v1/deployments" for c in client.post.call_args_list)
 
 
 def test_live_deploy_confirmation_token_expires(tmp_path, monkeypatch):
@@ -244,9 +244,9 @@ def test_live_deploy_confirmation_token_expires(tmp_path, monkeypatch):
 
     assert exc.value.error_code == "confirmation_token_expired"
     assert client.post.call_args_list[0] == call(
-        "/v1/live/preview", json={"strategy_id": "strat_abc"}
+        "/v1/deployments/preview", json={"strategy_id": "strat_abc"}
     )
-    assert all(c.args[0] != "/v1/live" for c in client.post.call_args_list)
+    assert all(c.args[0] != "/v1/deployments" for c in client.post.call_args_list)
 
 
 # ─── keel_live_deploy write-through guard (spec 08 R2) ───────────────────
@@ -299,7 +299,7 @@ def test_live_deploy_preview_local_ahead_default_pushes_first(tmp_path, monkeypa
     assert push_mock.call_args.kwargs["message"] == "Auto-push before live deploy"
     # Preview still ran (against the freshly pushed HEAD)
     assert client.post.call_args_list[0] == call(
-        "/v1/live/preview", json={"strategy_id": "strat_g"}
+        "/v1/deployments/preview", json={"strategy_id": "strat_g"}
     )
     assert "cmt_dep" in env["sync_note"]
     assert "auto-pushed" in env["sync_note"].lower()
@@ -411,7 +411,7 @@ def test_live_deploy_confirm_stops_if_local_moved_after_preview(tmp_path, monkey
             )
 
     # Confirm phase NEVER pushes (that would deploy unpreviewed code) and
-    # never reaches POST /v1/live.
+    # never reaches POST /v1/deployments.
     push_mock.assert_not_called()
     client.post.assert_not_called()
     assert exc.value.error_code == "local_ahead"
@@ -454,7 +454,7 @@ def test_live_deploy_guard_noops_hosted(tmp_path, monkeypatch):
 
 def test_live_deploy_default_returns_web_handoff_not_a_deploy():
     """Default (no `direct`): CLI/local go-live is a browser handoff — the
-    agent never enumerates accounts or POSTs /v1/live for the live action."""
+    agent never enumerates accounts or POSTs /v1/deployments for the live action."""
     client = MagicMock()
     client.post.return_value = {
         "handoff_url": "https://app.usekeel.io/deploy?intent=tokZ",
@@ -475,10 +475,10 @@ def test_live_deploy_default_returns_web_handoff_not_a_deploy():
     assert env["resume"]["token"] == "tokZ"
     assert env["resume"]["verify_call"]["tool"] == "keel_live_deploy"
     assert env["cost"]["suggested_sizing_usd"] == 500
-    # ONLY the deploy-intent mint happened — never POST /v1/live, never the
-    # /v1/live/preview call, and NO account enumeration.
+    # ONLY the deploy-intent mint happened — never POST /v1/deployments, never the
+    # /v1/deployments/preview call, and NO account enumeration.
     client.post.assert_called_once_with(
-        "/v1/live/deploy-intents", json={"strategy_id": "strat_abc"}
+        "/v1/deployments/deploy-intents", json={"strategy_id": "strat_abc"}
     )
     client.get.assert_not_called()
 
@@ -537,7 +537,7 @@ def test_live_deploy_intent_poll_works_regardless_of_direct():
     assert env["handoff_state"]["status"] == "completed"
     assert env["hero_url"] == "https://app.usekeel.io/live/dep_77"
     client.post.assert_called_once_with(
-        "/v1/live/deploy-intents/status", json={"intent_token": "tokP"}
+        "/v1/deployments/deploy-intents/status", json={"intent_token": "tokP"}
     )
 
 
@@ -557,7 +557,7 @@ def test_live_deploy_description_does_not_advertise_direct():
 
 def test_live_deploy_direct_without_env_opt_in_is_disabled(monkeypatch):
     """`direct=true` alone (env gate NOT set) must NOT reach the in-terminal
-    deploy: it raises `direct_deploy_disabled` and never POSTs /v1/live —
+    deploy: it raises `direct_deploy_disabled` and never POSTs /v1/deployments —
     so a model that merely guesses the param can't place real orders."""
     monkeypatch.delenv("KEEL_ALLOW_DIRECT_DEPLOY", raising=False)
     client = MagicMock()
@@ -598,9 +598,12 @@ def test_live_deploy_direct_with_env_opt_in_reaches_direct_path(tmp_path, monkey
         _ctx(client),
     )
 
-    # Reached the direct preview path: POST /v1/live/preview happened and a
+    # Reached the direct preview path: POST /v1/deployments/preview happened and a
     # local confirmation_token was minted.
-    assert call("/v1/live/preview", json={"strategy_id": "strat_abc"}) in client.post.call_args_list
+    assert (
+        call("/v1/deployments/preview", json={"strategy_id": "strat_abc"})
+        in client.post.call_args_list
+    )
     env = result.to_envelope()
     assert env["confirmation_token"]
 
@@ -623,9 +626,9 @@ def test_live_deploy_default_web_handoff_unaffected_by_env_opt_in():
     env = exc.value.to_envelope()
     assert env["code"] == "handoff_required"
     assert env["action_url"] == "https://app.usekeel.io/deploy?intent=tokZ"
-    # Default path never POSTs /v1/live and never enumerates accounts.
+    # Default path never POSTs /v1/deployments and never enumerates accounts.
     client.post.assert_called_once_with(
-        "/v1/live/deploy-intents", json={"strategy_id": "strat_abc"}
+        "/v1/deployments/deploy-intents", json={"strategy_id": "strat_abc"}
     )
     client.get.assert_not_called()
 
@@ -644,7 +647,14 @@ def test_live_monitor_overview_returns_metadata():
 
     result = tool.handler({"deployment_id": "dep_42"}, _ctx(client))
 
-    client.get.assert_called_once_with("/v1/live/dep_42")
+    # The overview row first; the card's stats + equity enrichment ride
+    # behind it (Q-1505) and never replace it.
+    assert client.get.call_args_list[0] == call("/v1/deployments/dep_42")
+    assert [c.args[0] for c in client.get.call_args_list] == [
+        "/v1/deployments/dep_42",
+        "/v1/deployments/dep_42/stats",
+        "/v1/deployments/dep_42/equity",
+    ]
     env = result.to_envelope()
     assert env["run_id"] == "dep_42"
     assert env["view"] == "overview"
@@ -655,6 +665,71 @@ def test_live_monitor_overview_returns_metadata():
     assert env["data"]["status"] == "active"
 
 
+def test_live_monitor_overview_carries_stats_and_compact_curve():
+    """The live card draws from the envelope alone (Q-1505): overview
+    ships the stats slice verbatim and the equity series compacted to
+    [[timestamp, equity, twr_pct], ...] — values copied, never
+    recomputed, first and last points always kept."""
+    from keel.tools.outcomes.live_monitor import _CURVE_MAX_POINTS
+
+    n = 1000
+    points = [
+        {
+            "timestamp": f"2026-06-{1 + (i % 28):02d}T00:00:00Z",
+            "equity": 1000.0 + i,
+            "twr_pct": i / 10,
+        }
+        for i in range(n)
+    ]
+
+    def _get(path, **params):
+        if path.endswith("/stats"):
+            return {"net_pnl": 123.4, "sharpe": 1.2}
+        if path.endswith("/equity"):
+            return {"points": points, "baseline_value": 1000.0, "current_value": 1999.0}
+        return {"deployment_id": "dep_42", "name": "mom", "status": "active"}
+
+    client = MagicMock()
+    client.get.side_effect = _get
+    env = get("keel_live_monitor").handler({"deployment_id": "dep_42"}, _ctx(client)).to_envelope()
+
+    assert env["stats"] == {"net_pnl": 123.4, "sharpe": 1.2}
+    curve = env["curve"]
+    assert len(curve["points"]) == _CURVE_MAX_POINTS
+    assert curve["points"][0] == ["2026-06-01T00:00:00Z", 1000.0, 0.0]
+    assert curve["points"][-1] == [points[-1]["timestamp"], 1999.0, 99.9]
+    assert curve["source_points"] == n
+    assert curve["baseline_value"] == 1000.0
+    assert curve["current_value"] == 1999.0
+    # Strictly increasing equity in, strictly increasing out (no reordering).
+    eqs = [p[1] for p in curve["points"]]
+    assert eqs == sorted(eqs)
+
+
+def test_live_monitor_overview_enrichment_is_best_effort():
+    """A failing stats/equity read omits the block; the overview still
+    answers (the enrichment is a render nicety, never a gate)."""
+
+    def _get(path, **params):
+        if path.endswith("/stats") or path.endswith("/equity"):
+            raise KeelError("boom", error_code="upstream")
+        return {"deployment_id": "dep_42", "status": "active"}
+
+    client = MagicMock()
+    client.get.side_effect = _get
+    env = get("keel_live_monitor").handler({"deployment_id": "dep_42"}, _ctx(client)).to_envelope()
+    assert env["data"]["status"] == "active"
+    assert "stats" not in env
+    assert "curve" not in env
+
+
+def test_live_monitor_non_overview_views_do_not_enrich():
+    client = MagicMock()
+    client.get.return_value = {"points": []}
+    get("keel_live_monitor").handler({"deployment_id": "dep_42", "view": "equity"}, _ctx(client))
+    client.get.assert_called_once_with("/v1/deployments/dep_42/equity")
+
+
 def test_live_monitor_positions_view():
     client = MagicMock()
     client.get.return_value = {"account_value": 1000.0, "perp_positions": []}
@@ -662,7 +737,7 @@ def test_live_monitor_positions_view():
 
     result = tool.handler({"deployment_id": "dep_42", "view": "positions"}, _ctx(client))
 
-    client.get.assert_called_once_with("/v1/live/dep_42/positions")
+    client.get.assert_called_once_with("/v1/deployments/dep_42/positions")
     env = result.to_envelope()
     assert env["view"] == "positions"
     assert env["hero_url"].endswith("?tab=positions")
@@ -688,7 +763,7 @@ def test_live_monitor_executions_returns_executing_snapshot_without_polling():
         _ctx(client),
     )
 
-    client.get.assert_called_once_with("/v1/live/dep_42/executions", limit=25)
+    client.get.assert_called_once_with("/v1/deployments/dep_42/executions", limit=25)
     env = result.to_envelope()
     assert env["view"] == "executions"
     assert env["data"][0]["execution_status"] == "EXECUTING"
@@ -714,7 +789,7 @@ def test_live_monitor_trades_view_with_filters():
     )
 
     client.get.assert_called_once_with(
-        "/v1/live/dep_42/trades",
+        "/v1/deployments/dep_42/trades",
         limit=25,
         symbol="HYPE",
         side="BUY",
@@ -732,7 +807,7 @@ def test_live_monitor_portfolio_ignores_deployment_id():
 
     result = tool.handler({"deployment_id": "all"}, _ctx(client))
 
-    client.get.assert_called_once_with("/v1/live/portfolio/summary")
+    client.get.assert_called_once_with("/v1/deployments/portfolio/summary")
     env = result.to_envelope()
     assert env["view"] == "portfolio"
     assert env.get("run_id") is None
@@ -752,7 +827,7 @@ def test_live_monitor_bare_call_returns_portfolio():
 
     result = tool.handler({}, _ctx(client))
 
-    client.get.assert_called_once_with("/v1/live/portfolio/summary")
+    client.get.assert_called_once_with("/v1/deployments/portfolio/summary")
     env = result.to_envelope()
     assert env["view"] == "portfolio"
 
@@ -783,7 +858,7 @@ def test_live_control_pause_calls_correct_endpoint(tmp_path, monkeypatch):
 
     result = tool.handler({"deployment_id": "dep_42", "action": "pause"}, _ctx(client))
 
-    client.post.assert_called_once_with("/v1/live/dep_42/pause")
+    client.post.assert_called_once_with("/v1/deployments/dep_42/pause")
     env = result.to_envelope()
     assert env["run_id"] == "dep_42"
     assert env["action"] == "pause"
@@ -799,7 +874,7 @@ def test_live_control_stop_uses_delete(tmp_path, monkeypatch):
 
     tool.handler({"deployment_id": "dep_42", "action": "stop"}, _ctx(client))
 
-    client.delete.assert_called_once_with("/v1/live/dep_42")
+    client.delete.assert_called_once_with("/v1/deployments/dep_42")
     client.post.assert_not_called()
 
 
@@ -837,9 +912,15 @@ def test_live_tools_registered_with_correct_toolset_and_hints():
     assert monitor.annotations["readOnlyHint"] is True
     assert monitor.annotations["destructiveHint"] is False
 
-    # Descriptions include the canonical "Do NOT" guard clause.
-    for tool in (deploy, monitor, control):
+    # The CLI-only write tools keep the canonical "Do NOT" guard clause;
+    # the listed monitor states its neighbours as facts (Q-1804 — an
+    # imperative routing clause reads as injection on ChatGPT).
+    for tool in (deploy, control):
         assert "Do NOT use" in tool.description
+    for text in (monitor.description, monitor.listed_description):
+        assert "Do NOT" not in text
+    assert "`keel_live_control`" in monitor.description
+    assert "`keel_app_link`" in monitor.listed_description
 
 
 # ─── quota visibility pass-through (spec 04 R5) ──────────────────────────

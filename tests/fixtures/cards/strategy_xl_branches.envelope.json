@@ -1,0 +1,514 @@
+{
+  "strategy": {
+    "name": "an_8_branch_parallel",
+    "status": "valid"
+  },
+  "view": {
+    "categories": {
+      "CumulativeSum": "signal_transform",
+      "Difference": "signal_transform",
+      "DollarVolumeLoader": "data_loader",
+      "EWMA": "indicator",
+      "EqualWeightSizer": "position_sizer",
+      "ForecastCombiner": "forecast_composer",
+      "OpenInterestLoader": "data_loader",
+      "PremiumLoader": "data_loader",
+      "PriceDataLoader": "data_loader",
+      "SignalROC": "signal_transform",
+      "TakerFlowLoader": "data_loader",
+      "TargetSignalProjector": "signal_transform",
+      "TwapVolumeLoader": "data_loader",
+      "VWAPLoader": "data_loader",
+      "WhalePrintLoader": "data_loader"
+    },
+    "change": null,
+    "evidence": null,
+    "header": {
+      "clock": "1h",
+      "execution": {
+        "label": "Buffered 0.2",
+        "params": {
+          "buffer_mode": "relative",
+          "buffer_threshold": 0.2,
+          "min_trade_size": 0.0,
+          "rebalance": "buffered",
+          "rebalance_method": "to_edge"
+        }
+      },
+      "factories": [],
+      "universe": {
+        "label": "Manual basket \u00b7 HL perps",
+        "symbols": [],
+        "total": 0
+      }
+    },
+    "markdown": "**an_8_branch_parallel** \u00b7 valid \u00b7 1h\nuniverse  Manual basket \u00b7 HL perps\nexecution Buffered 0.2\n\n\u2026 Parallel \u00b7 8 branches \u00b7 19 blocks (oi 3, cvd 3, twap 2, vwap 2, whale 2, dollar 2, premium 3, momentum 2)\nForecastCombiner\nEqualWeightSizer\n",
+    "name": "an_8_branch_parallel",
+    "size": "structure",
+    "status": "valid",
+    "status_text": "Valid",
+    "structure": {
+      "blocks": [
+        {
+          "branches": {
+            "cvd": [
+              {
+                "args": {
+                  "cache_freshness_hours": 12,
+                  "cache_only": false,
+                  "dex_name": "native",
+                  "max_stale_days": 90,
+                  "measure": "volume",
+                  "output_format": "dict",
+                  "side": "net",
+                  "symbols": [
+                    "AAVE",
+                    "ADA",
+                    "APT",
+                    "ARB",
+                    "AVAX",
+                    "BCH",
+                    "BNB",
+                    "BTC",
+                    "CHIP",
+                    "DOGE",
+                    "ETH",
+                    "GRAM",
+                    "HYPE",
+                    "LINK",
+                    "LTC",
+                    "NEAR",
+                    "OP",
+                    "SOL",
+                    "SUI",
+                    "XRP"
+                  ],
+                  "use_cache": true
+                },
+                "category": "data_loader",
+                "component": "TakerFlowLoader",
+                "type": "component"
+              },
+              {
+                "args": {
+                  "reset": "none"
+                },
+                "category": "signal_transform",
+                "component": "CumulativeSum",
+                "type": "component"
+              },
+              {
+                "args": {
+                  "period": 3
+                },
+                "category": "signal_transform",
+                "component": "SignalROC",
+                "type": "component"
+              }
+            ],
+            "dollar": [
+              {
+                "args": {
+                  "cache_freshness_hours": 12,
+                  "cache_only": false,
+                  "dex_name": "native",
+                  "max_stale_days": 90,
+                  "output_format": "dict",
+                  "symbols": [
+                    "AAVE",
+                    "ADA",
+                    "APT",
+                    "ARB",
+                    "AVAX",
+                    "BCH",
+                    "BNB",
+                    "BTC",
+                    "CHIP",
+                    "DOGE",
+                    "ETH",
+                    "GRAM",
+                    "HYPE",
+                    "LINK",
+                    "LTC",
+                    "NEAR",
+                    "OP",
+                    "SOL",
+                    "SUI",
+                    "XRP"
+                  ],
+                  "use_cache": true
+                },
+                "category": "data_loader",
+                "component": "DollarVolumeLoader",
+                "type": "component"
+              },
+              {
+                "args": {
+                  "period": 3
+                },
+                "category": "signal_transform",
+                "component": "SignalROC",
+                "type": "component"
+              }
+            ],
+            "momentum": [
+              {
+                "args": {
+                  "cache_freshness_hours": 12,
+                  "cache_only": false,
+                  "dex_name": "native",
+                  "exchange": "hyperliquid",
+                  "force_live_only": false,
+                  "max_gap_fill": 3,
+                  "max_stale_days": 90,
+                  "output_format": "dict",
+                  "symbols": [
+                    "AAVE",
+                    "ADA",
+                    "APT",
+                    "ARB",
+                    "AVAX",
+                    "BCH",
+                    "BNB",
+                    "BTC",
+                    "CHIP",
+                    "DOGE",
+                    "ETH",
+                    "GRAM",
+                    "HYPE",
+                    "LINK",
+                    "LTC",
+                    "NEAR",
+                    "OP",
+                    "SOL",
+                    "SUI",
+                    "XRP"
+                  ],
+                  "timeframe": "1h",
+                  "use_cache": true
+                },
+                "category": "data_loader",
+                "component": "PriceDataLoader",
+                "type": "component"
+              },
+              {
+                "args": {
+                  "min_periods": 20,
+                  "window": 20
+                },
+                "category": "indicator",
+                "component": "EWMA",
+                "type": "component"
+              }
+            ],
+            "oi": [
+              {
+                "args": {
+                  "cache_freshness_hours": 12,
+                  "cache_only": false,
+                  "dex_name": "native",
+                  "interval": "1h",
+                  "max_stale_days": 90,
+                  "output_format": "dict",
+                  "source": "hyperliquid",
+                  "symbols": [
+                    "AAVE",
+                    "ADA",
+                    "APT",
+                    "ARB",
+                    "AVAX",
+                    "BCH",
+                    "BNB",
+                    "BTC",
+                    "CHIP",
+                    "DOGE",
+                    "ETH",
+                    "GRAM",
+                    "HYPE",
+                    "LINK",
+                    "LTC",
+                    "NEAR",
+                    "OP",
+                    "SOL",
+                    "SUI",
+                    "XRP"
+                  ],
+                  "use_cache": true
+                },
+                "category": "data_loader",
+                "component": "OpenInterestLoader",
+                "type": "component"
+              },
+              {
+                "args": {
+                  "period": 1
+                },
+                "category": "signal_transform",
+                "component": "Difference",
+                "type": "component"
+              },
+              {
+                "args": {},
+                "category": "signal_transform",
+                "component": "TargetSignalProjector",
+                "type": "component"
+              }
+            ],
+            "premium": [
+              {
+                "args": {
+                  "cache_freshness_hours": 12,
+                  "cache_only": false,
+                  "dex_name": "native",
+                  "interval": "1h",
+                  "max_stale_days": 90,
+                  "output_format": "dict",
+                  "source": "hyperliquid",
+                  "symbols": [
+                    "AAVE",
+                    "ADA",
+                    "APT",
+                    "ARB",
+                    "AVAX",
+                    "BCH",
+                    "BNB",
+                    "BTC",
+                    "CHIP",
+                    "DOGE",
+                    "ETH",
+                    "GRAM",
+                    "HYPE",
+                    "LINK",
+                    "LTC",
+                    "NEAR",
+                    "OP",
+                    "SOL",
+                    "SUI",
+                    "XRP"
+                  ],
+                  "use_cache": true
+                },
+                "category": "data_loader",
+                "component": "PremiumLoader",
+                "type": "component"
+              },
+              {
+                "args": {
+                  "period": 3
+                },
+                "category": "signal_transform",
+                "component": "SignalROC",
+                "type": "component"
+              },
+              {
+                "args": {},
+                "category": "signal_transform",
+                "component": "TargetSignalProjector",
+                "type": "component"
+              }
+            ],
+            "twap": [
+              {
+                "args": {
+                  "cache_freshness_hours": 12,
+                  "cache_only": false,
+                  "dex_name": "native",
+                  "max_stale_days": 90,
+                  "output_format": "dict",
+                  "symbols": [
+                    "AAVE",
+                    "ADA",
+                    "APT",
+                    "ARB",
+                    "AVAX",
+                    "BCH",
+                    "BNB",
+                    "BTC",
+                    "CHIP",
+                    "DOGE",
+                    "ETH",
+                    "GRAM",
+                    "HYPE",
+                    "LINK",
+                    "LTC",
+                    "NEAR",
+                    "OP",
+                    "SOL",
+                    "SUI",
+                    "XRP"
+                  ],
+                  "use_cache": true
+                },
+                "category": "data_loader",
+                "component": "TwapVolumeLoader",
+                "type": "component"
+              },
+              {
+                "args": {
+                  "period": 3
+                },
+                "category": "signal_transform",
+                "component": "SignalROC",
+                "type": "component"
+              }
+            ],
+            "vwap": [
+              {
+                "args": {
+                  "cache_freshness_hours": 12,
+                  "cache_only": false,
+                  "dex_name": "native",
+                  "max_stale_days": 90,
+                  "output_format": "dict",
+                  "symbols": [
+                    "AAVE",
+                    "ADA",
+                    "APT",
+                    "ARB",
+                    "AVAX",
+                    "BCH",
+                    "BNB",
+                    "BTC",
+                    "CHIP",
+                    "DOGE",
+                    "ETH",
+                    "GRAM",
+                    "HYPE",
+                    "LINK",
+                    "LTC",
+                    "NEAR",
+                    "OP",
+                    "SOL",
+                    "SUI",
+                    "XRP"
+                  ],
+                  "use_cache": true
+                },
+                "category": "data_loader",
+                "component": "VWAPLoader",
+                "type": "component"
+              },
+              {
+                "args": {
+                  "period": 3
+                },
+                "category": "signal_transform",
+                "component": "SignalROC",
+                "type": "component"
+              }
+            ],
+            "whale": [
+              {
+                "args": {
+                  "bucket": "100k",
+                  "cache_freshness_hours": 12,
+                  "cache_only": false,
+                  "dex_name": "native",
+                  "max_stale_days": 90,
+                  "output_format": "dict",
+                  "side": "net",
+                  "symbols": [
+                    "AAVE",
+                    "ADA",
+                    "APT",
+                    "ARB",
+                    "AVAX",
+                    "BCH",
+                    "BNB",
+                    "BTC",
+                    "CHIP",
+                    "DOGE",
+                    "ETH",
+                    "GRAM",
+                    "HYPE",
+                    "LINK",
+                    "LTC",
+                    "NEAR",
+                    "OP",
+                    "SOL",
+                    "SUI",
+                    "XRP"
+                  ],
+                  "use_cache": true
+                },
+                "category": "data_loader",
+                "component": "WhalePrintLoader",
+                "type": "component"
+              },
+              {
+                "args": {
+                  "period": 3
+                },
+                "category": "signal_transform",
+                "component": "SignalROC",
+                "type": "component"
+              }
+            ]
+          },
+          "type": "parallel"
+        },
+        {
+          "args": {
+            "weights": "equal"
+          },
+          "category": "forecast_composer",
+          "component": "ForecastCombiner",
+          "type": "component"
+        },
+        {
+          "args": {
+            "target_leverage": 1
+          },
+          "category": "position_sizer",
+          "component": "EqualWeightSizer",
+          "type": "component"
+        }
+      ],
+      "execution": {
+        "buffer_mode": "relative",
+        "buffer_threshold": 0.2,
+        "min_trade_size": 0.0,
+        "rebalance": "buffered",
+        "rebalance_method": "to_edge"
+      },
+      "factories": [],
+      "globals": {
+        "target_timeframe": "1h"
+      },
+      "name": "an_8_branch_parallel",
+      "universe": {
+        "assets": [
+          "AAVE",
+          "ADA",
+          "APT",
+          "ARB",
+          "AVAX",
+          "BCH",
+          "BNB",
+          "BTC",
+          "CHIP",
+          "DOGE",
+          "ETH",
+          "GRAM",
+          "HYPE",
+          "LINK",
+          "LTC",
+          "NEAR",
+          "OP",
+          "SOL",
+          "SUI",
+          "XRP"
+        ],
+        "market": "perp",
+        "mode": "manual",
+        "top_n": null
+      }
+    },
+    "validation": {
+      "errors": 0,
+      "ok": true,
+      "warnings": 0
+    },
+    "version": null
+  }
+}

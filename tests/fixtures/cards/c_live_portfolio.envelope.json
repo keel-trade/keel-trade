@@ -1,0 +1,124 @@
+{
+  "hero_url": "https://app.usekeel.io/live?tab=portfolio",
+  "url_line": "View in Keel: https://app.usekeel.io/live?tab=portfolio",
+  "view": "portfolio",
+  "freshness": {
+    "source": "keel_backend_records",
+    "mode": "recorded_state",
+    "realtime": false
+  },
+  "data": {
+    "total_account_value": 128400.55,
+    "total_unrealized_pnl": 2144.1,
+    "total_realized_pnl": -318.9,
+    "total_funding": -212.44,
+    "total_fees": 418.02,
+    "active_count": 11,
+    "total_count": 14,
+    "updated_at": "2026-09-20T13:52:00+00:00",
+    "deployments": [
+      {
+        "name": "strategy_01_momentum",
+        "status": "PAUSED",
+        "total_pnl": 103.8,
+        "position_count": 1,
+        "schedule": "Daily at 00:05"
+      },
+      {
+        "name": "strategy_02_momentum",
+        "status": "ACTIVE",
+        "total_pnl": -207.6,
+        "position_count": 2,
+        "schedule": "Every 4h at :05"
+      },
+      {
+        "name": "strategy_03_momentum",
+        "status": "ACTIVE",
+        "total_pnl": 311.4,
+        "position_count": 3,
+        "schedule": "Daily at 00:05"
+      },
+      {
+        "name": "strategy_04_momentum",
+        "status": "ACTIVE",
+        "total_pnl": -415.2,
+        "position_count": 4,
+        "schedule": "Every 4h at :05"
+      },
+      {
+        "name": "strategy_05_momentum",
+        "status": "PAUSED",
+        "total_pnl": 519.0,
+        "position_count": 5,
+        "schedule": "Daily at 00:05"
+      },
+      {
+        "name": "strategy_06_momentum",
+        "status": "ACTIVE",
+        "total_pnl": -622.8,
+        "position_count": 6,
+        "schedule": "Every 4h at :05"
+      },
+      {
+        "name": "strategy_07_momentum",
+        "status": "ACTIVE",
+        "total_pnl": 726.6,
+        "position_count": 7,
+        "schedule": "Daily at 00:05"
+      },
+      {
+        "name": "strategy_08_momentum",
+        "status": "ACTIVE",
+        "total_pnl": -830.4,
+        "position_count": 8,
+        "schedule": "Every 4h at :05"
+      },
+      {
+        "name": "strategy_09_momentum",
+        "status": "PAUSED",
+        "total_pnl": 934.2,
+        "position_count": 9,
+        "schedule": "Daily at 00:05"
+      },
+      {
+        "name": "strategy_10_momentum",
+        "status": "ACTIVE",
+        "total_pnl": -1038.0,
+        "position_count": 1,
+        "schedule": "Every 4h at :05"
+      },
+      {
+        "name": "strategy_11_momentum",
+        "status": "ACTIVE",
+        "total_pnl": 1141.8,
+        "position_count": 2,
+        "schedule": "Daily at 00:05"
+      },
+      {
+        "name": "strategy_12_momentum",
+        "status": "ACTIVE",
+        "total_pnl": -1245.6,
+        "position_count": 3,
+        "schedule": "Every 4h at :05"
+      },
+      {
+        "name": "strategy_13_momentum",
+        "status": "PAUSED",
+        "total_pnl": 1349.4,
+        "position_count": 4,
+        "schedule": "Daily at 00:05"
+      },
+      {
+        "name": "strategy_14_momentum",
+        "status": "ACTIVE",
+        "total_pnl": -1453.2,
+        "position_count": 5,
+        "schedule": "Every 4h at :05"
+      }
+    ]
+  },
+  "render": {
+    "card": "live",
+    "fallback_url": "https://app.usekeel.io/live?tab=portfolio"
+  }
+}

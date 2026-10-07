@@ -8,7 +8,6 @@ from unittest.mock import patch
 
 import pytest
 from click.testing import CliRunner
-
 from keel.cli.main import cli
 from keel.errors import NotFoundError
 from keel.tools.outcomes import OUTCOMES, OutcomeResult, _bootstrap, all_tools
@@ -58,7 +57,13 @@ def test_envelope_error_has_five_required_fields():
         example={"x": "abc"},
         suggested_next_action={"tool": "keel_help", "args": {"topic": "x"}, "why": "..."},
     )
-    assert set(e.keys()) == {"code", "message", "what_was_expected", "example", "suggested_next_action"}
+    assert set(e.keys()) == {
+        "code",
+        "message",
+        "what_was_expected",
+        "example",
+        "suggested_next_action",
+    }
 
 
 def test_outcome_input_schemas_are_top_level_strict():
@@ -130,21 +135,30 @@ def test_is_tool_loaded_respects_always(monkeypatch):
 
 def test_pilot_tools_registered():
     names = {t.name for t in all_tools()}
-    assert "keel_status" in names
-    assert "keel_doctor" in names
+    assert "keel_account_status" in names
+    assert "keel_connection_check" in names
     assert "keel_help" in names
 
 
 def test_pilot_tools_are_always_loaded():
-    for name in ("keel_status", "keel_doctor", "keel_help"):
+    for name in ("keel_account_status", "keel_connection_check", "keel_help"):
         assert OUTCOMES[name].toolset == "always"
 
 
-def test_pilot_tool_descriptions_include_dont_use_clause():
-    """Spec §4 line 389: every tool description must include a `Don't use to…` clause."""
-    for name in ("keel_status", "keel_doctor", "keel_help"):
+def test_pilot_tool_descriptions_name_their_neighbours_as_facts():
+    """Spec §4 line 389 asked every description to say when NOT to use the
+    tool. Q-1804: on the listed surface that is a neutral statement naming
+    the neighbour ("Enumerating strategies is `keel_strategy_search`"), never
+    an imperative `Do NOT use… — call` (ChatGPT's per-call review reads the
+    imperative as injected steering)."""
+    import re
+
+    for name in ("keel_account_status", "keel_connection_check", "keel_help"):
         desc = OUTCOMES[name].description
-        assert "Do NOT use" in desc, f"{name} description missing 'Do NOT use' clause"
+        # Each names its own confusable neighbour, backticked, as a fact.
+        neighbours = set(re.findall(r"`(keel_[a-z_]+)`", desc)) - {name}
+        assert neighbours, name
+        assert "Do NOT" not in desc, f"{name} description still carries an imperative"
 
 
 # ─── CLI adapter ─────────────────────────────────────────────────────────
@@ -170,31 +184,35 @@ def test_cli_status_includes_progressive_workflow_routes():
     assert result.exit_code == 0, result.output
     data = json.loads(result.stdout)
 
+    # Agent-surface-cleanup spec 02 §2.5 (R-22): on the full profile the
+    # routes are `{name, when, tools}` only — no `next`/`prompt` method
+    # prose — filtered to routes whose EVERY tool this server loads.
     routes = {route["name"]: route for route in data["workflow_routes"]}
-    assert {
-        "first_session",
-        "research_strategy",
-        "existing_strategy_iteration",
-        "debug_recovery",
-        "live_monitoring",
-        "live_trading",
-    } <= set(routes)
+    assert {"research_strategy", "debug_recovery", "live_monitoring"} <= set(routes)
+    for route in routes.values():
+        assert set(route) == {"name", "when", "tools"}, route
+        assert set(route["tools"]) <= set(data["tools_visible"]), route
     research = routes["research_strategy"]
-    assert research["prompt"] == "strategy-creation"
     assert research["tools"] == [
         "keel_components_search",
-        "keel_components_detail_batch",
+        "keel_components_get_many",
         "keel_strategy_compose",
         "keel_backtest_run",
         "keel_backtest_summarize",
     ]
-    assert routes["live_monitoring"]["available"] is True
     assert routes["live_monitoring"]["tools"] == [
         "keel_accounts_list",
         "keel_live_monitor",
     ]
-    assert routes["live_trading"]["available"] is False
-    assert routes["live_trading"]["read_available"] is True
+    # Live-write is not loaded by default, so the route that names
+    # `keel_live_deploy` is not served — the capability block says it.
+    assert "live_trading" not in routes
+    assert data["capabilities"] == {
+        "research": True,
+        "backtest": True,
+        "monitor": "read-only",
+        "live_actions": "web app",
+    }
 
 
 def test_cli_doctor_runs_checks(monkeypatch):
@@ -247,26 +265,67 @@ def test_cli_help_pattern_topic_omits_missing_resource_uri():
     assert len(data.get("body", "")) > 0
 
 
-def test_help_description_does_not_reference_stale_resource_uri():
+def test_help_result_carries_the_current_resource_uri_never_the_stale_one():
+    """The claim this test has always made — `keel_help` points at the
+    resource URI that exists — moved off the DESCRIPTION and onto the
+    RESULT.
+
+    The description used to spend 108 characters restating the mirror
+    (`keel://dsl/reference/<topic>` / `keel://knowledge/<section>`); that
+    budget now carries the `rule:<CODE>` explain channel, which is
+    reachable no other way on claude.ai, while the resources stay
+    registered and `keel_help` stays the universal path (guidance spec
+    §3 L3). Asserting the RESULT is the stronger form anyway: a stale URI
+    in prose is a typo, a stale URI in `resource_uri` is a dead fetch.
+    """
+    from keel.tools.outcomes import ToolContext
+
+    handler = OUTCOMES["keel_help"].handler
+    reference = handler({"topic": "types"}, ToolContext()).to_envelope()
+    knowledge = handler({"topic": "tool_usage"}, ToolContext()).to_envelope()
+    assert reference["resource_uri"] == "keel://dsl/reference/types"
+    assert knowledge["resource_uri"] == "keel://knowledge/tool_usage"
+    # The stale spelling appears nowhere an agent reads.
     assert "keel://reference/dsl" not in OUTCOMES["keel_help"].description
-    assert "keel://dsl/reference" in OUTCOMES["keel_help"].description
-    assert "keel://knowledge" in OUTCOMES["keel_help"].description
+    assert "keel://reference/dsl" not in reference["resource_uri"]
 
 
-def test_cli_help_unknown_topic_surfaces_known_topics():
-    # `help._handler` falls back to `GET /v1/reference/{topic}` when the
-    # topic isn't bundled — an endpoint that doesn't exist yet. Stub the
-    # miss it gets in reality; unstubbed, this test reached the PRODUCTION
-    # API (and, with no credentials, minted a real anonymous org).
-    with patch(
-        "keel.client.KeelClient.get",
-        side_effect=NotFoundError("no /v1/reference endpoint in this deployment"),
-    ):
-        result = runner.invoke(cli, ["--format", "json", "help", "no_such_topic"])
+def test_cli_help_unknown_topic_surfaces_known_topics_without_network():
+    """A topic miss is instant and offline (Q-0573): the old fallback fired
+    a doomed `GET /v1/reference/{topic}` (an endpoint that has never existed
+    in any keel-api router) before failing. Any network call now fails this
+    test outright."""
+
+    def _no_network(*_a, **_kw):
+        raise AssertionError("help topic miss must not make a network call")
+
+    with patch("keel.client.KeelClient.get", side_effect=_no_network):
+        result = runner.invoke(cli, ["--format", "json", "help", "zz_no_such_topic_zz"])
     # Exit 3 = not found per keel error codes
     assert result.exit_code == 3
     err_text = result.stderr if hasattr(result, "stderr") else result.output
     assert "not_found" in err_text or "Known topics" in err_text
+
+
+def test_cli_help_normalizes_topic_separators_and_case():
+    """`keel help dsl-syntax` / `DSL Syntax` hit the bundled snake_case doc
+    (Q-0573: kebab-case guesses used to miss and 404 against the API)."""
+    for guess in ("dsl-syntax", "DSL_SYNTAX", "dsl syntax"):
+        result = runner.invoke(cli, ["--format", "json", "help", guess])
+        assert result.exit_code == 0, (guess, result.output)
+        data = json.loads(result.stdout)
+        assert data["topic"] == "dsl_syntax"
+        assert data["source"] == "bundled"
+        assert len(data["body"]) > 100
+
+
+def test_cli_help_miss_suggests_close_topics():
+    """A near-miss names the closest bundled topics, not just the full list."""
+    result = runner.invoke(cli, ["--format", "json", "help", "strategy-pattern"])
+    assert result.exit_code == 3
+    err_text = result.stderr if hasattr(result, "stderr") else result.output
+    assert "Did you mean" in err_text
+    assert "strategy_patterns" in err_text
 
 
 def test_cli_help_bare_lists_topics():
@@ -359,7 +418,7 @@ def test_cli_agent_mode_allows_live_deploy_preview_without_yes(monkeypatch, tmp_
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
     def fake_post(_self, path, json=None, **_params):
-        assert path == "/v1/live/preview"
+        assert path == "/v1/deployments/preview"
         assert json == {"strategy_id": "str_abc"}
         return {"derived_schedule": "0 */4 * * *", "weights": []}
 
@@ -393,8 +452,8 @@ def test_cli_live_deploy_default_returns_web_handoff(monkeypatch, tmp_path):
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
     def fake_post(_self, path, json=None, **_params):
-        # Only the deploy-intent mint is allowed — never /v1/live[/preview].
-        assert path == "/v1/live/deploy-intents", path
+        # Only the deploy-intent mint is allowed — never /v1/deployments[/preview].
+        assert path == "/v1/deployments/deploy-intents", path
         return {
             "handoff_url": "https://app.usekeel.io/deploy?intent=tokC",
             "intent_token": "tokC",
@@ -475,12 +534,15 @@ def test_cli_status_unauth_includes_next_hint_to_keel_auth_login(monkeypatch, tm
     assert result.exit_code == 0, result.output
     data = json.loads(result.stdout)
     assert data["authenticated"] is False
-    assert "next" in data
-    assert any("keel_auth_login" in line for line in data["next"])
+    # ONE `next` string (spec 02 §2.5), the local profile's sign-in arm.
+    assert data["next"] == (
+        "Not signed in — keel_auth_login opens the browser sign-in "
+        "(keel auth login from a terminal)."
+    )
 
 
 def test_keel_status_identity_reads_nested_me_shape(monkeypatch, tmp_path):
-    """keel_status.identity must extract fields from the nested /v1/me shape.
+    """keel_account_status.identity must extract fields from the nested /v1/me shape.
 
     Regression — caught in v0.4.2 prod-readiness smoke. The handler used
     to read flat `me['principal_id']`/`me['org_id']`/`me['plan']` and
@@ -489,15 +551,13 @@ def test_keel_status_identity_reads_nested_me_shape(monkeypatch, tmp_path):
     (same shape `_login_summary` reads). Both call sites must agree.
     """
     import keel.config as _config
-    from keel.tools.outcomes._base import ToolContext
     from keel.tools.outcomes import OUTCOMES
+    from keel.tools.outcomes._base import ToolContext
 
     # Force an "authed" path by stubbing get_identity directly and
     # supplying a non-empty api_key in the config.
     cfg_file = tmp_path / "config.yaml"
-    cfg_file.write_text(
-        "api_key: dummy_test_key\napi_url: https://api.usekeel.io\n"
-    )
+    cfg_file.write_text("api_key: dummy_test_key\napi_url: https://api.usekeel.io\n")
     monkeypatch.setattr(_config, "CONFIG_FILE", cfg_file)
     monkeypatch.delenv("KEEL_API_KEY", raising=False)
 
@@ -507,7 +567,7 @@ def test_keel_status_identity_reads_nested_me_shape(monkeypatch, tmp_path):
         "credential_scopes": ["strategy.read", "backtest.read"],
     }
     monkeypatch.setattr("keel.auth.get_identity", lambda: me_payload)
-    # `keel_status` also runs a best-effort `GET /v1/entitlements` probe
+    # `keel_account_status` also runs a best-effort `GET /v1/entitlements` probe
     # once it believes it's authed. The dummy api_key above satisfies the
     # local auth precheck, so unstubbed that probe went to the PRODUCTION
     # API. Same stub the entitlements tests below use.
@@ -516,7 +576,7 @@ def test_keel_status_identity_reads_nested_me_shape(monkeypatch, tmp_path):
         lambda self, path, **kw: {"balances": []},
     )
 
-    tool = OUTCOMES["keel_status"]
+    tool = OUTCOMES["keel_account_status"]
     ctx = ToolContext(is_tty=False, app_url="https://app.usekeel.io")
     env = tool.handler({}, ctx).to_envelope()
 
@@ -542,9 +602,15 @@ def test_mcp_adapter_wraps_missing_required_in_spec13_envelope():
     # keel_strategy_fork has a single required arg `source`.
     tool = OUTCOMES["keel_strategy_fork"]
     fn = _make_param_synthesized_handler(tool, frozenset({"backtest"}))
-    # Call with no args (missing required `source`)
-    raw = fn()
-    env = json.loads(raw)
+    # Call with no args (missing required `source`). A view tool's error is
+    # a ToolResult carrying the whole envelope as structuredContent (Q-1785)
+    # and a text block led by the human message, ending in the envelope JSON
+    # (spec 02 §2.2, R-27).
+    result = fn()
+    raw = result.content[0].text
+    env = result.structured_content
+    assert raw.startswith(env["message"])
+    assert json.loads(raw[raw.index("\n{") + 1 :]) == env
     assert env["code"] == "usage_error"
     assert "missing required argument" in env["message"]
     assert "source" in env["message"]
@@ -562,13 +628,16 @@ def test_synthesized_handler_does_not_use_var_kwargs():
     function signature.
     """
     import inspect
+
     from keel.tools.outcomes import OUTCOMES
     from keel.tools.outcomes._mcp_adapter import _make_param_synthesized_handler
 
     for name, tool in OUTCOMES.items():
         if tool.mcp_only:
             continue
-        fn = _make_param_synthesized_handler(tool, frozenset({"always", "backtest", "read-only", "share"}))
+        fn = _make_param_synthesized_handler(
+            tool, frozenset({"always", "backtest", "read-only", "share"})
+        )
         sig = inspect.signature(fn)
         for param in sig.parameters.values():
             assert param.kind != inspect.Parameter.VAR_KEYWORD, (
@@ -620,7 +689,8 @@ def test_mcp_server_wraps_unknown_arguments_in_spec13_envelope():
     async def go():
         s = create_server()
         result = await s.call_tool("keel_strategy_fork", {"share": "str_abc"})
-        env = json.loads(result.content[0].text)
+        env = result.structured_content
+        assert result.content[0].text.startswith(env["message"])
         assert env["code"] == "usage_error"
         assert "unexpected argument" in env["message"]
         assert "share" in env["message"]
@@ -639,7 +709,8 @@ def test_mcp_server_missing_required_still_uses_spec13_envelope():
     async def go():
         s = create_server()
         result = await s.call_tool("keel_strategy_fork", {})
-        env = json.loads(result.content[0].text)
+        env = result.structured_content
+        assert result.content[0].text.startswith(env["message"])
         assert env["code"] == "usage_error"
         assert "missing required argument" in env["message"]
         assert env["suggested_next_action"]["tool"] == "keel_strategy_fork"
@@ -652,65 +723,105 @@ def test_mcp_adapter_passes_valid_args_through(monkeypatch):
     from keel.tools.outcomes import OUTCOMES
     from keel.tools.outcomes._mcp_adapter import _make_param_synthesized_handler
 
-    tool = OUTCOMES["keel_status"]
+    tool = OUTCOMES["keel_account_status"]
     fn = _make_param_synthesized_handler(tool, frozenset({"always", "backtest"}))
-    raw = fn()  # status has no required args
-    env = json.loads(raw)
+    result = fn()  # status has no required args
+    # Until the non-view probe arm flips, status keeps the `{"result":
+    # string}` wrapper old connectors hold (R-25): the envelope is a string.
+    env = json.loads(result.structured_content["result"])
     # Should return the status envelope, not a usage_error
     assert env.get("code") != "usage_error"
     assert "api_url" in env
+    # ...and the text block is the status view's markdown (spec 02 §2.5).
+    assert result.content[0].text.startswith("**Keel**")
 
 
 def test_keel_status_surfaces_entitlement_summary(monkeypatch, tmp_path):
     """Agents need a window into plan-limit usage BEFORE running bulk
-    backtest sweeps. `keel_status` now fetches `/v1/entitlements` and
+    backtest sweeps. `keel_account_status` now fetches `/v1/entitlements` and
     surfaces the consumable units (backtest_runs, ai_messages,
     compute_seconds, live_strategies, eval_runs) in
     `entitlements.summary` so the agent can warn the user proactively
-    if they're close to a cap. Includes the billing upgrade URL."""
+    if they're close to a cap. Carries no plan destination (D-12)."""
     import keel.config as _config
-    from keel.tools.outcomes._base import ToolContext
     from keel.tools.outcomes import OUTCOMES
+    from keel.tools.outcomes._base import ToolContext
 
     cfg_file = tmp_path / "config.yaml"
-    cfg_file.write_text(
-        "api_key: dummy_test_key\napi_url: https://api.usekeel.io\n"
-    )
+    cfg_file.write_text("api_key: dummy_test_key\napi_url: https://api.usekeel.io\n")
     monkeypatch.setattr(_config, "CONFIG_FILE", cfg_file)
     monkeypatch.delenv("KEEL_API_KEY", raising=False)
 
     # Stub identity probe
-    monkeypatch.setattr("keel.auth.get_identity", lambda: {
-        "principal": {"id": "prn_x"},
-        "org": {"id": "org_x", "name": "Test", "plan": "starter"},
-        "credential_scopes": ["strategy.read", "backtest.read"],
-    })
+    monkeypatch.setattr(
+        "keel.auth.get_identity",
+        lambda: {
+            "principal": {"id": "prn_x"},
+            "org": {"id": "org_x", "name": "Test", "plan": "starter"},
+            "credential_scopes": ["strategy.read", "backtest.read"],
+        },
+    )
 
     # Stub the entitlements API response (mirrors live shape:
     # granted/spent/reserved/available).
     fake_balances = {
         "balances": [
-            {"unit": "backtest_runs", "type": "consumable",
-             "granted": 150, "spent": 25, "reserved": 0, "available": 125},
-            {"unit": "ai_messages", "type": "consumable",
-             "granted": 50, "spent": 10, "reserved": 0, "available": 40},
-            {"unit": "live_strategies_max", "type": "cap",
-             "granted": 3, "spent": 0, "reserved": 0, "available": 3},
-            {"unit": "backtest_compute_seconds", "type": "consumable",
-             "granted": 10000, "spent": 1200, "reserved": 0, "available": 8800},
+            {
+                "unit": "backtest_runs",
+                "type": "consumable",
+                "granted": 150,
+                "spent": 25,
+                "reserved": 0,
+                "available": 125,
+            },
+            {
+                "unit": "ai_messages",
+                "type": "consumable",
+                "granted": 50,
+                "spent": 10,
+                "reserved": 0,
+                "available": 40,
+            },
+            {
+                "unit": "live_strategies_max",
+                "type": "cap",
+                "granted": 3,
+                "spent": 0,
+                "reserved": 0,
+                "available": 3,
+            },
+            {
+                "unit": "backtest_compute_seconds",
+                "type": "consumable",
+                "granted": 10000,
+                "spent": 1200,
+                "reserved": 0,
+                "available": 8800,
+            },
             # Plus some unit we DON'T surface — verify it's filtered out
-            {"unit": "feature:api_access", "type": "boolean",
-             "granted": 1, "spent": 0, "reserved": 0, "available": 1},
+            {
+                "unit": "feature:api_access",
+                "type": "boolean",
+                "granted": 1,
+                "spent": 0,
+                "reserved": 0,
+                "available": 1,
+            },
         ],
     }
     monkeypatch.setattr("keel.client.KeelClient.get", lambda self, path, **kw: fake_balances)
 
-    tool = OUTCOMES["keel_status"]
+    tool = OUTCOMES["keel_account_status"]
     env = tool.handler({}, ToolContext(is_tty=False)).to_envelope()
 
     ent = env.get("entitlements")
-    assert ent is not None, "keel_status must surface `entitlements`"
-    assert ent["upgrade_url"] == "https://app.usekeel.io/settings?tab=billing"
+    assert ent is not None, "keel_account_status must surface `entitlements`"
+    # D-12: the caller's own units only — no plan destination. The key set
+    # is exact, so a re-added `upgrade_url` (SEED, run 2026-09-28) reds here.
+    assert set(ent) == {"summary"}, ent
+    # hero_url is the strategies list, never `/settings` (billing by default).
+    assert env["hero_url"] == "https://app.usekeel.io/strategies"
+    assert "/settings" not in json.dumps(env)
 
     by_unit = {b["unit"]: b for b in ent["summary"]}
     # Consumable units surface
@@ -718,11 +829,77 @@ def test_keel_status_surfaces_entitlement_summary(monkeypatch, tmp_path):
     assert by_unit["backtest_runs"]["granted"] == 150
     assert by_unit["backtest_runs"]["spent"] == 25
     assert by_unit["backtest_runs"]["available"] == 125
-    assert "unlimited" not in by_unit["backtest_runs"], (
-        "starter plan = 150 limit, NOT unlimited"
-    )
+    assert "unlimited" not in by_unit["backtest_runs"], "starter plan = 150 limit, NOT unlimited"
     # Boolean features filtered out
     assert "feature:api_access" not in by_unit
+
+
+def test_keel_status_reports_the_reset_instant_when_the_server_sends_it(monkeypatch, tmp_path):
+    """M1.3: the agent needs WHEN a unit refills, not just how much is
+    left. Read verbatim from the balance; a balance without one is
+    reported without one (control arm below) rather than with a guess.
+
+    The link host comes from the environment too — it was a hardcoded
+    prod literal, so a staging agent pointed users at production.
+    """
+    import keel.config as _config
+    from keel.tools.outcomes import OUTCOMES
+    from keel.tools.outcomes._base import ToolContext
+
+    cfg_file = tmp_path / "config.json"
+    cfg_file.write_text('{"api_key": "k", "api_url": "https://api.test", "refresh_token": null}')
+    monkeypatch.setattr(_config, "CONFIG_FILE", cfg_file)
+    monkeypatch.delenv("KEEL_API_KEY", raising=False)
+    monkeypatch.setattr(
+        "keel.auth.get_identity",
+        lambda: {
+            "principal": {"id": "prn_x"},
+            "org": {"id": "org_x", "name": "Test", "plan": "free"},
+            "credential_scopes": [],
+        },
+    )
+    balances = {
+        "balances": [
+            {
+                "unit": "backtest_runs",
+                "type": "consumable",
+                "granted": 50,
+                "spent": 44,
+                "reserved": 0,
+                "available": 6,
+                "period": "weekly",
+                "resets_at": "2026-09-22T00:00:00Z",
+                "seconds_to_reset": 24300,
+            },
+            # Control arm: same call, a unit the server sent no reset for.
+            {
+                "unit": "live_strategies_max",
+                "type": "cap",
+                "granted": 1,
+                "spent": 0,
+                "reserved": 0,
+                "available": 1,
+                "cap_current": 0,
+            },
+        ],
+    }
+    monkeypatch.setattr("keel.client.KeelClient.get", lambda self, path, **kw: balances)
+    monkeypatch.setenv("KEEL_APP_URL", "https://staging-app.tailf4d598.ts.net")
+
+    ctx = ToolContext(is_tty=False, app_url="https://staging-app.tailf4d598.ts.net")
+    env = OUTCOMES["keel_account_status"].handler({}, ctx).to_envelope()
+    ent = env["entitlements"]
+    by_unit = {b["unit"]: b for b in ent["summary"]}
+    assert by_unit["backtest_runs"]["resets_at"] == "2026-09-22T00:00:00Z"
+    assert by_unit["backtest_runs"]["period"] == "weekly"
+    assert by_unit["backtest_runs"]["seconds_to_reset"] == 24300
+    # Control: nothing invented for the unit the server said nothing about.
+    assert "resets_at" not in by_unit["live_strategies_max"]
+    assert "period" not in by_unit["live_strategies_max"]
+    # D-12: no plan destination on any host (the staging arm of the test
+    # above); the one app link follows the environment.
+    assert "upgrade_url" not in ent
+    assert env["hero_url"] == "https://staging-app.tailf4d598.ts.net/strategies"
 
 
 def test_keel_status_annotates_each_unit_with_consumed_by_surfaces():
@@ -732,10 +909,9 @@ def test_keel_status_annotates_each_unit_with_consumed_by_surfaces():
     as a consumer — it's the in-app chat at app.usekeel.io/chat only,
     and a `note` field must say so explicitly (so the agent doesn't
     tell the user "your MCP backtest will use one of your AI messages")."""
-    import keel.config as _config
-    from keel.tools.outcomes._base import ToolContext
-    from keel.tools.outcomes import OUTCOMES
     import pytest
+    from keel.tools.outcomes import OUTCOMES
+    from keel.tools.outcomes._base import ToolContext
 
     @pytest.fixture
     def _setup(monkeypatch, tmp_path):
@@ -744,29 +920,68 @@ def test_keel_status_annotates_each_unit_with_consumed_by_surfaces():
     # Inline monkeypatching since we can't use pytest fixture in this signature
     from unittest.mock import patch
 
-    with patch("keel.config.CONFIG_FILE", new=__import__("pathlib").Path("/tmp/_test_status_cfg.yaml")) as cfg_path:
+    # (pre-existing F841: the bound name was never read; dropping it is
+    # what lets ruff's pre-commit gate pass on any commit touching this file)
+    with patch(
+        "keel.config.CONFIG_FILE", new=__import__("pathlib").Path("/tmp/_test_status_cfg.yaml")
+    ):
         cfg_file = __import__("pathlib").Path("/tmp/_test_status_cfg.yaml")
         cfg_file.write_text("api_key: dummy\napi_url: https://api.usekeel.io\n")
 
         import os
+
         os.environ.pop("KEEL_API_KEY", None)
 
-        with patch("keel.auth.get_identity", return_value={
-            "principal": {"id": "x"}, "org": {"id": "y", "plan": "free"},
-            "credential_scopes": [],
-        }), patch("keel.client.KeelClient.get", return_value={
-            "balances": [
-                {"unit": "backtest_runs", "type": "consumable",
-                 "granted": 30, "spent": 5, "reserved": 0, "available": 25},
-                {"unit": "ai_messages", "type": "consumable",
-                 "granted": 15, "spent": 3, "reserved": 0, "available": 12},
-                {"unit": "live_strategies_max", "type": "cap",
-                 "granted": 1, "spent": 0, "reserved": 0, "available": 1},
-                {"unit": "backtest_compute_seconds", "type": "consumable",
-                 "granted": 3000, "spent": 280, "reserved": 0, "available": 2720},
-            ],
-        }):
-            tool = OUTCOMES["keel_status"]
+        with (
+            patch(
+                "keel.auth.get_identity",
+                return_value={
+                    "principal": {"id": "x"},
+                    "org": {"id": "y", "plan": "free"},
+                    "credential_scopes": [],
+                },
+            ),
+            patch(
+                "keel.client.KeelClient.get",
+                return_value={
+                    "balances": [
+                        {
+                            "unit": "backtest_runs",
+                            "type": "consumable",
+                            "granted": 30,
+                            "spent": 5,
+                            "reserved": 0,
+                            "available": 25,
+                        },
+                        {
+                            "unit": "ai_messages",
+                            "type": "consumable",
+                            "granted": 15,
+                            "spent": 3,
+                            "reserved": 0,
+                            "available": 12,
+                        },
+                        {
+                            "unit": "live_strategies_max",
+                            "type": "cap",
+                            "granted": 1,
+                            "spent": 0,
+                            "reserved": 0,
+                            "available": 1,
+                        },
+                        {
+                            "unit": "backtest_compute_seconds",
+                            "type": "consumable",
+                            "granted": 3000,
+                            "spent": 280,
+                            "reserved": 0,
+                            "available": 2720,
+                        },
+                    ],
+                },
+            ),
+        ):
+            tool = OUTCOMES["keel_account_status"]
             env = tool.handler({}, ToolContext(is_tty=False)).to_envelope()
 
     by_unit = {b["unit"]: b for b in env["entitlements"]["summary"]}
@@ -811,25 +1026,38 @@ def test_keel_status_marks_unlimited_for_int_max_grants(monkeypatch, tmp_path):
     grants) must surface as `unlimited: True` so agents don't tell
     users they have "2147483647 backtest runs remaining"."""
     import keel.config as _config
-    from keel.tools.outcomes._base import ToolContext
     from keel.tools.outcomes import OUTCOMES
+    from keel.tools.outcomes._base import ToolContext
 
     cfg_file = tmp_path / "config.yaml"
     cfg_file.write_text("api_key: dummy\napi_url: https://api.usekeel.io\n")
     monkeypatch.setattr(_config, "CONFIG_FILE", cfg_file)
     monkeypatch.delenv("KEEL_API_KEY", raising=False)
-    monkeypatch.setattr("keel.auth.get_identity", lambda: {
-        "principal": {"id": "x"}, "org": {"id": "y", "plan": "trader"},
-        "credential_scopes": [],
-    })
-    monkeypatch.setattr("keel.client.KeelClient.get", lambda self, path, **kw: {
-        "balances": [
-            {"unit": "backtest_runs", "type": "consumable",
-             "granted": 2147483647, "spent": 0, "reserved": 0, "available": 2147483647},
-        ],
-    })
+    monkeypatch.setattr(
+        "keel.auth.get_identity",
+        lambda: {
+            "principal": {"id": "x"},
+            "org": {"id": "y", "plan": "trader"},
+            "credential_scopes": [],
+        },
+    )
+    monkeypatch.setattr(
+        "keel.client.KeelClient.get",
+        lambda self, path, **kw: {
+            "balances": [
+                {
+                    "unit": "backtest_runs",
+                    "type": "consumable",
+                    "granted": 2147483647,
+                    "spent": 0,
+                    "reserved": 0,
+                    "available": 2147483647,
+                },
+            ],
+        },
+    )
 
-    tool = OUTCOMES["keel_status"]
+    tool = OUTCOMES["keel_account_status"]
     env = tool.handler({}, ToolContext(is_tty=False)).to_envelope()
     summary = env["entitlements"]["summary"]
     by_unit = {b["unit"]: b for b in summary}
@@ -845,8 +1073,8 @@ def test_keel_status_identity_network_error_does_not_suggest_reauth(monkeypatch,
     response that simultaneously suggested re-auth.
     """
     import keel.config as _config
-    from keel.tools.outcomes._base import ToolContext
     from keel.tools.outcomes import OUTCOMES
+    from keel.tools.outcomes._base import ToolContext
 
     cfg_file = tmp_path / "config.yaml"
     cfg_file.write_text("api_key: dummy\napi_url: https://api.usekeel.io\n")
@@ -862,7 +1090,7 @@ def test_keel_status_identity_network_error_does_not_suggest_reauth(monkeypatch,
         lambda self, path, **kw: {"balances": []},
     )
 
-    tool = OUTCOMES["keel_status"]
+    tool = OUTCOMES["keel_account_status"]
     env = tool.handler({}, ToolContext(is_tty=False)).to_envelope()
 
     assert env["authenticated"] is True, "non-auth errors must not flip authenticated"
@@ -879,8 +1107,8 @@ def test_keel_status_identity_auth_error_suggests_reauth(monkeypatch, tmp_path):
     server rejected them, which is the legitimate re-login path."""
     import keel.config as _config
     from keel.errors import AuthError
-    from keel.tools.outcomes._base import ToolContext
     from keel.tools.outcomes import OUTCOMES
+    from keel.tools.outcomes._base import ToolContext
 
     cfg_file = tmp_path / "config.yaml"
     cfg_file.write_text("api_key: dummy\napi_url: https://api.usekeel.io\n")
@@ -896,13 +1124,13 @@ def test_keel_status_identity_auth_error_suggests_reauth(monkeypatch, tmp_path):
         lambda self, path, **kw: {"balances": []},
     )
 
-    tool = OUTCOMES["keel_status"]
+    tool = OUTCOMES["keel_account_status"]
     env = tool.handler({}, ToolContext(is_tty=False)).to_envelope()
 
     assert env["authenticated"] is False, "AuthError must flip authenticated to false"
     assert "identity_error" in env
     assert "next" in env
-    assert any("keel_auth_login" in line for line in env["next"])
+    assert "keel_auth_login" in env["next"]
 
 
 def test_keel_status_entitlements_probe_fails_soft(monkeypatch, tmp_path):
@@ -910,24 +1138,28 @@ def test_keel_status_entitlements_probe_fails_soft(monkeypatch, tmp_path):
     surfaces in `entitlements_error` so the agent knows quota info
     isn't visible, but the rest of the status payload still works."""
     import keel.config as _config
-    from keel.tools.outcomes._base import ToolContext
     from keel.tools.outcomes import OUTCOMES
+    from keel.tools.outcomes._base import ToolContext
 
     cfg_file = tmp_path / "config.yaml"
     cfg_file.write_text("api_key: dummy\napi_url: https://api.usekeel.io\n")
     monkeypatch.setattr(_config, "CONFIG_FILE", cfg_file)
     monkeypatch.delenv("KEEL_API_KEY", raising=False)
-    monkeypatch.setattr("keel.auth.get_identity", lambda: {
-        "principal": {"id": "x"}, "org": {"id": "y", "plan": "free"},
-        "credential_scopes": [],
-    })
+    monkeypatch.setattr(
+        "keel.auth.get_identity",
+        lambda: {
+            "principal": {"id": "x"},
+            "org": {"id": "y", "plan": "free"},
+            "credential_scopes": [],
+        },
+    )
 
     def _fail(self, path, **kw):
         raise RuntimeError("simulated entitlements outage")
 
     monkeypatch.setattr("keel.client.KeelClient.get", _fail)
 
-    tool = OUTCOMES["keel_status"]
+    tool = OUTCOMES["keel_account_status"]
     env = tool.handler({}, ToolContext(is_tty=False)).to_envelope()
     # Status still returns
     assert env["authenticated"] is True
@@ -940,13 +1172,11 @@ def test_keel_status_entitlements_probe_fails_soft(monkeypatch, tmp_path):
 def test_keel_status_identity_marks_tier_live_with_runner_scope(monkeypatch, tmp_path):
     """credential_scopes containing 'runner.*' flips tier to live."""
     import keel.config as _config
-    from keel.tools.outcomes._base import ToolContext
     from keel.tools.outcomes import OUTCOMES
+    from keel.tools.outcomes._base import ToolContext
 
     cfg_file = tmp_path / "config.yaml"
-    cfg_file.write_text(
-        "api_key: dummy_test_key\napi_url: https://api.usekeel.io\n"
-    )
+    cfg_file.write_text("api_key: dummy_test_key\napi_url: https://api.usekeel.io\n")
     monkeypatch.setattr(_config, "CONFIG_FILE", cfg_file)
     monkeypatch.delenv("KEEL_API_KEY", raising=False)
 
@@ -963,7 +1193,7 @@ def test_keel_status_identity_marks_tier_live_with_runner_scope(monkeypatch, tmp
         lambda self, path, **kw: {"balances": []},
     )
 
-    tool = OUTCOMES["keel_status"]
+    tool = OUTCOMES["keel_account_status"]
     env = tool.handler({}, ToolContext(is_tty=False)).to_envelope()
 
     assert env["identity"]["tier"] == "live"
@@ -982,7 +1212,7 @@ def test_mcp_server_registers_pilot_outcomes():
         s = create_server()
         tools = await s.list_tools()
         names = {t.name for t in tools}
-        for required in ("keel_status", "keel_doctor", "keel_help"):
+        for required in ("keel_account_status", "keel_connection_check", "keel_help"):
             assert required in names, f"MCP missing outcome {required}"
         assert "keel_audit_replay" not in names
 
@@ -990,56 +1220,65 @@ def test_mcp_server_registers_pilot_outcomes():
 
 
 def test_mcp_server_instructions_teach_skills_discovery():
-    """Regression — agents discover skills only via the MCP `instructions`
-    block. Without explicit guidance there, agents compose strategies
-    "blind" because they don't know the strategy-creation skill exists.
-    See chat-api parity story 2026-05-21."""
+    """Skills are METHOD, reached only through user-controlled channels
+    (mcp-conversion 05 §3.2, R-L3 — "nothing we serve tells the model to
+    fetch guidance"): the MCP prompts a user picks, and `keel_help`'s own
+    catalogue (`topic="skills"`), which its description states. The
+    instructions no longer carry a `skill:` pointer; the 2026-05-21 chat
+    parity story's discovery need is met by the catalogue instead."""
     from keel.mcp.server import create_server
+    from keel.tools.outcomes import OUTCOMES
 
-    s = create_server()
-    instr = s.instructions or ""
-    # Must mention skills section + the canonical first-compose skill +
-    # the knowledge resources URI scheme.
-    assert "SKILLS" in instr or "skill" in instr.lower(), (
-        "MCP instructions don't mention skills — agents won't discover them"
-    )
-    assert "strategy-creation" in instr, (
-        "MCP instructions don't name the strategy-creation skill — agents "
-        "won't know to invoke it before composing"
-    )
-    assert "keel://knowledge/" in instr, (
-        "MCP instructions don't expose the knowledge resource URIs — "
-        "agents can't discover them via resources/list alone"
-    )
+    instr = create_server().instructions or ""
+    assert "skill:" not in instr, "the instructions point the model at a skill"
+    # The tools-only path to the pull tier and to the skill catalogue is
+    # `keel_help` itself: its description names both, so a client that
+    # never lists prompts or resources can still reach them.
+    help_desc = OUTCOMES["keel_help"].description or ""
+    assert '`topic="skills"` lists the agent skills' in help_desc
+    assert "With no `topic` it lists the topic names" in help_desc
+    # Non-vacuity: the instructions are the real assembly.
+    assert "keel_account_status" in instr and len(instr) > 400
 
 
 def test_mcp_server_instructions_teach_progressive_workflows():
     """Instructions should give generic agents a route before they pick
-    lower-level tools from tools/list. Strategy routing now comes from the
-    corpus-distilled operating core (`Route:` / `New thesis:`); the full
-    wrapper adds the profile-specific plumbing routes (LIVE, DEBUG, skills)."""
+    lower-level tools from tools/list. Strategy routing comes from the
+    corpus: the `sequence` section ("New strategy: …", agent-surface-cleanup
+    spec 01 §2.2 — a FACT about the platform's order of operations; the
+    discovery gate is the chat's opinion layer) replaced `LOOP` on
+    2026-09-23; the full profiles add the plumbing blocks (AUTH, STATE,
+    LIVE)."""
     from keel.mcp.server import create_server
 
     instr = create_server().instructions or ""
-    # Core-provided strategy routing + full-profile plumbing routes.
-    for marker in ("Route:", "New thesis:", "DEBUG", "LIVE WRITE"):
+    # Corpus-provided strategy routing + full-profile plumbing blocks.
+    for marker in ("New strategy:", "AUTH —", "STATE —", "LIVE —"):
         assert marker in instr, marker
     # The concrete tool chain agents follow.
     assert "keel_components_search" in instr
-    assert "keel_components_detail_batch" in instr
+    assert "keel_components_get_many" in instr
     assert "keel_strategy_compose" in instr
     assert "keel_backtest_run" in instr
-    assert "deploy-and-monitor" in instr
+    # No skill pointer rides the instructions (mcp-conversion 05 §3.2).
+    assert "skill:strategy-creation" not in instr
 
 
 def test_mcp_server_exposes_knowledge_resources():
     """The bundled knowledge files (same set chat-api always-loads) must
     be reachable as MCP resources for direct fetch."""
-    from keel.skills import load_section
+    # `keel.data.knowledge` is the loader's owner; `keel.skills` used to
+    # re-export it only because composing a skill appended these files.
+    from keel.data.knowledge import load_section
 
     # Sanity — direct loader works for canonical sections
-    for section in ("tool_usage", "mistakes", "reasoning_principles",
-                    "composition_mechanics", "dsl_syntax"):
+    for section in (
+        "tool_usage",
+        "mistakes",
+        "reasoning_principles",
+        "composition_mechanics",
+        "dsl_syntax",
+    ):
         text = load_section(section)
         assert len(text) > 100, f"knowledge section '{section}' suspiciously short"
 
@@ -1130,16 +1369,15 @@ def test_cli_components_describe_alias_works():
     assert json.loads(result3.stdout)["name"] == "ROC"
 
 
-def test_strategy_compose_description_directs_first_use_to_skill():
-    """The compose tool must direct first-time callers to the
-    strategy-creation skill so they get the full workflow guidance."""
+def test_strategy_compose_description_leaves_the_skill_route_to_the_instructions():
+    """Q-1947 (2026-09-25): ChatGPT's approval gate read compose's skill
+    pointer as the tool "specifying validation/help methods" and showed a
+    Suspicious Instruction warning on every save. The route to the
+    strategy-creation skill lives in the server instructions' head and in
+    keel_help's description (test_listed_skill_routing pins both)."""
     from keel.tools.outcomes import OUTCOMES
 
     desc = OUTCOMES["keel_strategy_compose"].description
-    assert "strategy-creation" in desc, (
-        "compose tool description doesn't point at the strategy-creation "
-        "skill — first-time agents will compose without the deep guidance"
-    )
-    assert "prompts/list" in desc or "MCP prompt" in desc, (
-        "compose description doesn't tell agents WHERE to find the skill"
-    )
+    assert "strategy-creation" not in desc
+    # Non-vacuous: this is the compose description (its skeleton is present).
+    assert "Declarations, then one Pipeline:" in desc

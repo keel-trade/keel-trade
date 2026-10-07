@@ -158,12 +158,13 @@ def test_backtest_run_hosted_skips_divergence_guard(monkeypatch):
 
     submitted = {"id": "bt_hosted1", "status": "queued", "strategy_id": "strat_x"}
     # The handler also runs the best-effort ownership projection
-    # (`_ownership.fetch_ownership_projection` → two GETs). Unstubbed
-    # that reached the real `api_url` bound above; stub it with the empty
-    # projection, which is the branch this test's assertions expect.
+    # (`_ownership.fetch_projection` → ONE GET to /v1/strategy-work since
+    # Q-0533; it was two GETs against the work-session routes before).
+    # Unstubbed it would reach the real `api_url` bound above; the empty dict
+    # is the no-hint-fields branch this test's assertions expect.
     with (
         patch("keel.client.KeelClient.post", return_value=submitted),
-        patch("keel.client.KeelClient.get", return_value={"items": []}),
+        patch("keel.client.KeelClient.get", return_value={}),
     ):
         result = OUTCOMES["keel_backtest_run"].handler(
             {
@@ -196,7 +197,7 @@ def test_strategy_search_hosted_never_lists_local_workspaces(monkeypatch):
 
 
 def test_hosted_status_reports_hosted_visible_tools(monkeypatch):
-    """keel_status's tools_visible mirrors the hosted registration set."""
+    """keel_account_status's tools_visible mirrors the hosted registration set."""
     monkeypatch.setenv("KEEL_TOOLSETS", ALL_TOOLSETS_ENV)
     monkeypatch.setenv("KEEL_EXECUTION_MODE", "hosted")
     bind_request_credentials(token="caller-tok", api_url="https://staging-api.test")
@@ -212,7 +213,7 @@ def test_hosted_status_reports_hosted_visible_tools(monkeypatch):
         ),
         patch("keel.client.KeelClient.get", return_value={"balances": []}),
     ):
-        result = OUTCOMES["keel_status"].handler({}, ToolContext(is_tty=False))
+        result = OUTCOMES["keel_account_status"].handler({}, ToolContext(is_tty=False))
     visible = set(result.extra["tools_visible"])
     assert visible == set(OUTCOMES) - HOSTED_EXCLUDED
     assert json.loads(json.dumps(result.extra))  # envelope stays serializable

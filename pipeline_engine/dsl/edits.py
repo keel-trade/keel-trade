@@ -906,6 +906,489 @@ def _scan_back_for_comma(source: str, start: int, floor: int) -> int | None:
     return None
 
 
+# ---------------------------------------------------------------------------
+# comment-preserving text primitives (position-layer spec 04-R12)
+#
+# The upgrade planner (``dsl/upgrade.py``) rewrites a strategy's position
+# wiring through these, and its contract is stricter than the primitives
+# above: the MULTISET of comment strings in the result equals the original's.
+# A comment inside a span that is replaced is re-emitted as a full-line
+# comment directly above the replacement; a moved step carries the full-line
+# comments directly above it and its same-line trailing comment with it.
+# Every primitive is still verified by the spec-equivalence net (I4).
+# ---------------------------------------------------------------------------
+
+
+def comment_tokens(source: str) -> list[tuple[int, str]]:
+    """Every ``#`` comment in ``source`` as ``(char offset, text)``, in order.
+
+    Uses ``tokenize`` so a ``#`` inside a string literal is never a comment.
+    """
+    import io
+    import tokenize
+
+    starts: list[int] = []
+    pos = 0
+    for line in source.splitlines(keepends=True):
+        starts.append(pos)
+        pos += len(line)
+    out: list[tuple[int, str]] = []
+    for tok in tokenize.generate_tokens(io.StringIO(source).readline):
+        if tok.type == tokenize.COMMENT:
+            row, col = tok.start
+            out.append((starts[row - 1] + col, tok.string.rstrip()))
+    return out
+
+
+def comment_multiset(source: str) -> dict[str, int]:
+    """The comment strings of ``source`` with their counts (04-R12's invariant)."""
+    counts: dict[str, int] = {}
+    for _off, text in comment_tokens(source):
+        counts[text] = counts.get(text, 0) + 1
+    return counts
+
+
+def _line_start(source: str, offset: int) -> int:
+    return source.rfind("\n", 0, offset) + 1
+
+
+def _line_end(source: str, offset: int) -> int:
+    """Offset just past the newline that ends ``offset``'s line (or len)."""
+    nl = source.find("\n", offset)
+    return len(source) if nl == -1 else nl + 1
+
+
+def _starts_its_line(source: str, offset: int) -> bool:
+    return source[_line_start(source, offset) : offset].strip() == ""
+
+
+def _indent_of_line(source: str, offset: int) -> int:
+    """Leading-space count of the line holding ``offset``."""
+    start = _line_start(source, offset)
+    line = source[start : _line_end(source, offset)]
+    return len(line) - len(line.lstrip(" "))
+
+
+@dataclass(frozen=True)
+class _Block:
+    """A step's movable text: the step, its comma, and its own comments.
+
+    ``line_block`` is True when the step owns whole lines: it starts its line
+    and nothing but its comma and a comment follows it on its last line.
+    Then ``[start, end)`` covers the full-line comments directly above it
+    through the newline ending its last line. Otherwise (an inline element)
+    ``[start, end)`` is the step span plus its following comma.
+    """
+
+    start: int
+    end: int
+    step: Span
+    line_block: bool
+
+
+def _step_block(source: str, span: Span, list_close: int) -> _Block:
+    comma = _scan_for_comma(source, span.end, list_close)
+    after = comma + 1 if comma is not None else span.end
+    rest_of_line = source[after : _line_end(source, after)].strip()
+    if _starts_its_line(source, span.start) and (
+        rest_of_line == "" or rest_of_line.startswith("#")
+    ):
+        # Did the comma land on the step's own last line? (A comma on a later
+        # line would make the block swallow a line that belongs to no one.)
+        if comma is not None and source.count("\n", span.end, comma):
+            return _Block(span.start, after, span, line_block=False)
+        start = _line_start(source, span.start)
+        # Full-line comments directly above the step belong to it.
+        while start > 0:
+            prev_start = _line_start(source, start - 1)
+            if source[prev_start:start].strip().startswith("#"):
+                start = prev_start
+            else:
+                break
+        return _Block(start, _line_end(source, after), span, line_block=True)
+    return _Block(span.start, after, span, line_block=False)
+
+
+def _reindent(text: str, delta: int) -> str:
+    """Shift every line after the first by ``delta`` columns (uniformly)."""
+    if delta == 0:
+        return text
+    lines = text.split("\n")
+    out = [lines[0]]
+    for line in lines[1:]:
+        if not line.strip():
+            out.append(line)
+        elif delta > 0:
+            out.append(" " * delta + line)
+        else:
+            cut = min(-delta, len(line) - len(line.lstrip(" ")))
+            out.append(line[cut:])
+    return "\n".join(out)
+
+
+def _indent_block(text: str, delta: int) -> str:
+    """Shift EVERY line of a whole-line block by ``delta`` columns."""
+    return _reindent("\n" + text, delta)[1:] if delta else text
+
+
+def _multiline_at(source: str, container: ListSpans, index: int) -> bool:
+    """Is the list laid out one element per line AT the insertion point?
+
+    Judged locally (the neighbour the insertion anchors on), so a list that
+    puts a few short steps on one line elsewhere still takes a new line here.
+    """
+    span = container.list_span
+    if "\n" not in source[span.start : span.end]:
+        return False
+    n = len(container.elements)
+    if n == 0:
+        return True
+    return _starts_its_line(source, container.elements[min(index, n - 1)].start)
+
+
+def _whole_lines_ok(source: str, container: ListSpans, index: int) -> bool:
+    """Can a whole-line block (with comment lines) become element ``index``?"""
+    span = container.list_span
+    if "\n" not in source[span.start : span.end]:
+        return False
+    n = len(container.elements)
+    if index < n:
+        return _starts_its_line(source, container.elements[index].start)
+    if n == 0:
+        return _starts_its_line(source, span.end - 1)
+    last = container.elements[-1]
+    comma = _scan_for_comma(source, last.end, span.end - 1)
+    after = comma + 1 if comma is not None else last.end
+    rest = source[after : _line_end(source, after)].strip()
+    return rest == "" or rest.startswith("#")
+
+
+def _anchor_col(source: str, container: ListSpans, index: int) -> int:
+    n = len(container.elements)
+    if n:
+        return _column_of(source, container.elements[min(index, n - 1)].start)
+    return _indent_of_line(source, container.list_span.start) + 4
+
+
+def _container_key(container_path: str) -> str:
+    return "" if container_path == "pipeline" else container_path
+
+
+def _insertion(
+    source: str, container: ListSpans, index: int, text: str, *, whole_lines: bool
+) -> tuple[int, str]:
+    """Where and what to splice so ``text`` becomes element ``index``.
+
+    ``text`` is one step expression (continuation lines already indented for
+    the anchor column), or — with ``whole_lines`` — a whole-line block that
+    already ends with ``,\\n`` (comments allowed).
+    """
+    n = len(container.elements)
+    multiline = _multiline_at(source, container, index)
+    col = _anchor_col(source, container, index)
+    indent = " " * col
+    if whole_lines:
+        if not _whole_lines_ok(source, container, index):
+            raise EditError(
+                "cannot insert a commented whole-line block where the step list is not "
+                "laid out one step per line"
+            )
+        if index < n:
+            # Before element ``index``'s own comment block, so that block stays its own.
+            blk = _step_block(source, container.elements[index], container.list_span.end - 1)
+            return blk.start, text
+        if n == 0:
+            close = container.list_span.end - 1
+            return _line_start(source, close), text
+        last = container.elements[-1]
+        comma = _scan_for_comma(source, last.end, container.list_span.end - 1)
+        if comma is None:
+            raise EditError(
+                "internal: append after a comma-less last element — call _with_last_comma first"
+            )
+        return _line_end(source, comma + 1), text
+    if n == 0:
+        at = container.list_span.start + 1
+        if multiline:
+            close_col = _indent_of_line(source, container.list_span.end - 1)
+            return at, f"\n{indent}{text},\n{' ' * close_col}"
+        return at, text
+    if index < n:
+        at = container.elements[index].start
+        return at, (f"{text},\n{indent}" if multiline else f"{text}, ")
+    last_end = container.elements[-1].end
+    comma = _scan_for_comma(source, last_end, container.list_span.end - 1)
+    if comma is not None:
+        return comma + 1, (f"\n{indent}{text}," if multiline else f" {text},")
+    return last_end, (f",\n{indent}{text}" if multiline else f", {text}")
+
+
+def _with_last_comma(source: str, key: str) -> str:
+    """Give a step list's last element its trailing comma, if it lacks one.
+
+    Appending whole lines after a comma-less last element needs the comma
+    first; a trailing comma is insignificant to the grammar, so the spec is
+    unchanged (the callers' net re-checks that).
+    """
+    idx = build_span_index(source)
+    container = idx.containers.get(key)
+    if container is None or not container.elements:
+        return source
+    last = container.elements[-1]
+    if _scan_for_comma(source, last.end, container.list_span.end - 1) is not None:
+        return source
+    return _splice(source, Span(last.end, last.end), ",")
+
+
+def _whole_line_text(text: str, col: int, comments: list[str]) -> str:
+    """``text`` (continuation lines relative to ``col``) as whole lines at ``col``."""
+    pad = " " * col
+    head = "".join(f"{pad}{c}\n" for c in comments)
+    return head + pad + text + ",\n"
+
+
+def insert_step_text(
+    source: str,
+    container_path: str,
+    index: int,
+    text: str,
+    *,
+    comments: list[str] | None = None,
+) -> str:
+    """Insert raw step text at ``index`` of a step list, verified (I4).
+
+    ``text`` is ONE step expression; its continuation lines are written
+    relative to column 0 and are indented to the insertion column here.
+    ``comments`` (full ``# ...`` strings) are placed as full-line comments
+    directly above the inserted step — the planner's way of carrying
+    comments from a replaced or deleted span (04-R12).
+    """
+    key = _container_key(container_path)
+    if comments:
+        source = _with_last_comma(source, key)
+    idx = build_span_index(source)
+    container = idx.containers.get(key)
+    if container is None:
+        raise SpanNotFoundError(f"no step list at container path {container_path!r}")
+    n = len(container.elements)
+    if not 0 <= index <= n:
+        raise SpanNotFoundError(f"insert index {index} out of range 0..{n}")
+    factory_names = {f.name for f in idx.file.factories}
+    parsed = _parse_step_fragment(text, factory_names)
+    col = _anchor_col(source, container, index)
+    body = _reindent(text, col)
+    if comments:
+        at, fragment = _insertion(
+            source, container, index, _whole_line_text(body, col, comments), whole_lines=True
+        )
+    else:
+        at, fragment = _insertion(source, container, index, body, whole_lines=False)
+    expected = copy.deepcopy(idx.file)
+    _resolve_steps_list(expected, key).insert(index, parsed)
+    new_text = _splice(source, Span(at, at), fragment)
+    return _verify(new_text, expected, f"insert_step_text({container_path}, {index})")
+
+
+def replace_step_text(source: str, step_path: str, text: str) -> str:
+    """Replace one step's span with raw ``text``, keeping its comments (04-R12).
+
+    Comments inside the replaced span are re-emitted as full-line comments
+    directly above the replacement. A step that does not start its own line
+    and carries comments inside its span cannot honour that, and raises.
+    """
+    idx = build_span_index(source)
+    info = idx.steps.get(step_path)
+    if info is None:
+        raise SpanNotFoundError(f"no step at path {step_path!r}")
+    factory_names = {f.name for f in idx.file.factories}
+    parsed = _parse_step_fragment(text, factory_names)
+    col = _column_of(source, info.span.start)
+    inner = [c for off, c in comment_tokens(source) if info.span.start <= off < info.span.end]
+    body = _reindent(text, col)
+    start = info.span.start
+    if inner:
+        if not _starts_its_line(source, start):
+            raise EditError(
+                f"replace_step_text({step_path}): the step carries comments but does not "
+                "start its own line, so they cannot be kept above it"
+            )
+        start = _line_start(source, start)
+        body = "".join(f"{' ' * col}{c}\n" for c in inner) + " " * col + body
+    expected = copy.deepcopy(idx.file)
+    steps, i, _node = _resolve_step_node(expected, step_path)
+    steps[i] = parsed
+    new_text = _splice(source, Span(start, info.span.end), body)
+    return _verify(new_text, expected, f"replace_step_text({step_path})")
+
+
+def replace_step_list(source: str, container_path: str, texts: list[str]) -> str:
+    """Replace a whole step list's contents with ``texts`` (one step each).
+
+    The list keeps its layout: single-line stays single-line, multi-line
+    stays one step per line. Comments inside the old list are re-emitted at
+    the top of the new list (which is then multi-line), so none is lost.
+    """
+    idx = build_span_index(source)
+    key = _container_key(container_path)
+    container = idx.containers.get(key)
+    if container is None:
+        raise SpanNotFoundError(f"no step list at container path {container_path!r}")
+    factory_names = {f.name for f in idx.file.factories}
+    parsed = [_parse_step_fragment(t, factory_names) for t in texts]
+    span = container.list_span
+    inner_comments = [c for off, c in comment_tokens(source) if span.start < off < span.end - 1]
+    multiline = "\n" in source[span.start : span.end] or bool(inner_comments)
+    if multiline:
+        base_col = _indent_of_line(source, span.start)
+        if container.elements and _starts_its_line(source, container.elements[0].start):
+            col = _column_of(source, container.elements[0].start)
+        else:
+            col = _column_of(source, span.start) + 4
+        close_col = (
+            _indent_of_line(source, span.end - 1)
+            if _starts_its_line(source, span.end - 1)
+            else base_col
+        )
+        lines = [f"{' ' * col}{c}" for c in inner_comments]
+        lines += [f"{' ' * col}{_reindent(t, col)}," for t in texts]
+        rendered = "[\n" + "\n".join(lines) + "\n" + " " * close_col + "]"
+    else:
+        col = _column_of(source, span.start)
+        rendered = "[" + ", ".join(_reindent(t, col) for t in texts) + "]"
+    expected = copy.deepcopy(idx.file)
+    lst = _resolve_steps_list(expected, key)
+    lst[:] = parsed
+    new_text = _splice(source, span, rendered)
+    return _verify(new_text, expected, f"replace_step_list({container_path})")
+
+
+def delete_step_keep_comments(source: str, step_path: str) -> tuple[str, list[str]]:
+    """Delete one step and RETURN the comments its removal took out.
+
+    ``delete_step`` drops a step's own same-line comment with its line (a
+    trailing comment belongs to the step it annotates); the planner must
+    keep every comment, so it re-emits what this returns elsewhere (04-R12).
+    Full-line comments above the step are left in place.
+    """
+    before = comment_tokens(source)
+    after_text = delete_step(source, step_path)
+    remaining = dict(comment_multiset(after_text))
+    removed: list[str] = []
+    for _off, text in before:
+        if remaining.get(text, 0) > 0:
+            remaining[text] -= 1
+        else:
+            removed.append(text)
+    return after_text, removed
+
+
+def move_step(source: str, step_path: str, to_container: str, index: int) -> str:
+    """Move one step's exact source text to ``index`` of another step list.
+
+    Paths are ORIGINAL-source paths: ``to_container`` and ``index`` name the
+    target list and the element the step will precede (``index == len`` to
+    append), both read BEFORE the move. Within the same list, the step lands
+    immediately before original element ``index``.
+
+    The moved text keeps its bytes — including the full-line comments
+    directly above it and its same-line trailing comment — re-indented by a
+    uniform column delta. Verified by the spec-equivalence net (I4): the
+    result must parse to the original tree with that one node moved.
+    Not idempotent by nature.
+    """
+    tgt_key = _container_key(to_container)
+    source = _with_last_comma(source, tgt_key)
+    idx = build_span_index(source)
+    info = idx.steps.get(step_path)
+    if info is None:
+        raise SpanNotFoundError(f"no step at path {step_path!r}")
+    src_key, i = _split_step_path(step_path)
+    if tgt_key == step_path or tgt_key.startswith(step_path + "."):
+        raise EditError(f"cannot move {step_path!r} into itself ({to_container!r})")
+    src_container = idx.containers.get(src_key)
+    tgt_container = idx.containers.get(tgt_key)
+    if src_container is None or tgt_container is None:
+        raise SpanNotFoundError(
+            f"move_step({step_path} -> {to_container}): both ends must be editable step lists"
+        )
+    n_tgt = len(tgt_container.elements)
+    if not 0 <= index <= n_tgt:
+        raise SpanNotFoundError(f"move index {index} out of range 0..{n_tgt}")
+    if tgt_key == src_key and index in (i, i + 1):
+        return source  # already there
+
+    block = _step_block(source, src_container.elements[i], src_container.list_span.end - 1)
+    src_col = _column_of(source, info.span.start)
+    tgt_col = _anchor_col(source, tgt_container, index)
+    if block.line_block and _whole_lines_ok(source, tgt_container, index):
+        moved = _indent_block(source[block.start : block.end], tgt_col - src_col)
+        if _scan_for_comma(source, info.span.end, src_container.list_span.end - 1) is None:
+            # The last element of its list may omit its comma; in a new home
+            # it needs one before the newline/comment.
+            step_end = info.span.end - block.start
+            moved_lines = source[block.start : block.end]
+            moved = _indent_block(
+                moved_lines[:step_end] + "," + moved_lines[step_end:], tgt_col - src_col
+            )
+        ins_at, ins_text = _insertion(source, tgt_container, index, moved, whole_lines=True)
+        del_span = Span(block.start, block.end)
+    else:
+        own = [c for off, c in comment_tokens(source) if block.start <= off < block.end]
+        trailing = [
+            c
+            for off, c in comment_tokens(source)
+            if block.end <= off < _line_end(source, block.end)
+            and not block.line_block
+            and source[block.end : off].strip() == ""
+        ]
+        if own or trailing:
+            raise EditError(
+                f"move_step({step_path}): an inline step with comments cannot be moved "
+                "without re-flowing its list"
+            )
+        text = _reindent(source[info.span.start : info.span.end], tgt_col - src_col)
+        ins_at, ins_text = _insertion(source, tgt_container, index, text, whole_lines=False)
+        # Remove the element exactly as delete_step does (span + its comma).
+        del_start, del_end = info.span.start, info.span.end
+        comma = _scan_for_comma(source, del_end, src_container.list_span.end - 1)
+        if comma is not None:
+            del_end = comma + 1
+            while del_end < len(source) and source[del_end] == " ":
+                del_end += 1
+        else:
+            floor = (
+                src_container.elements[i - 1].end if i > 0 else src_container.list_span.start + 1
+            )
+            back = _scan_back_for_comma(source, del_start, floor)
+            if back is not None:
+                del_start = back
+        if block.line_block or _starts_its_line(source, info.span.start):
+            ls, le = _line_start(source, del_start), _line_end(source, del_end)
+            if source[ls:del_start].strip() == "" and source[del_end:le].strip() == "":
+                del_start, del_end = ls, le
+        del_span = Span(del_start, del_end)
+    if del_span.start <= ins_at < del_span.end:
+        raise EditError(f"move_step({step_path}): target position lies inside the moved text")
+
+    expected = copy.deepcopy(idx.file)
+    src_list = _resolve_steps_list(expected, src_key)
+    tgt_list = _resolve_steps_list(expected, tgt_key)
+    anchor = tgt_list[index] if index < len(tgt_list) else None
+    node = src_list.pop(i)
+    if anchor is None:
+        tgt_list.append(node)
+    else:
+        tgt_list.insert(next(k for k, s in enumerate(tgt_list) if s is anchor), node)
+
+    if ins_at >= del_span.end:
+        new_text = _splice(source, Span(ins_at, ins_at), ins_text)
+        new_text = _splice(new_text, del_span, "")
+    else:
+        new_text = _splice(source, del_span, "")
+        new_text = _splice(new_text, Span(ins_at, ins_at), ins_text)
+    return _verify(new_text, expected, f"move_step({step_path} -> {to_container}[{index}])")
+
+
 __all__ = [
     "EditEquivalenceError",
     "EditError",
@@ -913,8 +1396,15 @@ __all__ = [
     "SpanIndex",
     "SpanNotFoundError",
     "build_span_index",
+    "comment_multiset",
+    "comment_tokens",
     "delete_step",
+    "delete_step_keep_comments",
     "insert_step",
+    "insert_step_text",
+    "move_step",
+    "replace_step_list",
+    "replace_step_text",
     "render_value",
     "replace_decl_arg",
     "replace_declaration",

@@ -1,21 +1,16 @@
 <!-- keywords: improve, better, next, iterate, upgrade, enhance, optimize, ladder, step, progression -->
 <!-- pattern: improvement_ladders -->
 
-# Context-Driven Improvement Sequence
-
-When a user says "make it better" or wants to improve an existing strategy,
-suggest ONE specific improvement at a time. Follow this ladder based on what
-the pipeline currently has.
-
 ## Improvement Ladder
 
 ### Level 1 → Level 2: Add a Second Signal
 
 **When**: Pipeline has a single signal (1 indicator → forecast → ForecastWeightNormalizer).
 **Action**: Add a complementary signal from a different family.
-**Why**: Uncorrelated signals improve Sharpe ratio more than optimizing one signal.
+**Why**: Signals from different families have lower correlation, so combining them diversifies the forecast rather than refining one signal.
 
 Best complementary pairs:
+
 - Trend (EWMAC/ROC) + Carry (funding rate)
 - Trend + Mean reversion (RSI)
 - Momentum (ROC) + Breakout (BreakoutDistance)
@@ -24,13 +19,13 @@ Best complementary pairs:
 
 **When**: Pipeline combines signals with ForecastWeightNormalizer.
 **Action**: Replace ForecastWeightNormalizer with ReturnVolatility + VolTargetWeightConverter chain.
-**Why**: Volatility-targeted sizing reduces drawdowns without sacrificing returns.
+**Why**: Volatility-targeted sizing scales each position to a volatility target, so risk per position is comparable across assets and over time.
 
 ### Level 3 → Level 4: Add Position Management
 
-**When**: Pipeline has VolTargetWeightConverter but no inertia or IDM.
-**Action**: Add IDMPortfolioAggregator → PositionInertia.
-**Why**: IDM captures diversification benefit; inertia reduces unnecessary turnover.
+**When**: Pipeline has VolTargetWeightConverter but no IDM or turnover control.
+**Action**: Add IDMPortfolioAggregator, and `Execution(rebalance="buffered", buffer_threshold=0.2, buffer_mode="relative", rebalance_method="to_edge")`.
+**Why**: IDM captures diversification benefit; a buffer reduces unnecessary turnover.
 
 ### Level 4 → Level 5: Add Regime Conditioning
 
@@ -41,19 +36,13 @@ Best complementary pairs:
 ### Level 5 → Level 6: Cost Optimization
 
 **When**: Pipeline is feature-complete.
-**Action**: Add PositionInertia tuning, DenseToSparseConverter, or
+**Action**: Tune the buffer (`buffer_threshold`), slow the signal, or
 adjust rebalance frequency.
-**Why**: Reduces trading costs without changing signal quality.
+**Why**: Fewer and smaller trades lower trading costs.
 
 ## Anti-Pattern: Skipping Levels
 
-Don't jump from a single-signal strategy to a full production pipeline.
-Each level should be tested and understood before adding complexity.
-More than 25 free parameters almost certainly means overfitting.
-
-## Asking the Right Question
-
-When the user says "make it better", ask yourself:
-1. What level is the current pipeline?
-2. What's the ONE most impactful improvement?
-3. Suggest that ONE change, explain why, and let the user test it.
+Jumping from a single-signal strategy to a full vol-targeted pipeline adds
+every level's components and parameters at once, so a backtest cannot show
+what any one addition changed. Testing each level before the next isolates
+its effect. More than 25 free parameters almost certainly means overfitting.

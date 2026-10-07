@@ -32,7 +32,6 @@
       "pattern": "entry_exit",
       "teaches": [
         "threshold_signals",
-        "position_state",
         "binary_decisions"
       ]
     },
@@ -53,6 +52,6 @@
       ]
     }
   ],
-  "count": 15,
+  "count": 16,
   "showing": 3
 }

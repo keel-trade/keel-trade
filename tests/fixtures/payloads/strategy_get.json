@@ -1,0 +1,486 @@
+{
+  "_meta": {
+    "ui": {
+      "resourceUri": "ui://keel/cards/strategy.html"
+    }
+  },
+  "content": [
+    {
+      "type": "text",
+      "text": "card: where the host draws Keel cards, what follows is shown to the user as a card \u2014 its structure, metrics and links.\n\n**sv-verify-roc20** \u00b7 v11 \u00b7 valid \u00b7 1d @ 12h\nuniverse  Top 30 by volume \u00b7 HL perps\nexecution Every bar\n\nPriceDataLoader\nROC(50)\nForecastScaler(10)\nForecastCapper(20)\nForecastWeightNormalizer(1)\n\nbacktest  Sharpe 0.6092509382867117 \u00b7 return +46.20242295203809% \u00b7 max DD \u221255.21299365265347% \u00b7 1468 round trips \u00b7 2024-07-27 \u2192 2026-09-22 \u00b7 net of fees, slippage, funding\n\nView in Keel: https://staging-app00.example.invalid/strategies/str_01m35gh6y82737z2695nszb6ka/edit\n\nexecution: Execution(rebalance='every_bar')"
+    }
+  ],
+  "structuredContent": {
+    "share_url": null,
+    "run_id": "str_01m35gh6y82737z2695nszb6ka",
+    "hero_url": "https://staging-app00.example.invalid/strategies/str_01m35gh6y82737z2695nszb6ka/edit",
+    "url_line": "View in Keel: https://staging-app00.example.invalid/strategies/str_01m35gh6y82737z2695nszb6ka/edit",
+    "resource_uri": "keel://strategy/str_01m35gh6y82737z2695nszb6ka/source",
+    "metadata": {
+      "id": "str_01m35gh6y82737z2695nszb6ka",
+      "name": "sv-verify-roc20",
+      "status": "ARCHIVED",
+      "visibility": null,
+      "forked_from_id": null,
+      "forked_from_name": null,
+      "fork_count": 0,
+      "description": "Staging render-cadence verification strategy (safe to delete).",
+      "source": "Globals(target_timeframe='1d', bar_offset='12h')\nUniverse(mode='top_volume', top_n=30, market='perp', resolved=[\"AAVE\", \"ARB\", \"AVAX\", \"BNB\", \"BTC\", \"CASHCAT\", \"DOGE\", \"ENA\", \"ETH\", \"FARTCOIN\", \"HYPE\", \"LINK\", \"LIT\", \"LTC\", \"NEAR\", \"ONDO\", \"PONS\", \"PUMP\", \"SOL\", \"SUI\", \"TAO\", \"UNI\", \"USELESS\", \"VVV\", \"WLD\", \"XMR\", \"XPL\", \"XRP\", \"ZEC\", \"kPEPE\"], resolved_at=\"2026-09-22T21:43:04.294205+00:00\", max_leverages={\"AAVE\": 10.0, \"ARB\": 10.0, \"AVAX\": 10.0, \"BNB\": 10.0, \"BTC\": 40.0, \"CASHCAT\": 3.0, \"DOGE\": 10.0, \"ENA\": 10.0, \"ETH\": 25.0, \"FARTCOIN\": 10.0, \"HYPE\": 10.0, \"LINK\": 10.0, \"LIT\": 5.0, \"LTC\": 10.0, \"NEAR\": 10.0, \"ONDO\": 10.0, \"PONS\": 3.0, \"PUMP\": 10.0, \"SOL\": 20.0, \"SUI\": 10.0, \"TAO\": 5.0, \"UNI\": 10.0, \"USELESS\": 3.0, \"VVV\": 3.0, \"WLD\": 10.0, \"XMR\": 5.0, \"XPL\": 10.0, \"XRP\": 20.0, \"ZEC\": 10.0, \"kPEPE\": 10.0})\nExecution(rebalance='every_bar')\nPipeline([\n    PriceDataLoader(),\n    ROC(period=50),\n    ForecastScaler(avg_abs_target=10.0),\n    ForecastCapper(limit=20.0),\n    ForecastWeightNormalizer(target_leverage=1.0),\n], name='sv_roc20')\n",
+      "source_hash": "6cd26202d002a1963941aca851dbc77343752c1b6033f2f59e9d1f6f608f917b",
+      "created_via": "mcp-remote",
+      "library_source_slug": null,
+      "library_entry_version": null,
+      "library_entry_name": null,
+      "library_variant_id": null,
+      "library_import_id": null,
+      "library_source_hash": null,
+      "head_commit_id": "cmt_01m35h5208r9wvnj6rtscaxpmg",
+      "head_source_hash": "6cd26202d002a1963941aca851dbc77343752c1b6033f2f59e9d1f6f608f917b",
+      "compilation_error": null,
+      "validation": null,
+      "graph": {
+        "blocks": [
+          {
+            "id": "324ed07278ce",
+            "type": "component",
+            "component": "PriceDataLoader",
+            "params": {}
+          },
+          {
+            "id": "3c2d6fd1d763",
+            "type": "component",
+            "component": "ROC",
+            "params": {
+              "period": 50
+            }
+          },
+          {
+            "id": "a25a6517491f",
+            "type": "component",
+            "component": "ForecastScaler",
+            "params": {
+              "avg_abs_target": 10.0
+            }
+          },
+          {
+            "id": "0ca56b9a640b",
+            "type": "component",
+            "component": "ForecastCapper",
+            "params": {
+              "limit": 20.0
+            }
+          },
+          {
+            "id": "aea890d81c49",
+            "type": "component",
+            "component": "ForecastWeightNormalizer",
+            "params": {
+              "target_leverage": 1.0
+            }
+          }
+        ],
+        "globals": {
+          "target_timeframe": "1d",
+          "bar_offset": "12h"
+        },
+        "universe": {
+          "mode": "top_volume",
+          "market": "perp",
+          "top_n": 30,
+          "resolved": [
+            "AAVE",
+            "ARB",
+            "AVAX",
+            "BNB",
+            "BTC",
+            "CASHCAT",
+            "DOGE",
+            "ENA",
+            "ETH",
+            "FARTCOIN",
+            "HYPE",
+            "LINK",
+            "LIT",
+            "LTC",
+            "NEAR",
+            "ONDO",
+            "PONS",
+            "PUMP",
+            "SOL",
+            "SUI",
+            "TAO",
+            "UNI",
+            "USELESS",
+            "VVV",
+            "WLD",
+            "XMR",
+            "XPL",
+            "XRP",
+            "ZEC",
+            "kPEPE"
+          ],
+          "resolved_at": "2026-09-22T21:43:04.294205+00:00",
+          "max_leverages": {
+            "AAVE": 10.0,
+            "ARB": 10.0,
+            "AVAX": 10.0,
+            "BNB": 10.0,
+            "BTC": 40.0,
+            "CASHCAT": 3.0,
+            "DOGE": 10.0,
+            "ENA": 10.0,
+            "ETH": 25.0,
+            "FARTCOIN": 10.0,
+            "HYPE": 10.0,
+            "LINK": 10.0,
+            "LIT": 5.0,
+            "LTC": 10.0,
+            "NEAR": 10.0,
+            "ONDO": 10.0,
+            "PONS": 3.0,
+            "PUMP": 10.0,
+            "SOL": 20.0,
+            "SUI": 10.0,
+            "TAO": 5.0,
+            "UNI": 10.0,
+            "USELESS": 3.0,
+            "VVV": 3.0,
+            "WLD": 10.0,
+            "XMR": 5.0,
+            "XPL": 10.0,
+            "XRP": 20.0,
+            "ZEC": 10.0,
+            "kPEPE": 10.0
+          }
+        },
+        "execution": {
+          "rebalance": "every_bar"
+        }
+      },
+      "s3_key": "strategies/str_01m35gh6y82737z2695nszb6ka/versions/6cd26202d002a1963941aca851dbc77343752c1b6033f2f59e9d1f6f608f917b/strategy.py",
+      "org_id": "org_00000000000000000000000000",
+      "component_lock": {
+        "ROC": 1,
+        "ForecastCapper": 1,
+        "ForecastScaler": 1,
+        "PriceDataLoader": 3,
+        "ForecastWeightNormalizer": 1
+      },
+      "current_sequence": 11,
+      "deployed_sequence": null,
+      "deployed_version_string": null,
+      "deployment_id": null,
+      "deployment_schedule": null,
+      "deployed_at": null,
+      "latest_backtest_metrics": {
+        "store": {
+          "root": "/var/lib/keel-barstore/v2",
+          "coins": 463,
+          "profile": "serving",
+          "build_id": "v9-20260914T181517Z-nogit",
+          "synced_at": "2026-09-22T21:35:09.027367+00:00",
+          "age_seconds": 7.6,
+          "sealed_through": {
+            "1d": "2026-09-22T20:00:00+00:00",
+            "1h": "2026-09-22T20:00:00+00:00",
+            "2h": "2026-09-22T20:00:00+00:00",
+            "3h": "2026-09-22T20:00:00+00:00",
+            "4h": "2026-09-22T20:00:00+00:00",
+            "6h": "2026-09-22T20:00:00+00:00",
+            "8h": "2026-09-22T20:00:00+00:00",
+            "12h": "2026-09-22T20:00:00+00:00",
+            "5min": "2026-09-22T20:00:00+00:00",
+            "15min": "2026-09-22T20:00:00+00:00",
+            "30min": "2026-09-22T20:00:00+00:00"
+          }
+        },
+        "funding": {
+          "funding_boost_pct": -17.5221079718483,
+          "cumulative_funding": 1586.8747474631302,
+          "funding_return_pct": -15.868747474631304,
+          "price_only_return_pct": 63.72453092388639
+        },
+        "turnover": 235.68572056095692,
+        "win_rate": 23.958333333333336,
+        "end_value": 14620.242295203809,
+        "expectancy": 0.16292455214677715,
+        "price_only": {
+          "max_drawdown": 54.03385591109502,
+          "sharpe_ratio": 0.6777211402351646,
+          "total_return": 63.72453092388639
+        },
+        "omega_ratio": 1.0962602636422978,
+        "trade_model": "position_round_trip",
+        "warmup_bars": 30,
+        "wipeout_bar": null,
+        "calmar_ratio": 0.3488752107990236,
+        "max_drawdown": 55.21299365265347,
+        "sharpe_ratio": 0.5975294299117756,
+        "total_orders": 19250,
+        "total_return": 46.20242295203809,
+        "total_trades": 1468,
+        "wipeout_date": null,
+        "effective_end": "2026-09-21T03:00:00+00:00",
+        "profit_factor": 1.0070947124325962,
+        "sortino_ratio": 0.8680026182417031,
+        "window_policy": "consumed_eras",
+        "rebalance_legs": 16342,
+        "result_outcome": "ordinary",
+        "effective_start": "2024-07-27T03:00:00+00:00",
+        "total_fees_paid": 1060.5857425243062,
+        "funding_included": true,
+        "fees_pct_of_initial": 10.605857425243062,
+        "sharpe_ratio_active": 0.6092509382867117,
+        "max_drawdown_duration": "652 days 00:00:00",
+        "fees_pct_of_net_profit": 22.955197471467706,
+        "fees_pct_of_gross_profit": 18.669562526459735
+      },
+      "latest_backtest_id": "btr_01m35gpnf86zs9zxsfmg7nrgtn",
+      "latest_backtest_sequence": 5,
+      "latest_backtest_start_date": "2024-07-27T00:00:00Z",
+      "latest_backtest_end_date": "2026-09-22T00:00:00Z",
+      "backtest_state": "backtested",
+      "backtest_run_count": 4,
+      "journey_projection": null,
+      "created_at": "2026-09-22T21:32:12.110266Z",
+      "updated_at": "2026-09-22T21:44:47.030550Z"
+    },
+    "ownership_resource_uri": "keel://ownership/strategy/str_01m35gh6y82737z2695nszb6ka",
+    "ownership_status": "active",
+    "next_recommended_action": {
+      "kind": "write_strategy_brief",
+      "reason": "Understand the idea, why it might work, what it assumes, and what evidence is missing."
+    },
+    "missing_evidence": [
+      "strategy_brief",
+      "baseline_evidence",
+      "failure_modes"
+    ],
+    "live_readiness_blockers": [
+      "before_live:reviewed_risk_flags",
+      "before_live:survives_costs",
+      "before_live:holds_across_period"
+    ],
+    "view": {
+      "kind": "strategy",
+      "name": "sv-verify-roc20",
+      "version": 11,
+      "status": "ARCHIVED",
+      "validation": {
+        "ok": true,
+        "errors": 0,
+        "warnings": 0
+      },
+      "header": {
+        "clock": "1d @ 12h",
+        "universe": {
+          "label": "Top 30 by volume \u00b7 HL perps",
+          "total": 30,
+          "symbols": [
+            "AAVE",
+            "ARB",
+            "AVAX",
+            "BNB",
+            "BTC",
+            "CASHCAT",
+            "DOGE",
+            "ENA",
+            "ETH",
+            "FARTCOIN",
+            "HYPE",
+            "LINK",
+            "LIT",
+            "LTC",
+            "NEAR",
+            "ONDO",
+            "PONS",
+            "PUMP",
+            "SOL",
+            "SUI",
+            "TAO",
+            "UNI",
+            "USELESS",
+            "VVV",
+            "WLD",
+            "XMR",
+            "XPL",
+            "XRP",
+            "ZEC",
+            "kPEPE"
+          ]
+        },
+        "execution": {
+          "label": "Every bar",
+          "params": {
+            "rebalance": "every_bar"
+          }
+        },
+        "factories": []
+      },
+      "structure": {
+        "blocks": [
+          {
+            "id": "324ed07278ce",
+            "type": "component",
+            "component": "PriceDataLoader",
+            "params": {}
+          },
+          {
+            "id": "3c2d6fd1d763",
+            "type": "component",
+            "component": "ROC",
+            "params": {
+              "period": 50
+            }
+          },
+          {
+            "id": "a25a6517491f",
+            "type": "component",
+            "component": "ForecastScaler",
+            "params": {
+              "avg_abs_target": 10.0
+            }
+          },
+          {
+            "id": "0ca56b9a640b",
+            "type": "component",
+            "component": "ForecastCapper",
+            "params": {
+              "limit": 20.0
+            }
+          },
+          {
+            "id": "aea890d81c49",
+            "type": "component",
+            "component": "ForecastWeightNormalizer",
+            "params": {
+              "target_leverage": 1.0
+            }
+          }
+        ],
+        "globals": {
+          "target_timeframe": "1d",
+          "bar_offset": "12h"
+        },
+        "universe": {
+          "mode": "top_volume",
+          "market": "perp",
+          "top_n": 30,
+          "resolved": [
+            "AAVE",
+            "ARB",
+            "AVAX",
+            "BNB",
+            "BTC",
+            "CASHCAT",
+            "DOGE",
+            "ENA",
+            "ETH",
+            "FARTCOIN",
+            "HYPE",
+            "LINK",
+            "LIT",
+            "LTC",
+            "NEAR",
+            "ONDO",
+            "PONS",
+            "PUMP",
+            "SOL",
+            "SUI",
+            "TAO",
+            "UNI",
+            "USELESS",
+            "VVV",
+            "WLD",
+            "XMR",
+            "XPL",
+            "XRP",
+            "ZEC",
+            "kPEPE"
+          ],
+          "resolved_at": "2026-09-22T21:43:04.294205+00:00",
+          "max_leverages": {
+            "AAVE": 10.0,
+            "ARB": 10.0,
+            "AVAX": 10.0,
+            "BNB": 10.0,
+            "BTC": 40.0,
+            "CASHCAT": 3.0,
+            "DOGE": 10.0,
+            "ENA": 10.0,
+            "ETH": 25.0,
+            "FARTCOIN": 10.0,
+            "HYPE": 10.0,
+            "LINK": 10.0,
+            "LIT": 5.0,
+            "LTC": 10.0,
+            "NEAR": 10.0,
+            "ONDO": 10.0,
+            "PONS": 3.0,
+            "PUMP": 10.0,
+            "SOL": 20.0,
+            "SUI": 10.0,
+            "TAO": 5.0,
+            "UNI": 10.0,
+            "USELESS": 3.0,
+            "VVV": 3.0,
+            "WLD": 10.0,
+            "XMR": 5.0,
+            "XPL": 10.0,
+            "XRP": 20.0,
+            "ZEC": 10.0,
+            "kPEPE": 10.0
+          }
+        },
+        "execution": {
+          "rebalance": "every_bar"
+        }
+      },
+      "change": null,
+      "evidence": {
+        "version": 5,
+        "window": {
+          "start": "2024-07-27",
+          "end": "2026-09-22"
+        },
+        "sharpe": 0.6092509382867117,
+        "total_return_pct": 46.20242295203809,
+        "max_drawdown_pct": -55.21299365265347,
+        "win_rate_pct": 23.958333333333336,
+        "total_trades": 1468,
+        "net_of": ["fees", "slippage", "funding"]
+      },
+      "categories": {
+        "PriceDataLoader": "data_loader",
+        "ROC": "indicator",
+        "ForecastScaler": "forecast_mapper",
+        "ForecastCapper": "forecast_mapper",
+        "ForecastWeightNormalizer": "position_sizer"
+      },
+      "size": "structure",
+      "status_text": "Archived \u00b7 updated Sep 22",
+      "url_line": "View in Keel: https://staging-app00.example.invalid/strategies/str_01m35gh6y82737z2695nszb6ka/edit",
+      "object": "str_01m35gh6y82737z2695nszb6ka",
+      "at": "2026-09-23T18:42:54.969Z",
+      "seq": 19,
+      "markdown": "**sv-verify-roc20** \u00b7 v11 \u00b7 valid \u00b7 1d @ 12h\nuniverse  Top 30 by volume \u00b7 HL perps\nexecution Every bar\n\nPriceDataLoader\nROC(50)\nForecastScaler(10)\nForecastCapper(20)\nForecastWeightNormalizer(1)\n\nbacktest  Sharpe 0.6092509382867117 \u00b7 return +46.20242295203809% \u00b7 max DD \u221255.21299365265347% \u00b7 1468 round trips \u00b7 2024-07-27 \u2192 2026-09-22 \u00b7 net of fees, slippage, funding\n\nView in Keel: https://staging-app00.example.invalid/strategies/str_01m35gh6y82737z2695nszb6ka/edit\n",
+      "source": {
+        "text": "Globals(target_timeframe='1d', bar_offset='12h')\nUniverse(mode='top_volume', top_n=30, market='perp', resolved=[\"AAVE\", \"ARB\", \"AVAX\", \"BNB\", \"BTC\", \"CASHCAT\", \"DOGE\", \"ENA\", \"ETH\", \"FARTCOIN\", \"HYPE\", \"LINK\", \"LIT\", \"LTC\", \"NEAR\", \"ONDO\", \"PONS\", \"PUMP\", \"SOL\", \"SUI\", \"TAO\", \"UNI\", \"USELESS\", \"VVV\", \"WLD\", \"XMR\", \"XPL\", \"XRP\", \"ZEC\", \"kPEPE\"], resolved_at=\"2026-09-22T21:43:04.294205+00:00\", max_leverages={\"AAVE\": 10.0, \"ARB\": 10.0, \"AVAX\": 10.0, \"BNB\": 10.0, \"BTC\": 40.0, \"CASHCAT\": 3.0, \"DOGE\": 10.0, \"ENA\": 10.0, \"ETH\": 25.0, \"FARTCOIN\": 10.0, \"HYPE\": 10.0, \"LINK\": 10.0, \"LIT\": 5.0, \"LTC\": 10.0, \"NEAR\": 10.0, \"ONDO\": 10.0, \"PONS\": 3.0, \"PUMP\": 10.0, \"SOL\": 20.0, \"SUI\": 10.0, \"TAO\": 5.0, \"UNI\": 10.0, \"USELESS\": 3.0, \"VVV\": 3.0, \"WLD\": 10.0, \"XMR\": 5.0, \"XPL\": 10.0, \"XRP\": 20.0, \"ZEC\": 10.0, \"kPEPE\": 10.0})\nExecution(rebalance='every_bar')\nPipeline([\n    PriceDataLoader(),\n    ROC(period=50),\n    ForecastScaler(avg_abs_target=10.0),\n    ForecastCapper(limit=20.0),\n    ForecastWeightNormalizer(target_leverage=1.0),\n], name='sv_roc20')",
+        "lines": 10,
+        "truncated": false
+      }
+    },
+    "render": {
+      "card": "strategy",
+      "card_resource_uri": "ui://keel/cards/strategy.html",
+      "fallback_url": "https://staging-app00.example.invalid/strategies/str_01m35gh6y82737z2695nszb6ka/edit",
+      "surface_hints": {
+        "claude": "The card renders automatically when the host supports MCP Apps: one header line, four headline numbers with the rest one tap away, a receipt line, and an in-card chart drawn from the envelope. It carries an Expand action only where the host offers fullscreen. The plain link line is the fallback wherever the card does not render; bare image blocks collapse behind an expander on this host.",
+        "claude_code": "No widget renders here: `view.markdown` is the complete rendering (a receipt is one line), with the plain link line; `keel open <kind> <id>` opens it in the browser.",
+        "cursor": "The same card renders inline (MCP Apps), without fullscreen; an inline chart image is acceptable too; the plain link line accompanies it.",
+        "chatgpt": "The same card renders inline (MCP Apps). The card declares fullscreen and draws its own Expand action when ChatGPT lists that mode, so fullscreen is the user's choice; no PiP on mobile; the plain link line accompanies it."
+      }
+    }
+  },
+  "isError": false
+}

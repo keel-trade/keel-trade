@@ -41,8 +41,8 @@ GRANT_RESPONSE = {
     "principal_id": "prn_anon_1",
     "plan": "anon",
     "org_expires_at": "2026-07-24T00:00:00+00:00",
-    "quota": {"backtest_runs": 15, "backtest_compute_seconds": 600, "strategies_max": 3},
-    "notice": "Running anonymously — 15 backtests and 3 strategies included.",
+    "quota": {"backtest_runs": 10, "backtest_compute_seconds": 1000, "strategies_max": 3},
+    "notice": "Running anonymously — 10 backtests and 3 strategies included.",
     "claim": {"endpoint": "/v1/orgs/claim", "how": "sign in then POST"},
 }
 

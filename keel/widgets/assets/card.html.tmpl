@@ -3,6 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
     <title>{{TITLE}}</title>
     <style>
       {{CSS}}
@@ -10,12 +11,28 @@
   </head>
   <body data-card="{{KIND}}">
     <div id="root" class="keel-card" role="group" aria-label="{{TITLE}}">
-      <header class="card-head">
+      <header id="card-head" class="card-head">
         <span class="brand">Keel</span>
         <span id="card-title" class="card-title">{{TITLE}}</span>
       </header>
-      <div id="card-body" class="card-body">
-        <p class="muted">Loading&hellip;</p>
+      <!-- Shape-stable skeleton (Q-1627): the shape the card resolves
+           into, so nothing jumps when the result lands. Every variant
+           ships; card.css shows exactly one set per KIND — tiles + a
+           body block for backtest/strategy/live/preflight, a table over
+           a chart for compare (BUILD §4.1), and the single `sk-row`
+           for a card already known to be a receipt. The adapter removes
+           it on the first render and replaces it with an honest line
+           when no result ever arrives. Never the word "loading". -->
+      <div id="card-body" class="card-body" aria-busy="true">
+        <div class="skeleton" aria-hidden="true">
+          <div class="sk-line sk-title"></div>
+          <div class="sk-line sk-row"></div>
+          <div class="sk-tiles">
+            <i></i><i></i><i></i><i></i>
+          </div>
+          <div class="sk-block sk-table"></div>
+          <div class="sk-block"></div>
+        </div>
       </div>
       <!-- Non-negotiable fallback: the plain link row renders whether or
            not the host delivers tool output (research/05 §1 reliability). -->

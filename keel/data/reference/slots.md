@@ -1,8 +1,9 @@
 # Slot System
 
 Slots provide typed, named storage for sharing data between pipeline steps.
-They enable cross-branch data sharing, config propagation, and deferred
-data access without coupling steps together.
+They enable cross-branch data sharing and deferred data access without
+coupling steps together. In the DSL a slot is named by a string literal —
+`Store("ohlcv_1d")`, `Load("ohlcv_1d")`.
 
 ## Core Operations
 
@@ -11,16 +12,8 @@ data access without coupling steps together.
 Save the current pipeline value to a named slot. Passthrough -- the value
 continues flowing through the pipeline unchanged.
 
-```python
-from pipeline_engine.slot_ops import Store
-from pipeline_engine.slots import OHLCV_1D
-
-Pipeline([
-    PriceDataLoader(timeframe="15min"),
-    TimeframeResampler(target_timeframe="1d"),
-    Store(OHLCV_1D),       # Save resampled data for later use
-    # ... pipeline continues with same data
-])
+```python fragment
+PriceDataLoader() → Store("ohlcv_1d") → ...   # save the bars for later use; the same data flows on
 ```
 
 - **Input:** T (current value)
@@ -32,14 +25,8 @@ Pipeline([
 Load a value from a named slot into the pipeline flow. Replaces the
 current value entirely.
 
-```python
-from pipeline_engine.slot_ops import Load
-from pipeline_engine.slots import OHLCV_1D
-
-Pipeline([
-    Load(OHLCV_1D),        # Replace current with stored OHLCV data
-    ROC(period=10),         # Compute indicator on loaded data
-])
+```python fragment
+Load("ohlcv_1d") → ROC(period=10)   # replace current with the stored OHLCV, then compute on it
 ```
 
 - **Input:** any (ignored)
@@ -49,19 +36,15 @@ Pipeline([
 ### StoreValue
 
 Store a literal/constant value into a slot. Current pipeline value passes
-through unchanged. Use for config parameters that must be consistent across
-multiple components.
+through unchanged. Use it only for a genuine runtime slot value that a
+downstream component reads by slot name. Strategy configuration is NOT a
+slot value: `target_timeframe` and `bar_offset` are declared once in
+`Globals(...)` above the Pipeline, and the loaders and declaration-backed
+resamplers read them through their declaration refs — never
+`StoreValue("target_timeframe", ...)`.
 
-```python
-from pipeline_engine.slot_ops import StoreValue
-from pipeline_engine.slots import BAR_OFFSET, TARGET_TIMEFRAME
-
-Pipeline([
-    StoreValue(BAR_OFFSET, "12h"),
-    StoreValue(TARGET_TIMEFRAME, "1d"),
-    PriceDataLoader(timeframe="15min"),
-    # ... components can read BAR_OFFSET and TARGET_TIMEFRAME slots
-])
+```python fragment
+PriceDataLoader() → StoreValue("some_slot", 1.5)   # illustrative: a literal a later step reads by slot name
 ```
 
 - **Input:** any (passed through unchanged)
@@ -73,74 +56,26 @@ Pipeline([
 Select a single value from a dict (after Parallel). Not a slot operation
 per se, but categorized as SLOT_OP for phase ordering purposes.
 
-```python
-from pipeline_engine.slot_ops import Extract
-
-Pipeline([
-    {
-        "momentum": [Load(OHLCV_1D), EWMA(window=8)],
-        "carry":    [Load(FUNDING_RATES), EWMATransform(window=24)],
-    },
-    Extract("momentum"),   # Select just the momentum branch result
-])
+```python fragment
+{"momentum": [Load("ohlcv_1d"), EWMA(window=8)], "carry": [FundingDataLoader(), NegateTransform()]}
+→ Extract("momentum")   # select just the momentum branch result
 ```
 
 ---
 
-## Slot Handles
+## Slot Names and Types
 
-Slots are created via `Slot.create(name, type)`:
+A slot is identified by its NAME: two references to the same name are the
+same data, whatever type each declares. The type is for documentation,
+validation and introspection — a slot read is checked against the type its
+writer produced (`SLOT_TYPE_MISMATCH`), and annotated types carry their
+bounds.
 
-```python
-from pipeline_engine.slots import Slot
-from pipeline_engine.types import OHLCVDict, ForecastSeries, WeightSeries
-
-# Create typed slot handles
-OHLCV_1D = Slot.create("ohlcv_1d", OHLCVDict)
-FORECAST_COMBINED = Slot.create("forecast_combined", ForecastSeries)
-FINAL_WEIGHTS = Slot.create("final_weights", WeightSeries)
-```
-
-Key properties:
-- **Identity by name:** Two slots with the same name refer to the same data,
-  regardless of declared type
-- **value_type:** For documentation, validation, and introspection -- not identity
-- **Bounds:** Annotated types carry bounds constraints accessible via `slot.get_bounds()`
-
-### Pre-Defined Domain Slots
-
-The engine provides common slots out of the box:
-
-```python
-from pipeline_engine.slots import (
-    OHLCV_1D,           # Slot[OHLCVDict] -- daily OHLCV data
-    OHLCV_1H,           # Slot[OHLCVDict] -- hourly OHLCV data
-    FUNDING_RATES,      # Slot[StreamSeries] -- funding rate data
-    FORECAST_MOMENTUM,  # Slot[ForecastSeries] -- momentum forecast
-    FORECAST_CARRY,     # Slot[ForecastSeries] -- carry forecast
-    COMBINED_FORECAST,  # Slot[ForecastSeries] -- blended forecast
-    MARKET_BETA,        # Slot[SignalSeries] -- market beta
-    FINAL_WEIGHTS,      # Slot[WeightSeries] -- final portfolio weights
-    TARGET_WEIGHTS,     # Slot[WeightSeries] -- target weights
-    BAR_OFFSET,         # Slot[TemporalOffset] -- bar alignment offset
-    TARGET_TIMEFRAME,   # Slot[str] -- target timeframe string
-)
-```
-
-### String-Based Slot References
-
-In DSL code and some component parameters, slots are referenced by name
-string rather than Slot object. The DSL resolver creates Slot handles from
-string names during pipeline construction:
-
-```python
-# DSL-style (string names)
-Pipeline([
-    Store("ohlcv_1d"),
-    Load("ohlcv_1d"),
-    StoreValue("bar_offset", "12h"),
-])
-```
+Conventional names the components' `*_slot` parameters default to or
+document: `"ohlcv"` / `"ohlcv_1d"` (OHLCV bars on the strategy clock),
+`"return_vol"` (ReturnVolatility), `"vol"` (the vol sizers), `"entries"`
+(`TradeManager(entries=)`), `"forecast_combined"`
+(IDMPortfolioAggregator). The clock is not a slot: it is `Globals(...)`.
 
 ---
 
@@ -150,7 +85,7 @@ Many components have `*_slot` parameters that reference slots by name. The
 component reads from the named slot during execution, in addition to
 receiving the pipeline's current value.
 
-```python
+```python fragment
 # Component reads current (SignalSeries) + slot data
 VolatilityStandardizer(
     signal_type="price_points",
@@ -172,9 +107,8 @@ IDMPortfolioAggregator(
 )
 ```
 
-The component declares which slots it reads via its `reads` property, and
-the pipeline executor fetches slot values from Context and passes them as
-`**kwargs` to the `run()` method.
+The component declares which slots it reads, and the pipeline executor
+fetches those slot values from the Context and passes them to the component.
 
 ---
 
@@ -182,23 +116,9 @@ the pipeline executor fetches slot values from Context and passes them as
 
 ### Static Validation
 
-The `PipelineValidator.validate_slot_availability()` pass checks that every
-Load (and every slot read) has a corresponding prior Store or StoreValue:
-
-```python
-# VALID: Store before Load
-Pipeline([
-    PriceDataLoader(),
-    Store(OHLCV_1D),
-    # ... other steps ...
-    Load(OHLCV_1D),           # OK: slot was written above
-])
-
-# INVALID: Load without Store
-Pipeline([
-    Load(OHLCV_1D),           # ERROR: SLOT_NOT_FOUND -- no prior Store
-])
-```
+The validator checks that every Load (and every slot read) has a
+corresponding prior Store or StoreValue — `SLOT_NOT_FOUND` /
+`SLOT_REF_NOT_FOUND`, with the missing `Store("...")` named in the fix.
 
 ### Parallel Branch Isolation
 
@@ -206,48 +126,26 @@ Within a Parallel, each branch gets a **snapshot** of the parent context.
 Branches cannot see each other's intermediate writes. After all branches
 complete, new slots are merged back into the parent context.
 
-```python
-Pipeline([
-    Store(OHLCV_1D),
-    {
-        "branch_a": [
-            Load(OHLCV_1D),       # OK: reads from parent snapshot
-            Store(FORECAST_MOMENTUM),
-        ],
-        "branch_b": [
-            Load(OHLCV_1D),       # OK: reads from parent snapshot
-            # Load(FORECAST_MOMENTUM),  # ERROR at runtime: branch_a's
-            #                           # writes are not visible here
-            Store(FORECAST_CARRY),
-        ],
-    },
-    # After Parallel: both FORECAST_MOMENTUM and FORECAST_CARRY are available
-])
+```python fragment
+Store("ohlcv_1d") → {
+    "branch_a": [Load("ohlcv_1d"), ROC(period=20), Store("momentum")],   # reads the parent snapshot
+    "branch_b": [Load("ohlcv_1d"), RSI(period=14), Store("rsi")],        # cannot see "momentum"
+}
+# after the Parallel: both "momentum" and "rsi" are available
 ```
 
 ### No Slot Overwrites in Parallel
 
 Parallel branches must write to distinct slots. If two branches write the
-same slot name, a `SlotOverwriteError` is raised at construction time:
-
-```python
-# INVALID: both branches write the same slot
-{
-    "a": [Store(OHLCV_1D)],
-    "b": [Store(OHLCV_1D)],   # SlotOverwriteError!
-}
-```
+same slot name, a `SlotOverwriteError` is raised when the pipeline runs —
+the validator does not catch it, so give each branch's Store its own name
+(and parameterize slot names in a factory that is called from several
+branches).
 
 ### Self-Cycle Detection
 
-A step that both reads and writes the same slot produces a warning:
-
-```python
-# WARNING: SLOT_SELF_CYCLE
-class MyStep:
-    reads = (MY_SLOT,)
-    writes = (MY_SLOT,)
-```
+A step that both reads and writes the same slot produces the
+`SLOT_SELF_CYCLE` warning.
 
 ---
 
@@ -258,63 +156,65 @@ class MyStep:
 Store data before Parallel, Load in branches:
 
 ```python
+Globals(target_timeframe="1d")
+Universe(mode="manual", symbols=["BTC", "ETH", "SOL"])
+Execution(rebalance="every_bar")
+
 Pipeline([
-    PriceDataLoader(timeframe="15min"),
-    TimeframeResampler(target_timeframe="1d"),
-    Store(OHLCV_1D),
+    PriceDataLoader(),
+    Store("ohlcv_1d"),
     {
         "momentum": Pipeline([
-            Load(OHLCV_1D),
+            Load("ohlcv_1d"),
             EWMA(window=8),
             ForecastScaler(),
         ]),
         "carry": Pipeline([
             FundingDataLoader(),
-            TargetSignalResampler(method="mean"),
+            NegateTransform(),
             ForecastScaler(),
         ]),
     },
     ForecastCombiner(weights={"momentum": 0.6, "carry": 0.4}),
-])
-```
-
-### Config Propagation
-
-Use StoreValue at pipeline start for shared configuration:
-
-```python
-Pipeline([
-    StoreValue(BAR_OFFSET, "12h"),
-    StoreValue(TARGET_TIMEFRAME, "1d"),
-    PriceDataLoader(timeframe="15min"),
-    # ... all downstream components can read these config values
-])
+    ForecastWeightNormalizer(target_leverage=1.0),
+], name="shared_ohlcv")
 ```
 
 ### Store for Later Position Sizing
 
 Store intermediate results for use in position sizing:
 
-```python
-Pipeline([
-    # ... signal generation ...
-    Store(COMBINED_FORECAST),    # Save for VolTargetWeightConverter / IDMPortfolioAggregator
-    # ... position sizing pipeline reads forecast_combined slot ...
-    VolTargetWeightConverter(return_vol_slot="return_vol", pct_target=0.25),
-])
+```python fragment
+ForecastCombiner(weights={...}) → Store("forecast_combined")   # read later by IDMPortfolioAggregator
+→ VolTargetWeightConverter(return_vol_slot="return_vol", pct_target=0.25)
 ```
 
 ### Multi-Timeframe Slot Sharing
 
-Store OHLCV data at different timeframes for mixed-frequency strategies:
+A branch on its own clock loads its own grain with an explicit `timeframe=`
+(the only override) and comes back to the Globals clock with
+`TargetSignalResampler(method=...)` (a FINER branch is coarsened) or
+`TargetSignalProjector()` (a COARSER branch is projected) before it is combined:
 
 ```python
+Globals(target_timeframe="1d")
+Universe(mode="manual", symbols=["BTC", "ETH", "SOL"])
+Execution(rebalance="every_bar")
+
 Pipeline([
-    PriceDataLoader(timeframe="15min"),
-    TimeframeResampler(target_timeframe="1d"),
-    Store(OHLCV_1D),
-    TimeframeResampler(target_timeframe="1h"),
-    Store(OHLCV_1H),
-    # ... branches can Load either timeframe
-])
+    PriceDataLoader(),                    # the Globals clock: 1d, closing 00:00 UTC
+    Store("ohlcv_1d"),
+    {
+        "daily": [Load("ohlcv_1d"), ROC(period=14), CrossSectionalZScore(), ForecastScaler()],
+        "intraday": [
+            PriceDataLoader(timeframe="15min"),   # this branch's own clock
+            ROC(period=96),
+            TargetSignalResampler(method="mean"),
+            CrossSectionalZScore(),
+            ForecastScaler(),
+        ],
+    },
+    ForecastCombiner(weights={"daily": 0.5, "intraday": 0.5}),
+    ForecastWeightNormalizer(target_leverage=1.0),
+], name="two_clocks")
 ```

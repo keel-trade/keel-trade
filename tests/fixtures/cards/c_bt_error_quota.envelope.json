@@ -1,0 +1,14 @@
+{
+  "code": "backtest_quota_exhausted",
+  "message": "Monthly backtest quota reached (40 of 40) — resets Oct 1.",
+  "what_was_expected": "A backtest run within the plan's monthly allowance.",
+  "example": {
+    "strategy_id": "str_7b31de90",
+    "start": "2024-08-15"
+  },
+  "suggested_next_action": {
+    "tool": "keel_account_status",
+    "args": {},
+    "reason": "See the plan's remaining allowance."
+  }
+}

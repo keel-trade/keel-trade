@@ -62,7 +62,6 @@ def _quota_error() -> EntitlementError:
             "unit_label": "backtest runs",
             "limit": 15,
             "current": 15,
-            "billing_url": "https://app.usekeel.io/settings?tab=billing",
         },
     )
     e.recovery_tool = None
@@ -147,14 +146,21 @@ class TestSignedInControls:
         h = deploy_web_handoff(strategy_id="str_1", ctx=ctx)
         assert h.to_envelope()["action_url"] == "https://app.usekeel.io/deploy/str_1"
 
-    def test_quota_wall_keeps_billing_when_signed_in(self):
+    def test_quota_wall_is_the_neutral_wall_when_signed_in(self):
+        """Signed in, the quota wall is the D-12 plan-limit wall: no URL of
+        any kind (the billing link it used to carry is gone), and the resume
+        is the blocked call itself — not the anon sign-in."""
         _signed_in_config()
         h = maybe_quota_handoff(
             _quota_error(),
             blocked_action="backtest_run",
             retry_call={"tool": "keel_backtest_run", "args": {}},
         )
-        assert "billing" in h.to_envelope()["action_url"]
+        envelope = h.to_envelope()
+        assert "action_url" not in envelope
+        assert "http" not in repr(envelope)
+        assert envelope["resume"]["verify_call"]["tool"] == "keel_backtest_run"
+        assert ANON_SIGNIN_TALKING_POINT not in envelope["talking_points"]
 
 
 class TestHandoffActionUrlContract:

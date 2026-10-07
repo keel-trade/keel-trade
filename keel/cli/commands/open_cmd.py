@@ -6,7 +6,7 @@ only — a hosted server must never attempt a browser open (guarded via
 ``keel.hosting.is_hosted``).
 
 URL routing is `keel.tools.outcomes.open_in_app.app_url_for` — the SAME
-single source of truth behind `keel_open_in_app` (MCP) and `keel app
+single source of truth behind `keel_app_link` (MCP) and `keel app
 open` (URL-printing CLI twin). This verb adds exactly one behavior on
 top: the browser launch (via the same ``_try_open_browser`` helper the
 OAuth login flow uses).
@@ -82,9 +82,7 @@ def open_cmd(ctx: click.Context, kind: str, target_id: str) -> None:
                 f"(expected the {_KIND_PREFIXES[kind]!r} prefix).",
                 error_code="unknown_id_prefix",
                 exit_code=2,
-                suggestion=(
-                    "Find ids via `keel strategy search` or `keel backtest run`."
-                ),
+                suggestion=("Find ids via `keel strategy search` or `keel backtest run`."),
             )
         )
 
@@ -93,12 +91,11 @@ def open_cmd(ctx: click.Context, kind: str, target_id: str) -> None:
     if is_hosted():
         _fail(
             KeelError(
-                "`keel open` launches a local browser and is not available "
-                "on hosted servers.",
+                "`keel open` launches a local browser and is not available on hosted servers.",
                 error_code="open_not_available_hosted",
                 exit_code=2,
                 suggestion=(
-                    "Call `keel_open_in_app` instead — it returns the same "
+                    "Call `keel_app_link` instead — it returns the same "
                     "canonical URL as a link for the user."
                 ),
             )

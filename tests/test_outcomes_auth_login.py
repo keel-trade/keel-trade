@@ -70,10 +70,10 @@ def test_auth_login_default_scope_returns_base_tier(ctx):
     assert env["hero_url"] == "https://app.usekeel.io/settings"
     assert env["share_url"] is None
     # next-hint should drop the user into the discovery flow.
-    assert any("keel_status" in line for line in env["next"])
+    assert any("keel_account_status" in line for line in env["next"])
     assert any("prompts/list" in line for line in env["next"])
     assert any("keel_components_search" in line for line in env["next"])
-    assert any("keel_components_detail_batch" in line for line in env["next"])
+    assert any("keel_components_get_many" in line for line in env["next"])
 
 
 def test_auth_login_with_live_scope_marks_tier_live(ctx):
@@ -98,9 +98,7 @@ def test_auth_login_passes_api_url_through(ctx):
     """Staging users override the default api_url; arg must reach browser_login."""
     with patch("keel.auth.browser_login", return_value=_fake_me()) as mock_login:
         tool = OUTCOMES["keel_auth_login"]
-        tool.handler(
-            {"api_url": "https://staging-api.example.com"}, ctx
-        )
+        tool.handler({"api_url": "https://staging-api.example.com"}, ctx)
 
     mock_login.assert_called_once_with(
         api_url="https://staging-api.example.com",

@@ -29,6 +29,11 @@ def register(tool: OutcomeTool) -> OutcomeTool:
         raise ValueError(
             f"Duplicate OutcomeTool name: {tool.name!r}. Each tool must register exactly once."
         )
+    # A declared enum or `format: date` is enforced wherever the handler
+    # runs — CLI, MCP or a direct call (Q-2273 L5).
+    from ._declared_choices import enforce_declared_choices
+
+    object.__setattr__(tool, "handler", enforce_declared_choices(tool, tool.handler))
     OUTCOMES[tool.name] = tool
     return tool
 
@@ -41,7 +46,7 @@ def get(name: str) -> OutcomeTool:
 
 
 def all_tools() -> list[OutcomeTool]:
-    """Stable-sorted list (by name) — used by tests and `keel_status`."""
+    """Stable-sorted list (by name) — used by tests and `keel_account_status`."""
     return [OUTCOMES[n] for n in sorted(OUTCOMES)]
 
 
@@ -64,21 +69,28 @@ def _bootstrap() -> None:
     # Order is the §4 inventory in the spec.
     from . import (  # always-loaded pilot trio  # components family
         accounts,
+        accounts_safety,
         audit,
         auth_login,
         auth_logout,
+        backtest_compare,
+        backtest_positions,
         backtest_run,
         backtest_summarize,
         backtest_watch,
         components_detail_batch,
         components_help,
         components_search,
+        deployments,
         doctor,
         feedback,
         library,
         live_control,
         live_deploy,
         live_monitor,
+        live_quality,
+        live_receipt,
+        live_update,
         open_in_app,
         ownership_status,
         plan_status,
@@ -98,6 +110,7 @@ def _bootstrap() -> None:
         strategy_restore,
         strategy_search,
         strategy_status,
+        strategy_upgrade,
         strategy_workspaces,
     )
     from . import help as _help

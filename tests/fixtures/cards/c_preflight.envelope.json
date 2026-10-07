@@ -1,0 +1,41 @@
+{
+  "hero_url": "https://app.usekeel.io/live/new?intent=int_01HZ",
+  "url_line": "View in Keel: https://app.usekeel.io/live/new?intent=int_01HZ",
+  "confirmation_expires_at": "2026-09-20T14:19:00+00:00",
+  "preview": {
+    "est_slippage": 0.0012,
+    "est_fees": 0.00045,
+    "schedule": "Every 4h at :05",
+    "raw": {
+      "strategy_name": "adx_trend_crypto",
+      "version": 2,
+      "timeframe": "4h",
+      "bar_offset": "5m",
+      "schedule_description": "Every 4h at :05",
+      "universe_size": 15,
+      "tranche_schedule_description": "3 tranches over 90 minutes",
+      "universe_warnings": [
+        {
+          "code": "SYMBOL_UNAVAILABLE",
+          "message": "kPEPE has no venue quote right now."
+        },
+        {
+          "code": "SYMBOL_THIN",
+          "reason": "WIF quotes are thin at this size."
+        }
+      ]
+    }
+  },
+  "deploy_intent": {
+    "suggested_config": {
+      "sizing_usd": 25000,
+      "expected_drawdown_usd": 3575,
+      "sizing_basis": "max_drawdown_budget"
+    }
+  },
+  "sync_note": "The strategy's latest version is what will run.",
+  "render": {
+    "card": "preflight",
+    "fallback_url": "https://app.usekeel.io/live/new?intent=int_01HZ"
+  }
+}

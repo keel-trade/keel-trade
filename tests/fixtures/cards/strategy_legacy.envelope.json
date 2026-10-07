@@ -1,0 +1,162 @@
+{
+  "metadata": {
+    "name": "adx_trend_crypto",
+    "status": "DRAFT",
+    "current_sequence": 1,
+    "graph": {
+      "blocks": [
+        {
+          "id": "b1",
+          "type": "component",
+          "component": "PriceDataLoader",
+          "params": {
+            "timeframe": "15min"
+          }
+        },
+        {
+          "id": "b2",
+          "type": "component",
+          "component": "TargetTimeframeResampler",
+          "params": {}
+        },
+        {
+          "id": "b3",
+          "type": "parallel",
+          "branches": {
+            "trend_strong": [
+              {
+                "id": "b4",
+                "type": "component",
+                "component": "ADX",
+                "params": {
+                  "period": 14
+                }
+              },
+              {
+                "id": "b5",
+                "type": "component",
+                "component": "AboveThresholdFilter",
+                "params": {
+                  "threshold": 25.0
+                }
+              }
+            ],
+            "trend_up": [
+              {
+                "id": "b6",
+                "type": "variable_ref",
+                "variableName": "ema_cross"
+              },
+              {
+                "id": "b7",
+                "type": "component",
+                "component": "AboveThresholdFilter",
+                "params": {
+                  "threshold": 0.0
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "b8",
+          "type": "component",
+          "component": "MaskAnd",
+          "params": {}
+        },
+        {
+          "id": "b9",
+          "type": "component",
+          "component": "EqualWeightSizer",
+          "params": {
+            "max_weight": 0.2,
+            "target_leverage": 1.0
+          }
+        }
+      ],
+      "globals": {
+        "target_timeframe": "4h"
+      },
+      "universe": {
+        "mode": "top_volume",
+        "market": "perp",
+        "top_n": 15,
+        "resolved": [
+          "BTC",
+          "DOGE",
+          "ETH",
+          "GRAM",
+          "HYPE",
+          "LINK",
+          "LIT",
+          "PUMP",
+          "SOL",
+          "SUI",
+          "VVV",
+          "XPL",
+          "XRP",
+          "ZEC",
+          "kPEPE"
+        ]
+      },
+      "execution": {
+        "rebalance": "buffered",
+        "buffer_threshold": 0.2,
+        "buffer_mode": "relative",
+        "rebalance_method": "to_edge"
+      },
+      "factories": [
+        {
+          "name": "ema_cross",
+          "params": [],
+          "body": [
+            {
+              "id": "f1",
+              "type": "parallel",
+              "branches": {
+                "fast": [
+                  {
+                    "id": "f2",
+                    "type": "component",
+                    "component": "EWMA",
+                    "params": {
+                      "window": 10
+                    }
+                  }
+                ],
+                "slow": [
+                  {
+                    "id": "f3",
+                    "type": "component",
+                    "component": "EWMA",
+                    "params": {
+                      "window": 30
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "id": "f4",
+              "type": "component",
+              "component": "Crossover",
+              "params": {
+                "fast_key": "fast",
+                "slow_key": "slow"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "latest_backtest_metrics": {
+      "sharpe_ratio": 0.82,
+      "total_return_pct": 65.4,
+      "max_drawdown_pct": 39.6,
+      "total_trades": 1155
+    },
+    "latest_backtest_start_date": "2024-08-15",
+    "latest_backtest_end_date": "2026-07-05"
+  },
+  "hero_url": "https://app.usekeel.io/strategies/str_adx/edit"
+}

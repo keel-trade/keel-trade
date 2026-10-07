@@ -23,9 +23,10 @@ import json
 import click
 
 from keel.errors import KeelError
-from keel.output import emit, emit_error
+from keel.output import emit, emit_error, format_field_line
 
 from ._base import OutcomeResult, OutcomeTool, ToolContext
+from ._toolsets import PARAM_ALIASES
 
 
 def _flag_name(prop: str) -> str:
@@ -65,6 +66,14 @@ def _build_click_command(tool: OutcomeTool) -> click.Command:
             if schema_prop.get("x-cli-positional") is True:
                 positional_arg = prop
                 break
+    array_props = [p for p, s in properties.items() if s.get("type") == "array"]
+    # A renamed parameter's old flag (`_toolsets.PARAM_ALIASES`, Q-2267):
+    # registered hidden, typed as the new property, and rewritten to the new
+    # name when GIVEN — a scripted `keel strategy get --no-ownership-hint`
+    # keeps working after the rename, exactly as the MCP call does.
+    aliases = {
+        old: new for old, new in PARAM_ALIASES.get(tool.name, {}).items() if new in properties
+    }
 
     # Build the callback.
     def callback(**kwargs):
@@ -72,6 +81,24 @@ def _build_click_command(tool: OutcomeTool) -> click.Command:
         # `dest` rules. Translate `none`-valued args away so handlers see
         # a clean dict.
         args: dict = {k: v for k, v in kwargs.items() if v is not None}
+        for old, new in aliases.items():
+            # A hidden boolean flag arrives as False when absent (Click gives
+            # flags a default), so only a given value — True, or any
+            # non-boolean value — is the caller's and wins over the new name.
+            given = args.pop(old, None)
+            if given is not None and given is not False:
+                args[new] = given
+        # Array properties reach the handler in the shape MCP sends (Q-2211):
+        # a JSON list, and no key at all when omitted. Click hands a tuple
+        # for `multiple=True` / `nargs=-1` — `()` when the flag is absent —
+        # so an optional array read `()` as "given" and a list check refused
+        # every call. The handler's own validation is then the one path.
+        for prop in array_props:
+            if prop in args:
+                if args[prop]:
+                    args[prop] = list(args[prop])
+                else:
+                    del args[prop]
 
         ctx_obj = click.get_current_context().obj or {}
         # Per-subcommand --format wins over top-level --format. Users
@@ -131,6 +158,11 @@ def _build_click_command(tool: OutcomeTool) -> click.Command:
             continue
         opt = _prop_to_option(prop, properties[prop], required=prop in required)
         options.append(opt)
+    for old, new in sorted(aliases.items()):
+        # The new property's shape minus its default, so an absent old flag
+        # never masquerades as a given value.
+        shape = {k: v for k, v in properties[new].items() if k != "default"}
+        options.append(_prop_to_option(old, shape, required=False, hidden=True))
 
     cmd = click.pass_context(callback) if False else callback  # noqa: SIM108
     for opt in options:
@@ -207,7 +239,7 @@ class _JSONObjectParamType(click.ParamType):
 _JSON_OBJECT = _JSONObjectParamType()
 
 
-def _prop_to_option(prop: str, schema: dict, *, required: bool):
+def _prop_to_option(prop: str, schema: dict, *, required: bool, hidden: bool = False):
     flags = _flag_aliases(prop, schema)
     help_text = schema.get("description", "")
     schema_type = schema.get("type", "string")
@@ -222,6 +254,7 @@ def _prop_to_option(prop: str, schema: dict, *, required: bool):
             default=default,
             show_default=default is not None,
             help=help_text,
+            hidden=hidden,
         )
 
     if schema_type == "boolean":
@@ -235,6 +268,7 @@ def _prop_to_option(prop: str, schema: dict, *, required: bool):
             default=default if default is not None else False,
             show_default=True,
             help=help_text,
+            hidden=hidden,
         )
 
     if schema_type == "array":
@@ -243,6 +277,7 @@ def _prop_to_option(prop: str, schema: dict, *, required: bool):
             prop,
             multiple=True,
             help=help_text,
+            hidden=hidden,
         )
 
     if schema_type == "integer":
@@ -254,6 +289,7 @@ def _prop_to_option(prop: str, schema: dict, *, required: bool):
             default=default,
             show_default=default is not None,
             help=help_text,
+            hidden=hidden,
         )
 
     if schema_type == "number":
@@ -265,6 +301,7 @@ def _prop_to_option(prop: str, schema: dict, *, required: bool):
             default=default,
             show_default=default is not None,
             help=help_text,
+            hidden=hidden,
         )
 
     if schema_type == "object":
@@ -274,6 +311,7 @@ def _prop_to_option(prop: str, schema: dict, *, required: bool):
             type=_JSON_OBJECT,
             required=required,
             help=help_text,
+            hidden=hidden,
         )
 
     # Default: string-ish
@@ -358,9 +396,54 @@ def _confirm_destructive(tool: OutcomeTool, args: dict) -> None:
     )
 
 
+def _render_comparison(envelope: dict, markdown: str) -> None:
+    """A compare in a terminal: the table, its hold lines, the link (Q-2221).
+
+    The markdown is the whole comparison (table, run links, warnings,
+    notes). Every other field is the table's structured twin, a spec diff
+    or card data, so nothing is dumped: the lines after the markdown are
+    the ones an MCP text host reads (`operational_lines`, the one owner),
+    with each hold on its own line. `--format json` keeps the envelope.
+    """
+    from ._backtest_view import reference_line
+    from ._mcp_adapter import operational_lines
+
+    click.echo(markdown.rstrip())
+    many = envelope.get("references")
+    holds = many if isinstance(many, list) and many else [envelope.get("reference")]
+    # One sentence per hold, in `reference_line`'s words (the MCP `reference`
+    # row's owner), where MCP joins them into one line.
+    lines = [
+        f"reference: {line}"
+        for line in (reference_line(hold, comparison=True) for hold in holds)
+        if line
+    ]
+    rest = {k: v for k, v in envelope.items() if k not in ("reference", "references")}
+    lines += operational_lines(rest)
+    if lines:
+        click.echo()
+        for line in lines:
+            click.echo(line)
+    if envelope.get("hero_url"):
+        click.echo(envelope["hero_url"])
+
+
 def _render(result: OutcomeResult, fmt: str) -> None:
+    from ._backtest_view import KIND_COMPARISON
+
     envelope = result.to_envelope()
     if _is_human_format(fmt):
+        # The view first, verbatim (PLAN §4.6): a strategy in a terminal
+        # is the block list, not a nested graph object printed as JSON.
+        # `--format json` is untouched — the field is still in there.
+        view = envelope.get("view")
+        markdown = view.get("markdown") if isinstance(view, dict) else None
+        if isinstance(markdown, str) and markdown.strip() and view.get("kind") == KIND_COMPARISON:
+            _render_comparison(envelope, markdown)
+            return
+        if isinstance(markdown, str) and markdown.strip():
+            click.echo(markdown.rstrip())
+            click.echo()
         # All payload fields to stdout so the user can pipe/grep.
         # Spinners + status would go to stderr (we don't emit any
         # today). hero_url + share_url are the LAST lines on stdout
@@ -371,9 +454,23 @@ def _render(result: OutcomeResult, fmt: str) -> None:
             # form in human mode (structured formats keep it).
             if k in {"hero_url", "share_url", "resource_uri", "url_line"}:
                 continue
-            if isinstance(v, (dict, list)):
-                v = json.dumps(v, indent=2)
-            click.echo(f"{k}: {v}")
+            # The view printed above; its JSON form would be the wall of
+            # nested graph this change exists to remove.
+            if k == "view" and isinstance(markdown, str) and markdown.strip():
+                continue
+            # `curve` is the CARD's series — 240 columnar triples the
+            # backtest widget draws. A terminal draws no chart, so
+            # printing it means 240 rows of numbers immediately after a
+            # one-line receipt. Skipped the way `view` is; `--format
+            # json` is untouched and still carries it.
+            if k == "curve" and isinstance(v, dict) and v.get("points"):
+                continue
+            # Renderer-first (Q-0913): `keel.output.FIELD_RENDERERS` is the
+            # ONE owner of how an execution field reads, so the CLI and the
+            # CLI-only verbs in keel/cli/commands cannot drift. Unknown
+            # structured values keep this surface's long-standing indented
+            # JSON fallback.
+            click.echo(format_field_line(k, v, envelope, nested="indent"))
         if envelope.get("resource_uri"):
             click.echo(envelope["resource_uri"])
         if envelope.get("hero_url"):
@@ -397,11 +494,13 @@ _GROUP_HELP: dict[tuple[str, ...], str] = {
     ("strategy",): "Create, search, fork, diff, and inspect strategies.",
     ("backtest",): "Run backtests and read their results.",
     ("live",): "Deploy, monitor, and control live trading deployments.",
+    ("deployments",): "List the deployments in your org (ids, accounts, status).",
     ("components",): "Search the component catalog and inspect schemas.",
     ("accounts",): "Read Hyperliquid trading accounts attached to your org.",
     ("share",): "Publish strategies and backtests at public usekeel.io/share URLs.",
     ("audit",): "Inspect agent / tool call history.",
     ("library",): "Browse and fork verified Keel Library entries.",
+    ("ownership",): "Read what a strategy still needs before it can go live.",
     ("strategy", "memory"): "Read and append per-strategy notes (cross-conversation memory).",
 }
 
@@ -413,12 +512,16 @@ _GROUP_HELP: dict[tuple[str, ...], str] = {
 # alternatives by intuition; instead of fighting that, accept them.
 _CLI_VERB_ALIASES: dict[tuple[str, ...], tuple[str, ...]] = {
     # `keel components compose-help <name>` is the canonical name (matches
-    # the MCP tool `keel_components_compose_help`), but "describe" is what
+    # the MCP tool `keel_components_get`), but "describe" is what
     # every agent reaches for. The misnamed-tool finding is filed as P2 in
     # `projects/agent-v2/06-prod-readiness-followups.md`; the proper
     # rename ships in v0.5.0 as a breaking change. Until then, accept
     # both verb forms in the CLI so agents aren't blocked.
     ("components", "compose-help"): ("describe", "detail"),
+    # `keel backtest positions` is the canonical verb (MCP
+    # `keel_backtest_positions`, founder rename 2026-09-23, Q-1893); it
+    # shipped as `keel backtest trades` the same day, which stays an alias.
+    ("backtest", "positions"): ("trades",),
 }
 
 

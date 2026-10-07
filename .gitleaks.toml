@@ -1,11 +1,59 @@
 # Gitleaks config for the keel-trade public mirror scan (sync G2 gate).
-# Extends the default ruleset; allowlists below suppress KNOWN false
-# positives only — never real credentials.
+#
+# `gitleaks dir` auto-discovers this file at the scanned-tree root, so it is
+# published with the mirror (registered in public-overlay/.mirror-allowlist)
+# and the scan boundary is third-party-auditable.
+#
+# The default ruleset stays ON for the whole tree (`useDefault = true`). The one
+# allowlist below suppresses a KNOWN false-positive class and nothing else:
+# gitleaks' `generic-api-key` rule fires on `key="<value>"` when the value
+# clears its entropy threshold, and two of the DSL staged-change registry
+# identifiers in the bundled validator catalog do (Q-0468 — this reddened the
+# sdk-v0.7.0 sync dry run, run 32515169718). They are validator rule keys, not
+# credentials.
+#
+# ── Why this is a LINE regex and NOT a `paths` entry (Q-0468 re-verification,
+#    2026-08-25; the first version of this file got it wrong) ────────────────
+#
+# In gitleaks 8.30.1 (the version the G2 step pins) a `paths` entry in a global
+# allowlist excludes the ENTIRE FILE from scanning, and it does so regardless of
+# the allowlist's `condition`/`matchCondition` — both keys are accepted without
+# error and then ignored, so an "AND"-scoped allowlist silently behaves as a
+# whole-file exclusion. Measured, all four with the same pinned binary:
+#
+#   path-scoped allowlist  →  a planted `sk_live_…` INSIDE catalog.py:  MISSED
+#   path-scoped allowlist  →  `condition = "AND"` + a regex matching
+#                             nothing: the file is still skipped entirely
+#   regex-only (this file) →  planted `sk_live_…` in catalog.py:        caught
+#   regex-only (this file) →  planted `ghp_…`, and a lowercase-hex token
+#                             on a `key="…"` line, in any file:         caught
+#
+# So the suppression is expressed ONLY as an exact enumeration of the
+# identifiers, anchored to the whole line. Nothing else is exempted anywhere:
+# a high-entropy value that merely LOOKS kebab-case is not on the list, and
+# therefore is not allowlisted. The identifiers are literal known-safe strings,
+# so allowlisting them tree-wide costs nothing a path scope would have bought.
+#
+# The enumeration is drift-gated at PR time by
+# tests/test_mirror_gitleaks_allowlist.py: it must equal the live
+# `StagedChange(key=…)` set in the bundled catalog. Adding a staged change
+# therefore takes a same-PR edit here — loud by construction, and never a
+# surprise red at `sdk-v*` tag time, which is the half-promoted-release mode
+# Q-0468 exists to prevent.
+#
+# No expiry field: unlike a .trivyignore.yaml CVE suppression (a temporary
+# acceptance awaiting an upstream fix), "these identifiers are not credentials"
+# is a permanent property of a named, enumerated set. The same-PR drift gate,
+# not a date, is what forces re-examination.
 [extend]
 useDefault = true
 
-[allowlist]
-description = "DSL staged-change registry identifiers (StagedChange(key=...)) in the bundled validator catalog — kebab-case rule keys, not credentials"
-paths = ['''pipeline_engine/dsl/catalog\.py''']
+[[allowlists]]
+id = "dsl-stagedchange-registry-keys"
+description = """
+DSL staged-change registry identifiers (StagedChange(key=...)) in the bundled
+validator catalog. Enumerated exactly and kept in sync with the catalog by
+tests/test_mirror_gitleaks_allowlist.py. Not credentials.
+"""
 regexTarget = "line"
-regexes = ['''key="[a-z0-9][a-z0-9-]*",''']
+regexes = ['''^\s*key="(carrier-fallback-retirement|clock-harmonic|clock-mismatch|clock-projector|clock-transform-rebase|composer-record-reach|d2-refinement-unproven|d4-slot-sib-narrowing|empty-parallel-rule|extract-projection|fixed-weight-uncapped|forecast-magnitude-discarded|loader-native-floor|loader-timeframe-unbound|mask-slot-not-wired|missing-universe|nondense-terminal-weights|normalizer-before-concat|relational-constraints|role-mismatch-rule|role-survival|scheme-synthesis|soft-bounds-advisory|soft-unproven-silence|terminal-dict-not-consumed|terminal-not-weights|tombstoned-option-pinned|value-domain-rule|xs-before-universe-mask)",$''']

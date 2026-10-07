@@ -40,22 +40,36 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
 
     notes: list[str] = []
     if not str(payload.get("text") or "").strip():
-        notes.append(
-            "no `text` was provided, so the stored record carries no feedback "
-            "content — include `text` (plus `goal` and `kind`) next time"
+        # An empty note stored an empty record no one can act on (Q-2273).
+        # Never-fails (spec 02 R4) covers DELIVERY; a note with nothing in it
+        # is a usage error, refused before anything is sent.
+        from keel.errors import UsageError
+
+        raise UsageError(
+            "Missing `text` — the feedback itself; nothing was sent.",
+            suggestion="Re-call with `text` (plus `goal` and `kind` when known).",
         )
 
     delivered = False
+    stored = False
     feedback_id: str | None = None
     try:
         client = ctx.get_client()
         response = client.post("/v1/feedback", json=payload)
-        delivered = True
+        # keel-api answers 200 even when it could not store the row (its
+        # never-fails contract): the body then carries `note: "feedback could
+        # not be persisted"` and no team member will ever read it. Transport
+        # success is not delivery (Q-2268), so `delivered` is the stored fact
+        # and `stored` names it.
         if isinstance(response, dict):
             feedback_id = response.get("feedback_id")
             server_note = response.get("note")
             if server_note:
                 notes.append(str(server_note))
+            stored = not _persist_failed(server_note)
+        else:
+            stored = True
+        delivered = stored
     except Exception as e:  # noqa: BLE001 — delivery-class failures only; re-raised below if not
         # Never-fails boundary: auth (KeelError/AuthError), HTTP 4xx/5xx
         # and network/timeouts (KeelError via the client's translation +
@@ -78,6 +92,7 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
     extra: dict[str, Any] = {
         "status": "ok",
         "delivered": delivered,
+        "stored": stored,
         "feedback_id": feedback_id,
     }
     if notes:
@@ -85,52 +100,64 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
     return OutcomeResult(run_id=None, hero_url=None, share_url=None, extra=extra)
 
 
+#: keel-api's success-with-note for a row it could not write
+#: (services/keel-api/src/routers/feedback.py: "feedback could not be
+#: persisted"). Matched as a phrase so a longer note still counts.
+_PERSIST_FAILED_PHRASE = "could not be persisted"
+
+
+def _persist_failed(note: Any) -> bool:
+    return isinstance(note, str) and _PERSIST_FAILED_PHRASE in note.lower()
+
+
 FEEDBACK = register(
     OutcomeTool(
         name="keel_feedback",
         # Deliberately the lowest consent bucket (read — same as
-        # keel_status/keel_doctor/keel_help): feedback must be fileable
+        # keel_account_status/keel_connection_check/keel_help): feedback must be fileable
         # by every authenticated caller, so it never sits behind a
         # write-scope grant (spec 02 R4 "no flow may gate on it").
         required_action="audit.read",
         cli_path=("feedback",),
         toolset="always",
         # grounded-in: feedback.py docstring (spec 02 R4 — never-fails
-        # contract, no flow gates on it) + tool_usage.md:36-37 (a tool
+        # contract, no flow gates on it) + system/chat/tool_usage.md:27-29 (a tool
         # erroring twice on the same root cause is exactly the friction to
         # capture here rather than silently working around).
+        # No trigger beyond the user's say-so (Q-2080, 2026-10-01): the
+        # earlier "can be filed at any point, including after a tool keeps
+        # erroring twice" read to OpenAI's scan as autonomous transmission of
+        # session details. The description now says when it is for: the user
+        # asked, or agreed.
         description=(
-            "Send product feedback about Keel to the team: friction, praise, "
-            "or a bug report from this session. File it at the END of a "
-            "session, and any time the same friction repeats — a tool erroring "
-            "twice on the same root cause, a confusing result, a missing "
-            "capability — capture it here rather than silently working around "
-            "it. Provide `goal` (what you were trying to accomplish), `kind` "
-            "(friction | praise | bug), and `text` (the feedback itself); "
-            "optionally `severity` and `context_ref` (the id or tool name it "
-            "concerns). This tool NEVER fails: delivery problems return "
-            "success with a `note`, so it is always safe to call and no "
-            "workflow should wait on or gate on it. "
-            "Do NOT use for support questions — nothing is returned and no "
-            "human replies in-session; for connectivity problems call "
-            "`keel_doctor`."
+            "Send feedback about Keel to the Keel team — friction, praise or a bug report "
+            "in `goal`, `kind` and `text` — when the user asks or agrees; a failing "
+            "connection is `keel_connection_check`. It sends only these fields (plus "
+            "optional `severity` and `context_ref`), nothing else from the conversation; "
+            "`text` is required. Returns `delivered` (true only "
+            "when Keel stored the note) and, on a problem, a "
+            "`note`; no one replies within the session."
         ),
         input_schema={
             "type": "object",
-            # No `required` fields — the never-fails contract extends to
-            # arguments: keel-api normalizes whatever arrives and answers
-            # success-with-note, so a sparse call must not be rejected
-            # client-side either (spec 02 R4).
-            "required": [],
+            # `text` is required (Q-2273): a call without it stored an empty
+            # record. The never-fails contract (spec 02 R4) still covers
+            # DELIVERY — a well-formed note keel-api cannot take is a success
+            # with a note — and every other field stays optional.
+            "required": ["text"],
             "properties": {
                 "text": {
                     "type": "string",
                     "x-cli-positional": True,
-                    "description": "The feedback itself, in your own words. Markdown allowed.",
+                    "description": (
+                        "The feedback itself, in the caller's own words. Markdown allowed. "
+                        "Up to 5,000 characters are stored; longer text is cut and the "
+                        "result's `note` says so."
+                    ),
                 },
                 "goal": {
                     "type": "string",
-                    "description": ("What you were trying to accomplish when the feedback arose."),
+                    "description": ("What was being attempted when the feedback arose."),
                 },
                 "kind": {
                     "type": "string",
@@ -139,14 +166,21 @@ FEEDBACK = register(
                 },
                 "severity": {
                     "type": "string",
-                    "description": "Optional severity: low, medium, or high.",
+                    # Free text, not an enum (Q-2266): keel-api stores any
+                    # string up to 500 characters as written (routers/
+                    # feedback.py `_clean_str`), and the never-fails contract
+                    # rules out a client-side refusal.
+                    "description": (
+                        "Optional severity in a word or two (for example low, medium or "
+                        "high); stored as written."
+                    ),
                 },
                 "context_ref": {
                     "type": "string",
                     "description": (
-                        "Optional reference this feedback concerns — a strategy "
-                        "id (str_...), a backtest run id (btr_...), or a tool "
-                        "name (keel_backtest_run)."
+                        "Optional reference this feedback concerns — a strategy id "
+                        "(`str_...`), a backtest run id (`btr_...`), or a tool name "
+                        "(`keel_backtest_run`)."
                     ),
                 },
             },
@@ -154,8 +188,15 @@ FEEDBACK = register(
         annotations={
             "title": "Send Feedback",
             "readOnlyHint": False,
-            "destructiveHint": False,
+            # Irreversible (2026-10-01, Q-2080): a note delivered to the Keel
+            # team cannot be recalled, so it is not an append-only write the
+            # caller can read back and move on from.
+            "destructiveHint": True,
             "idempotentHint": False,
+            # The note leaves the caller's workspace and is delivered to the
+            # Keel team — an external party from the caller's side. OpenAI's
+            # scanner read it as an external system (2026-09-30), correctly;
+            # the ground is the delivery, never Keel's own telemetry.
             "openWorldHint": True,
         },
         handler=_handler,

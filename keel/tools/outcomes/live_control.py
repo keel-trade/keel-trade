@@ -13,10 +13,10 @@ surfaces; `trigger` (an off-schedule rebalance on an already-authorized
 deployment) is the borderline case and is flagged for founder review.
 
 Routes used (verified against the API live router):
-  - pause   → POST   /v1/live/{id}/pause
-  - resume  → POST   /v1/live/{id}/resume
-  - stop    → DELETE /v1/live/{id}
-  - trigger → POST   /v1/live/{id}/trigger
+  - pause   → POST   /v1/deployments/{id}/pause
+  - resume  → POST   /v1/deployments/{id}/resume
+  - stop    → DELETE /v1/deployments/{id}
+  - trigger → POST   /v1/deployments/{id}/trigger
 
 Do NOT use to go live / deploy a new strategy — call `keel_live_deploy`
 (it hands off to the web deploy flow). Do NOT use to read state — call
@@ -29,6 +29,7 @@ from keel.errors import EntitlementError, KeelError, ValidationError
 
 from . import register
 from ._base import OutcomeResult, OutcomeTool, ToolContext
+from .open_in_app import app_url_for
 
 
 # action → (method, path-suffix)
@@ -89,7 +90,7 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
     assert_armed_for_account(None)  # no account_id in path; cross-account allowed
 
     method, suffix = _ACTIONS[action]
-    path = f"/v1/live/{deployment_id}{suffix}"
+    path = f"/v1/deployments/{deployment_id}{suffix}"
     if override:
         path = f"{path}?override=true"
 
@@ -129,14 +130,25 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
             handoff = live_scope_handoff(
                 e,
                 blocked_action="live_control",
-                action_url=f"{ctx.app_url}/live/{deployment_id}",
+                action_url=app_url_for("live", deployment_id, ctx),
                 retry_call=retry_call,
             )
         raise handoff from e
+    except KeelError as e:
+        # D-42 / 04-R34: resuming a deployment whose commit pins a
+        # known-issue component is refused (it stays PAUSED, its schedule
+        # untouched) until the strategy is upgraded and the new version
+        # deployed. No parameter here — `override` included — bypasses it.
+        from ._known_issue import known_issue_refusal
+
+        refusal = known_issue_refusal(e)
+        if refusal is not None:
+            raise refusal from e
+        raise
 
     return OutcomeResult(
         run_id=deployment_id,
-        hero_url=f"{ctx.app_url}/live/{deployment_id}",
+        hero_url=app_url_for("live", deployment_id, ctx),
         share_url=None,
         extra={
             "action": action,
@@ -169,6 +181,8 @@ LIVE_CONTROL = register(
             "Do NOT use to go live / deploy a NEW strategy — that is done by the human "
             "in the Keel web app; call `keel_live_deploy`, which returns a handoff into "
             "that web deploy flow. "
+            "Do NOT use to update a deployment to its strategy's newer version — call "
+            "`keel_live_update`, which mints the web update handoff link. "
             "Do NOT use to read state — call `keel_live_monitor`."
         ),
         input_schema={

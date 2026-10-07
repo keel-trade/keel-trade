@@ -3,7 +3,8 @@
 The 8 bundled skills (spec §11.2) compose at runtime from
 `the upstream reference system docs` + each skill's own
 workflow body. See `keel/skills/__init__.py` for the loader and
-`keel/skills/*.md` for the source files.
+`keel/skills/<name>/SKILL.md` for the source files (portable Agent
+Skills layout).
 
 Commands:
     keel skills list             — name + description + trigger for all 8

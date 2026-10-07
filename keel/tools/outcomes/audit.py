@@ -106,7 +106,7 @@ def _list_handler(args: dict, ctx: ToolContext) -> OutcomeResult:
     except Exception as e:  # noqa: BLE001
         raise KeelError(
             f"Failed to fetch audit events: {e}",
-            suggestion="Run `keel_doctor` to diagnose auth / API.",
+            suggestion="Run `keel_connection_check` to diagnose auth / API.",
         )
 
     # API returns the canonical {data: [...], pagination: {cursor, has_more}}
@@ -140,8 +140,8 @@ AUDIT_LIST_LAST = register(
         cli_path=("audit", "list-last"),
         toolset="read-only",
         # grounded-in: audit.py module docstring (spec §13.7 — read-only
-        # self-inspection feeding the recover-from-error skill) + tool_usage.md
-        # :36-37 (reason about what happened instead of blindly retrying).
+        # self-inspection feeding the recover-from-error skill) + system/chat/tool_usage.md
+        # :27-29 (reason about what happened instead of blindly retrying).
         description=(
             "Read the most recent N audit events for the current org — the "
             "agent's own trail for self-debugging and recovery. Use it to see "

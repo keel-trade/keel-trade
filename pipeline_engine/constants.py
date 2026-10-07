@@ -4,6 +4,8 @@ Provides sentinel values used across multiple modules to avoid identity
 divergence from independently created sentinels.
 """
 
+from timeframes import VALID_TIMEFRAMES  # noqa: F401 — re-export; see below
+
 
 class MissingType:
     """Type of the :data:`MISSING` sentinel — a copy-stable singleton.
@@ -49,23 +51,22 @@ class MissingType:
 # Distinct from None so we can tell "required param" from "default is None".
 MISSING = MissingType()
 
-# Valid target timeframes for strategy pipelines.
-# This is the single source of truth — the runtime TimeframeResampler only
-# supports these values.  Update this set when adding new timeframe support.
-VALID_TIMEFRAMES = frozenset(
-    {
-        "15min",
-        "30min",
-        "1h",
-        "2h",
-        "3h",
-        "4h",
-        "6h",
-        "8h",
-        "12h",
-        "1d",
-    }
-)
+# Valid target timeframes for strategy pipelines — the KEY SET of the clock
+# alphabet, re-exported from ``libs/timeframes`` rather than mirrored.
+#
+# It used to be a hand-written frozenset, and the comment here explained why:
+# ``dsl/validator.py``'s Globals gate wants a membership test, and importing
+# the minutes table from ``validation_shared`` would have been circular. That
+# reason is gone. The alphabet now lives in ``libs/timeframes``, a stdlib-only
+# leaf package that imports nothing from ``pipeline_engine``, so the membership
+# set can come straight from the source with no cycle to route around.
+#
+# The mirror had already cost us once: ``3h`` sat in this set while
+# ``TIMEFRAME_MINUTES`` lacked it, so a strategy could declare a timeframe the
+# scheduler could not convert to minutes (see
+# ``services/keel-api/tests/test_schedule.py``). A parity test made that drift
+# a red; deriving makes it unrepresentable, which is strictly better than a
+# test that catches it afterwards. The import sits at the top of the file.
 
 
 __all__ = ["MISSING", "VALID_TIMEFRAMES", "MissingType"]

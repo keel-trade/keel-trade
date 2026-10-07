@@ -1,0 +1,3940 @@
+{
+  "strategy": {
+    "name": "a_189_block_pipeline",
+    "status": "valid"
+  },
+  "view": {
+    "categories": {
+      "AdverseVolCap": "risk_manager",
+      "ApplyUniverseMask": "signal_transform",
+      "BenchmarkDemean": "signal_transform",
+      "CrossSectionalDemedian": "signal_transform",
+      "CrossSectionalZScore": "signal_transform",
+      "Crossover": "signal_composer",
+      "EWMA": "indicator",
+      "EWMATransform": "signal_transform",
+      "EmpiricalFDM": "forecast_mapper",
+      "FillNaN": "risk_manager",
+      "ForecastCapper": "forecast_mapper",
+      "ForecastCombiner": "forecast_composer",
+      "ForecastScaler": "forecast_mapper",
+      "FundingDataLoader": "data_loader",
+      "IDMPortfolioAggregator": "position_manager",
+      "LeverageCap": "risk_manager",
+      "Load": "slot_op",
+      "NegateTransform": "signal_transform",
+      "PortfolioMarginCap": "risk_manager",
+      "PriceDataLoader": "data_loader",
+      "RealizedVolCap": "risk_manager",
+      "RealizedVolatility": "indicator",
+      "ResidualMomentum": "signal_transform",
+      "ReturnVolatility": "indicator",
+      "RollingUniverseMask": "universe_filter",
+      "SeasonedAssetMask": "universe_filter",
+      "Store": "slot_op",
+      "TargetSignalResampler": "signal_transform",
+      "TargetTimeframeResampler": "data_transform",
+      "VolAttenuator": "signal_transform",
+      "VolFloorScale": "risk_manager",
+      "VolTargetWeightConverter": "position_sizer",
+      "VolatilityStandardizer": "forecast_mapper"
+    },
+    "change": null,
+    "evidence": null,
+    "header": {
+      "clock": "1d @ 12h",
+      "execution": {
+        "label": "Buffered 0.25",
+        "params": {
+          "buffer_mode": "reference",
+          "buffer_threshold": 0.25,
+          "min_trade_size": 0.0,
+          "rebalance": "buffered",
+          "rebalance_method": "to_edge"
+        }
+      },
+      "factories": [],
+      "universe": {
+        "label": "Top 170 by volume \u00b7 HL perps",
+        "symbols": [],
+        "total": 170
+      }
+    },
+    "markdown": "**a_189_block_pipeline** \u00b7 valid \u00b7 1d @ 12h\nuniverse  Top 170 by volume \u00b7 HL perps\nexecution Buffered 0.25\n\nPriceDataLoader\nStore\nTargetTimeframeResampler\nStore\nRollingUniverseMask\nStore\nLoad\nSeasonedAssetMask\nStore\nLoad\nLoad\n\u2026 Parallel \u00b7 6 branches \u00b7 6 blocks (span_8 1, span_16 1, span_36 1, span_60 1, span_90 1, span_180 1)\n\u2026 172 more blocks\n",
+    "name": "a_189_block_pipeline",
+    "size": "structure",
+    "status": "valid",
+    "status_text": "Valid",
+    "structure": {
+      "blocks": [
+        {
+          "args": {
+            "cache_freshness_hours": 12,
+            "cache_only": false,
+            "dex_name": "native",
+            "exchange": "hyperliquid",
+            "force_live_only": false,
+            "max_gap_fill": 3,
+            "max_stale_days": 90,
+            "output_format": "dict",
+            "symbols": [
+              "0G",
+              "2Z",
+              "AAVE",
+              "ACE",
+              "ADA",
+              "AERO",
+              "AIXBT",
+              "ALGO",
+              "ALT",
+              "ANIME",
+              "APE",
+              "APEX",
+              "APT",
+              "AR",
+              "ARB",
+              "ASTER",
+              "ATOM",
+              "AVAX",
+              "AVNT",
+              "AXS",
+              "AZTEC",
+              "BABY",
+              "BANANA",
+              "BCH",
+              "BERA",
+              "BIGTIME",
+              "BIO",
+              "BLUR",
+              "BNB",
+              "BOME",
+              "BRETT",
+              "BSV",
+              "BTC",
+              "CAKE",
+              "CASHCAT",
+              "CC",
+              "CELO",
+              "CFX",
+              "CHIP",
+              "COMP",
+              "CRV",
+              "DASH",
+              "DOGE",
+              "DOT",
+              "DYDX",
+              "DYM",
+              "EIGEN",
+              "ENA",
+              "ENS",
+              "ETC",
+              "ETH",
+              "ETHFI",
+              "FARTCOIN",
+              "FET",
+              "FIL",
+              "FOGO",
+              "GALA",
+              "GMT",
+              "GMX",
+              "GOAT",
+              "GRAM",
+              "GRASS",
+              "GRIFFAIN",
+              "HBAR",
+              "HEMI",
+              "HMSTR",
+              "HYPE",
+              "HYPER",
+              "ICP",
+              "IMX",
+              "INIT",
+              "INJ",
+              "IO",
+              "JTO",
+              "JUP",
+              "KAITO",
+              "KAS",
+              "LAYER",
+              "LDO",
+              "LINEA",
+              "LINK",
+              "LIT",
+              "LTC",
+              "MANTA",
+              "ME",
+              "MEGA",
+              "MELANIA",
+              "MEME",
+              "MERL",
+              "MET",
+              "MINA",
+              "MNT",
+              "MON",
+              "MOODENG",
+              "MORPHO",
+              "MOVE",
+              "NEAR",
+              "NIL",
+              "NOT",
+              "NXPC",
+              "ONDO",
+              "OP",
+              "ORDI",
+              "PAXG",
+              "PENDLE",
+              "PENGU",
+              "PEOPLE",
+              "PNUT",
+              "POL",
+              "POLYX",
+              "POPCAT",
+              "PROVE",
+              "PUMP",
+              "PURR",
+              "PYTH",
+              "RENDER",
+              "RESOLV",
+              "REZ",
+              "RSR",
+              "RUNE",
+              "S",
+              "SAGA",
+              "SAND",
+              "SEI",
+              "SKR",
+              "SKY",
+              "SNX",
+              "SOL",
+              "SPX",
+              "STABLE",
+              "STBL",
+              "STRK",
+              "STX",
+              "SUI",
+              "SUPER",
+              "SUSHI",
+              "SYRUP",
+              "TAO",
+              "TIA",
+              "TNSR",
+              "TRB",
+              "TRUMP",
+              "UNI",
+              "VINE",
+              "VIRTUAL",
+              "VVV",
+              "W",
+              "WCT",
+              "WIF",
+              "WLD",
+              "WLFI",
+              "XAI",
+              "XLM",
+              "XMR",
+              "XPL",
+              "XRP",
+              "YGG",
+              "ZEC",
+              "ZEN",
+              "ZETA",
+              "ZK",
+              "ZORA",
+              "ZRO",
+              "kBONK",
+              "kFLOKI",
+              "kLUNC",
+              "kNEIRO",
+              "kPEPE",
+              "kSHIB"
+            ],
+            "timeframe": "15min",
+            "use_cache": true
+          },
+          "category": "data_loader",
+          "component": "PriceDataLoader",
+          "type": "component"
+        },
+        {
+          "args": {
+            "slot": {
+              "__type__": "Slot",
+              "name": "ohlcv_15m",
+              "value_type": "OHLCVDict"
+            }
+          },
+          "category": "slot_op",
+          "component": "Store",
+          "type": "component"
+        },
+        {
+          "args": {},
+          "category": "data_transform",
+          "component": "TargetTimeframeResampler",
+          "type": "component"
+        },
+        {
+          "args": {
+            "slot": {
+              "__type__": "Slot",
+              "name": "ohlcv_1d",
+              "value_type": "OHLCVDict"
+            }
+          },
+          "category": "slot_op",
+          "component": "Store",
+          "type": "component"
+        },
+        {
+          "args": {
+            "exit_rank": 70,
+            "force_include": [],
+            "lookback_bars": 90,
+            "memory_k": 2,
+            "min_history_bars": 36,
+            "rebalance_freq": "7d",
+            "top_n": 60
+          },
+          "category": "universe_filter",
+          "component": "RollingUniverseMask",
+          "type": "component"
+        },
+        {
+          "args": {
+            "slot": {
+              "__type__": "Slot",
+              "name": "universe_mask",
+              "value_type": "BinarySignal"
+            }
+          },
+          "category": "slot_op",
+          "component": "Store",
+          "type": "component"
+        },
+        {
+          "args": {
+            "slot": {
+              "__type__": "Slot",
+              "name": "ohlcv_1d",
+              "value_type": "OHLCVDict"
+            }
+          },
+          "category": "slot_op",
+          "component": "Load",
+          "type": "component"
+        },
+        {
+          "args": {
+            "min_age_bars": 121
+          },
+          "category": "universe_filter",
+          "component": "SeasonedAssetMask",
+          "type": "component"
+        },
+        {
+          "args": {
+            "slot": {
+              "__type__": "Slot",
+              "name": "mature_mask",
+              "value_type": "BinarySignal"
+            }
+          },
+          "category": "slot_op",
+          "component": "Store",
+          "type": "component"
+        },
+        {
+          "args": {
+            "slot": {
+              "__type__": "Slot",
+              "name": "ohlcv_1d",
+              "value_type": "OHLCVDict"
+            }
+          },
+          "category": "slot_op",
+          "component": "Load",
+          "type": "component"
+        },
+        {
+          "args": {
+            "slot": {
+              "__type__": "Slot",
+              "name": "ohlcv_1d",
+              "value_type": "OHLCVDict"
+            }
+          },
+          "category": "slot_op",
+          "component": "Load",
+          "type": "component"
+        },
+        {
+          "branches": {
+            "span_16": [
+              {
+                "args": {
+                  "burn_in": 1,
+                  "returns": "pct",
+                  "window": "16d"
+                },
+                "category": "indicator",
+                "component": "ReturnVolatility",
+                "type": "component"
+              }
+            ],
+            "span_180": [
+              {
+                "args": {
+                  "burn_in": 0.2,
+                  "returns": "pct",
+                  "window": "180d"
+                },
+                "category": "indicator",
+                "component": "ReturnVolatility",
+                "type": "component"
+              }
+            ],
+            "span_36": [
+              {
+                "args": {
+                  "burn_in": 1,
+                  "returns": "pct",
+                  "window": "36d"
+                },
+                "category": "indicator",
+                "component": "ReturnVolatility",
+                "type": "component"
+              }
+            ],
+            "span_60": [
+              {
+                "args": {
+                  "burn_in": 0.6,
+                  "returns": "pct",
+                  "window": "60d"
+                },
+                "category": "indicator",
+                "component": "ReturnVolatility",
+                "type": "component"
+              }
+            ],
+            "span_8": [
+              {
+                "args": {
+                  "burn_in": 1,
+                  "returns": "pct",
+                  "window": "8d"
+                },
+                "category": "indicator",
+                "component": "ReturnVolatility",
+                "type": "component"
+              }
+            ],
+            "span_90": [
+              {
+                "args": {
+                  "burn_in": 0.4,
+                  "returns": "pct",
+                  "window": "90d"
+                },
+                "category": "indicator",
+                "component": "ReturnVolatility",
+                "type": "component"
+              }
+            ]
+          },
+          "type": "parallel"
+        },
+        {
+          "args": {
+            "weights": {
+              "span_16": 0.095,
+              "span_180": 0.286,
+              "span_36": 0.143,
+              "span_60": 0.19,
+              "span_8": 0.048,
+              "span_90": 0.238
+            }
+          },
+          "category": "forecast_composer",
+          "component": "ForecastCombiner",
+          "type": "component"
+        },
+        {
+          "args": {
+            "slot": {
+              "__type__": "Slot",
+              "name": "return_vol",
+              "value_type": "ForecastSeries"
+            }
+          },
+          "category": "slot_op",
+          "component": "Store",
+          "type": "component"
+        },
+        {
+          "args": {
+            "slot": {
+              "__type__": "Slot",
+              "name": "ohlcv_15m",
+              "value_type": "OHLCVDict"
+            }
+          },
+          "category": "slot_op",
+          "component": "Load",
+          "type": "component"
+        },
+        {
+          "args": {
+            "min_coverage": 0.9,
+            "returns": "pct"
+          },
+          "category": "indicator",
+          "component": "RealizedVolatility",
+          "type": "component"
+        },
+        {
+          "args": {
+            "adjust": false,
+            "window": 36
+          },
+          "category": "signal_transform",
+          "component": "EWMATransform",
+          "type": "component"
+        },
+        {
+          "args": {
+            "slot": {
+              "__type__": "Slot",
+              "name": "rv_intra",
+              "value_type": "SignalSeries"
+            }
+          },
+          "category": "slot_op",
+          "component": "Store",
+          "type": "component"
+        },
+        {
+          "branches": {
+            "carry_bucket": [
+              {
+                "branches": {
+                  "raw_sub": [
+                    {
+                      "branches": {
+                        "carry_out_14": [
+                          {
+                            "args": {
+                              "cache_freshness_hours": 12,
+                              "cache_only": false,
+                              "dex_name": "native",
+                              "interval": "1h",
+                              "max_stale_days": 90,
+                              "output_format": "dict",
+                              "source": "hyperliquid",
+                              "symbols": [
+                                "0G",
+                                "2Z",
+                                "AAVE",
+                                "ACE",
+                                "ADA",
+                                "AERO",
+                                "AIXBT",
+                                "ALGO",
+                                "ALT",
+                                "ANIME",
+                                "APE",
+                                "APEX",
+                                "APT",
+                                "AR",
+                                "ARB",
+                                "ASTER",
+                                "ATOM",
+                                "AVAX",
+                                "AVNT",
+                                "AXS",
+                                "AZTEC",
+                                "BABY",
+                                "BANANA",
+                                "BCH",
+                                "BERA",
+                                "BIGTIME",
+                                "BIO",
+                                "BLUR",
+                                "BNB",
+                                "BOME",
+                                "BRETT",
+                                "BSV",
+                                "BTC",
+                                "CAKE",
+                                "CASHCAT",
+                                "CC",
+                                "CELO",
+                                "CFX",
+                                "CHIP",
+                                "COMP",
+                                "CRV",
+                                "DASH",
+                                "DOGE",
+                                "DOT",
+                                "DYDX",
+                                "DYM",
+                                "EIGEN",
+                                "ENA",
+                                "ENS",
+                                "ETC",
+                                "ETH",
+                                "ETHFI",
+                                "FARTCOIN",
+                                "FET",
+                                "FIL",
+                                "FOGO",
+                                "GALA",
+                                "GMT",
+                                "GMX",
+                                "GOAT",
+                                "GRAM",
+                                "GRASS",
+                                "GRIFFAIN",
+                                "HBAR",
+                                "HEMI",
+                                "HMSTR",
+                                "HYPE",
+                                "HYPER",
+                                "ICP",
+                                "IMX",
+                                "INIT",
+                                "INJ",
+                                "IO",
+                                "JTO",
+                                "JUP",
+                                "KAITO",
+                                "KAS",
+                                "LAYER",
+                                "LDO",
+                                "LINEA",
+                                "LINK",
+                                "LIT",
+                                "LTC",
+                                "MANTA",
+                                "ME",
+                                "MEGA",
+                                "MELANIA",
+                                "MEME",
+                                "MERL",
+                                "MET",
+                                "MINA",
+                                "MNT",
+                                "MON",
+                                "MOODENG",
+                                "MORPHO",
+                                "MOVE",
+                                "NEAR",
+                                "NIL",
+                                "NOT",
+                                "NXPC",
+                                "ONDO",
+                                "OP",
+                                "ORDI",
+                                "PAXG",
+                                "PENDLE",
+                                "PENGU",
+                                "PEOPLE",
+                                "PNUT",
+                                "POL",
+                                "POLYX",
+                                "POPCAT",
+                                "PROVE",
+                                "PUMP",
+                                "PURR",
+                                "PYTH",
+                                "RENDER",
+                                "RESOLV",
+                                "REZ",
+                                "RSR",
+                                "RUNE",
+                                "S",
+                                "SAGA",
+                                "SAND",
+                                "SEI",
+                                "SKR",
+                                "SKY",
+                                "SNX",
+                                "SOL",
+                                "SPX",
+                                "STABLE",
+                                "STBL",
+                                "STRK",
+                                "STX",
+                                "SUI",
+                                "SUPER",
+                                "SUSHI",
+                                "SYRUP",
+                                "TAO",
+                                "TIA",
+                                "TNSR",
+                                "TRB",
+                                "TRUMP",
+                                "UNI",
+                                "VINE",
+                                "VIRTUAL",
+                                "VVV",
+                                "W",
+                                "WCT",
+                                "WIF",
+                                "WLD",
+                                "WLFI",
+                                "XAI",
+                                "XLM",
+                                "XMR",
+                                "XPL",
+                                "XRP",
+                                "YGG",
+                                "ZEC",
+                                "ZEN",
+                                "ZETA",
+                                "ZK",
+                                "ZORA",
+                                "ZRO",
+                                "kBONK",
+                                "kFLOKI",
+                                "kLUNC",
+                                "kNEIRO",
+                                "kPEPE",
+                                "kSHIB"
+                              ],
+                              "use_cache": true
+                            },
+                            "category": "data_loader",
+                            "component": "FundingDataLoader",
+                            "type": "component"
+                          },
+                          {
+                            "args": {
+                              "method": "mean"
+                            },
+                            "category": "signal_transform",
+                            "component": "TargetSignalResampler",
+                            "type": "component"
+                          },
+                          {
+                            "args": {},
+                            "category": "signal_transform",
+                            "component": "NegateTransform",
+                            "type": "component"
+                          },
+                          {
+                            "args": {
+                              "adjust": false,
+                              "window": 14
+                            },
+                            "category": "signal_transform",
+                            "component": "EWMATransform",
+                            "type": "component"
+                          },
+                          {
+                            "args": {
+                              "ohlcv_slot": "ohlcv_1d",
+                              "returns": "pct",
+                              "signal_type": "percentage",
+                              "window": "36d"
+                            },
+                            "category": "forecast_mapper",
+                            "component": "VolatilityStandardizer",
+                            "type": "component"
+                          },
+                          {
+                            "args": {
+                              "mask_slot": "universe_mask"
+                            },
+                            "category": "signal_transform",
+                            "component": "ApplyUniverseMask",
+                            "type": "component"
+                          },
+                          {
+                            "args": {
+                              "avg_abs_target": 10,
+                              "method": "mean",
+                              "pool": "global",
+                              "population_mask_slot": "mature_mask",
+                              "rolling": true,
+                              "window": "60d"
+                            },
+                            "category": "forecast_mapper",
+                            "component": "ForecastScaler",
+                            "type": "component"
+                          },
+                          {
+                            "args": {
+                              "limit": 20
+                            },
+                            "category": "forecast_mapper",
+                            "component": "ForecastCapper",
+                            "type": "component"
+                          }
+                        ],
+                        "carry_out_30": [
+                          {
+                            "args": {
+                              "cache_freshness_hours": 12,
+                              "cache_only": false,
+                              "dex_name": "native",
+                              "interval": "1h",
+                              "max_stale_days": 90,
+                              "output_format": "dict",
+                              "source": "hyperliquid",
+                              "symbols": [
+                                "0G",
+                                "2Z",
+                                "AAVE",
+                                "ACE",
+                                "ADA",
+                                "AERO",
+                                "AIXBT",
+                                "ALGO",
+                                "ALT",
+                                "ANIME",
+                                "APE",
+                                "APEX",
+                                "APT",
+                                "AR",
+                                "ARB",
+                                "ASTER",
+                                "ATOM",
+                                "AVAX",
+                                "AVNT",
+                                "AXS",
+                                "AZTEC",
+                                "BABY",
+                                "BANANA",
+                                "BCH",
+                                "BERA",
+                                "BIGTIME",
+                                "BIO",
+                                "BLUR",
+                                "BNB",
+                                "BOME",
+                                "BRETT",
+                                "BSV",
+                                "BTC",
+                                "CAKE",
+                                "CASHCAT",
+                                "CC",
+                                "CELO",
+                                "CFX",
+                                "CHIP",
+                                "COMP",
+                                "CRV",
+                                "DASH",
+                                "DOGE",
+                                "DOT",
+                                "DYDX",
+                                "DYM",
+                                "EIGEN",
+                                "ENA",
+                                "ENS",
+                                "ETC",
+                                "ETH",
+                                "ETHFI",
+                                "FARTCOIN",
+                                "FET",
+                                "FIL",
+                                "FOGO",
+                                "GALA",
+                                "GMT",
+                                "GMX",
+                                "GOAT",
+                                "GRAM",
+                                "GRASS",
+                                "GRIFFAIN",
+                                "HBAR",
+                                "HEMI",
+                                "HMSTR",
+                                "HYPE",
+                                "HYPER",
+                                "ICP",
+                                "IMX",
+                                "INIT",
+                                "INJ",
+                                "IO",
+                                "JTO",
+                                "JUP",
+                                "KAITO",
+                                "KAS",
+                                "LAYER",
+                                "LDO",
+                                "LINEA",
+                                "LINK",
+                                "LIT",
+                                "LTC",
+                                "MANTA",
+                                "ME",
+                                "MEGA",
+                                "MELANIA",
+                                "MEME",
+                                "MERL",
+                                "MET",
+                                "MINA",
+                                "MNT",
+                                "MON",
+                                "MOODENG",
+                                "MORPHO",
+                                "MOVE",
+                                "NEAR",
+                                "NIL",
+                                "NOT",
+                                "NXPC",
+                                "ONDO",
+                                "OP",
+                                "ORDI",
+                                "PAXG",
+                                "PENDLE",
+                                "PENGU",
+                                "PEOPLE",
+                                "PNUT",
+                                "POL",
+                                "POLYX",
+                                "POPCAT",
+                                "PROVE",
+                                "PUMP",
+                                "PURR",
+                                "PYTH",
+                                "RENDER",
+                                "RESOLV",
+                                "REZ",
+                                "RSR",
+                                "RUNE",
+                                "S",
+                                "SAGA",
+                                "SAND",
+                                "SEI",
+                                "SKR",
+                                "SKY",
+                                "SNX",
+                                "SOL",
+                                "SPX",
+                                "STABLE",
+                                "STBL",
+                                "STRK",
+                                "STX",
+                                "SUI",
+                                "SUPER",
+                                "SUSHI",
+                                "SYRUP",
+                                "TAO",
+                                "TIA",
+                                "TNSR",
+                                "TRB",
+                                "TRUMP",
+                                "UNI",
+                                "VINE",
+                                "VIRTUAL",
+                                "VVV",
+                                "W",
+                                "WCT",
+                                "WIF",
+                                "WLD",
+                                "WLFI",
+                                "XAI",
+                                "XLM",
+                                "XMR",
+                                "XPL",
+                                "XRP",
+                                "YGG",
+                                "ZEC",
+                                "ZEN",
+                                "ZETA",
+                                "ZK",
+                                "ZORA",
+                                "ZRO",
+                                "kBONK",
+                                "kFLOKI",
+                                "kLUNC",
+                                "kNEIRO",
+                                "kPEPE",
+                                "kSHIB"
+                              ],
+                              "use_cache": true
+                            },
+                            "category": "data_loader",
+                            "component": "FundingDataLoader",
+                            "type": "component"
+                          },
+                          {
+                            "args": {
+                              "method": "mean"
+                            },
+                            "category": "signal_transform",
+                            "component": "TargetSignalResampler",
+                            "type": "component"
+                          },
+                          {
+                            "args": {},
+                            "category": "signal_transform",
+                            "component": "NegateTransform",
+                            "type": "component"
+                          },
+                          {
+                            "args": {
+                              "adjust": false,
+                              "window": 30
+                            },
+                            "category": "signal_transform",
+                            "component": "EWMATransform",
+                            "type": "component"
+                          },
+                          {
+                            "args": {
+                              "ohlcv_slot": "ohlcv_1d",
+                              "returns": "pct",
+                              "signal_type": "percentage",
+                              "window": "36d"
+                            },
+                            "category": "forecast_mapper",
+                            "component": "VolatilityStandardizer",
+                            "type": "component"
+                          },
+                          {
+                            "args": {
+                              "mask_slot": "universe_mask"
+                            },
+                            "category": "signal_transform",
+                            "component": "ApplyUniverseMask",
+                            "type": "component"
+                          },
+                          {
+                            "args": {
+                              "avg_abs_target": 10,
+                              "method": "mean",
+                              "pool": "global",
+                              "population_mask_slot": "mature_mask",
+                              "rolling": true,
+                              "window": "60d"
+                            },
+                            "category": "forecast_mapper",
+                            "component": "ForecastScaler",
+                            "type": "component"
+                          },
+                          {
+                            "args": {
+                              "limit": 20
+                            },
+                            "category": "forecast_mapper",
+                            "component": "ForecastCapper",
+                            "type": "component"
+                          }
+                        ],
+                        "carry_out_60": [
+                          {
+                            "args": {
+                              "cache_freshness_hours": 12,
+                              "cache_only": false,
+                              "dex_name": "native",
+                              "interval": "1h",
+                              "max_stale_days": 90,
+                              "output_format": "dict",
+                              "source": "hyperliquid",
+                              "symbols": [
+                                "0G",
+                                "2Z",
+                                "AAVE",
+                                "ACE",
+                                "ADA",
+                                "AERO",
+                                "AIXBT",
+                                "ALGO",
+                                "ALT",
+                                "ANIME",
+                                "APE",
+                                "APEX",
+                                "APT",
+                                "AR",
+                                "ARB",
+                                "ASTER",
+                                "ATOM",
+                                "AVAX",
+                                "AVNT",
+                                "AXS",
+                                "AZTEC",
+                                "BABY",
+                                "BANANA",
+                                "BCH",
+                                "BERA",
+                                "BIGTIME",
+                                "BIO",
+                                "BLUR",
+                                "BNB",
+                                "BOME",
+                                "BRETT",
+                                "BSV",
+                                "BTC",
+                                "CAKE",
+                                "CASHCAT",
+                                "CC",
+                                "CELO",
+                                "CFX",
+                                "CHIP",
+                                "COMP",
+                                "CRV",
+                                "DASH",
+                                "DOGE",
+                                "DOT",
+                                "DYDX",
+                                "DYM",
+                                "EIGEN",
+                                "ENA",
+                                "ENS",
+                                "ETC",
+                                "ETH",
+                                "ETHFI",
+                                "FARTCOIN",
+                                "FET",
+                                "FIL",
+                                "FOGO",
+                                "GALA",
+                                "GMT",
+                                "GMX",
+                                "GOAT",
+                                "GRAM",
+                                "GRASS",
+                                "GRIFFAIN",
+                                "HBAR",
+                                "HEMI",
+                                "HMSTR",
+                                "HYPE",
+                                "HYPER",
+                                "ICP",
+                                "IMX",
+                                "INIT",
+                                "INJ",
+                                "IO",
+                                "JTO",
+                                "JUP",
+                                "KAITO",
+                                "KAS",
+                                "LAYER",
+                                "LDO",
+                                "LINEA",
+                                "LINK",
+                                "LIT",
+                                "LTC",
+                                "MANTA",
+                                "ME",
+                                "MEGA",
+                                "MELANIA",
+                                "MEME",
+                                "MERL",
+                                "MET",
+                                "MINA",
+                                "MNT",
+                                "MON",
+                                "MOODENG",
+                                "MORPHO",
+                                "MOVE",
+                                "NEAR",
+                                "NIL",
+                                "NOT",
+                                "NXPC",
+                                "ONDO",
+                                "OP",
+                                "ORDI",
+                                "PAXG",
+                                "PENDLE",
+                                "PENGU",
+                                "PEOPLE",
+                                "PNUT",
+                                "POL",
+                                "POLYX",
+                                "POPCAT",
+                                "PROVE",
+                                "PUMP",
+                                "PURR",
+                                "PYTH",
+                                "RENDER",
+                                "RESOLV",
+                                "REZ",
+                                "RSR",
+                                "RUNE",
+                                "S",
+                                "SAGA",
+                                "SAND",
+                                "SEI",
+                                "SKR",
+                                "SKY",
+                                "SNX",
+                                "SOL",
+                                "SPX",
+                                "STABLE",
+                                "STBL",
+                                "STRK",
+                                "STX",
+                                "SUI",
+                                "SUPER",
+                                "SUSHI",
+                                "SYRUP",
+                                "TAO",
+                                "TIA",
+                                "TNSR",
+                                "TRB",
+                                "TRUMP",
+                                "UNI",
+                                "VINE",
+                                "VIRTUAL",
+                                "VVV",
+                                "W",
+                                "WCT",
+                                "WIF",
+                                "WLD",
+                                "WLFI",
+                                "XAI",
+                                "XLM",
+                                "XMR",
+                                "XPL",
+                                "XRP",
+                                "YGG",
+                                "ZEC",
+                                "ZEN",
+                                "ZETA",
+                                "ZK",
+                                "ZORA",
+                                "ZRO",
+                                "kBONK",
+                                "kFLOKI",
+                                "kLUNC",
+                                "kNEIRO",
+                                "kPEPE",
+                                "kSHIB"
+                              ],
+                              "use_cache": true
+                            },
+                            "category": "data_loader",
+                            "component": "FundingDataLoader",
+                            "type": "component"
+                          },
+                          {
+                            "args": {
+                              "method": "mean"
+                            },
+                            "category": "signal_transform",
+                            "component": "TargetSignalResampler",
+                            "type": "component"
+                          },
+                          {
+                            "args": {},
+                            "category": "signal_transform",
+                            "component": "NegateTransform",
+                            "type": "component"
+                          },
+                          {
+                            "args": {
+                              "adjust": false,
+                              "window": 60
+                            },
+                            "category": "signal_transform",
+                            "component": "EWMATransform",
+                            "type": "component"
+                          },
+                          {
+                            "args": {
+                              "ohlcv_slot": "ohlcv_1d",
+                              "returns": "pct",
+                              "signal_type": "percentage",
+                              "window": "36d"
+                            },
+                            "category": "forecast_mapper",
+                            "component": "VolatilityStandardizer",
+                            "type": "component"
+                          },
+                          {
+                            "args": {
+                              "mask_slot": "universe_mask"
+                            },
+                            "category": "signal_transform",
+                            "component": "ApplyUniverseMask",
+                            "type": "component"
+                          },
+                          {
+                            "args": {
+                              "avg_abs_target": 10,
+                              "method": "mean",
+                              "pool": "global",
+                              "population_mask_slot": "mature_mask",
+                              "rolling": true,
+                              "window": "60d"
+                            },
+                            "category": "forecast_mapper",
+                            "component": "ForecastScaler",
+                            "type": "component"
+                          },
+                          {
+                            "args": {
+                              "limit": 20
+                            },
+                            "category": "forecast_mapper",
+                            "component": "ForecastCapper",
+                            "type": "component"
+                          }
+                        ],
+                        "carry_out_90": [
+                          {
+                            "args": {
+                              "cache_freshness_hours": 12,
+                              "cache_only": false,
+                              "dex_name": "native",
+                              "interval": "1h",
+                              "max_stale_days": 90,
+                              "output_format": "dict",
+                              "source": "hyperliquid",
+                              "symbols": [
+                                "0G",
+                                "2Z",
+                                "AAVE",
+                                "ACE",
+                                "ADA",
+                                "AERO",
+                                "AIXBT",
+                                "ALGO",
+                                "ALT",
+                                "ANIME",
+                                "APE",
+                                "APEX",
+                                "APT",
+                                "AR",
+                                "ARB",
+                                "ASTER",
+                                "ATOM",
+                                "AVAX",
+                                "AVNT",
+                                "AXS",
+                                "AZTEC",
+                                "BABY",
+                                "BANANA",
+                                "BCH",
+                                "BERA",
+                                "BIGTIME",
+                                "BIO",
+                                "BLUR",
+                                "BNB",
+                                "BOME",
+                                "BRETT",
+                                "BSV",
+                                "BTC",
+                                "CAKE",
+                                "CASHCAT",
+                                "CC",
+                                "CELO",
+                                "CFX",
+                                "CHIP",
+                                "COMP",
+                                "CRV",
+                                "DASH",
+                                "DOGE",
+                                "DOT",
+                                "DYDX",
+                                "DYM",
+                                "EIGEN",
+                                "ENA",
+                                "ENS",
+                                "ETC",
+                                "ETH",
+                                "ETHFI",
+                                "FARTCOIN",
+                                "FET",
+                                "FIL",
+                                "FOGO",
+                                "GALA",
+                                "GMT",
+                                "GMX",
+                                "GOAT",
+                                "GRAM",
+                                "GRASS",
+                                "GRIFFAIN",
+                                "HBAR",
+                                "HEMI",
+                                "HMSTR",
+                                "HYPE",
+                                "HYPER",
+                                "ICP",
+                                "IMX",
+                                "INIT",
+                                "INJ",
+                                "IO",
+                                "JTO",
+                                "JUP",
+                                "KAITO",
+                                "KAS",
+                                "LAYER",
+                                "LDO",
+                                "LINEA",
+                                "LINK",
+                                "LIT",
+                                "LTC",
+                                "MANTA",
+                                "ME",
+                                "MEGA",
+                                "MELANIA",
+                                "MEME",
+                                "MERL",
+                                "MET",
+                                "MINA",
+                                "MNT",
+                                "MON",
+                                "MOODENG",
+                                "MORPHO",
+                                "MOVE",
+                                "NEAR",
+                                "NIL",
+                                "NOT",
+                                "NXPC",
+                                "ONDO",
+                                "OP",
+                                "ORDI",
+                                "PAXG",
+                                "PENDLE",
+                                "PENGU",
+                                "PEOPLE",
+                                "PNUT",
+                                "POL",
+                                "POLYX",
+                                "POPCAT",
+                                "PROVE",
+                                "PUMP",
+                                "PURR",
+                                "PYTH",
+                                "RENDER",
+                                "RESOLV",
+                                "REZ",
+                                "RSR",
+                                "RUNE",
+                                "S",
+                                "SAGA",
+                                "SAND",
+                                "SEI",
+                                "SKR",
+                                "SKY",
+                                "SNX",
+                                "SOL",
+                                "SPX",
+                                "STABLE",
+                                "STBL",
+                                "STRK",
+                                "STX",
+                                "SUI",
+                                "SUPER",
+                                "SUSHI",
+                                "SYRUP",
+                                "TAO",
+                                "TIA",
+                                "TNSR",
+                                "TRB",
+                                "TRUMP",
+                                "UNI",
+                                "VINE",
+                                "VIRTUAL",
+                                "VVV",
+                                "W",
+                                "WCT",
+                                "WIF",
+                                "WLD",
+                                "WLFI",
+                                "XAI",
+                                "XLM",
+                                "XMR",
+                                "XPL",
+                                "XRP",
+                                "YGG",
+                                "ZEC",
+                                "ZEN",
+                                "ZETA",
+                                "ZK",
+                                "ZORA",
+                                "ZRO",
+                                "kBONK",
+                                "kFLOKI",
+                                "kLUNC",
+                                "kNEIRO",
+                                "kPEPE",
+                                "kSHIB"
+                              ],
+                              "use_cache": true
+                            },
+                            "category": "data_loader",
+                            "component": "FundingDataLoader",
+                            "type": "component"
+                          },
+                          {
+                            "args": {
+                              "method": "mean"
+                            },
+                            "category": "signal_transform",
+                            "component": "TargetSignalResampler",
+                            "type": "component"
+                          },
+                          {
+                            "args": {},
+                            "category": "signal_transform",
+                            "component": "NegateTransform",
+                            "type": "component"
+                          },
+                          {
+                            "args": {
+                              "adjust": false,
+                              "window": 90
+                            },
+                            "category": "signal_transform",
+                            "component": "EWMATransform",
+                            "type": "component"
+                          },
+                          {
+                            "args": {
+                              "ohlcv_slot": "ohlcv_1d",
+                              "returns": "pct",
+                              "signal_type": "percentage",
+                              "window": "36d"
+                            },
+                            "category": "forecast_mapper",
+                            "component": "VolatilityStandardizer",
+                            "type": "component"
+                          },
+                          {
+                            "args": {
+                              "mask_slot": "universe_mask"
+                            },
+                            "category": "signal_transform",
+                            "component": "ApplyUniverseMask",
+                            "type": "component"
+                          },
+                          {
+                            "args": {
+                              "avg_abs_target": 10,
+                              "method": "mean",
+                              "pool": "global",
+                              "population_mask_slot": "mature_mask",
+                              "rolling": true,
+                              "window": "60d"
+                            },
+                            "category": "forecast_mapper",
+                            "component": "ForecastScaler",
+                            "type": "component"
+                          },
+                          {
+                            "args": {
+                              "limit": 20
+                            },
+                            "category": "forecast_mapper",
+                            "component": "ForecastCapper",
+                            "type": "component"
+                          }
+                        ]
+                      },
+                      "type": "parallel"
+                    },
+                    {
+                      "args": {
+                        "weights": {
+                          "carry_out_14": 0.25,
+                          "carry_out_30": 0.25,
+                          "carry_out_60": 0.25,
+                          "carry_out_90": 0.25
+                        }
+                      },
+                      "category": "forecast_composer",
+                      "component": "ForecastCombiner",
+                      "type": "component"
+                    },
+                    {
+                      "args": {
+                        "fdm_max": 2.5,
+                        "fdm_min": 1,
+                        "min_periods_frac": 0.25,
+                        "population_mask_slot": "mature_mask",
+                        "smoothing_half_life": 30,
+                        "target": 10,
+                        "window": "90d"
+                      },
+                      "category": "forecast_mapper",
+                      "component": "EmpiricalFDM",
+                      "type": "component"
+                    }
+                  ],
+                  "xs_sub": [
+                    {
+                      "branches": {
+                        "carry_xs_14": [
+                          {
+                            "args": {
+                              "cache_freshness_hours": 12,
+                              "cache_only": false,
+                              "dex_name": "native",
+                              "interval": "1h",
+                              "max_stale_days": 90,
+                              "output_format": "dict",
+                              "source": "hyperliquid",
+                              "symbols": [
+                                "0G",
+                                "2Z",
+                                "AAVE",
+                                "ACE",
+                                "ADA",
+                                "AERO",
+                                "AIXBT",
+                                "ALGO",
+                                "ALT",
+                                "ANIME",
+                                "APE",
+                                "APEX",
+                                "APT",
+                                "AR",
+                                "ARB",
+                                "ASTER",
+                                "ATOM",
+                                "AVAX",
+                                "AVNT",
+                                "AXS",
+                                "AZTEC",
+                                "BABY",
+                                "BANANA",
+                                "BCH",
+                                "BERA",
+                                "BIGTIME",
+                                "BIO",
+                                "BLUR",
+                                "BNB",
+                                "BOME",
+                                "BRETT",
+                                "BSV",
+                                "BTC",
+                                "CAKE",
+                                "CASHCAT",
+                                "CC",
+                                "CELO",
+                                "CFX",
+                                "CHIP",
+                                "COMP",
+                                "CRV",
+                                "DASH",
+                                "DOGE",
+                                "DOT",
+                                "DYDX",
+                                "DYM",
+                                "EIGEN",
+                                "ENA",
+                                "ENS",
+                                "ETC",
+                                "ETH",
+                                "ETHFI",
+                                "FARTCOIN",
+                                "FET",
+                                "FIL",
+                                "FOGO",
+                                "GALA",
+                                "GMT",
+                                "GMX",
+                                "GOAT",
+                                "GRAM",
+                                "GRASS",
+                                "GRIFFAIN",
+                                "HBAR",
+                                "HEMI",
+                                "HMSTR",
+                                "HYPE",
+                                "HYPER",
+                                "ICP",
+                                "IMX",
+                                "INIT",
+                                "INJ",
+                                "IO",
+                                "JTO",
+                                "JUP",
+                                "KAITO",
+                                "KAS",
+                                "LAYER",
+                                "LDO",
+                                "LINEA",
+                                "LINK",
+                                "LIT",
+                                "LTC",
+                                "MANTA",
+                                "ME",
+                                "MEGA",
+                                "MELANIA",
+                                "MEME",
+                                "MERL",
+                                "MET",
+                                "MINA",
+                                "MNT",
+                                "MON",
+                                "MOODENG",
+                                "MORPHO",
+                                "MOVE",
+                                "NEAR",
+                                "NIL",
+                                "NOT",
+                                "NXPC",
+                                "ONDO",
+                                "OP",
+                                "ORDI",
+                                "PAXG",
+                                "PENDLE",
+                                "PENGU",
+                                "PEOPLE",
+                                "PNUT",
+                                "POL",
+                                "POLYX",
+                                "POPCAT",
+                                "PROVE",
+                                "PUMP",
+                                "PURR",
+                                "PYTH",
+                                "RENDER",
+                                "RESOLV",
+                                "REZ",
+                                "RSR",
+                                "RUNE",
+                                "S",
+                                "SAGA",
+                                "SAND",
+                                "SEI",
+                                "SKR",
+                                "SKY",
+                                "SNX",
+                                "SOL",
+                                "SPX",
+                                "STABLE",
+                                "STBL",
+                                "STRK",
+                                "STX",
+                                "SUI",
+                                "SUPER",
+                                "SUSHI",
+                                "SYRUP",
+                                "TAO",
+                                "TIA",
+                                "TNSR",
+                                "TRB",
+                                "TRUMP",
+                                "UNI",
+                                "VINE",
+                                "VIRTUAL",
+                                "VVV",
+                                "W",
+                                "WCT",
+                                "WIF",
+                                "WLD",
+                                "WLFI",
+                                "XAI",
+                                "XLM",
+                                "XMR",
+                                "XPL",
+                                "XRP",
+                                "YGG",
+                                "ZEC",
+                                "ZEN",
+                                "ZETA",
+                                "ZK",
+                                "ZORA",
+                                "ZRO",
+                                "kBONK",
+                                "kFLOKI",
+                                "kLUNC",
+                                "kNEIRO",
+                                "kPEPE",
+                                "kSHIB"
+                              ],
+                              "use_cache": true
+                            },
+                            "category": "data_loader",
+                            "component": "FundingDataLoader",
+                            "type": "component"
+                          },
+                          {
+                            "args": {
+                              "method": "mean"
+                            },
+                            "category": "signal_transform",
+                            "component": "TargetSignalResampler",
+                            "type": "component"
+                          },
+                          {
+                            "args": {},
+                            "category": "signal_transform",
+                            "component": "NegateTransform",
+                            "type": "component"
+                          },
+                          {
+                            "args": {
+                              "adjust": false,
+                              "window": 14
+                            },
+                            "category": "signal_transform",
+                            "component": "EWMATransform",
+                            "type": "component"
+                          },
+                          {
+                            "args": {
+                              "mask_slot": "universe_mask"
+                            },
+                            "category": "signal_transform",
+                            "component": "ApplyUniverseMask",
+                            "type": "component"
+                          },
+                          {
+                            "args": {
+                              "population_mask_slot": "mature_mask",
+                              "slow_window": 60
+                            },
+                            "category": "signal_transform",
+                            "component": "CrossSectionalDemedian",
+                            "type": "component"
+                          },
+                          {
+                            "args": {
+                              "benchmarks": ["BTC", "ETH", "SOL"]
+                            },
+                            "category": "signal_transform",
+                            "component": "BenchmarkDemean",
+                            "type": "component"
+                          },
+                          {
+                            "args": {
+                              "avg_abs_target": 10,
+                              "method": "mean",
+                              "pool": "global",
+                              "population_mask_slot": "mature_mask",
+                              "rolling": true,
+                              "window": "60d"
+                            },
+                            "category": "forecast_mapper",
+                            "component": "ForecastScaler",
+                            "type": "component"
+                          },
+                          {
+                            "args": {
+                              "limit": 20
+                            },
+                            "category": "forecast_mapper",
+                            "component": "ForecastCapper",
+                            "type": "component"
+                          }
+                        ],
+                        "carry_xs_30": [
+                          {
+                            "args": {
+                              "cache_freshness_hours": 12,
+                              "cache_only": false,
+                              "dex_name": "native",
+                              "interval": "1h",
+                              "max_stale_days": 90,
+                              "output_format": "dict",
+                              "source": "hyperliquid",
+                              "symbols": [
+                                "0G",
+                                "2Z",
+                                "AAVE",
+                                "ACE",
+                                "ADA",
+                                "AERO",
+                                "AIXBT",
+                                "ALGO",
+                                "ALT",
+                                "ANIME",
+                                "APE",
+                                "APEX",
+                                "APT",
+                                "AR",
+                                "ARB",
+                                "ASTER",
+                                "ATOM",
+                                "AVAX",
+                                "AVNT",
+                                "AXS",
+                                "AZTEC",
+                                "BABY",
+                                "BANANA",
+                                "BCH",
+                                "BERA",
+                                "BIGTIME",
+                                "BIO",
+                                "BLUR",
+                                "BNB",
+                                "BOME",
+                                "BRETT",
+                                "BSV",
+                                "BTC",
+                                "CAKE",
+                                "CASHCAT",
+                                "CC",
+                                "CELO",
+                                "CFX",
+                                "CHIP",
+                                "COMP",
+                                "CRV",
+                                "DASH",
+                                "DOGE",
+                                "DOT",
+                                "DYDX",
+                                "DYM",
+                                "EIGEN",
+                                "ENA",
+                                "ENS",
+                                "ETC",
+                                "ETH",
+                                "ETHFI",
+                                "FARTCOIN",
+                                "FET",
+                                "FIL",
+                                "FOGO",
+                                "GALA",
+                                "GMT",
+                                "GMX",
+                                "GOAT",
+                                "GRAM",
+                                "GRASS",
+                                "GRIFFAIN",
+                                "HBAR",
+                                "HEMI",
+                                "HMSTR",
+                                "HYPE",
+                                "HYPER",
+                                "ICP",
+                                "IMX",
+                                "INIT",
+                                "INJ",
+                                "IO",
+                                "JTO",
+                                "JUP",
+                                "KAITO",
+                                "KAS",
+                                "LAYER",
+                                "LDO",
+                                "LINEA",
+                                "LINK",
+                                "LIT",
+                                "LTC",
+                                "MANTA",
+                                "ME",
+                                "MEGA",
+                                "MELANIA",
+                                "MEME",
+                                "MERL",
+                                "MET",
+                                "MINA",
+                                "MNT",
+                                "MON",
+                                "MOODENG",
+                                "MORPHO",
+                                "MOVE",
+                                "NEAR",
+                                "NIL",
+                                "NOT",
+                                "NXPC",
+                                "ONDO",
+                                "OP",
+                                "ORDI",
+                                "PAXG",
+                                "PENDLE",
+                                "PENGU",
+                                "PEOPLE",
+                                "PNUT",
+                                "POL",
+                                "POLYX",
+                                "POPCAT",
+                                "PROVE",
+                                "PUMP",
+                                "PURR",
+                                "PYTH",
+                                "RENDER",
+                                "RESOLV",
+                                "REZ",
+                                "RSR",
+                                "RUNE",
+                                "S",
+                                "SAGA",
+                                "SAND",
+                                "SEI",
+                                "SKR",
+                                "SKY",
+                                "SNX",
+                                "SOL",
+                                "SPX",
+                                "STABLE",
+                                "STBL",
+                                "STRK",
+                                "STX",
+                                "SUI",
+                                "SUPER",
+                                "SUSHI",
+                                "SYRUP",
+                                "TAO",
+                                "TIA",
+                                "TNSR",
+                                "TRB",
+                                "TRUMP",
+                                "UNI",
+                                "VINE",
+                                "VIRTUAL",
+                                "VVV",
+                                "W",
+                                "WCT",
+                                "WIF",
+                                "WLD",
+                                "WLFI",
+                                "XAI",
+                                "XLM",
+                                "XMR",
+                                "XPL",
+                                "XRP",
+                                "YGG",
+                                "ZEC",
+                                "ZEN",
+                                "ZETA",
+                                "ZK",
+                                "ZORA",
+                                "ZRO",
+                                "kBONK",
+                                "kFLOKI",
+                                "kLUNC",
+                                "kNEIRO",
+                                "kPEPE",
+                                "kSHIB"
+                              ],
+                              "use_cache": true
+                            },
+                            "category": "data_loader",
+                            "component": "FundingDataLoader",
+                            "type": "component"
+                          },
+                          {
+                            "args": {
+                              "method": "mean"
+                            },
+                            "category": "signal_transform",
+                            "component": "TargetSignalResampler",
+                            "type": "component"
+                          },
+                          {
+                            "args": {},
+                            "category": "signal_transform",
+                            "component": "NegateTransform",
+                            "type": "component"
+                          },
+                          {
+                            "args": {
+                              "adjust": false,
+                              "window": 30
+                            },
+                            "category": "signal_transform",
+                            "component": "EWMATransform",
+                            "type": "component"
+                          },
+                          {
+                            "args": {
+                              "mask_slot": "universe_mask"
+                            },
+                            "category": "signal_transform",
+                            "component": "ApplyUniverseMask",
+                            "type": "component"
+                          },
+                          {
+                            "args": {
+                              "population_mask_slot": "mature_mask",
+                              "slow_window": 60
+                            },
+                            "category": "signal_transform",
+                            "component": "CrossSectionalDemedian",
+                            "type": "component"
+                          },
+                          {
+                            "args": {
+                              "benchmarks": ["BTC", "ETH", "SOL"]
+                            },
+                            "category": "signal_transform",
+                            "component": "BenchmarkDemean",
+                            "type": "component"
+                          },
+                          {
+                            "args": {
+                              "avg_abs_target": 10,
+                              "method": "mean",
+                              "pool": "global",
+                              "population_mask_slot": "mature_mask",
+                              "rolling": true,
+                              "window": "60d"
+                            },
+                            "category": "forecast_mapper",
+                            "component": "ForecastScaler",
+                            "type": "component"
+                          },
+                          {
+                            "args": {
+                              "limit": 20
+                            },
+                            "category": "forecast_mapper",
+                            "component": "ForecastCapper",
+                            "type": "component"
+                          }
+                        ],
+                        "carry_xs_60": [
+                          {
+                            "args": {
+                              "cache_freshness_hours": 12,
+                              "cache_only": false,
+                              "dex_name": "native",
+                              "interval": "1h",
+                              "max_stale_days": 90,
+                              "output_format": "dict",
+                              "source": "hyperliquid",
+                              "symbols": [
+                                "0G",
+                                "2Z",
+                                "AAVE",
+                                "ACE",
+                                "ADA",
+                                "AERO",
+                                "AIXBT",
+                                "ALGO",
+                                "ALT",
+                                "ANIME",
+                                "APE",
+                                "APEX",
+                                "APT",
+                                "AR",
+                                "ARB",
+                                "ASTER",
+                                "ATOM",
+                                "AVAX",
+                                "AVNT",
+                                "AXS",
+                                "AZTEC",
+                                "BABY",
+                                "BANANA",
+                                "BCH",
+                                "BERA",
+                                "BIGTIME",
+                                "BIO",
+                                "BLUR",
+                                "BNB",
+                                "BOME",
+                                "BRETT",
+                                "BSV",
+                                "BTC",
+                                "CAKE",
+                                "CASHCAT",
+                                "CC",
+                                "CELO",
+                                "CFX",
+                                "CHIP",
+                                "COMP",
+                                "CRV",
+                                "DASH",
+                                "DOGE",
+                                "DOT",
+                                "DYDX",
+                                "DYM",
+                                "EIGEN",
+                                "ENA",
+                                "ENS",
+                                "ETC",
+                                "ETH",
+                                "ETHFI",
+                                "FARTCOIN",
+                                "FET",
+                                "FIL",
+                                "FOGO",
+                                "GALA",
+                                "GMT",
+                                "GMX",
+                                "GOAT",
+                                "GRAM",
+                                "GRASS",
+                                "GRIFFAIN",
+                                "HBAR",
+                                "HEMI",
+                                "HMSTR",
+                                "HYPE",
+                                "HYPER",
+                                "ICP",
+                                "IMX",
+                                "INIT",
+                                "INJ",
+                                "IO",
+                                "JTO",
+                                "JUP",
+                                "KAITO",
+                                "KAS",
+                                "LAYER",
+                                "LDO",
+                                "LINEA",
+                                "LINK",
+                                "LIT",
+                                "LTC",
+                                "MANTA",
+                                "ME",
+                                "MEGA",
+                                "MELANIA",
+                                "MEME",
+                                "MERL",
+                                "MET",
+                                "MINA",
+                                "MNT",
+                                "MON",
+                                "MOODENG",
+                                "MORPHO",
+                                "MOVE",
+                                "NEAR",
+                                "NIL",
+                                "NOT",
+                                "NXPC",
+                                "ONDO",
+                                "OP",
+                                "ORDI",
+                                "PAXG",
+                                "PENDLE",
+                                "PENGU",
+                                "PEOPLE",
+                                "PNUT",
+                                "POL",
+                                "POLYX",
+                                "POPCAT",
+                                "PROVE",
+                                "PUMP",
+                                "PURR",
+                                "PYTH",
+                                "RENDER",
+                                "RESOLV",
+                                "REZ",
+                                "RSR",
+                                "RUNE",
+                                "S",
+                                "SAGA",
+                                "SAND",
+                                "SEI",
+                                "SKR",
+                                "SKY",
+                                "SNX",
+                                "SOL",
+                                "SPX",
+                                "STABLE",
+                                "STBL",
+                                "STRK",
+                                "STX",
+                                "SUI",
+                                "SUPER",
+                                "SUSHI",
+                                "SYRUP",
+                                "TAO",
+                                "TIA",
+                                "TNSR",
+                                "TRB",
+                                "TRUMP",
+                                "UNI",
+                                "VINE",
+                                "VIRTUAL",
+                                "VVV",
+                                "W",
+                                "WCT",
+                                "WIF",
+                                "WLD",
+                                "WLFI",
+                                "XAI",
+                                "XLM",
+                                "XMR",
+                                "XPL",
+                                "XRP",
+                                "YGG",
+                                "ZEC",
+                                "ZEN",
+                                "ZETA",
+                                "ZK",
+                                "ZORA",
+                                "ZRO",
+                                "kBONK",
+                                "kFLOKI",
+                                "kLUNC",
+                                "kNEIRO",
+                                "kPEPE",
+                                "kSHIB"
+                              ],
+                              "use_cache": true
+                            },
+                            "category": "data_loader",
+                            "component": "FundingDataLoader",
+                            "type": "component"
+                          },
+                          {
+                            "args": {
+                              "method": "mean"
+                            },
+                            "category": "signal_transform",
+                            "component": "TargetSignalResampler",
+                            "type": "component"
+                          },
+                          {
+                            "args": {},
+                            "category": "signal_transform",
+                            "component": "NegateTransform",
+                            "type": "component"
+                          },
+                          {
+                            "args": {
+                              "adjust": false,
+                              "window": 60
+                            },
+                            "category": "signal_transform",
+                            "component": "EWMATransform",
+                            "type": "component"
+                          },
+                          {
+                            "args": {
+                              "mask_slot": "universe_mask"
+                            },
+                            "category": "signal_transform",
+                            "component": "ApplyUniverseMask",
+                            "type": "component"
+                          },
+                          {
+                            "args": {
+                              "population_mask_slot": "mature_mask",
+                              "slow_window": 60
+                            },
+                            "category": "signal_transform",
+                            "component": "CrossSectionalDemedian",
+                            "type": "component"
+                          },
+                          {
+                            "args": {
+                              "benchmarks": ["BTC", "ETH", "SOL"]
+                            },
+                            "category": "signal_transform",
+                            "component": "BenchmarkDemean",
+                            "type": "component"
+                          },
+                          {
+                            "args": {
+                              "avg_abs_target": 10,
+                              "method": "mean",
+                              "pool": "global",
+                              "population_mask_slot": "mature_mask",
+                              "rolling": true,
+                              "window": "60d"
+                            },
+                            "category": "forecast_mapper",
+                            "component": "ForecastScaler",
+                            "type": "component"
+                          },
+                          {
+                            "args": {
+                              "limit": 20
+                            },
+                            "category": "forecast_mapper",
+                            "component": "ForecastCapper",
+                            "type": "component"
+                          }
+                        ],
+                        "carry_xs_90": [
+                          {
+                            "args": {
+                              "cache_freshness_hours": 12,
+                              "cache_only": false,
+                              "dex_name": "native",
+                              "interval": "1h",
+                              "max_stale_days": 90,
+                              "output_format": "dict",
+                              "source": "hyperliquid",
+                              "symbols": [
+                                "0G",
+                                "2Z",
+                                "AAVE",
+                                "ACE",
+                                "ADA",
+                                "AERO",
+                                "AIXBT",
+                                "ALGO",
+                                "ALT",
+                                "ANIME",
+                                "APE",
+                                "APEX",
+                                "APT",
+                                "AR",
+                                "ARB",
+                                "ASTER",
+                                "ATOM",
+                                "AVAX",
+                                "AVNT",
+                                "AXS",
+                                "AZTEC",
+                                "BABY",
+                                "BANANA",
+                                "BCH",
+                                "BERA",
+                                "BIGTIME",
+                                "BIO",
+                                "BLUR",
+                                "BNB",
+                                "BOME",
+                                "BRETT",
+                                "BSV",
+                                "BTC",
+                                "CAKE",
+                                "CASHCAT",
+                                "CC",
+                                "CELO",
+                                "CFX",
+                                "CHIP",
+                                "COMP",
+                                "CRV",
+                                "DASH",
+                                "DOGE",
+                                "DOT",
+                                "DYDX",
+                                "DYM",
+                                "EIGEN",
+                                "ENA",
+                                "ENS",
+                                "ETC",
+                                "ETH",
+                                "ETHFI",
+                                "FARTCOIN",
+                                "FET",
+                                "FIL",
+                                "FOGO",
+                                "GALA",
+                                "GMT",
+                                "GMX",
+                                "GOAT",
+                                "GRAM",
+                                "GRASS",
+                                "GRIFFAIN",
+                                "HBAR",
+                                "HEMI",
+                                "HMSTR",
+                                "HYPE",
+                                "HYPER",
+                                "ICP",
+                                "IMX",
+                                "INIT",
+                                "INJ",
+                                "IO",
+                                "JTO",
+                                "JUP",
+                                "KAITO",
+                                "KAS",
+                                "LAYER",
+                                "LDO",
+                                "LINEA",
+                                "LINK",
+                                "LIT",
+                                "LTC",
+                                "MANTA",
+                                "ME",
+                                "MEGA",
+                                "MELANIA",
+                                "MEME",
+                                "MERL",
+                                "MET",
+                                "MINA",
+                                "MNT",
+                                "MON",
+                                "MOODENG",
+                                "MORPHO",
+                                "MOVE",
+                                "NEAR",
+                                "NIL",
+                                "NOT",
+                                "NXPC",
+                                "ONDO",
+                                "OP",
+                                "ORDI",
+                                "PAXG",
+                                "PENDLE",
+                                "PENGU",
+                                "PEOPLE",
+                                "PNUT",
+                                "POL",
+                                "POLYX",
+                                "POPCAT",
+                                "PROVE",
+                                "PUMP",
+                                "PURR",
+                                "PYTH",
+                                "RENDER",
+                                "RESOLV",
+                                "REZ",
+                                "RSR",
+                                "RUNE",
+                                "S",
+                                "SAGA",
+                                "SAND",
+                                "SEI",
+                                "SKR",
+                                "SKY",
+                                "SNX",
+                                "SOL",
+                                "SPX",
+                                "STABLE",
+                                "STBL",
+                                "STRK",
+                                "STX",
+                                "SUI",
+                                "SUPER",
+                                "SUSHI",
+                                "SYRUP",
+                                "TAO",
+                                "TIA",
+                                "TNSR",
+                                "TRB",
+                                "TRUMP",
+                                "UNI",
+                                "VINE",
+                                "VIRTUAL",
+                                "VVV",
+                                "W",
+                                "WCT",
+                                "WIF",
+                                "WLD",
+                                "WLFI",
+                                "XAI",
+                                "XLM",
+                                "XMR",
+                                "XPL",
+                                "XRP",
+                                "YGG",
+                                "ZEC",
+                                "ZEN",
+                                "ZETA",
+                                "ZK",
+                                "ZORA",
+                                "ZRO",
+                                "kBONK",
+                                "kFLOKI",
+                                "kLUNC",
+                                "kNEIRO",
+                                "kPEPE",
+                                "kSHIB"
+                              ],
+                              "use_cache": true
+                            },
+                            "category": "data_loader",
+                            "component": "FundingDataLoader",
+                            "type": "component"
+                          },
+                          {
+                            "args": {
+                              "method": "mean"
+                            },
+                            "category": "signal_transform",
+                            "component": "TargetSignalResampler",
+                            "type": "component"
+                          },
+                          {
+                            "args": {},
+                            "category": "signal_transform",
+                            "component": "NegateTransform",
+                            "type": "component"
+                          },
+                          {
+                            "args": {
+                              "adjust": false,
+                              "window": 90
+                            },
+                            "category": "signal_transform",
+                            "component": "EWMATransform",
+                            "type": "component"
+                          },
+                          {
+                            "args": {
+                              "mask_slot": "universe_mask"
+                            },
+                            "category": "signal_transform",
+                            "component": "ApplyUniverseMask",
+                            "type": "component"
+                          },
+                          {
+                            "args": {
+                              "population_mask_slot": "mature_mask",
+                              "slow_window": 60
+                            },
+                            "category": "signal_transform",
+                            "component": "CrossSectionalDemedian",
+                            "type": "component"
+                          },
+                          {
+                            "args": {
+                              "benchmarks": ["BTC", "ETH", "SOL"]
+                            },
+                            "category": "signal_transform",
+                            "component": "BenchmarkDemean",
+                            "type": "component"
+                          },
+                          {
+                            "args": {
+                              "avg_abs_target": 10,
+                              "method": "mean",
+                              "pool": "global",
+                              "population_mask_slot": "mature_mask",
+                              "rolling": true,
+                              "window": "60d"
+                            },
+                            "category": "forecast_mapper",
+                            "component": "ForecastScaler",
+                            "type": "component"
+                          },
+                          {
+                            "args": {
+                              "limit": 20
+                            },
+                            "category": "forecast_mapper",
+                            "component": "ForecastCapper",
+                            "type": "component"
+                          }
+                        ]
+                      },
+                      "type": "parallel"
+                    },
+                    {
+                      "args": {
+                        "weights": {
+                          "carry_xs_14": 0.25,
+                          "carry_xs_30": 0.25,
+                          "carry_xs_60": 0.25,
+                          "carry_xs_90": 0.25
+                        }
+                      },
+                      "category": "forecast_composer",
+                      "component": "ForecastCombiner",
+                      "type": "component"
+                    },
+                    {
+                      "args": {
+                        "fdm_max": 2.5,
+                        "fdm_min": 1,
+                        "min_periods_frac": 0.25,
+                        "population_mask_slot": "mature_mask",
+                        "smoothing_half_life": 30,
+                        "target": 10,
+                        "window": "90d"
+                      },
+                      "category": "forecast_mapper",
+                      "component": "EmpiricalFDM",
+                      "type": "component"
+                    }
+                  ]
+                },
+                "type": "parallel"
+              },
+              {
+                "args": {
+                  "weights": {
+                    "raw_sub": 0.2,
+                    "xs_sub": 0.8
+                  }
+                },
+                "category": "forecast_composer",
+                "component": "ForecastCombiner",
+                "type": "component"
+              },
+              {
+                "args": {
+                  "fdm_max": 2.5,
+                  "fdm_min": 1,
+                  "min_periods_frac": 0.25,
+                  "population_mask_slot": "mature_mask",
+                  "smoothing_half_life": 30,
+                  "target": 10,
+                  "window": "90d"
+                },
+                "category": "forecast_mapper",
+                "component": "EmpiricalFDM",
+                "type": "component"
+              }
+            ],
+            "mom_bucket": [
+              {
+                "branches": {
+                  "mom_res_126d": [
+                    {
+                      "args": {
+                        "benchmarks": ["BTC", "ETH", "SOL"],
+                        "beta_window": 90,
+                        "momentum_window": 126,
+                        "ohlcv_slot": "ohlcv_1d"
+                      },
+                      "category": "signal_transform",
+                      "component": "ResidualMomentum",
+                      "type": "component"
+                    },
+                    {
+                      "args": {
+                        "anchor": "relative",
+                        "anchor_min_periods": 90,
+                        "hi": 2,
+                        "history_window": 90,
+                        "lo": 0.5,
+                        "longrun_min_periods": 60,
+                        "min_periods": 30,
+                        "return_vol_slot": "return_vol",
+                        "smooth_span": 10
+                      },
+                      "category": "signal_transform",
+                      "component": "VolAttenuator",
+                      "type": "component"
+                    },
+                    {
+                      "args": {
+                        "mask_slot": "universe_mask"
+                      },
+                      "category": "signal_transform",
+                      "component": "ApplyUniverseMask",
+                      "type": "component"
+                    },
+                    {
+                      "args": {
+                        "population_mask_slot": "mature_mask"
+                      },
+                      "category": "signal_transform",
+                      "component": "CrossSectionalZScore",
+                      "type": "component"
+                    },
+                    {
+                      "args": {
+                        "avg_abs_target": 10,
+                        "method": "mean",
+                        "pool": "global",
+                        "population_mask_slot": "mature_mask",
+                        "rolling": true,
+                        "window": "60d"
+                      },
+                      "category": "forecast_mapper",
+                      "component": "ForecastScaler",
+                      "type": "component"
+                    },
+                    {
+                      "args": {
+                        "limit": 20
+                      },
+                      "category": "forecast_mapper",
+                      "component": "ForecastCapper",
+                      "type": "component"
+                    }
+                  ],
+                  "mom_res_14d": [
+                    {
+                      "args": {
+                        "benchmarks": ["BTC", "ETH", "SOL"],
+                        "beta_window": 90,
+                        "momentum_window": 14,
+                        "ohlcv_slot": "ohlcv_1d"
+                      },
+                      "category": "signal_transform",
+                      "component": "ResidualMomentum",
+                      "type": "component"
+                    },
+                    {
+                      "args": {
+                        "anchor": "relative",
+                        "anchor_min_periods": 90,
+                        "hi": 2,
+                        "history_window": 90,
+                        "lo": 0.5,
+                        "longrun_min_periods": 60,
+                        "min_periods": 30,
+                        "return_vol_slot": "return_vol",
+                        "smooth_span": 10
+                      },
+                      "category": "signal_transform",
+                      "component": "VolAttenuator",
+                      "type": "component"
+                    },
+                    {
+                      "args": {
+                        "mask_slot": "universe_mask"
+                      },
+                      "category": "signal_transform",
+                      "component": "ApplyUniverseMask",
+                      "type": "component"
+                    },
+                    {
+                      "args": {
+                        "population_mask_slot": "mature_mask"
+                      },
+                      "category": "signal_transform",
+                      "component": "CrossSectionalZScore",
+                      "type": "component"
+                    },
+                    {
+                      "args": {
+                        "avg_abs_target": 10,
+                        "method": "mean",
+                        "pool": "global",
+                        "population_mask_slot": "mature_mask",
+                        "rolling": true,
+                        "window": "60d"
+                      },
+                      "category": "forecast_mapper",
+                      "component": "ForecastScaler",
+                      "type": "component"
+                    },
+                    {
+                      "args": {
+                        "limit": 20
+                      },
+                      "category": "forecast_mapper",
+                      "component": "ForecastCapper",
+                      "type": "component"
+                    }
+                  ],
+                  "mom_res_21d": [
+                    {
+                      "args": {
+                        "benchmarks": ["BTC", "ETH", "SOL"],
+                        "beta_window": 90,
+                        "momentum_window": 21,
+                        "ohlcv_slot": "ohlcv_1d"
+                      },
+                      "category": "signal_transform",
+                      "component": "ResidualMomentum",
+                      "type": "component"
+                    },
+                    {
+                      "args": {
+                        "anchor": "relative",
+                        "anchor_min_periods": 90,
+                        "hi": 2,
+                        "history_window": 90,
+                        "lo": 0.5,
+                        "longrun_min_periods": 60,
+                        "min_periods": 30,
+                        "return_vol_slot": "return_vol",
+                        "smooth_span": 10
+                      },
+                      "category": "signal_transform",
+                      "component": "VolAttenuator",
+                      "type": "component"
+                    },
+                    {
+                      "args": {
+                        "mask_slot": "universe_mask"
+                      },
+                      "category": "signal_transform",
+                      "component": "ApplyUniverseMask",
+                      "type": "component"
+                    },
+                    {
+                      "args": {
+                        "population_mask_slot": "mature_mask"
+                      },
+                      "category": "signal_transform",
+                      "component": "CrossSectionalZScore",
+                      "type": "component"
+                    },
+                    {
+                      "args": {
+                        "avg_abs_target": 10,
+                        "method": "mean",
+                        "pool": "global",
+                        "population_mask_slot": "mature_mask",
+                        "rolling": true,
+                        "window": "60d"
+                      },
+                      "category": "forecast_mapper",
+                      "component": "ForecastScaler",
+                      "type": "component"
+                    },
+                    {
+                      "args": {
+                        "limit": 20
+                      },
+                      "category": "forecast_mapper",
+                      "component": "ForecastCapper",
+                      "type": "component"
+                    }
+                  ],
+                  "mom_res_63d": [
+                    {
+                      "args": {
+                        "benchmarks": ["BTC", "ETH", "SOL"],
+                        "beta_window": 90,
+                        "momentum_window": 63,
+                        "ohlcv_slot": "ohlcv_1d"
+                      },
+                      "category": "signal_transform",
+                      "component": "ResidualMomentum",
+                      "type": "component"
+                    },
+                    {
+                      "args": {
+                        "anchor": "relative",
+                        "anchor_min_periods": 90,
+                        "hi": 2,
+                        "history_window": 90,
+                        "lo": 0.5,
+                        "longrun_min_periods": 60,
+                        "min_periods": 30,
+                        "return_vol_slot": "return_vol",
+                        "smooth_span": 10
+                      },
+                      "category": "signal_transform",
+                      "component": "VolAttenuator",
+                      "type": "component"
+                    },
+                    {
+                      "args": {
+                        "mask_slot": "universe_mask"
+                      },
+                      "category": "signal_transform",
+                      "component": "ApplyUniverseMask",
+                      "type": "component"
+                    },
+                    {
+                      "args": {
+                        "population_mask_slot": "mature_mask"
+                      },
+                      "category": "signal_transform",
+                      "component": "CrossSectionalZScore",
+                      "type": "component"
+                    },
+                    {
+                      "args": {
+                        "avg_abs_target": 10,
+                        "method": "mean",
+                        "pool": "global",
+                        "population_mask_slot": "mature_mask",
+                        "rolling": true,
+                        "window": "60d"
+                      },
+                      "category": "forecast_mapper",
+                      "component": "ForecastScaler",
+                      "type": "component"
+                    },
+                    {
+                      "args": {
+                        "limit": 20
+                      },
+                      "category": "forecast_mapper",
+                      "component": "ForecastCapper",
+                      "type": "component"
+                    }
+                  ]
+                },
+                "type": "parallel"
+              },
+              {
+                "args": {
+                  "weights": {
+                    "mom_res_126d": 0.25,
+                    "mom_res_14d": 0.25,
+                    "mom_res_21d": 0.25,
+                    "mom_res_63d": 0.25
+                  }
+                },
+                "category": "forecast_composer",
+                "component": "ForecastCombiner",
+                "type": "component"
+              },
+              {
+                "args": {
+                  "fdm_max": 2.5,
+                  "fdm_min": 1,
+                  "min_periods_frac": 0.25,
+                  "population_mask_slot": "mature_mask",
+                  "smoothing_half_life": 30,
+                  "target": 10,
+                  "window": "90d"
+                },
+                "category": "forecast_mapper",
+                "component": "EmpiricalFDM",
+                "type": "component"
+              }
+            ],
+            "trend_bucket": [
+              {
+                "branches": {
+                  "ewmac_16_64": [
+                    {
+                      "args": {
+                        "slot": {
+                          "__type__": "Slot",
+                          "name": "ohlcv_1d",
+                          "value_type": "OHLCVDict"
+                        }
+                      },
+                      "category": "slot_op",
+                      "component": "Load",
+                      "type": "component"
+                    },
+                    {
+                      "branches": {
+                        "fast": [
+                          {
+                            "args": {
+                              "min_periods": 16,
+                              "window": 16
+                            },
+                            "category": "indicator",
+                            "component": "EWMA",
+                            "type": "component"
+                          }
+                        ],
+                        "slow": [
+                          {
+                            "args": {
+                              "min_periods": 64,
+                              "window": 64
+                            },
+                            "category": "indicator",
+                            "component": "EWMA",
+                            "type": "component"
+                          }
+                        ]
+                      },
+                      "type": "parallel"
+                    },
+                    {
+                      "args": {
+                        "fast_key": "fast",
+                        "slow_key": "slow"
+                      },
+                      "category": "signal_composer",
+                      "component": "Crossover",
+                      "type": "component"
+                    },
+                    {
+                      "args": {
+                        "anchor": "relative",
+                        "anchor_min_periods": 90,
+                        "hi": 2,
+                        "history_window": 90,
+                        "lo": 0.5,
+                        "longrun_min_periods": 60,
+                        "min_periods": 30,
+                        "return_vol_slot": "return_vol",
+                        "smooth_span": 10
+                      },
+                      "category": "signal_transform",
+                      "component": "VolAttenuator",
+                      "type": "component"
+                    },
+                    {
+                      "args": {
+                        "ohlcv_slot": "ohlcv_1d",
+                        "returns": "pct",
+                        "signal_type": "price_points",
+                        "window": "36d"
+                      },
+                      "category": "forecast_mapper",
+                      "component": "VolatilityStandardizer",
+                      "type": "component"
+                    },
+                    {
+                      "args": {
+                        "mask_slot": "universe_mask"
+                      },
+                      "category": "signal_transform",
+                      "component": "ApplyUniverseMask",
+                      "type": "component"
+                    },
+                    {
+                      "args": {
+                        "population_mask_slot": "mature_mask"
+                      },
+                      "category": "signal_transform",
+                      "component": "CrossSectionalZScore",
+                      "type": "component"
+                    },
+                    {
+                      "args": {
+                        "avg_abs_target": 10,
+                        "method": "mean",
+                        "pool": "global",
+                        "population_mask_slot": "mature_mask",
+                        "rolling": true,
+                        "window": "60d"
+                      },
+                      "category": "forecast_mapper",
+                      "component": "ForecastScaler",
+                      "type": "component"
+                    },
+                    {
+                      "args": {
+                        "limit": 20
+                      },
+                      "category": "forecast_mapper",
+                      "component": "ForecastCapper",
+                      "type": "component"
+                    }
+                  ],
+                  "ewmac_2_8": [
+                    {
+                      "args": {
+                        "slot": {
+                          "__type__": "Slot",
+                          "name": "ohlcv_1d",
+                          "value_type": "OHLCVDict"
+                        }
+                      },
+                      "category": "slot_op",
+                      "component": "Load",
+                      "type": "component"
+                    },
+                    {
+                      "branches": {
+                        "fast": [
+                          {
+                            "args": {
+                              "min_periods": 2,
+                              "window": 2
+                            },
+                            "category": "indicator",
+                            "component": "EWMA",
+                            "type": "component"
+                          }
+                        ],
+                        "slow": [
+                          {
+                            "args": {
+                              "min_periods": 8,
+                              "window": 8
+                            },
+                            "category": "indicator",
+                            "component": "EWMA",
+                            "type": "component"
+                          }
+                        ]
+                      },
+                      "type": "parallel"
+                    },
+                    {
+                      "args": {
+                        "fast_key": "fast",
+                        "slow_key": "slow"
+                      },
+                      "category": "signal_composer",
+                      "component": "Crossover",
+                      "type": "component"
+                    },
+                    {
+                      "args": {
+                        "anchor": "relative",
+                        "anchor_min_periods": 90,
+                        "hi": 2,
+                        "history_window": 90,
+                        "lo": 0.5,
+                        "longrun_min_periods": 60,
+                        "min_periods": 30,
+                        "return_vol_slot": "return_vol",
+                        "smooth_span": 10
+                      },
+                      "category": "signal_transform",
+                      "component": "VolAttenuator",
+                      "type": "component"
+                    },
+                    {
+                      "args": {
+                        "ohlcv_slot": "ohlcv_1d",
+                        "returns": "pct",
+                        "signal_type": "price_points",
+                        "window": "36d"
+                      },
+                      "category": "forecast_mapper",
+                      "component": "VolatilityStandardizer",
+                      "type": "component"
+                    },
+                    {
+                      "args": {
+                        "mask_slot": "universe_mask"
+                      },
+                      "category": "signal_transform",
+                      "component": "ApplyUniverseMask",
+                      "type": "component"
+                    },
+                    {
+                      "args": {
+                        "population_mask_slot": "mature_mask"
+                      },
+                      "category": "signal_transform",
+                      "component": "CrossSectionalZScore",
+                      "type": "component"
+                    },
+                    {
+                      "args": {
+                        "avg_abs_target": 10,
+                        "method": "mean",
+                        "pool": "global",
+                        "population_mask_slot": "mature_mask",
+                        "rolling": true,
+                        "window": "60d"
+                      },
+                      "category": "forecast_mapper",
+                      "component": "ForecastScaler",
+                      "type": "component"
+                    },
+                    {
+                      "args": {
+                        "limit": 20
+                      },
+                      "category": "forecast_mapper",
+                      "component": "ForecastCapper",
+                      "type": "component"
+                    }
+                  ],
+                  "ewmac_4_16": [
+                    {
+                      "args": {
+                        "slot": {
+                          "__type__": "Slot",
+                          "name": "ohlcv_1d",
+                          "value_type": "OHLCVDict"
+                        }
+                      },
+                      "category": "slot_op",
+                      "component": "Load",
+                      "type": "component"
+                    },
+                    {
+                      "branches": {
+                        "fast": [
+                          {
+                            "args": {
+                              "min_periods": 4,
+                              "window": 4
+                            },
+                            "category": "indicator",
+                            "component": "EWMA",
+                            "type": "component"
+                          }
+                        ],
+                        "slow": [
+                          {
+                            "args": {
+                              "min_periods": 16,
+                              "window": 16
+                            },
+                            "category": "indicator",
+                            "component": "EWMA",
+                            "type": "component"
+                          }
+                        ]
+                      },
+                      "type": "parallel"
+                    },
+                    {
+                      "args": {
+                        "fast_key": "fast",
+                        "slow_key": "slow"
+                      },
+                      "category": "signal_composer",
+                      "component": "Crossover",
+                      "type": "component"
+                    },
+                    {
+                      "args": {
+                        "anchor": "relative",
+                        "anchor_min_periods": 90,
+                        "hi": 2,
+                        "history_window": 90,
+                        "lo": 0.5,
+                        "longrun_min_periods": 60,
+                        "min_periods": 30,
+                        "return_vol_slot": "return_vol",
+                        "smooth_span": 10
+                      },
+                      "category": "signal_transform",
+                      "component": "VolAttenuator",
+                      "type": "component"
+                    },
+                    {
+                      "args": {
+                        "ohlcv_slot": "ohlcv_1d",
+                        "returns": "pct",
+                        "signal_type": "price_points",
+                        "window": "36d"
+                      },
+                      "category": "forecast_mapper",
+                      "component": "VolatilityStandardizer",
+                      "type": "component"
+                    },
+                    {
+                      "args": {
+                        "mask_slot": "universe_mask"
+                      },
+                      "category": "signal_transform",
+                      "component": "ApplyUniverseMask",
+                      "type": "component"
+                    },
+                    {
+                      "args": {
+                        "population_mask_slot": "mature_mask"
+                      },
+                      "category": "signal_transform",
+                      "component": "CrossSectionalZScore",
+                      "type": "component"
+                    },
+                    {
+                      "args": {
+                        "avg_abs_target": 10,
+                        "method": "mean",
+                        "pool": "global",
+                        "population_mask_slot": "mature_mask",
+                        "rolling": true,
+                        "window": "60d"
+                      },
+                      "category": "forecast_mapper",
+                      "component": "ForecastScaler",
+                      "type": "component"
+                    },
+                    {
+                      "args": {
+                        "limit": 20
+                      },
+                      "category": "forecast_mapper",
+                      "component": "ForecastCapper",
+                      "type": "component"
+                    }
+                  ],
+                  "ewmac_8_32": [
+                    {
+                      "args": {
+                        "slot": {
+                          "__type__": "Slot",
+                          "name": "ohlcv_1d",
+                          "value_type": "OHLCVDict"
+                        }
+                      },
+                      "category": "slot_op",
+                      "component": "Load",
+                      "type": "component"
+                    },
+                    {
+                      "branches": {
+                        "fast": [
+                          {
+                            "args": {
+                              "min_periods": 8,
+                              "window": 8
+                            },
+                            "category": "indicator",
+                            "component": "EWMA",
+                            "type": "component"
+                          }
+                        ],
+                        "slow": [
+                          {
+                            "args": {
+                              "min_periods": 32,
+                              "window": 32
+                            },
+                            "category": "indicator",
+                            "component": "EWMA",
+                            "type": "component"
+                          }
+                        ]
+                      },
+                      "type": "parallel"
+                    },
+                    {
+                      "args": {
+                        "fast_key": "fast",
+                        "slow_key": "slow"
+                      },
+                      "category": "signal_composer",
+                      "component": "Crossover",
+                      "type": "component"
+                    },
+                    {
+                      "args": {
+                        "anchor": "relative",
+                        "anchor_min_periods": 90,
+                        "hi": 2,
+                        "history_window": 90,
+                        "lo": 0.5,
+                        "longrun_min_periods": 60,
+                        "min_periods": 30,
+                        "return_vol_slot": "return_vol",
+                        "smooth_span": 10
+                      },
+                      "category": "signal_transform",
+                      "component": "VolAttenuator",
+                      "type": "component"
+                    },
+                    {
+                      "args": {
+                        "ohlcv_slot": "ohlcv_1d",
+                        "returns": "pct",
+                        "signal_type": "price_points",
+                        "window": "36d"
+                      },
+                      "category": "forecast_mapper",
+                      "component": "VolatilityStandardizer",
+                      "type": "component"
+                    },
+                    {
+                      "args": {
+                        "mask_slot": "universe_mask"
+                      },
+                      "category": "signal_transform",
+                      "component": "ApplyUniverseMask",
+                      "type": "component"
+                    },
+                    {
+                      "args": {
+                        "population_mask_slot": "mature_mask"
+                      },
+                      "category": "signal_transform",
+                      "component": "CrossSectionalZScore",
+                      "type": "component"
+                    },
+                    {
+                      "args": {
+                        "avg_abs_target": 10,
+                        "method": "mean",
+                        "pool": "global",
+                        "population_mask_slot": "mature_mask",
+                        "rolling": true,
+                        "window": "60d"
+                      },
+                      "category": "forecast_mapper",
+                      "component": "ForecastScaler",
+                      "type": "component"
+                    },
+                    {
+                      "args": {
+                        "limit": 20
+                      },
+                      "category": "forecast_mapper",
+                      "component": "ForecastCapper",
+                      "type": "component"
+                    }
+                  ]
+                },
+                "type": "parallel"
+              },
+              {
+                "args": {
+                  "weights": {
+                    "ewmac_16_64": 0.25,
+                    "ewmac_2_8": 0.25,
+                    "ewmac_4_16": 0.25,
+                    "ewmac_8_32": 0.25
+                  }
+                },
+                "category": "forecast_composer",
+                "component": "ForecastCombiner",
+                "type": "component"
+              },
+              {
+                "args": {
+                  "fdm_max": 2.5,
+                  "fdm_min": 1,
+                  "min_periods_frac": 0.25,
+                  "population_mask_slot": "mature_mask",
+                  "smoothing_half_life": 30,
+                  "target": 10,
+                  "window": "90d"
+                },
+                "category": "forecast_mapper",
+                "component": "EmpiricalFDM",
+                "type": "component"
+              }
+            ]
+          },
+          "type": "parallel"
+        },
+        {
+          "args": {
+            "weights": {
+              "carry_bucket": 0.25,
+              "mom_bucket": 0.35,
+              "trend_bucket": 0.4
+            }
+          },
+          "category": "forecast_composer",
+          "component": "ForecastCombiner",
+          "type": "component"
+        },
+        {
+          "args": {
+            "fdm_max": 2.5,
+            "fdm_min": 1,
+            "min_periods_frac": 0.25,
+            "population_mask_slot": "mature_mask",
+            "smoothing_half_life": 30,
+            "target": 10,
+            "window": "90d"
+          },
+          "category": "forecast_mapper",
+          "component": "EmpiricalFDM",
+          "type": "component"
+        },
+        {
+          "args": {
+            "mask_slot": "universe_mask"
+          },
+          "category": "signal_transform",
+          "component": "ApplyUniverseMask",
+          "type": "component"
+        },
+        {
+          "args": {
+            "slot": {
+              "__type__": "Slot",
+              "name": "forecast_combined",
+              "value_type": "SignalSeries"
+            }
+          },
+          "category": "slot_op",
+          "component": "Store",
+          "type": "component"
+        },
+        {
+          "args": {
+            "slot": {
+              "__type__": "Slot",
+              "name": "ohlcv_1d",
+              "value_type": "OHLCVDict"
+            }
+          },
+          "category": "slot_op",
+          "component": "Load",
+          "type": "component"
+        },
+        {
+          "branches": {
+            "span_16": [
+              {
+                "args": {
+                  "burn_in": 1,
+                  "returns": "pct",
+                  "window": "16d"
+                },
+                "category": "indicator",
+                "component": "ReturnVolatility",
+                "type": "component"
+              }
+            ],
+            "span_180": [
+              {
+                "args": {
+                  "burn_in": 0.2,
+                  "returns": "pct",
+                  "window": "180d"
+                },
+                "category": "indicator",
+                "component": "ReturnVolatility",
+                "type": "component"
+              }
+            ],
+            "span_36": [
+              {
+                "args": {
+                  "burn_in": 1,
+                  "returns": "pct",
+                  "window": "36d"
+                },
+                "category": "indicator",
+                "component": "ReturnVolatility",
+                "type": "component"
+              }
+            ],
+            "span_60": [
+              {
+                "args": {
+                  "burn_in": 0.6,
+                  "returns": "pct",
+                  "window": "60d"
+                },
+                "category": "indicator",
+                "component": "ReturnVolatility",
+                "type": "component"
+              }
+            ],
+            "span_8": [
+              {
+                "args": {
+                  "burn_in": 1,
+                  "returns": "pct",
+                  "window": "8d"
+                },
+                "category": "indicator",
+                "component": "ReturnVolatility",
+                "type": "component"
+              }
+            ],
+            "span_90": [
+              {
+                "args": {
+                  "burn_in": 0.4,
+                  "returns": "pct",
+                  "window": "90d"
+                },
+                "category": "indicator",
+                "component": "ReturnVolatility",
+                "type": "component"
+              }
+            ]
+          },
+          "type": "parallel"
+        },
+        {
+          "args": {
+            "weights": {
+              "span_16": 0.095,
+              "span_180": 0.286,
+              "span_36": 0.143,
+              "span_60": 0.19,
+              "span_8": 0.048,
+              "span_90": 0.238
+            }
+          },
+          "category": "forecast_composer",
+          "component": "ForecastCombiner",
+          "type": "component"
+        },
+        {
+          "args": {
+            "slot": {
+              "__type__": "Slot",
+              "name": "return_vol",
+              "value_type": "ForecastSeries"
+            }
+          },
+          "category": "slot_op",
+          "component": "Store",
+          "type": "component"
+        },
+        {
+          "args": {
+            "slot": {
+              "__type__": "Slot",
+              "name": "forecast_combined",
+              "value_type": "SignalSeries"
+            }
+          },
+          "category": "slot_op",
+          "component": "Load",
+          "type": "component"
+        },
+        {
+          "args": {
+            "annual_period": "1y",
+            "forecast_target": 10,
+            "pct_target": 0.89154,
+            "return_vol_slot": "return_vol"
+          },
+          "category": "position_sizer",
+          "component": "VolTargetWeightConverter",
+          "type": "component"
+        },
+        {
+          "args": {
+            "cap": 8,
+            "floor_negative_correlations": false,
+            "forecast_slot": "forecast_combined",
+            "min_idm": 1,
+            "ohlcv_slot": "ohlcv_1d",
+            "resample_freq": "1D",
+            "return_vol_slot": "return_vol",
+            "rolling": true,
+            "shrinkage": "oas",
+            "smoothing_half_life": 60,
+            "target_vol": 1.3,
+            "window": "180d"
+          },
+          "category": "position_manager",
+          "component": "IDMPortfolioAggregator",
+          "type": "component"
+        },
+        {
+          "args": {
+            "bars_per_year": 365,
+            "log_fires": true,
+            "ohlcv_slot": "ohlcv_1d",
+            "ratio": 2,
+            "recent_window": 30,
+            "target_vol": 0.89154
+          },
+          "category": "risk_manager",
+          "component": "RealizedVolCap",
+          "type": "component"
+        },
+        {
+          "args": {
+            "bars_per_year": 365,
+            "log_fires": true,
+            "max_stale_bars": 5,
+            "ratio": 6.5,
+            "return_vol_slot": "return_vol",
+            "target_vol": 0.89154
+          },
+          "category": "risk_manager",
+          "component": "AdverseVolCap",
+          "type": "component"
+        },
+        {
+          "args": {
+            "floor_quantile": 0.05,
+            "floor_window": 500,
+            "log_fires": true,
+            "min_periods": 100,
+            "return_vol_slot": "return_vol"
+          },
+          "category": "risk_manager",
+          "component": "VolFloorScale",
+          "type": "component"
+        },
+        {
+          "args": {
+            "max_asset_weight": 1.27,
+            "max_leverage": 5.715
+          },
+          "category": "risk_manager",
+          "component": "LeverageCap",
+          "type": "component"
+        },
+        {
+          "args": {
+            "bars_per_year": 365,
+            "log_fires": true,
+            "max_stale_bars": 5,
+            "ratio": 2,
+            "response_exponent": 3,
+            "return_vol_slot": "rv_intra",
+            "target_vol": 0.5,
+            "threshold_min_periods": 90,
+            "threshold_quantile": 0.4,
+            "threshold_window": 180
+          },
+          "category": "risk_manager",
+          "component": "AdverseVolCap",
+          "type": "component"
+        },
+        {
+          "args": {
+            "bars_per_year": 365,
+            "log_fires": true,
+            "max_stale_bars": 5,
+            "ratio": 2,
+            "return_vol_slot": "rv_intra",
+            "target_vol": 0.5,
+            "threshold": 5.17997
+          },
+          "category": "risk_manager",
+          "component": "AdverseVolCap",
+          "type": "component"
+        },
+        {
+          "args": {
+            "default_max_leverage": 3,
+            "hard_limit": 0.4445,
+            "log_fires": true,
+            "soft_limit": 0.381
+          },
+          "category": "risk_manager",
+          "component": "PortfolioMarginCap",
+          "type": "component"
+        },
+        {
+          "args": {
+            "fill_value": 0
+          },
+          "category": "risk_manager",
+          "component": "FillNaN",
+          "type": "component"
+        }
+      ],
+      "execution": {
+        "buffer_mode": "reference",
+        "buffer_threshold": 0.25,
+        "min_trade_size": 0.0,
+        "rebalance": "buffered",
+        "rebalance_method": "to_edge"
+      },
+      "factories": [],
+      "globals": {
+        "bar_offset": "12h",
+        "target_timeframe": "1d"
+      },
+      "name": "a_189_block_pipeline",
+      "universe": {
+        "assets": [
+          "0G",
+          "2Z",
+          "AAVE",
+          "ACE",
+          "ADA",
+          "AERO",
+          "AIXBT",
+          "ALGO",
+          "ALT",
+          "ANIME",
+          "APE",
+          "APEX",
+          "APT",
+          "AR",
+          "ARB",
+          "ASTER",
+          "ATOM",
+          "AVAX",
+          "AVNT",
+          "AXS",
+          "AZTEC",
+          "BABY",
+          "BANANA",
+          "BCH",
+          "BERA",
+          "BIGTIME",
+          "BIO",
+          "BLUR",
+          "BNB",
+          "BOME",
+          "BRETT",
+          "BSV",
+          "BTC",
+          "CAKE",
+          "CASHCAT",
+          "CC",
+          "CELO",
+          "CFX",
+          "CHIP",
+          "COMP",
+          "CRV",
+          "DASH",
+          "DOGE",
+          "DOT",
+          "DYDX",
+          "DYM",
+          "EIGEN",
+          "ENA",
+          "ENS",
+          "ETC",
+          "ETH",
+          "ETHFI",
+          "FARTCOIN",
+          "FET",
+          "FIL",
+          "FOGO",
+          "GALA",
+          "GMT",
+          "GMX",
+          "GOAT",
+          "GRAM",
+          "GRASS",
+          "GRIFFAIN",
+          "HBAR",
+          "HEMI",
+          "HMSTR",
+          "HYPE",
+          "HYPER",
+          "ICP",
+          "IMX",
+          "INIT",
+          "INJ",
+          "IO",
+          "JTO",
+          "JUP",
+          "KAITO",
+          "KAS",
+          "LAYER",
+          "LDO",
+          "LINEA",
+          "LINK",
+          "LIT",
+          "LTC",
+          "MANTA",
+          "ME",
+          "MEGA",
+          "MELANIA",
+          "MEME",
+          "MERL",
+          "MET",
+          "MINA",
+          "MNT",
+          "MON",
+          "MOODENG",
+          "MORPHO",
+          "MOVE",
+          "NEAR",
+          "NIL",
+          "NOT",
+          "NXPC",
+          "ONDO",
+          "OP",
+          "ORDI",
+          "PAXG",
+          "PENDLE",
+          "PENGU",
+          "PEOPLE",
+          "PNUT",
+          "POL",
+          "POLYX",
+          "POPCAT",
+          "PROVE",
+          "PUMP",
+          "PURR",
+          "PYTH",
+          "RENDER",
+          "RESOLV",
+          "REZ",
+          "RSR",
+          "RUNE",
+          "S",
+          "SAGA",
+          "SAND",
+          "SEI",
+          "SKR",
+          "SKY",
+          "SNX",
+          "SOL",
+          "SPX",
+          "STABLE",
+          "STBL",
+          "STRK",
+          "STX",
+          "SUI",
+          "SUPER",
+          "SUSHI",
+          "SYRUP",
+          "TAO",
+          "TIA",
+          "TNSR",
+          "TRB",
+          "TRUMP",
+          "UNI",
+          "VINE",
+          "VIRTUAL",
+          "VVV",
+          "W",
+          "WCT",
+          "WIF",
+          "WLD",
+          "WLFI",
+          "XAI",
+          "XLM",
+          "XMR",
+          "XPL",
+          "XRP",
+          "YGG",
+          "ZEC",
+          "ZEN",
+          "ZETA",
+          "ZK",
+          "ZORA",
+          "ZRO",
+          "kBONK",
+          "kFLOKI",
+          "kLUNC",
+          "kNEIRO",
+          "kPEPE",
+          "kSHIB"
+        ],
+        "market": "perp",
+        "mode": "top_volume",
+        "top_n": 170
+      }
+    },
+    "validation": {
+      "errors": 0,
+      "ok": true,
+      "warnings": 0
+    },
+    "version": null
+  }
+}

@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import pytest
 from keel.tools.outcomes import OUTCOMES, _bootstrap
+from keel.tools.outcomes._base import listed_enum
 from keel.tools.outcomes._mcp_adapter import (
     effective_annotations,
     effective_description,
@@ -132,20 +133,138 @@ def _tools_with_schema_override():
     return [t for t in OUTCOMES.values() if t.listed_input_schema is not None]
 
 
+def _omitted(tool_name: str, prefix: str = "") -> set[str]:
+    """The declared omissions directly under `prefix` (R-8)."""
+    from keel.tools.outcomes._base import LISTED_SCHEMA_OMISSIONS
+
+    out = set()
+    for path in LISTED_SCHEMA_OMISSIONS.get(tool_name, ()):
+        head, _, leaf = path.rpartition(".")
+        if head == prefix:
+            out.add(leaf)
+    return out
+
+
 def test_listed_schema_overrides_keep_the_contract():
     """Property names, types, enums, defaults, and the required list must
-    match the shared schema exactly — overrides are wording, not contract."""
+    match the shared schema exactly — overrides are wording, not contract —
+    EXCEPT for the declared omissions (`_base.LISTED_SCHEMA_OMISSIONS`,
+    R-8): exactly those leave, at exactly their depth, and nothing else."""
     for tool in _tools_with_schema_override():
         shared = tool.input_schema
         listed = tool.listed_input_schema
-        assert set(listed["properties"]) == set(shared["properties"]), tool.name
-        assert listed.get("required", []) == shared.get("required", []), tool.name
+        omitted = _omitted(tool.name)
+        assert set(listed["properties"]) == set(shared["properties"]) - omitted, tool.name
+        # The one declared exception (`_base.LISTED_REQUIRED_ADDITIONS`,
+        # Q-2268): a parameter whose only alternative the listed schema omits
+        # is required there. Nothing else may differ.
+        from keel.tools.outcomes._base import LISTED_REQUIRED_ADDITIONS
+
+        shared_required = shared.get("required", [])
+        assert listed.get("required", []) == [r for r in shared_required if r not in omitted] + [
+            p for p in LISTED_REQUIRED_ADDITIONS.get(tool.name, {}) if p not in shared_required
+        ], tool.name
         for pname, pschema in shared["properties"].items():
+            if pname in omitted:
+                continue
             listed_p = listed["properties"][pname]
-            for contract_key in ("type", "enum", "default"):
-                assert listed_p.get(contract_key) == pschema.get(contract_key), (
+            # The declared bounds are contract too (Q-2270): the handler
+            # enforces whichever schema the profile serves, so a bound that
+            # differs between profiles is a behaviour that differs.
+            for contract_key in (
+                "type",
+                "enum",
+                "default",
+                "minimum",
+                "maximum",
+                "exclusiveMinimum",
+                "exclusiveMaximum",
+                "minLength",
+                "maxLength",
+                "minItems",
+                "maxItems",
+            ):
+                expected = pschema.get(contract_key)
+                if contract_key == "enum" and isinstance(expected, list):
+                    # The declared listed spellings (`_base.LISTED_ENUM_RENAMES`,
+                    # Q-2080): the same values, renamed where the table says so.
+                    expected = listed_enum(tool.name, pname, expected)
+                assert listed_p.get(contract_key) == expected, (
                     f"{tool.name}.{pname}.{contract_key} diverged between profiles"
                 )
+            nested_omitted = _omitted(tool.name, pname)
+            if isinstance(pschema.get("properties"), dict):
+                assert set(listed_p["properties"]) == set(pschema["properties"]) - nested_omitted, (
+                    f"{tool.name}.{pname}"
+                )
+
+
+def test_listed_required_additions_are_only_omitted_alternatives():
+    """The `required` exception (Q-2268, round 3) is narrow by construction:
+    each row names a parameter that is OPTIONAL on the shared schema, present
+    on both schemas, and whose alternative is a declared listed omission of
+    the same tool — the one case where the listed surface leaves a caller no
+    way to call without it. Non-vacuity: the table is non-empty and compose's
+    listed schema really requires `source` while the full one does not.
+
+    Proof it can fail (2026-10-01, reverted by reversing the edit): adding
+    `"keel_backtest_run": {"strategy_id": "version"}` to the table reds this
+    arm alone (`version` is no omission); emptying the table reds it too (the
+    non-vacuity half) and the shared-`required` arm above stays the guard for
+    every other tool."""
+    from keel.tools.outcomes._base import LISTED_REQUIRED_ADDITIONS, LISTED_SCHEMA_OMISSIONS
+
+    assert LISTED_REQUIRED_ADDITIONS, "no additions declared — the exception is vacuous"
+    for tool_name, rows in LISTED_REQUIRED_ADDITIONS.items():
+        tool = OUTCOMES[tool_name]
+        assert tool.listed_input_schema is not None, tool_name
+        for param, alternative in rows.items():
+            assert alternative in LISTED_SCHEMA_OMISSIONS.get(tool_name, ()), (tool_name, param)
+            assert param in tool.input_schema["properties"], (tool_name, param)
+            assert param in tool.listed_input_schema["properties"], (tool_name, param)
+            assert param not in tool.input_schema.get("required", []), (tool_name, param)
+            assert param in tool.listed_input_schema["required"], (tool_name, param)
+    compose = OUTCOMES["keel_strategy_compose"]
+    assert compose.listed_input_schema["required"] == ["source"]
+    assert "source" not in compose.input_schema.get("required", [])
+    assert "source_file" in compose.input_schema["properties"]
+
+
+def test_every_declared_enum_rename_names_a_real_value():
+    """Non-vacuity for the enum rule above: each declared rename targets a
+    parameter that exists on the shared schema, and every shared value it
+    names is really in that enum (a typo'd value would rename nothing and
+    pass)."""
+    from keel.tools.outcomes._base import LISTED_ENUM_RENAMES
+
+    assert LISTED_ENUM_RENAMES, "no renames declared — the rule is vacuous"
+    for (tool_name, param), renames in LISTED_ENUM_RENAMES.items():
+        shared = OUTCOMES[tool_name].input_schema["properties"][param]["enum"]
+        listed = OUTCOMES[tool_name].listed_input_schema["properties"][param]["enum"]
+        assert set(renames) <= set(shared), (tool_name, param)
+        assert set(renames.values()) <= set(listed), (tool_name, param)
+        assert not (set(renames.values()) & set(shared)), (tool_name, param)
+        assert len(listed) == len(shared)
+
+
+def test_every_declared_omission_names_a_real_parameter():
+    """Non-vacuity for the rule above: each omitted path exists on the
+    SHARED schema (a typo'd path would omit nothing and pass)."""
+    from keel.tools.outcomes._base import LISTED_SCHEMA_OMISSIONS
+
+    assert sum(len(v) for v in LISTED_SCHEMA_OMISSIONS.values()) >= 5
+    for tool_name, paths in LISTED_SCHEMA_OMISSIONS.items():
+        tool = OUTCOMES[tool_name]
+        assert tool.listed_input_schema is not None, tool_name
+        for path in paths:
+            node = tool.input_schema
+            for part in path.split("."):
+                node = node["properties"][part]
+            listed_node = tool.listed_input_schema
+            *parents, leaf = path.split(".")
+            for part in parents:
+                listed_node = listed_node["properties"][part]
+            assert leaf not in listed_node["properties"], (tool_name, path)
 
 
 def test_effective_surface_switches_with_profile(monkeypatch):
@@ -221,7 +340,13 @@ def test_server_instructions_switch_with_profile(monkeypatch):
     monkeypatch.setenv("KEEL_EXECUTION_MODE", "hosted")
     monkeypatch.setenv("KEEL_SERVER_PROFILE", "full")
     monkeypatch.setenv("KEEL_TOOLSETS", ALL_TOOLSETS_ENV)
-    assert "LIVE WRITE" in (create_server().instructions or "")
+    # The live block is `profiles: [full]` in operating_core.md, so it is
+    # in the full assembly and in no listed one. (Pinned on the sentence
+    # rather than the old hand-written "LIVE WRITE" heading: the blocks
+    # became corpus sections on 2026-09-22 — guidance spec §4.)
+    full_instructions = create_server().instructions or ""
+    assert "live-write toolset" in full_instructions
 
     monkeypatch.setenv("KEEL_SERVER_PROFILE", "listed")
     assert create_server().instructions == LISTED_INSTRUCTIONS
+    assert "live-write toolset" not in LISTED_INSTRUCTIONS

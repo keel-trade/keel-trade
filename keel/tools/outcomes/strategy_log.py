@@ -1,4 +1,4 @@
-"""`keel_strategy_log` — show commit history for a strategy.
+"""`keel_strategy_history` — show commit history for a strategy.
 
 The "git log" of the sync model. Wraps `GET /v1/strategies/<id>/versions`.
 Lists commits in reverse-chronological order (newest first) with
@@ -26,6 +26,70 @@ from keel.errors import KeelError
 
 from . import register
 from ._base import OutcomeResult, OutcomeTool, ToolContext
+from ._surface_hints import strategy_ids_hint, usage_hint
+from ._toolsets import local_tools_registered
+from .open_in_app import app_url_for
+
+
+def _next_lines(has_commits: bool) -> list[str]:
+    """The `next` facts — naming only tools this server registers.
+
+    Spec 05 §4 item 7: `keel_strategy_push` / `keel_strategy_checkout` are
+    local-only, so a hosted or listed result does not name them (the old
+    lines also advertised a checkout form marked "NOT YET IMPLEMENTED"). The
+    facts are indicative: what each tool does, not an instruction to call it.
+    """
+    local = local_tools_registered()
+    if not has_commits:
+        lines = ["No commits yet — the strategy may have just been created."]
+        if local:
+            lines.append("`keel_strategy_push -m 'msg'` pushes a first version from a checkout.")
+        return lines
+    lines = [
+        "`keel://strategy/{id}/source` and `keel_strategy_diff` show the source at a commit.",
+        "`keel_strategy_restore strategy_id=<id> ref=<sequence_or_commit_id>` makes a "
+        "historical commit the new HEAD.",
+    ]
+    if local:
+        lines.append(
+            "`keel_strategy_checkout <id>` then brings the restored HEAD into a local workspace."
+        )
+    return lines
+
+
+def version_entry(v: dict[str, Any], *, listed: bool) -> dict[str, Any]:
+    """One version row as this surface returns it.
+
+    Surface attribution (spec 08 R5): which surface/client made the commit.
+    The LISTED row is :data:`_listed_projection.LISTED_VERSION_FIELDS` — the
+    rendered `modified_via` sentence without the raw client / auth-surface
+    provenance or the source hash (Q-2268: internal plumbing on a research
+    connector); the CLI and local server keep all three, which the sync
+    contract reads. `keel_strategy_get include_versions=true` returns the
+    same row on listed.
+    """
+    from keel.workspace import format_modified_via
+
+    entry: dict[str, Any] = {
+        "sequence_number": v.get("sequence_number"),
+        "commit_id": v.get("commit_id"),
+        "parent_id": v.get("parent_id"),
+        "source_hash": (v.get("source_hash") or "")[:12],
+        "message": v.get("message"),
+        "created_at": v.get("created_at"),
+        "tags": v.get("tags") or [],
+        "client_name": v.get("client_name"),
+        "auth_surface": v.get("auth_surface"),
+        # None for commits predating the attribution migration.
+        "modified_via": format_modified_via(
+            v.get("client_name"), v.get("auth_surface"), v.get("created_at")
+        ),
+    }
+    if listed:
+        from ._listed_projection import LISTED_VERSION_FIELDS, pick
+
+        return pick(entry, LISTED_VERSION_FIELDS)
+    return entry
 
 
 def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
@@ -35,11 +99,11 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
             "Missing required `strategy_id`.",
             error_code="missing_strategy_id",
             exit_code=2,
-            suggestion=(
-                "Pass a strategy id (e.g. `keel strategy log str_abc123`). "
-                "Find ids via `keel_strategy_search` or "
-                "`keel_strategy_workspaces` for locally-checked-out ones."
-            ),
+            suggestion=usage_hint(
+                "Pass a strategy id (e.g. `keel strategy log str_abc123`). ",
+                "Pass `strategy_id` (`str_...`). ",
+            )
+            + strategy_ids_hint(),
         )
 
     limit = args.get("limit") or 50
@@ -52,10 +116,6 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
             exit_code=2,
             suggestion="Pass `limit` as an integer between 1 and 200 (default: 50).",
         )
-    if limit < 1:
-        limit = 1
-    if limit > 200:
-        limit = 200
 
     client = ctx.get_client()
     try:
@@ -65,85 +125,55 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
     except Exception as e:
         raise KeelError(
             f"Failed to fetch version history for {strategy_id}: {e}",
-            suggestion="Run `keel_doctor` to diagnose auth / API.",
+            suggestion="Run `keel_connection_check` to diagnose auth / API.",
         ) from e
 
     # Endpoint returns a bare list[VersionResponse] today but the
     # canonical shape is {data: [...], pagination: ...}; shared helper
     # handles both transparently.
-    from keel.workspace import _normalize_paginated_versions, format_modified_via
+    from keel.workspace import _normalize_paginated_versions
 
+    from ._toolsets import is_listed_profile
+
+    listed = is_listed_profile()
     entries: list[dict[str, Any]] = [
-        {
-            "sequence_number": v.get("sequence_number"),
-            "commit_id": v.get("commit_id"),
-            "parent_id": v.get("parent_id"),
-            "source_hash": (v.get("source_hash") or "")[:12],
-            "message": v.get("message"),
-            "created_at": v.get("created_at"),
-            "tags": v.get("tags") or [],
-            # Surface attribution (spec 08 R5): which surface/client made
-            # this commit. None for commits predating the attribution
-            # migration.
-            "client_name": v.get("client_name"),
-            "auth_surface": v.get("auth_surface"),
-            "modified_via": format_modified_via(
-                v.get("client_name"), v.get("auth_surface"), v.get("created_at")
-            ),
-        }
-        for v in _normalize_paginated_versions(result)
+        version_entry(v, listed=listed) for v in _normalize_paginated_versions(result)
     ]
 
     return OutcomeResult(
         run_id=strategy_id,
-        hero_url=f"{ctx.app_url}/strategies/{strategy_id}?tab=history",
+        # `?tab=history` was never read by any page (see open_in_app._with_query).
+        hero_url=app_url_for("strategy", strategy_id, ctx),
         share_url=None,
         extra={
             "strategy_id": strategy_id,
             "commits": entries,
             "count": len(entries),
             "head_sequence": entries[0]["sequence_number"] if entries else None,
-            "next": (
-                [
-                    "No commits yet — strategy may have been just created.",
-                    "Push your first version via `keel_strategy_push -m 'msg'`.",
-                ]
-                if not entries
-                else [
-                    "To see the source at a specific commit: read `keel://strategy/{id}/source` or use `keel_strategy_diff`.",
-                    "To restore a historical commit as new HEAD: `keel_strategy_restore strategy_id=<id> ref=<sequence_or_commit_id>`.",
-                    "To checkout a historical version locally: `keel_strategy_checkout <id>@<sequence_or_commit_id>` (NOT YET IMPLEMENTED — use restore + checkout for now).",
-                ]
-            ),
+            "next": _next_lines(bool(entries)),
         },
     )
 
 
 STRATEGY_LOG = register(
     OutcomeTool(
-        name="keel_strategy_log",
+        name="keel_strategy_history",
         required_action="strategy.read",
         cli_path=("strategy", "log"),
         toolset="read-only",
         # grounded-in: sync-contract (spec 08) — server HEAD is the canonical
         # source of truth; the log is the 'git log' over that timeline;
-        # collaboration.md §4 (find the ref to diff/restore against when
+        # system/chat/collaboration.md §4 (find the ref to diff/restore against when
         # iterating).
         description=(
-            "Show a strategy's commit history — the 'git log' of the sync "
-            "model over the server's canonical timeline, where server HEAD is "
-            "the source of truth. Each entry carries sequence number, commit "
-            "id, parent, source hash, message, timestamp, tags, and surface "
-            "attribution (`modified_via` — which client made each commit, "
-            "such as 'modified via claude.ai, 2h ago'). Reverse-chronological, "
-            "newest first. Use it to audit how a strategy evolved, find the "
-            "ref to restore or diff against, or see what's moved since you "
-            "last looked. "
-            "Do NOT use to fetch source for one commit — that's a future "
-            "`keel://strategy/{id}/versions/{ref}/source` resource. Do NOT "
-            "use to see what changed STRUCTURALLY between two versions — "
-            "call `keel_strategy_diff` for that. "
-            "Default `limit=50`; max 200 (server-enforced)."
+            "Show a strategy's commit history — each version's commit id, the ref "
+            "`keel_backtest_run` pins and `keel_strategy_diff` compares. Each entry "
+            "carries the sequence number, commit id, parent, source hash, message, "
+            "timestamp and tags, newest first; `limit` defaults to 50 (server maximum "
+            "200). It is the server's canonical timeline, where server HEAD is the source "
+            "of truth, and each entry also names the client that made it (`modified_via`). "
+            "One commit's source is `keel_strategy_get` with `version` and "
+            "`include_source=true`."
         ),
         input_schema={
             "type": "object",
@@ -157,12 +187,14 @@ STRATEGY_LOG = register(
                 "limit": {
                     "type": "integer",
                     "default": 50,
-                    "description": "Max commits to return. Clamped to 1..200.",
+                    "minimum": 1,
+                    "maximum": 200,
+                    "description": "Maximum commits to return (1-200).",
                 },
             },
         },
         annotations={
-            "title": "Strategy Version History",
+            "title": "Get Strategy History",
             "readOnlyHint": True,
             "destructiveHint": False,
             "idempotentHint": True,
@@ -173,17 +205,12 @@ STRATEGY_LOG = register(
         # tools on the listed surface. keel_strategy_diff is now listed
         # (D1 2026-07-19), so the structural-compare route points there.
         listed_description=(
-            "Show a strategy's commit history — the 'git log' of the sync "
-            "model. Each entry carries sequence number, commit id, parent, "
-            "source hash, message, timestamp, and tags. Reverse-chronological, "
-            "newest first. Use it to audit how a strategy evolved, find the "
-            "ref to restore or diff against, or see what's moved since you "
-            "last looked. "
-            "Do NOT use to fetch source for one commit — that's a future "
-            "`keel://strategy/{id}/versions/{ref}/source` resource. "
-            "Do NOT use to compare two versions structurally — call "
-            "`keel_strategy_diff`. "
-            "Default `limit=50`; max 200 (server-enforced)."
+            "Show a strategy's commit history — each version's commit id, the ref "
+            "`keel_backtest_run` pins and `keel_strategy_diff` compares. Each entry "
+            "carries the sequence number, commit id, parent, message, "
+            "timestamp and tags, newest first; `limit` defaults to 50 (server maximum "
+            "200). One commit's source is `keel_strategy_get` with `version` and "
+            "`include_source=true`."
         ),
     )
 )

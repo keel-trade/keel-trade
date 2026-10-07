@@ -1,0 +1,189 @@
+{
+  "view": {
+    "kind": "strategy",
+    "name": "Simple Momentum (ROC 20)",
+    "version": 4,
+    "status": "DRAFT",
+    "validation": {
+      "ok": true,
+      "errors": 0,
+      "warnings": 0
+    },
+    "header": {
+      "clock": "1d @ 12h",
+      "universe": {
+        "label": "Top 30 by volume · HL perps",
+        "total": 30,
+        "symbols": [
+          "BTC",
+          "ETH",
+          "SOL",
+          "HYPE",
+          "XRP",
+          "DOGE",
+          "SUI",
+          "LINK",
+          "ZEC",
+          "kPEPE",
+          "PUMP",
+          "XPL",
+          "ASTER",
+          "LIT",
+          "VVV",
+          "AVAX",
+          "ARB",
+          "OP",
+          "TIA",
+          "SEI",
+          "INJ",
+          "WIF",
+          "kBONK",
+          "JUP",
+          "APT",
+          "NEAR",
+          "ATOM",
+          "LDO",
+          "AAVE",
+          "UNI"
+        ]
+      },
+      "execution": {
+        "label": "Buffered 0.05",
+        "params": {
+          "rebalance": "buffered",
+          "buffer_threshold": 0.05,
+          "buffer_mode": "relative",
+          "rebalance_method": "to_edge"
+        }
+      },
+      "factories": []
+    },
+    "structure": {
+      "blocks": [
+        {
+          "id": "b1",
+          "type": "component",
+          "component": "PriceDataLoader",
+          "params": {}
+        },
+        {
+          "id": "b2",
+          "type": "component",
+          "component": "ROC",
+          "params": {
+            "period": 20
+          }
+        },
+        {
+          "id": "b3",
+          "type": "component",
+          "component": "ForecastScaler",
+          "params": {
+            "avg_abs_target": 10.0
+          }
+        },
+        {
+          "id": "b4",
+          "type": "component",
+          "component": "ForecastCapper",
+          "params": {
+            "limit": 20.0
+          }
+        },
+        {
+          "id": "b5",
+          "type": "component",
+          "component": "ForecastWeightNormalizer",
+          "params": {
+            "target_leverage": 1.0
+          }
+        }
+      ],
+      "globals": {
+        "target_timeframe": "1d",
+        "bar_offset": "12h"
+      },
+      "universe": {
+        "mode": "top_volume",
+        "market": "perp",
+        "top_n": 30,
+        "resolved": [
+          "BTC",
+          "ETH",
+          "SOL",
+          "HYPE",
+          "XRP",
+          "DOGE",
+          "SUI",
+          "LINK",
+          "ZEC",
+          "kPEPE",
+          "PUMP",
+          "XPL",
+          "ASTER",
+          "LIT",
+          "VVV",
+          "AVAX",
+          "ARB",
+          "OP",
+          "TIA",
+          "SEI",
+          "INJ",
+          "WIF",
+          "kBONK",
+          "JUP",
+          "APT",
+          "NEAR",
+          "ATOM",
+          "LDO",
+          "AAVE",
+          "UNI"
+        ]
+      },
+      "execution": {
+        "rebalance": "buffered",
+        "buffer_threshold": 0.05,
+        "buffer_mode": "relative",
+        "rebalance_method": "to_edge"
+      },
+      "factories": []
+    },
+    "change": {
+      "added": [],
+      "removed": [],
+      "changed": [],
+      "reordered": [],
+      "summary_text": "Execution · buffer 0.1 → 0.05",
+      "touched": 1,
+      "total": 5,
+      "declarations": {
+        "execution": {
+          "buffer_threshold": {
+            "a": 0.1,
+            "b": 0.05
+          }
+        }
+      },
+      "from_version": 3,
+      "to_version": 4
+    },
+    "evidence": null,
+    "categories": {
+      "PriceDataLoader": "data_loader",
+      "ROC": "indicator",
+      "ForecastScaler": "forecast_mapper",
+      "ForecastCapper": "forecast_mapper",
+      "ForecastWeightNormalizer": "position_sizer"
+    },
+    "size": "receipt",
+    "status_text": "Saved just now",
+    "url_line": "View in Keel: https://app.usekeel.io/strategies/str_7b31de90/edit",
+    "previous_version": 3,
+    "source": null,
+    "object": "str_7b31de90",
+    "at": "2026-09-22T15:02:58.117Z",
+    "seq": 1
+  },
+  "hero_url": "https://app.usekeel.io/strategies/str_7b31de90/edit",
+  "url_line": "View in Keel: https://app.usekeel.io/strategies/str_7b31de90/edit"
+}

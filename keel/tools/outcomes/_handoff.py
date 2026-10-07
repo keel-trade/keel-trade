@@ -9,15 +9,19 @@ tool-specific error prose:
       blocked_action:  what the agent tried ("backtest_run", "live_deploy", ...)
       reason:          why a human is required (one sentence)
       required_actor:  "human"                     (always — the wall's contract)
-      action_url:      where the human acts (billing page, handoff deep
-                       link, strategy overview — always an owned URL)
+      action_url:      where the human acts (handoff deep link, strategy
+                       overview — always an owned URL). ABSENT on anonymous
+                       walls and on plan-limit walls (D-12: no plan
+                       destination on any agent surface)
       limit_details:   exact numbers FROM THE API (never invented) — quota
                        walls only
       cost:            exact numbers FROM THE API (never invented) — e.g.
                        the server-computed sizing suggestion — when relevant
-      talking_points:  honest lines the agent can relay verbatim. ALWAYS
-                       includes the do-nothing alternative; never "earn X%";
-                       drawdown named whenever performance numbers appear.
+      talking_points:  honest lines the agent can relay verbatim. Walls that
+                       ask the human to act include the do-nothing
+                       alternative; a plan-limit wall states its facts and
+                       stops (D-12); never "earn X%"; drawdown named
+                       whenever performance numbers appear.
       resume:          how the agent resumes after the human acts:
                        {token} (pollable deploy-intent token) and/or
                        {verify_call: {tool, args, reason}}
@@ -35,10 +39,10 @@ by the CLI and MCP adapters.
 
 Adopters (M3.1): ``keel_backtest_run`` (quota), ``keel_strategy_compose``
 (plan caps), ``keel_live_deploy`` (live scope / unlinked account / preview
-handoff_url), ``keel_live_control`` (scope). ``keel_plan_status`` adopts
+handoff_url), ``keel_live_control`` (scope). ``keel_plan_usage`` adopts
 in M4.2. The LISTED directory profile never emits deploy-intent links —
 ``mint_deploy_intent`` is profile-gated (research/08 policy boundary;
-``keel_open_in_app`` is the listed bridge).
+``keel_app_link`` is the listed bridge).
 """
 
 from __future__ import annotations
@@ -46,7 +50,18 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from keel.errors import EntitlementError, KeelError
+from keel.errors import (
+    FORBIDDEN_UPSELL_RE,
+    EntitlementError,
+    KeelError,
+    assert_neutral_wall_text,
+    is_free_plan,
+    quota_allowance_note,
+    quota_headline,
+    quota_plans_line,
+    quota_reset_text,
+    quota_wall_lines,
+)
 
 from ._base import ToolContext
 from ._toolsets import is_listed_profile
@@ -60,6 +75,7 @@ __all__ = [
     "maybe_quota_handoff",
     "mint_deploy_intent",
     "unlinked_account_handoff",
+    "update_web_handoff",
     "validate_talking_points",
 ]
 
@@ -71,29 +87,64 @@ __all__ = [
 _FORBIDDEN_TALKING_POINT_RE = re.compile(r"\bearns?\b|\bguaranteed?\b", re.IGNORECASE)
 _DO_NOTHING_RE = re.compile(r"\bdo(ing)?\s+nothing\b", re.IGNORECASE)
 
+# RESTRAINT guard (mcp-conversion D-11, founder ruling 2026-09-19; widened by
+# D-12, 2026-09-28): runtime copy states facts and stops. The regex lives in
+# `keel.errors` (FORBIDDEN_UPSELL_RE) because the 403 translation below this
+# module renders wall text too; this name is kept for every existing reader.
+# Families, each of which HAS shipped here: a price or billing cadence, a
+# capacity promise or pitch verb ("upgrade", "unlock"), a transactional
+# pointer (checkout/Stripe), urgency — and, since D-12, the other plans and
+# every plan destination ("higher plans", "plan tier", "builder fee", "see
+# plans", the billing tab, /pricing). The D-11 revision's "Higher plans
+# include more backtests: Starter 500 a week, Trader unlimited." is exactly
+# what OpenAI rejected (Q-2080) and now fails this scan.
+#
+# A surface may still name the caller's OWN plan ("Current plan: Free"),
+# and the free-plan wall's one "Paid plans include more …" sentence is
+# admitted by `keel.errors.assert_neutral_wall_text(free_plan=True)` only.
+_FORBIDDEN_UPSELL_RE = FORBIDDEN_UPSELL_RE
 
-def validate_talking_points(talking_points: list[str]) -> list[str]:
-    """Structural honesty validation for `talking_points` (spec 03 R1).
+
+def validate_talking_points(
+    talking_points: list[str], *, require_do_nothing: bool = True
+) -> list[str]:
+    """Structural honesty + restraint validation for `talking_points`.
 
     ONE validator for every surface that emits talking points — the
-    handoff envelope below and `keel_plan_status`'s upsell-suppressed
-    output (spec 04 R2) both go through here, so the honesty rules can
-    never fork: non-empty strings, the do-nothing alternative named, no
-    return-promising language. Returns the list; raises ``ValueError``
-    otherwise (validators behave one exact way — repo lesson)."""
+    handoff envelope below and `keel_plan_usage`'s facts output (spec 04
+    R2) both go through here, so the rules can never fork:
+
+    * non-empty strings;
+    * the do-nothing alternative named — on a wall that asks the human to
+      ACT (deploy, link, consent, sign in). A neutral plan-limit wall and
+      `keel_plan_usage` propose no action, so they state their facts and
+      stop (D-12: the "doing nothing is also fine" line is removed there)
+      and pass ``require_do_nothing=False``;
+    * no return-promising language (spec 03 R1 honesty half);
+    * no price, capacity promise, transactional pointer, other plan or
+      plan destination (D-11 restraint half, widened by D-12).
+
+    Returns the list; raises ``ValueError`` otherwise (validators behave
+    one exact way — repo lesson)."""
     if (
         not isinstance(talking_points, list)
         or not talking_points
         or not all(isinstance(tp, str) and tp.strip() for tp in talking_points)
     ):
         raise ValueError("talking_points must be a non-empty list of non-empty strings")
-    if not any(_DO_NOTHING_RE.search(tp) for tp in talking_points):
+    if require_do_nothing and not any(_DO_NOTHING_RE.search(tp) for tp in talking_points):
         raise ValueError(
             "talking_points must include the do-nothing alternative (spec 03 R1 honesty rule)"
         )
     for tp in talking_points:
         if _FORBIDDEN_TALKING_POINT_RE.search(tp):
             raise ValueError(f"talking point uses forbidden return-promising language: {tp!r}")
+        hit = _FORBIDDEN_UPSELL_RE.search(tp)
+        if hit:
+            raise ValueError(
+                f"talking point uses forbidden upsell language {hit.group(0)!r} "
+                f"(mcp-conversion D-11: state facts and stop): {tp!r}"
+            )
     return list(talking_points)
 
 
@@ -120,21 +171,24 @@ class HandoffRequired(KeelError):
         resume: dict[str, Any],
         limit_details: dict[str, Any] | None = None,
         cost: dict[str, Any] | None = None,
+        limit_view: dict[str, Any] | None = None,
         suggestion: str | None = None,
         docs_url: str | None = None,
         input: dict | None = None,
+        require_do_nothing: bool = True,
     ) -> None:
         if not blocked_action or not isinstance(blocked_action, str):
             raise ValueError("HandoffRequired requires a non-empty blocked_action")
         if not reason or not isinstance(reason, str):
             raise ValueError("HandoffRequired requires a non-empty reason")
-        # Spec 09 CL-1: `None` is legal (anonymous walls have no URL to act
-        # at — the action is `keel_auth_login`); an EMPTY STRING is still a
-        # programming error. Every non-anon wall keeps passing a real URL.
+        # `None` is legal on two walls: anonymous ones (spec 09 CL-1 — the
+        # action is `keel_auth_login`) and plan-limit ones (D-12 — agent
+        # surfaces carry no plan destination). An EMPTY STRING is still a
+        # programming error; every live/account wall passes a real URL.
         if action_url is not None and (not action_url or not isinstance(action_url, str)):
             raise ValueError("HandoffRequired action_url must be a non-empty string or None")
         try:
-            validate_talking_points(talking_points)
+            validate_talking_points(talking_points, require_do_nothing=require_do_nothing)
         except ValueError as e:
             raise ValueError(f"HandoffRequired {e}") from None
         if not isinstance(resume, dict) or not (resume.get("token") or resume.get("verify_call")):
@@ -148,6 +202,7 @@ class HandoffRequired(KeelError):
         self.resume = dict(resume)
         self.limit_details = dict(limit_details) if limit_details is not None else None
         self.cost = dict(cost) if cost is not None else None
+        self.limit_view = dict(limit_view) if limit_view is not None else None
 
     def to_envelope(self) -> dict:
         envelope = super().to_envelope()
@@ -160,6 +215,8 @@ class HandoffRequired(KeelError):
             envelope["limit_details"] = self.limit_details
         if self.cost is not None:
             envelope["cost"] = self.cost
+        if self.limit_view is not None:
+            envelope["limit_view"] = self.limit_view
         envelope["talking_points"] = list(self.talking_points)
         envelope["resume"] = dict(self.resume)
         return envelope
@@ -250,14 +307,14 @@ def anon_signin_handoff(
 
 
 def mint_deploy_intent(ctx: ToolContext, strategy_id: str) -> dict[str, Any] | None:
-    """Mint a signed deploy-intent via ``POST /v1/live/deploy-intents``.
+    """Mint a signed deploy-intent via ``POST /v1/deployments/deploy-intents``.
 
     Returns the mint response dict (``handoff_url``, ``intent_token``,
     ``expires_at``, ``suggested_config``, ...) or ``None`` when a link
     cannot/must not be issued:
 
     * LISTED profile → ALWAYS ``None`` (policy: the directory-listed
-      surface never emits deploy-intent links; ``keel_open_in_app`` is
+      surface never emits deploy-intent links; ``keel_app_link`` is
       its only app bridge — research/08).
     * Endpoint unavailable / caller lacks the scope / any API error →
       ``None``. This is a legitimate best-effort fallback chain, not a
@@ -275,7 +332,9 @@ def mint_deploy_intent(ctx: ToolContext, strategy_id: str) -> dict[str, Any] | N
         # this guard keeps any future caller from re-opening the dead-end.
         return None
     try:
-        resp = ctx.get_client().post("/v1/live/deploy-intents", json={"strategy_id": strategy_id})
+        resp = ctx.get_client().post(
+            "/v1/deployments/deploy-intents", json={"strategy_id": strategy_id}
+        )
     except Exception:  # noqa: BLE001 — best-effort deep link; owned-URL fallback is equivalent
         return None
     if not isinstance(resp, dict) or not resp.get("handoff_url"):
@@ -328,94 +387,130 @@ def maybe_quota_handoff(
 
     Returns ``None`` when ``e`` is not the quota shape (callers re-raise
     the original error). ``limit_details`` carries the EXACT numbers the
-    API returned in its entitlement reasons — nothing is invented; fields
-    the API didn't send are omitted.
+    server sent in its quota block — limit, used, remaining, the period
+    and the reset instant. Nothing is invented; fields the API didn't send
+    are omitted, and the rendered talking point degrades to a sentence
+    that claims only what it was given.
     """
     parsed = _quota_details(e)
     if parsed is None:
         return None
 
+    label = parsed.get("label") or parsed.get("unit_label") or parsed.get("unit")
+
     if _is_anon_session():
         # Spec 09 CL-1: anon quota walls are SIGNUP framing, never billing —
         # the anon plan cannot reach billing, and signing in moves the work
         # to the free plan. The exact server numbers still ride along.
-        unit_label_anon = parsed.get("unit_label") or parsed.get("unit")
         return anon_signin_handoff(
             blocked_action=blocked_action,
             reason=(
-                f"The anonymous workspace's {unit_label_anon} allowance is "
-                "used up — more capacity needs a signed-in account."
+                f"The anonymous workspace's {label} allowance is used up — "
+                "a larger allowance needs a signed-in account."
             ),
             context_point=(
-                f"The anonymous workspace includes a small {unit_label_anon} "
+                f"The anonymous workspace includes a small {label} "
                 "allowance; signing in moves your work to the free plan and "
                 "its larger limits."
             ),
             retry_call=retry_call,
             limit_details={
                 "unit": parsed.get("unit"),
-                "unit_label": unit_label_anon,
+                "unit_label": label,
                 **{
                     k: parsed[k]
-                    for k in ("kind", "limit", "current", "need")
+                    for k in (
+                        "kind",
+                        "limit",
+                        "used",
+                        "remaining",
+                        "current",
+                        "need",
+                        "period",
+                        "resets_at",
+                        "reset_epoch",
+                    )
                     if parsed.get(k) is not None
                 },
             },
         )
 
-    unit_label = parsed.get("unit_label") or parsed.get("unit")
-    billing_url = parsed.get("billing_url") or (e.docs_url or "")
-    limit = parsed.get("limit")
-    current = parsed.get("current")
-    need = parsed.get("need")
+    # D-12 (2026-09-28): the plan-limit wall states the caller's own limit
+    # and its reset, and stops. No `action_url`, no `docs_url`, no link on
+    # the card, no other plan's name or number — OpenAI rejected Keel v1.0.0
+    # while this wall named the other tiers and linked the billing tab,
+    # whose plan buttons go straight to Stripe Checkout (Q-2080).
+    free = is_free_plan(parsed)
 
-    limit_details: dict[str, Any] = {"unit": parsed.get("unit"), "unit_label": unit_label}
-    if parsed.get("kind") is not None:
-        limit_details["kind"] = parsed["kind"]
-    if limit is not None:
-        limit_details["limit"] = limit
-    if current is not None:
-        limit_details["current"] = current
-    if need is not None:
-        limit_details["need"] = need
+    # ONE authoritative home for the numbers (Q-1806): `limit_details`. The
+    # handoff carries no `input`, so the envelope's `example` is `{}` — and
+    # nothing here may point at it. The caller's own plan rides along; the
+    # server's `higher_plans` never reaches `parsed` (errors._quota_context).
+    limit_details: dict[str, Any] = {"unit": parsed.get("unit"), "unit_label": label}
+    for key in (
+        "kind",
+        "limit",
+        "used",
+        "remaining",
+        "current",
+        "need",
+        "period",
+        "resets_at",
+        "reset_epoch",
+        "plan",
+    ):
+        if parsed.get(key) is not None:
+            limit_details[key] = parsed[key]
 
-    if limit is not None and current is not None:
-        usage_point = f"You've used {current} of {limit} {unit_label} on the current plan."
-    elif need is not None:
-        usage_point = f"The current plan doesn't include {unit_label} (needs {need})."
-    else:
-        usage_point = f"The current plan's {unit_label} allowance is exhausted."
+    # The sentences the user hears — the SAME lines the 403 message is made
+    # of (`keel.errors.quota_wall_lines`, one computation owner). The
+    # headline reads the server's own `kind` (Q-1590: only the no-grant
+    # kinds may say the plan does not include the unit), and the compute
+    # edge says "not enough to start this", never "used all" (Q-1806).
+    talking_points = quota_wall_lines(parsed)
 
-    talking_points = [
-        usage_point,
-        (
-            "Only a human can change the plan — upgrading at the link adds "
-            "capacity (plan prices and limits are shown there)."
-        ),
-        (
-            "Doing nothing is also fine: nothing is lost — existing "
-            "strategies and results stay available on the current plan."
-        ),
-    ]
+    # What the CARD draws (Q-1806): a calm plan-limit state, not a red error
+    # line — headline, reset, the free plan's one plan sentence, and what
+    # does not use the allowance. Human sentences only: every field here is
+    # rendered as text by the host adapter, and none is a link.
+    limit_view: dict[str, Any] = {"headline": quota_headline(parsed)}
+    for key, value in (
+        ("reset", quota_reset_text(parsed)),
+        ("plans", quota_plans_line(parsed)),
+        ("note", quota_allowance_note(parsed)),
+    ):
+        if value:
+            limit_view[key] = value
+
+    reason = f"A plan limit on {label} stopped this call."
+    suggestion = (
+        f"Plan limit on {label}; the numbers are in `limit_details`. It lifts at "
+        "the reset — neither a retry nor a new sign-in changes it before then."
+    )
+    # Every text field of the wall passes the D-12 scan — not only the
+    # talking points — so a pitch cannot ride in through a field nobody
+    # thought to check (message, reason, suggestion, card).
+    for text in (str(e), reason, suggestion, *talking_points, *limit_view.values()):
+        assert_neutral_wall_text(text, free_plan=free)
 
     return HandoffRequired(
         str(e),
         blocked_action=blocked_action,
-        reason=(
-            f"Plan limit on {unit_label} — adding capacity is a billing "
-            "action only a human can take."
-        ),
-        action_url=billing_url,
+        reason=reason,
+        action_url=None,
         talking_points=talking_points,
         resume={
             "verify_call": {
                 **retry_call,
-                "reason": "Re-run the blocked call after the human finishes at action_url.",
+                "reason": "The same call, unchanged; it succeeds after the reset.",
             }
         },
         limit_details=limit_details,
-        suggestion=e.suggestion,
-        docs_url=e.docs_url,
+        limit_view=limit_view,
+        suggestion=suggestion,
+        # A neutral wall proposes no action, so there is no do-nothing
+        # alternative to name (D-12 removed that line with the rest).
+        require_do_nothing=False,
     )
 
 
@@ -533,7 +628,7 @@ def deploy_web_handoff(
     result of ``keel_live_deploy`` on the CLI and local MCP — the same
     loop the hosted profile already uses (spec 03 R2/R4): the agent hands
     the user a link into the standalone deploy flow instead of
-    enumerating accounts or POSTing ``/v1/live`` itself.
+    enumerating accounts or POSTing ``/v1/deployments`` itself.
 
     A minted deploy-intent deep link is used when available (prefilled
     with the server-computed sizing + a pollable token); otherwise the
@@ -632,6 +727,90 @@ def deploy_web_handoff(
             "review the sizing, and go live in the Keel web app; then run "
             "resume.verify_call to observe the running deployment (no "
             "browser return needed)."
+        ),
+    )
+
+
+def update_web_handoff(
+    *,
+    deployment_id: str,
+    intent: dict[str, Any],
+    ctx: ToolContext,
+    blocked_action: str = "live_update",
+) -> HandoffRequired:
+    """Updating a live deployment is a WEB handoff (deploy-wizard-v2 spec 04 §4).
+
+    The agent can mint and share the update link; it cannot apply the
+    update and cannot put configuration into the intent — the mint body is
+    ``{"deployment_id"}`` and NOTHING else (the server rejects any extra
+    field with a 422), and everything the review shows (version diff,
+    schedule change, carried execution blocks) is derived server-side
+    exactly as the in-app flow derives it.
+
+    Unlike the deploy builders, minting here is NOT best-effort: the link
+    IS the outcome, so ``keel_live_update`` propagates mint refusals
+    (non-live deployment, not found) with the server's own remediation
+    instead of masking them behind a generic URL. This builder therefore
+    requires a successful mint response (``handoff_url`` +
+    ``intent_token``). ``resume`` carries the pollable token, the link's
+    ``expires_at``, and the executable poll (`keel_live_update` with
+    ``intent_token`` — spec 03 R6 semantics, update endpoints).
+    """
+    action_url = intent.get("handoff_url")
+    intent_token = intent.get("intent_token")
+    if not action_url or not intent_token:
+        raise ValueError(
+            "update_web_handoff requires a mint response with handoff_url + intent_token"
+        )
+
+    resume: dict[str, Any] = {
+        "token": intent_token,
+        "verify_call": {
+            "tool": "keel_live_update",
+            "args": {"deployment_id": deployment_id, "intent_token": intent_token},
+            "reason": (
+                "Polls this update link's server-side status: returns "
+                "handoff_state.status == 'completed' with the applied "
+                "version once the human finishes at action_url (pending "
+                "while they work; an expired link explains how to mint a "
+                "fresh one)."
+            ),
+        },
+    }
+    if intent.get("expires_at"):
+        resume["expires_at"] = intent["expires_at"]
+
+    reason_text = (
+        "Updating a live deployment is completed by you in the Keel web "
+        "app — reviewing what changes (strategy version, any evaluation-"
+        "schedule change, carried execution configuration) and confirming "
+        "are human steps the agent does not perform in the terminal."
+    )
+    talking_points = [
+        (
+            "The link opens a review of exactly what this update changes — "
+            "the strategy version, any evaluation-schedule change, and the "
+            "execution configuration carried from the running deployment — "
+            "and nothing changes until you confirm there."
+        ),
+        (
+            "The update applies to the deployment's existing account at the "
+            "next evaluation; the agent cannot apply it and cannot put "
+            "configuration into the link."
+        ),
+        ("Doing nothing is also fine — the deployment keeps running exactly as it is."),
+    ]
+    return HandoffRequired(
+        reason_text,
+        blocked_action=blocked_action,
+        reason=reason_text,
+        action_url=action_url,
+        talking_points=talking_points,
+        resume=resume,
+        suggestion=(
+            "Send the user to action_url to review and confirm the update "
+            "in the Keel web app; then run resume.verify_call to observe "
+            "completion (no browser return needed)."
         ),
     )
 

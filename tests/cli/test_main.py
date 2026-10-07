@@ -50,11 +50,38 @@ def test_top_level_help_shows_global_options():
 
 
 def test_version():
+    """`keel --version` prints the version identity the CLI resolves.
+
+    keel.cli.main resolves it in two arms: the installed dist metadata
+    (`importlib.metadata.version("keel-trade")`) when the package is
+    pip-installed — CI's sdk-test lane installs it editable into a fresh
+    venv, so that arm is the one exercised there — and the
+    `keel.__version__` fallback when there is no dist (an unpacked .mcpb
+    tree, or a source checkout whose env never installed the package;
+    the root uv workspace does not include keel-sdk, so the local
+    `.venv` is exactly that case). The test resolves the SAME way rather
+    than asserting the metadata arm unconditionally, which raised
+    PackageNotFoundError before the CLI was ever invoked in a source
+    checkout. test_version.py pins `keel.__version__` to pyproject.toml,
+    so the fallback arm is held to the declared version too.
+    """
+    from importlib.metadata import PackageNotFoundError
     from importlib.metadata import version as _pkg_version
+
+    import keel
+
+    try:
+        expected = _pkg_version("keel-trade")
+        arm = "installed dist metadata"
+    except PackageNotFoundError:
+        expected = keel.__version__
+        arm = "keel.__version__ fallback (no keel-trade dist in this env)"
 
     result = runner.invoke(cli, ["--version"])
     assert result.exit_code == 0
-    assert _pkg_version("keel-trade") in result.output
+    assert expected in result.output, (
+        f"`keel --version` printed {result.output!r}; expected {expected} via {arm}"
+    )
 
 
 # ─── Outcome groups — each shows its outcome commands ────────────────────

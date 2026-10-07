@@ -1,6 +1,15 @@
 """Sync HTTP client for the Keel API.
 
 Handles authentication, retries with exponential backoff, and error translation.
+
+Retries are idempotency-aware (Q-2273 L1): keel-api takes no client
+idempotency key, so a write whose response was lost may already have been
+applied, and resending it creates a second strategy, backtest or share link.
+A GET/HEAD is retried on a 5xx, a timeout or a transport error; a write is
+retried ONLY when the connection failed before anything was sent
+(`httpx.ConnectError` / `ConnectTimeout` / `PoolTimeout`). A write that fails
+after sending raises with ``retryable=False`` and says it may have been
+applied (`errors.write_unconfirmed`).
 """
 
 from __future__ import annotations
@@ -12,14 +21,42 @@ from typing import Any
 import httpx
 
 from keel.config import KeelConfig, load_config
-from keel.errors import AuthError, KeelError, translate_http_error
+from keel.errors import (
+    AuthError,
+    KeelError,
+    rate_limited_error,
+    retry_after_seconds,
+    translate_http_error,
+    transport_error,
+    write_unconfirmed,
+)
 
 
 logger = logging.getLogger(__name__)
 
+#: The header naming the client package + version (Q-2500).
+CLIENT_HEADER = "X-Keel-Client"
+
+
+def client_header_value() -> str:
+    """``keel-trade/<version>`` — the value of :data:`CLIENT_HEADER`."""
+    from keel import __version__
+
+    return f"keel-trade/{__version__}"
+
+
 _DEFAULT_TIMEOUT = httpx.Timeout(connect=5.0, read=30.0, write=5.0, pool=5.0)
 _MAX_RETRIES = 3
 _BACKOFF_BASE = 1.0  # 1s, 2s, 4s
+#: Methods safe to resend after a lost response (RFC 9110 §9.2.2 —
+#: keel-api's PUT/DELETE are not relied on as idempotent here).
+_IDEMPOTENT_METHODS = frozenset({"GET", "HEAD"})
+#: Transport failures that happen BEFORE the request is sent — the one
+#: failure a write may be resent after.
+_NOT_SENT = (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout)
+#: The longest a 429's Retry-After is waited out INSIDE one call; a longer
+#: wait is returned to the caller as `retry_after_s` instead of blocking it.
+_RETRY_AFTER_CAP_S = 5.0
 
 
 class KeelClient:
@@ -43,6 +80,11 @@ class KeelClient:
         from keel.surface import current_surface
 
         headers["x-keel-surface"] = current_surface()
+        # Q-2500: the wheel names its own version. keel-api treats component
+        # pins from a wheel WITHOUT this header (≤ 0.7.0, whose bundled lock
+        # predates the server's catalogue) as advisory; with it, the pins are
+        # the caller's (Q-2270). Also attributes every write to a version.
+        headers[CLIENT_HEADER] = client_header_value()
         # Spec 09 CL-9: post-claim org context. OAuth tokens are org-bound
         # at mint (pre-claim), so after a claim the client targets the
         # claimed org explicitly via the API's existing X-Org-Id mechanism
@@ -51,6 +93,11 @@ class KeelClient:
         if self._config.active_org_id:
             headers["X-Org-Id"] = self._config.active_org_id
         return headers
+
+    @property
+    def has_credentials(self) -> bool:
+        """Whether this client already holds credentials (never mints)."""
+        return bool(self._config.api_key)
 
     def _require_auth(self) -> None:
         if not self._config.api_key:
@@ -172,65 +219,90 @@ class KeelClient:
         """
         self._maybe_refresh_proactively()
 
-        last_error: Exception | None = None
+        idempotent = method.upper() in _IDEMPOTENT_METHODS
         refresh_already_attempted = False
         for attempt in range(_MAX_RETRIES):
+            last = attempt == _MAX_RETRIES - 1
+            delay = _BACKOFF_BASE * (2**attempt)
             try:
                 response = self._client.request(method, path, **kwargs)
-                # Log rate limit info at verbose level
-                remaining = response.headers.get("X-RateLimit-Remaining")
-                if remaining is not None:
-                    logger.debug("Rate limit remaining: %s", remaining)
-                if (
-                    response.status_code == 401
-                    and not refresh_already_attempted
-                    and self._config.refresh_token
-                ):
-                    refresh_already_attempted = True
-                    try:
-                        if self._attempt_reactive_refresh():
-                            logger.debug("Refreshed access token after 401; retrying request.")
-                            continue
-                    except AuthError:
-                        # Refresh failed hard (lineage burn / invalid grant) —
-                        # OAuth fields cleared; fall through to normal 401.
-                        pass
-                if response.status_code == 429:
-                    # Rate limited — retry after backoff
-                    retry_after = float(
-                        response.headers.get("Retry-After", _BACKOFF_BASE * (2**attempt))
-                    )
-                    logger.warning("Rate limited, retrying after %.1fs", retry_after)
-                    time.sleep(retry_after)
+            except _NOT_SENT as e:
+                # Nothing reached the server: safe to resend on any method.
+                if not last:
+                    logger.warning("Connection failed, retrying in %.1fs", delay)
+                    time.sleep(delay)
                     continue
-                if response.status_code >= 500 and attempt < _MAX_RETRIES - 1:
-                    # Server error — retry with backoff
-                    delay = _BACKOFF_BASE * (2**attempt)
+                raise transport_error(e, sent=False) from e
+            except httpx.HTTPError as e:
+                # Sent (or possibly sent) and no response read: a write may
+                # have been applied, so only a read is resent.
+                if idempotent and not last:
+                    logger.warning(
+                        "Request failed (%s), retrying in %.1fs", type(e).__name__, delay
+                    )
+                    time.sleep(delay)
+                    continue
+                if idempotent:
+                    raise transport_error(e, sent=True) from e
+                raise write_unconfirmed(method, transport_error(e, sent=True)) from e
+            # Log rate limit info at verbose level
+            remaining = response.headers.get("X-RateLimit-Remaining")
+            if remaining is not None:
+                logger.debug("Rate limit remaining: %s", remaining)
+            if (
+                response.status_code == 401
+                and not refresh_already_attempted
+                and self._config.refresh_token
+            ):
+                refresh_already_attempted = True
+                try:
+                    if self._attempt_reactive_refresh():
+                        logger.debug("Refreshed access token after 401; retrying request.")
+                        continue
+                except AuthError:
+                    # Refresh failed hard (lineage burn / invalid grant) —
+                    # OAuth fields cleared; fall through to normal 401.
+                    pass
+            if response.status_code == 429:
+                # Rate limited (Q-2273 L2): wait what the server asks — either
+                # Retry-After form — but never past `_RETRY_AFTER_CAP_S` inside
+                # a call and never after the last attempt; otherwise hand the
+                # wait back to the caller in the `rate_limited` envelope. A 429
+                # is refused before it is processed, so a write may be resent.
+                wait = retry_after_seconds(response.headers.get("Retry-After"))
+                if last or (wait is not None and wait > _RETRY_AFTER_CAP_S):
+                    raise rate_limited_error(wait)
+                wait = delay if wait is None else wait
+                logger.warning("Rate limited, retrying after %.1fs", wait)
+                time.sleep(wait)
+                continue
+            if response.status_code >= 500:
+                if idempotent and not last:
                     logger.warning(
                         "Server error %d, retrying in %.1fs", response.status_code, delay
                     )
                     time.sleep(delay)
                     continue
-                if response.status_code >= 400:
-                    raise translate_http_error(response.status_code, response.text)
+                err = translate_http_error(response.status_code, response.text)
+                raise err if idempotent else write_unconfirmed(method, err)
+            if response.status_code >= 400:
+                raise translate_http_error(response.status_code, response.text)
+            try:
                 return response.json()
-            except KeelError:
-                raise
-            except httpx.TimeoutException as e:
-                last_error = e
-                if attempt < _MAX_RETRIES - 1:
-                    delay = _BACKOFF_BASE * (2**attempt)
-                    logger.warning("Request timeout, retrying in %.1fs", delay)
-                    time.sleep(delay)
-                    continue
-            except httpx.HTTPError as e:
-                last_error = e
-                if attempt < _MAX_RETRIES - 1:
-                    delay = _BACKOFF_BASE * (2**attempt)
-                    logger.warning("HTTP error: %s, retrying in %.1fs", e, delay)
-                    time.sleep(delay)
-                    continue
-        raise KeelError(f"Request failed after {_MAX_RETRIES} attempts: {last_error}")
+            except ValueError:
+                # A 2xx whose body is not JSON (a proxy page, a truncated
+                # body): the parser's "Expecting value: line 1 column 1" is
+                # not a message (Q-2273 L3). A write answered 2xx was most
+                # likely applied, so it is never presented as safe to resend.
+                err = KeelError(
+                    f"Keel answered (HTTP {response.status_code}) with a response "
+                    "that could not be read.",
+                    error_code="server_error",
+                    retryable=True,
+                    suggestion="Retry in a few seconds. If it keeps failing, Keel may be unavailable.",
+                )
+                raise err if idempotent else write_unconfirmed(method, err) from None
+        raise KeelError(f"Request failed after {_MAX_RETRIES} attempts.")
 
     def close(self) -> None:
         """Close the underlying httpx client."""

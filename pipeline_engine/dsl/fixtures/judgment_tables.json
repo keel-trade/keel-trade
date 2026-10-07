@@ -2,7 +2,9 @@
   "flow_config": {
     "extract-projection": "post",
     "scheme-synthesis": "post",
-    "composer-record-reach": "post"
+    "composer-record-reach": "post",
+    "soft-unproven-silence": "post",
+    "role-survival": "post"
   },
   "step_kinds": {
     "component": [
@@ -79,7 +81,8 @@
           "category": "category",
           "output": "output",
           "prev_output": "prev-output",
-          "expected_outputs": "expected-outputs"
+          "expected_outputs": "expected-outputs",
+          "suggestion": "transition-binary-bridge"
         }
       },
       {
@@ -305,7 +308,8 @@
           "location": "location",
           "component": "component",
           "param": "param",
-          "slot": "slot"
+          "slot": "slot",
+          "suggestion": "suggestion-template:slot-ref-fix"
         }
       },
       {
@@ -523,13 +527,45 @@
         "op": "project",
         "src": "frequency"
       },
+      "DollarVolumeLoader": {
+        "op": "synth",
+        "src": "timeframe",
+        "off": "bar_offset",
+        "grain": "5min"
+      },
       "FundingDataLoader": {
         "op": "synth",
-        "src": "interval"
+        "src": "timeframe",
+        "off": "bar_offset",
+        "grain": "1h",
+        "floor": "1h"
+      },
+      "OpenInterestLoader": {
+        "op": "synth",
+        "src": "timeframe",
+        "off": "bar_offset",
+        "grain": "1h",
+        "floor": "5min"
+      },
+      "PredictedFundingLoader": {
+        "op": "synth",
+        "src": "timeframe",
+        "off": "bar_offset",
+        "grain": "1h",
+        "floor": "5min"
+      },
+      "PremiumLoader": {
+        "op": "synth",
+        "src": "timeframe",
+        "off": "bar_offset",
+        "grain": "1h",
+        "floor": "5min"
       },
       "PriceDataLoader": {
         "op": "synth",
-        "src": "timeframe"
+        "src": "timeframe",
+        "off": "bar_offset",
+        "grain": "15min"
       },
       "RealizedVolatility": {
         "op": "coarsen",
@@ -549,6 +585,12 @@
         "op": "project",
         "src": "target_timeframe"
       },
+      "TakerFlowLoader": {
+        "op": "synth",
+        "src": "timeframe",
+        "off": "bar_offset",
+        "grain": "5min"
+      },
       "TargetSignalProjector": {
         "op": "project",
         "src": "target_timeframe"
@@ -567,6 +609,24 @@
         "op": "coarsen",
         "src": "target_timeframe",
         "off": "bar_offset"
+      },
+      "TwapVolumeLoader": {
+        "op": "synth",
+        "src": "timeframe",
+        "off": "bar_offset",
+        "grain": "5min"
+      },
+      "VWAPLoader": {
+        "op": "synth",
+        "src": "timeframe",
+        "off": "bar_offset",
+        "grain": "5min"
+      },
+      "WhalePrintLoader": {
+        "op": "synth",
+        "src": "timeframe",
+        "off": "bar_offset",
+        "grain": "5min"
       }
     },
     "rows": [
@@ -652,6 +712,42 @@
         "recovery": "none"
       },
       {
+        "id": "J-SYNTH.unbound",
+        "judgment": "J-SYNTH",
+        "on_fail": {
+          "code": "LOADER_TIMEFRAME_UNBOUND"
+        },
+        "staged_by": null,
+        "recovery": "none"
+      },
+      {
+        "id": "J-SYNTH.floor",
+        "judgment": "J-SYNTH",
+        "on_fail": {
+          "code": "LOADER_FINER_THAN_NATIVE"
+        },
+        "staged_by": null,
+        "recovery": "declared-target"
+      },
+      {
+        "id": "J-SYNTH.offset-same-tf",
+        "judgment": "J-SYNTH",
+        "on_fail": {
+          "code": "BAR_OFFSET_AT_SAME_TF"
+        },
+        "staged_by": "clock-transform-rebase",
+        "recovery": "declared-target"
+      },
+      {
+        "id": "J-SYNTH.offset-multiple",
+        "judgment": "J-SYNTH",
+        "on_fail": {
+          "code": "BAR_OFFSET_NOT_MULTIPLE"
+        },
+        "staged_by": "clock-transform-rebase",
+        "recovery": "declared-target"
+      },
+      {
         "id": "J-CLKUNIFORM.consumer",
         "judgment": "J-CLKUNIFORM",
         "on_fail": {
@@ -688,5 +784,605 @@
         "recovery": "none"
       }
     ]
+  },
+  "binding": {
+    "vocabulary": {
+      "roles": [
+        "head",
+        "reader",
+        "trade_op",
+        "action",
+        "realizer",
+        "position_sizer",
+        "factory"
+      ],
+      "role_sub_categories": {
+        "head": "trade_manager",
+        "reader": {
+          "trade": "trade_reader",
+          "flat": "between_trades_reader"
+        },
+        "trade_op": "trade_operator",
+        "action": "trade_action",
+        "realizer": "exposure",
+        "position_sizer": "risk_sizing",
+        "factory": "trade_factory"
+      },
+      "scopes": [
+        "trade",
+        "flat"
+      ],
+      "scales": [
+        "fraction",
+        "price",
+        "bars",
+        "count",
+        "units",
+        "other"
+      ],
+      "action_kinds": [
+        "exit",
+        "reduce",
+        "scale_in",
+        "allow_entry"
+      ],
+      "needs_upstream": [
+        "reduce",
+        "add",
+        "leg"
+      ],
+      "facet_kinds": [
+        "market",
+        "position",
+        "trade",
+        "flat",
+        "realized"
+      ],
+      "compare_ops": [
+        "gt",
+        "ge",
+        "lt",
+        "le"
+      ],
+      "warmup_ops": [
+        "param",
+        "floordiv",
+        "add",
+        "sub",
+        "coalesce",
+        "max"
+      ],
+      "narrowing_keys": [
+        "min",
+        "max",
+        "equals",
+        "in"
+      ],
+      "template_ops": [
+        "$arg",
+        "$neg",
+        "$bars_of",
+        "$scope"
+      ],
+      "template_step_kinds": [
+        "component",
+        "load",
+        "parallel",
+        "$when"
+      ]
+    },
+    "rule_categories": [
+      "signal_transform",
+      "signal_composer",
+      "indicator",
+      "data_transform",
+      "universe_filter",
+      "regime_detector"
+    ],
+    "position_base": "Position",
+    "realized_base": "SignalSeries",
+    "bottom_lineage": "\u22a5",
+    "live_lookback_days": 365,
+    "window_token_pattern": "^([1-9][0-9]*)(min|h|d|w)$",
+    "window_unit_minutes": {
+      "min": 1,
+      "h": 60,
+      "d": 1440,
+      "w": 10080
+    },
+    "runtime_codes": [
+      "POSITION_ACTION_NEEDS_MASK",
+      "POSITION_BRANCH_MIXED",
+      "POSITION_FEEDBACK",
+      "POSITION_LINEAGE_MISMATCH",
+      "POSITION_NEEDS_EXPOSURE",
+      "POSITION_NEEDS_READER",
+      "POSITION_REQUIRED",
+      "POSITION_STATE_NOT_UPSTREAM",
+      "SIZER_ERASES_SIZE",
+      "TRADE_OP_NOT_TRADE_SAFE",
+      "TRADE_SCOPE_MIX",
+      "TRADE_SERIES_LEAK"
+    ],
+    "rows": [
+      {
+        "id": "J-BIND.head-open",
+        "event": "head",
+        "on_fail": {
+          "code": "POSITION_NEEDS_EXPOSURE"
+        },
+        "recovery": "none"
+      },
+      {
+        "id": "J-BIND.head-slot",
+        "event": "head",
+        "on_fail": {
+          "code": "TRADE_SERIES_LEAK"
+        },
+        "recovery": "none"
+      },
+      {
+        "id": "J-BIND.scope-required",
+        "event": "position-step",
+        "on_fail": {
+          "code": "POSITION_REQUIRED"
+        },
+        "recovery": "trade-bottom"
+      },
+      {
+        "id": "J-BIND.reader-lineage",
+        "event": "reader",
+        "on_fail": {
+          "code": "POSITION_LINEAGE_MISMATCH"
+        },
+        "recovery": "declared"
+      },
+      {
+        "id": "J-BIND.reader-upstream",
+        "event": "reader",
+        "on_fail": {
+          "code": "POSITION_STATE_NOT_UPSTREAM"
+        },
+        "recovery": "declared"
+      },
+      {
+        "id": "J-BIND.reader-window",
+        "event": "reader",
+        "on_fail": {
+          "code": "READER_WINDOW_INVALID"
+        },
+        "recovery": "declared",
+        "static_only": true
+      },
+      {
+        "id": "J-BIND.reader-lookback",
+        "event": "reader",
+        "on_fail": {
+          "code": "WINDOW_EXCEEDS_LIVE_LOOKBACK"
+        },
+        "recovery": "declared",
+        "static_only": true
+      },
+      {
+        "id": "J-BIND.market-slot",
+        "event": "position-step",
+        "on_fail": {
+          "code": "TRADE_SERIES_LEAK"
+        },
+        "recovery": "declared"
+      },
+      {
+        "id": "J-BIND.trade-op-scope",
+        "event": "trade_op",
+        "on_fail": {
+          "code": "TRADE_SCOPE_MIX"
+        },
+        "recovery": "declared"
+      },
+      {
+        "id": "J-BIND.trade-op-lineage",
+        "event": "trade_op",
+        "on_fail": {
+          "code": "POSITION_LINEAGE_MISMATCH"
+        },
+        "recovery": "declared"
+      },
+      {
+        "id": "J-BIND.action-mask",
+        "event": "action",
+        "on_fail": {
+          "code": "POSITION_ACTION_NEEDS_MASK"
+        },
+        "recovery": "position"
+      },
+      {
+        "id": "J-BIND.action-lineage",
+        "event": "action",
+        "on_fail": {
+          "code": "POSITION_LINEAGE_MISMATCH"
+        },
+        "recovery": "position"
+      },
+      {
+        "id": "J-BIND.action-feedback",
+        "event": "action",
+        "on_fail": {
+          "code": "POSITION_FEEDBACK"
+        },
+        "recovery": "position"
+      },
+      {
+        "id": "J-BIND.action-scope",
+        "event": "action",
+        "on_fail": {
+          "code": "TRADE_SCOPE_MIX"
+        },
+        "recovery": "position"
+      },
+      {
+        "id": "J-BIND.ordinary-position",
+        "event": "ordinary",
+        "on_fail": {
+          "code": "POSITION_NEEDS_READER"
+        },
+        "recovery": "trade-bottom"
+      },
+      {
+        "id": "J-BIND.ordinary-unrealized",
+        "event": "ordinary",
+        "on_fail": {
+          "code": "POSITION_NEEDS_EXPOSURE"
+        },
+        "recovery": "realized"
+      },
+      {
+        "id": "J-BIND.join-scope",
+        "event": "ordinary",
+        "on_fail": {
+          "code": "TRADE_SCOPE_MIX"
+        },
+        "recovery": "first-bound"
+      },
+      {
+        "id": "J-BIND.join-lineage",
+        "event": "ordinary",
+        "on_fail": {
+          "code": "POSITION_LINEAGE_MISMATCH"
+        },
+        "recovery": "first-bound"
+      },
+      {
+        "id": "J-BIND.trade-safe",
+        "event": "ordinary",
+        "on_fail": {
+          "code": "TRADE_OP_NOT_TRADE_SAFE"
+        },
+        "recovery": "first-bound"
+      },
+      {
+        "id": "J-BIND.sizer-erases",
+        "event": "ordinary",
+        "on_fail": {
+          "code": "SIZER_ERASES_SIZE"
+        },
+        "recovery": "none"
+      },
+      {
+        "id": "J-BIND.threshold-scale",
+        "event": "ordinary",
+        "on_fail": {
+          "code": "RETURN_THRESHOLD_SCALE"
+        },
+        "recovery": "none",
+        "static_only": true
+      },
+      {
+        "id": "J-BIND.market-expanding",
+        "event": "ordinary",
+        "on_fail": {
+          "code": "MARKET_EXPANDING_IN_POSITION"
+        },
+        "recovery": "none",
+        "static_only": true
+      },
+      {
+        "id": "J-BIND.store-position",
+        "event": "store",
+        "on_fail": {
+          "code": "POSITION_NEEDS_READER"
+        },
+        "recovery": "none"
+      },
+      {
+        "id": "J-BIND.load-outside",
+        "event": "load",
+        "on_fail": {
+          "code": "TRADE_SERIES_LEAK"
+        },
+        "recovery": "none"
+      },
+      {
+        "id": "J-BIND.load-lineage",
+        "event": "load",
+        "on_fail": {
+          "code": "POSITION_LINEAGE_MISMATCH"
+        },
+        "recovery": "none"
+      },
+      {
+        "id": "J-BIND.branch-open",
+        "event": "branch",
+        "on_fail": {
+          "code": "POSITION_NEEDS_EXPOSURE"
+        },
+        "recovery": "none"
+      },
+      {
+        "id": "J-BIND.branch-mixed",
+        "event": "merge",
+        "on_fail": {
+          "code": "POSITION_BRANCH_MIXED"
+        },
+        "recovery": "position"
+      },
+      {
+        "id": "J-BIND.terminal-open",
+        "event": "terminal",
+        "on_fail": {
+          "code": "POSITION_NEEDS_EXPOSURE"
+        },
+        "recovery": "none"
+      },
+      {
+        "id": "J-BIND.terminal-leak",
+        "event": "terminal",
+        "on_fail": {
+          "code": "TRADE_SERIES_LEAK"
+        },
+        "recovery": "none"
+      },
+      {
+        "id": "J-PLAN.reentry",
+        "event": "close",
+        "on_fail": {
+          "code": "REENTRY_ANY_BAR_NO_GATE"
+        },
+        "recovery": "none",
+        "static_only": true
+      },
+      {
+        "id": "J-PLAN.warmup",
+        "event": "close",
+        "on_fail": {
+          "code": "TRADE_RULE_WARMUP"
+        },
+        "recovery": "none",
+        "static_only": true
+      },
+      {
+        "id": "J-PLAN.max-units",
+        "event": "close",
+        "on_fail": {
+          "code": "MAX_UNITS_STATED"
+        },
+        "recovery": "none",
+        "static_only": true
+      },
+      {
+        "id": "J-PLAN.scale-in-room",
+        "event": "close",
+        "on_fail": {
+          "code": "SCALE_IN_NO_ROOM"
+        },
+        "recovery": "none",
+        "static_only": true
+      }
+    ],
+    "shapes": {
+      "MARKET_EXPANDING_IN_POSITION": {
+        "default": {
+          "detail": "'{component}' on a market value counts from the start of the data, not from the entry.",
+          "fix": "Use SinceEntry() for 'since entry'."
+        }
+      },
+      "MAX_UNITS_STATED": {
+        "default": {
+          "detail": "The TradeManager at {origin} can hold up to {units} units per trade: exposure up to {units}x the sizer's weight per position.",
+          "fix": "Set TradeManager(max_units=...) to cap it, or keep it if the size is intended."
+        }
+      },
+      "POSITION_ACTION_NEEDS_MASK": {
+        "directional": {
+          "detail": "'{producer}' gives -1/+1 (a direction); '{action}' fires on 1 only, so shorts would never act.",
+          "fix": "Use AboveThresholdFilter(threshold=0) for longs, or multiply by TradeDirection() and test < 0 for a directional rule."
+        },
+        "not_mask": {
+          "detail": "'{producer}' gives values outside 0 and 1; '{action}' fires only where its mask is exactly 1.",
+          "fix": "Compare the value with a filter (for example AboveThresholdFilter(...)) before '{action}'."
+        },
+        "not_series": {
+          "detail": "'{action}' needs a trade mask, but it received {received}.",
+          "fix": "Start the rule with a reader, then a filter, then '{action}'."
+        }
+      },
+      "POSITION_BRANCH_MIXED": {
+        "between_trades": {
+          "detail": "Branch '{branch}' does not end in an action, while the other branches of this rule stage do.",
+          "fix": "End branch '{branch}' with AllowEntry(): it reads between trades."
+        },
+        "default": {
+          "detail": "Branch '{branch}' does not end in an action, while the other branches of this rule stage do.",
+          "fix": "End branch '{branch}' with Exit(), Reduce() or ScaleIn()."
+        }
+      },
+      "POSITION_FEEDBACK": {
+        "default": {
+          "detail": "'{component}' acts on the realised exposure of its own TradeManager (at {origin}).",
+          "fix": "A rule cannot read the exposure it decides; read the trade with a reader (TradeReturn(), UnitsHeld(), ...) instead."
+        }
+      },
+      "POSITION_LINEAGE_MISMATCH": {
+        "default": {
+          "detail": "'{component}' mixes values of two TradeManagers: the one at {origin_a} and the one at {origin_b}.",
+          "fix": "Keep each TradeManager's rules between it and its own Exposure(); compute shared values on the market before the TradeManager."
+        }
+      },
+      "POSITION_NEEDS_EXPOSURE": {
+        "branch": {
+          "detail": "Branch '{branch}' starts the TradeManager at {origin} and ends without turning its Position into exposure.",
+          "fix": "End branch '{branch}' with Exposure()."
+        },
+        "consumer": {
+          "detail": "'{component}' received the Position from the TradeManager at {origin}, which is never turned into exposure.",
+          "fix": "End the rules with Exposure() (then the sizer), or size the Position with RiskSizer(...)."
+        },
+        "new_head": {
+          "detail": "A second TradeManager starts while the Position from the TradeManager at {origin} is still open.",
+          "fix": "End the first TradeManager's rules with Exposure() before starting another."
+        },
+        "terminal": {
+          "detail": "The Position from the TradeManager at {origin} is never turned into exposure.",
+          "fix": "End it with Exposure() (then a sizer), or size it with RiskSizer(...)."
+        }
+      },
+      "POSITION_NEEDS_READER": {
+        "default": {
+          "detail": "'{component}' received the Position itself.",
+          "fix": "Start the rule with a reader (TradeReturn(), BarsHeld(), ...) or with Load('<slot>')."
+        },
+        "store": {
+          "detail": "Store('{slot}') received the Position itself.",
+          "fix": "Store a reader's value (for example TradeReturn()), not the Position."
+        }
+      },
+      "POSITION_REQUIRED": {
+        "after_close": {
+          "detail": "'{component}' reads a trade, but the TradeManager's Position was already turned into exposure by '{closed_by}'.",
+          "fix": "Put '{component}' after the TradeManager's rules, not after '{closed_by}'."
+        },
+        "default": {
+          "detail": "'{component}' reads a trade, so it needs a Position, and no TradeManager is open here.",
+          "fix": "Put '{component}' between TradeManager(...) and Exposure()."
+        }
+      },
+      "POSITION_STATE_NOT_UPSTREAM": {
+        "add": {
+          "detail": "'{component}' reads what was added, but no earlier stage of this Position has a ScaleIn() rule.",
+          "fix": "Put '{component}' in a later stage, below the Parallel that holds the ScaleIn() rule."
+        },
+        "leg": {
+          "detail": "'{component}' names rule '{leg}', which no earlier stage of this Position has.",
+          "fix": "Name a rule of an earlier stage, or move '{component}' below it."
+        },
+        "reduce": {
+          "detail": "'{component}' reads what was sold, but no earlier stage of this Position has a Reduce() rule.",
+          "fix": "Put '{component}' in a later stage, below the Parallel that holds the Reduce() rule."
+        }
+      },
+      "READER_WINDOW_INVALID": {
+        "calendar": {
+          "detail": "'{component}' window '{window}' cannot use anchor='calendar'; calendar windows are {allowed}.",
+          "fix": "Use anchor='rolling' for a '{window}' window, or a calendar window ({allowed})."
+        },
+        "multiple": {
+          "detail": "'{component}' window '{window}' is not a whole number of {clock} bars.",
+          "fix": "Use a window that is a whole multiple of the strategy's {clock} timeframe."
+        },
+        "no_clock": {
+          "detail": "'{component}' window '{window}' needs the strategy's timeframe, and no Globals(target_timeframe=...) is declared.",
+          "fix": "Declare Globals(target_timeframe=...) above the Pipeline."
+        },
+        "token": {
+          "detail": "'{component}' window {window} is not a timeframe token.",
+          "fix": "Write the window as a count and a unit: '30min', '4h', '1d' or '1w'."
+        }
+      },
+      "REENTRY_ANY_BAR_NO_GATE": {
+        "default": {
+          "detail": "The TradeManager at {origin} has reentry='any_bar' and no AllowEntry() rule, so it re-enters on any bar its entry signal is on.",
+          "fix": "Add an AllowEntry() rule (for example Cooldown(bars=...)), or drop reentry='any_bar' to wait for the entry signal to reset."
+        }
+      },
+      "RETURN_THRESHOLD_SCALE": {
+        "default": {
+          "detail": "'{component}' compares a fraction ({reader}: 0.05 is 5%) with {param}={value}, which is {percent}%.",
+          "fix": "For {value}% write {param}={fraction}."
+        }
+      },
+      "SCALE_IN_NO_ROOM": {
+        "default": {
+          "detail": "ScaleIn rule '{rule}' can never add: the TradeManager at {origin} caps a trade at max_units={max_units}.",
+          "fix": "Raise max_units to at least {needed}, or remove it (the default allows every add)."
+        }
+      },
+      "SIZER_ERASES_SIZE": {
+        "default": {
+          "detail": "'{component}' v{version} sizes by sign, so the partial rule '{rule}' would do nothing.",
+          "fix": "Use a sizer that keeps size (FixedWeightSizer), or size the Position with RiskSizer(...)."
+        },
+        "upgrade": {
+          "detail": "'{component}' v{version} sizes by sign, so the partial rule '{rule}' would do nothing.",
+          "fix": "Use '{component}' v{newer}, which keeps partial and added units."
+        }
+      },
+      "TRADE_OP_NOT_TRADE_SAFE": {
+        "domain": {
+          "detail": "'{component}' v{version} is certified on trade values only with {narrowing}.",
+          "fix": "Set {narrowing}, or compute it on the market before the TradeManager and Load it."
+        },
+        "uncertified": {
+          "detail": "'{component}' v{version} is not certified to run on trade values.",
+          "fix": "Compute it on the market before the TradeManager, then read it in the rule with Load('<slot>')."
+        },
+        "upgrade": {
+          "detail": "'{component}' v{version} is not certified to run on trade values; v{newer} is.",
+          "fix": "Upgrade the pin of '{component}' to v{newer}."
+        }
+      },
+      "TRADE_RULE_WARMUP": {
+        "default": {
+          "detail": "Rule '{rule}' cannot fire: its window needs {warmup} bars after entry, and rule '{hold_rule}' closes every trade by bar {hold}.",
+          "fix": "Shorten the window of rule '{rule}', or lengthen rule '{hold_rule}'."
+        }
+      },
+      "TRADE_SCOPE_MIX": {
+        "allow_entry": {
+          "detail": "'{component}' gates new entries between trades, but its mask reads an open trade.",
+          "fix": "Use a between-trade reader (BarsSinceExit(), LastTradeReturn(), ...) under AllowEntry(), or Exit()/Reduce() for a trade rule."
+        },
+        "join": {
+          "detail": "'{component}' combines a trade value with a between-trade value of the TradeManager at {origin}.",
+          "fix": "Use trade values (TradeReturn(), BarsHeld(), ...) for Exit/Reduce/ScaleIn rules and between-trade values (BarsSinceExit(), ...) for AllowEntry() rules, never both in one rule."
+        },
+        "trade_action": {
+          "detail": "'{component}' acts during a trade, but its mask reads between trades.",
+          "fix": "Use AllowEntry() for a between-trade rule, or read a trade value (TradeReturn(), BarsHeld(), ...)."
+        },
+        "trade_op": {
+          "detail": "'{component}' aggregates over an open trade, but its input reads between trades.",
+          "fix": "Feed '{component}' a trade value or a market value."
+        }
+      },
+      "TRADE_SERIES_LEAK": {
+        "load": {
+          "detail": "Load('{slot}') reads a trade value of the TradeManager at {origin} outside that TradeManager's rules.",
+          "fix": "Load trade values only inside their own TradeManager's rules, before Exposure()."
+        },
+        "slot": {
+          "detail": "'{component}' reads '{param}' as a market value, but it holds a trade value of the TradeManager at {origin}.",
+          "fix": "Feed '{param}' a market value computed before the TradeManager; trade values stay inside their TradeManager's rules."
+        },
+        "terminal": {
+          "detail": "The pipeline ends with a trade value of the TradeManager at {origin}.",
+          "fix": "End the rule with an action (Exit(), Reduce(), ScaleIn() or AllowEntry()), then Exposure() and a sizer."
+        }
+      },
+      "WINDOW_EXCEEDS_LIVE_LOOKBACK": {
+        "default": {
+          "detail": "'{component}' window '{window}' is at or above the live look-back ({lookback_days} days); live cannot see that history.",
+          "fix": "Use a window under {lookback_days} days."
+        }
+      }
+    }
   }
 }

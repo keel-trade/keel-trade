@@ -11,15 +11,13 @@ interchangeable with `WeightSeries` even though both are DataFrames at runtime.
 Pipeline entry point. Data loaders accept `None` as input (they ignore
 incoming current and fetch fresh data).
 
-```python
-# Data loaders have input type None
-class PriceDataLoader(DataLoader[OHLCVDict]):
-    def run(self, current: None, ctx, **kw) -> tuple[OHLCVDict, Context]: ...
+```text
+PriceDataLoader: None -> OHLCVDict        # a loader starts a pipeline or a branch
 ```
 
 ### OHLCVDict
 
-```python
+```text
 OHLCVDict = NewType("OHLCVDict", dict)
 ```
 
@@ -31,7 +29,7 @@ DATA_TRANSFORM and UNIVERSE_FILTER phases.
 
 ### StreamSeries
 
-```python
+```text
 StreamSeries = NewType("StreamSeries", SignalSeries)
 ```
 
@@ -41,7 +39,7 @@ accept `SignalSeries` input.
 
 ### SignalSeries
 
-```python
+```text
 SignalSeries = NewType("SignalSeries", pd.DataFrame)
 ```
 
@@ -50,7 +48,7 @@ index is datetime. This is the workhorse type for the SIGNAL phase group.
 
 ### ForecastSeries
 
-```python
+```text
 ForecastSeries = Annotated[SignalSeries, Bounds(-20, 20)]
 ```
 
@@ -60,7 +58,7 @@ with `Bounds` constraint. Transparent subtype of `SignalSeries` --
 
 ### WeightSeries
 
-```python
+```text
 WeightSeries = NewType("WeightSeries", pd.DataFrame)
 ```
 
@@ -69,7 +67,7 @@ Typically sum to 1.0 or a target leverage value.
 
 ### OrderSeries
 
-```python
+```text
 OrderSeries = NewType("OrderSeries", pd.DataFrame)
 ```
 
@@ -91,7 +89,7 @@ value constraints.
 
 ### NormalizedSignal
 
-```python
+```text
 NormalizedSignal = Annotated[SignalSeries, Bounds(-1, 1)]
 ```
 
@@ -100,16 +98,26 @@ steps like `CrossSectionalZScore`.
 
 ### BinarySignal
 
-```python
+```text
 BinarySignal = Annotated[SignalSeries, DiscreteValues(frozenset({-1.0, 0.0, 1.0}))]
 ```
 
 Signal with only -1, 0, +1 values (short/flat/long). Output of threshold
 transforms.
 
+### Position
+
+A `TradeManager`'s trades: when each one opened, what it holds, and what its
+rules did. It flows only below `TradeManager`. A reader (`TradeReturn()`,
+`BarsHeld()`, `AtEntry(slot=...)`, ...) turns it into an ordinary series, so
+filters, combiners and ratios work on that series unchanged. Only actions
+(`Exit()`, `Reduce()`, `ScaleIn()`, `AllowEntry()`) and declared consumers
+(`Exposure()`, `RiskSizer`) take a Position. A continuous path never carries
+one.
+
 ### RankSignal
 
-```python
+```text
 RankSignal = Annotated[SignalSeries, Bounds(0, 1)]
 ```
 
@@ -117,7 +125,7 @@ Cross-sectional rank normalized to [0, 1]. Output of ranking transforms.
 
 ### RegimeLabel
 
-```python
+```text
 RegimeLabel = SignalSeries
 ```
 
@@ -127,7 +135,7 @@ declared category, not by type.
 
 ### Other Aliases
 
-```python
+```text
 RawSignal = SignalSeries        # Unprocessed indicator output
 Forecast = ForecastSeries       # Alias for ForecastSeries
 CappedForecast = ForecastSeries # Standard forecast range [-20, 20]
@@ -140,7 +148,7 @@ TargetWeights = WeightSeries    # Target portfolio weights
 
 These distinguish per-instrument data from market-wide data:
 
-```python
+```text
 InstrumentFrame = NewType("InstrumentFrame", pd.DataFrame)
 # Shape: (T x N) -- N instruments, T timestamps
 
@@ -154,7 +162,7 @@ GlobalSeries = NewType("GlobalSeries", pd.Series)
 
 Types use PEP 593 `Annotated` with constraint metadata:
 
-```python
+```text
 from pipeline_engine.types import Bounds, DiscreteValues, Ge, Le
 
 # Bounds: min/max range
@@ -170,7 +178,7 @@ Le(1.0)   # Less than or equal
 
 Accessing constraints at runtime:
 
-```python
+```text
 from typing import get_args, get_origin, Annotated
 
 if get_origin(type_hint) is Annotated:
@@ -190,13 +198,13 @@ on top of structural `is_compatible()` type checking.
 
 ### Entry
 
-```
+```text
 None -> DATA_LOADER -> [OHLCVDict, StreamSeries]
 ```
 
 ### From OHLCVDict
 
-```
+```text
 OHLCVDict -> DATA_TRANSFORM   -> [OHLCVDict]
 OHLCVDict -> UNIVERSE_FILTER  -> [SignalSeries, OHLCVDict]
 OHLCVDict -> INDICATOR        -> [SignalSeries]
@@ -205,16 +213,16 @@ OHLCVDict -> POSITION_SIZER   -> [WeightSeries, SignalSeries]
 
 ### From StreamSeries
 
-```
+```text
 StreamSeries -> DATA_TRANSFORM    -> [StreamSeries, SignalSeries]
-StreamSeries -> SIGNAL_TRANSFORM  -> [SignalSeries, NormalizedSignal, StreamSeries]
+StreamSeries -> SIGNAL_TRANSFORM  -> [SignalSeries, NormalizedSignal, StreamSeries, BinarySignal, RankSignal]
 StreamSeries -> REGIME_DETECTOR   -> [SignalSeries]
 StreamSeries -> INDICATOR         -> [SignalSeries]
 ```
 
 ### From SignalSeries
 
-```
+```text
 SignalSeries -> DATA_TRANSFORM    -> [SignalSeries]
 SignalSeries -> SIGNAL_TRANSFORM  -> [NormalizedSignal, BinarySignal, RankSignal, SignalSeries]
 SignalSeries -> REGIME_DETECTOR   -> [SignalSeries]
@@ -226,14 +234,14 @@ SignalSeries -> REPORTER          -> [SignalSeries]
 
 ### From NormalizedSignal
 
-```
+```text
 NormalizedSignal -> SIGNAL_TRANSFORM -> [NormalizedSignal, BinarySignal, RankSignal]
 NormalizedSignal -> FORECAST_MAPPER  -> [ForecastSeries]
 ```
 
 ### From BinarySignal
 
-```
+```text
 BinarySignal -> SIGNAL_TRANSFORM -> [BinarySignal]
 BinarySignal -> FORECAST_MAPPER  -> [ForecastSeries]
 BinarySignal -> POSITION_SIZER   -> [WeightSeries]
@@ -241,14 +249,14 @@ BinarySignal -> POSITION_SIZER   -> [WeightSeries]
 
 ### From RankSignal
 
-```
+```text
 RankSignal -> SIGNAL_TRANSFORM -> [NormalizedSignal, RankSignal]
 RankSignal -> FORECAST_MAPPER  -> [ForecastSeries]
 ```
 
 ### From dict (after Parallel)
 
-```
+```text
 dict -> SIGNAL_COMPOSER   -> [SignalSeries]
 dict -> FORECAST_COMPOSER -> [ForecastSeries]
 dict -> POSITION_SIZER    -> [WeightSeries]
@@ -256,7 +264,7 @@ dict -> POSITION_SIZER    -> [WeightSeries]
 
 ### From ForecastSeries
 
-```
+```text
 ForecastSeries -> SIGNAL_TRANSFORM  -> [ForecastSeries, SignalSeries]
 ForecastSeries -> FORECAST_COMPOSER -> [ForecastSeries]
 ForecastSeries -> FORECAST_MAPPER   -> [ForecastSeries]
@@ -266,16 +274,23 @@ ForecastSeries -> REPORTER          -> [ForecastSeries]
 
 ### From WeightSeries
 
-```
+```text
 WeightSeries -> POSITION_SIZER   -> [WeightSeries]
 WeightSeries -> RISK_MANAGER     -> [WeightSeries]
 WeightSeries -> POSITION_MANAGER -> [WeightSeries]
 WeightSeries -> EXECUTOR         -> [OrderSeries]
 ```
 
+### From Position
+
+```text
+Position -> POSITION_MANAGER -> [Position, SignalSeries, BinarySignal]
+Position -> POSITION_SIZER   -> [WeightSeries]
+```
+
 ### From OrderSeries
 
-```
+```text
 OrderSeries -> REPORTER -> [OrderSeries]
 ```
 

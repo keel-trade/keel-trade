@@ -10,16 +10,16 @@ The simplest pattern. Steps execute in order, each receiving the output of
 the previous step as its `current` input.
 
 ```python
-from pipeline_engine.pipeline.execution import Pipeline
+Globals(target_timeframe="1d")
+Universe(mode="manual", symbols=["BTC", "ETH", "SOL"])
+Execution(rebalance="every_bar")
 
 Pipeline([
-    PriceDataLoader(timeframe="15min"),
-    TimeframeResampler(target_timeframe="1d"),
-    VolumeUniverseReducer(top_n=50),
-    Store(OHLCV_1D),
+    PriceDataLoader(),          # serves the Globals clock — no resampler step
     EWMA(window=8),
     ForecastScaler(avg_abs_target=10.0),
     ForecastCapper(limit=20.0),
+    ForecastWeightNormalizer(target_leverage=1.0),
 ], name="simple_strategy")
 ```
 
@@ -30,44 +30,39 @@ Pipeline([
 Split the pipeline into named branches that execute independently, then
 rejoin via a Composer step.
 
-### Dict Syntax (Preferred)
+### Parallel branches — a dict step
 
 ```python
+Globals(target_timeframe="1d")
+Universe(mode="manual", symbols=["BTC", "ETH", "SOL"])
+Execution(rebalance="every_bar")
+
 Pipeline([
-    Store(OHLCV_1D),
+    PriceDataLoader(),
+    Store("ohlcv_1d"),
     {
         "momentum": [
-            Load(OHLCV_1D),
+            Load("ohlcv_1d"),
             EWMA(window=8),
             ForecastScaler(),
         ],
         "carry": [
             FundingDataLoader(),
-            TargetSignalResampler(method="mean"),
+            NegateTransform(),
             ForecastScaler(),
         ],
     },
     ForecastCombiner(weights={"momentum": 0.6, "carry": 0.4}),
-])
+    ForecastWeightNormalizer(target_leverage=1.0),
+], name="momentum_carry")
 ```
 
-Dicts in the step list are auto-wrapped as `Parallel` by
-`Pipeline._normalize_steps()`.
-
-### Explicit Parallel Class
-
-```python
-from pipeline_engine.pipeline.execution import Parallel
-
-Pipeline([
-    Store(OHLCV_1D),
-    Parallel(
-        momentum=[Load(OHLCV_1D), EWMA(window=8), ForecastScaler()],
-        carry=[FundingDataLoader(), EWMATransform(window=24), ForecastScaler()],
-    ),
-    ForecastCombiner(weights={"momentum": 0.6, "carry": 0.4}),
-])
-```
+In the DSL a Parallel is not a call: it is a dict literal in the step list —
+each key names a branch, each value is that branch's step list. Branches
+receive the same input, run in isolation, and the dict they produce is
+consumed by the next step. The Python pipeline API also has a `Parallel`
+class that takes branches as keyword arguments; that form is the Python
+API's, and the DSL parser rejects it (`PARALLEL_BRANCH_SHAPE`).
 
 ### Parallel Behavior
 
@@ -83,7 +78,7 @@ Pipeline([
 
 After a Parallel, `current` is a `dict`. Three ways to consume it:
 
-```python
+```python fragment
 # 1. Composer -- reduce dict to single value
 ForecastCombiner(weights={"a": 0.5, "b": 0.5})  # dict -> ForecastSeries
 
@@ -91,21 +86,35 @@ ForecastCombiner(weights={"a": 0.5, "b": 0.5})  # dict -> ForecastSeries
 Extract("momentum")  # dict -> whatever that branch produced
 
 # 3. Load -- ignore the dict, load from a slot instead
-Load(SOME_SLOT)      # dict is discarded, slot value becomes current
+Load("some_slot")    # dict is discarded, slot value becomes current
 ```
 
 ---
 
-## Factories (Parameterized Sub-Pipelines)
+## Factories and Variable Pipelines
 
-Define reusable pipeline templates as functions. Call with different
-arguments to create multiple instances.
+A **factory** is a function whose body is one `return Pipeline([...])`; call
+it with keyword arguments to create one instance per parameter set. A
+**variable** holds a Pipeline for reuse — it is embedded directly in each
+step list that names it and runs as a nested Pipeline, inheriting the
+parent's Context. Variables and factories are defined above the main
+`Pipeline(...)`, and a factory may use a variable defined before it.
 
 ```python
+Globals(target_timeframe="1d")
+Universe(mode="manual", symbols=["BTC", "ETH", "SOL", "AVAX", "LINK"])
+Execution(rebalance="every_bar")
+
+# Shared post-processing
+xs_post = Pipeline([
+    CrossSectionalZScore(),
+    ForecastScaler(avg_abs_target=10.0, pool="global", method="mean"),
+    ForecastCapper(limit=20.0),
+], name="XSPostProcess")
+
 def ewmac_signal(fast, slow):
-    """EWMA crossover signal with configurable windows."""
     return Pipeline([
-        Load(OHLCV_1D),
+        Load("ohlcv_1d"),
         {
             "fast": [EWMA(window=fast, min_periods=fast)],
             "slow": [EWMA(window=slow, min_periods=slow)],
@@ -115,132 +124,53 @@ def ewmac_signal(fast, slow):
         xs_post,
     ])
 
-def roc_signal(period, smooth=7):
-    """Rate of change signal with smoothing."""
+def roc_signal(period):
     return Pipeline([
-        Load(OHLCV_1D),
+        Load("ohlcv_1d"),
         ROC(period=period),
-        EWMATransform(window=smooth),
         VolatilityStandardizer(signal_type="percentage", ohlcv_slot="ohlcv_1d"),
         xs_post,
     ])
-```
 
-Use in the main pipeline:
-
-```python
 Pipeline([
-    # ... data loading ...
+    PriceDataLoader(),
+    Store("ohlcv_1d"),
     {
-        "ewmac_8_32":   ewmac_signal(fast=8, slow=32),
-        "ewmac_16_64":  ewmac_signal(fast=16, slow=64),
-        "roc_10":       roc_signal(period=10),
-        "roc_20":       roc_signal(period=20, smooth=14),
+        "ewmac_8_32":  ewmac_signal(fast=8, slow=32),
+        "ewmac_16_64": ewmac_signal(fast=16, slow=64),
+        "roc_20":      roc_signal(period=20),
     },
-    ForecastCombiner(weights={...}),
-])
+    ForecastCombiner(weights={"ewmac_8_32": 0.35, "ewmac_16_64": 0.35, "roc_20": 0.3}),
+    ForecastWeightNormalizer(target_leverage=1.0),
+], name="signal_family")
 ```
 
-Each factory call returns a new Pipeline instance with its own steps.
-Factory functions are the primary mechanism for creating signal families --
-same structure, different parameters.
-
-Note: when a Pipeline is used as a branch in a Parallel, it is kept as-is
-(not flattened). It executes as a nested pipeline with its own step loop.
-
----
-
-## Variable Pipelines (Shared Sub-Pipelines)
-
-Assign a pipeline to a variable for reuse across multiple branches.
-
-```python
-# Define shared post-processing steps
-xs_post = Pipeline([
-    CrossSectionalZScore(),
-    ForecastScaler(avg_abs_target=10.0, pool="global", method="mean"),
-    ForecastCapper(limit=20.0),
-], name="XSPostProcess")
-
-# Use in multiple signal factories
-def ewmac_signal(fast, slow):
-    return Pipeline([
-        Load(OHLCV_1D),
-        EWMA(window=fast),
-        xs_post,       # Shared post-processing
-    ])
-
-def roc_signal(period):
-    return Pipeline([
-        Load(OHLCV_1D),
-        ROC(period=period),
-        xs_post,       # Same post-processing
-    ])
-```
-
-The variable pipeline is embedded directly in each containing pipeline's
-step list. It executes as a nested Pipeline, inheriting the parent's
-Context and mode.
+Each factory call returns a new Pipeline instance with its own steps —
+factories are the primary mechanism for signal families: same structure,
+different parameters. When a Pipeline is a branch of a Parallel it is kept
+as-is (not flattened) and executes as a nested pipeline with its own step
+loop.
 
 ---
 
 ## Nesting
 
-Pipelines can contain Pipelines, and Parallels can contain Pipelines.
-This enables hierarchical strategy structures.
+Pipelines can contain Pipelines, and Parallels can contain Pipelines. This
+enables hierarchical strategy structures — a branch whose value is a
+Pipeline can itself hold a Parallel and its composer:
 
-### Nested Pipeline in Steps
-
-```python
-signal_pipeline = Pipeline([
-    Load(OHLCV_1D),
-    EWMA(window=8),
-    ForecastScaler(),
-], name="signal")
-
-position_pipeline = Pipeline([
-    VolTargetWeightConverter(return_vol_slot="return_vol", pct_target=0.25),
-], name="position")
-
-Pipeline([
-    PriceDataLoader(),
-    Store(OHLCV_1D),
-    signal_pipeline,     # Nested: inherits parent context
-    position_pipeline,   # Nested: sees slots from signal_pipeline
-], name="main")
-```
-
-### Hierarchical Parallel Nesting
-
-Parallel branches can contain further Parallel structures:
-
-```python
-Pipeline([
-    Store(OHLCV_1D),
-    {
-        "trend": Pipeline([
-            {
-                "ewmac_bucket": Pipeline([
-                    {
-                        "ewmac_8_32":  ewmac_signal(8, 32),
-                        "ewmac_16_64": ewmac_signal(16, 64),
-                    },
-                    ForecastCombiner(weights={"ewmac_8_32": 0.5, "ewmac_16_64": 0.5}),
-                ]),
-                "breakout_bucket": Pipeline([
-                    {
-                        "break_40":  breakout_signal(40),
-                        "break_160": breakout_signal(160),
-                    },
-                    ForecastCombiner(weights={"break_40": 0.5, "break_160": 0.5}),
-                ]),
-            },
-            ForecastCombiner(weights={"ewmac_bucket": 0.6, "breakout_bucket": 0.4}),
-        ]),
-        "carry": carry_signal(),
-    },
-    ForecastCombiner(weights={"trend": 0.75, "carry": 0.25}),
-])
+```python fragment
+{
+    "trend": Pipeline([
+        {
+            "ewmac_8_32":  ewmac_signal(fast=8, slow=32),
+            "ewmac_16_64": ewmac_signal(fast=16, slow=64),
+        },
+        ForecastCombiner(weights={"ewmac_8_32": 0.5, "ewmac_16_64": 0.5}),
+    ]),
+    "carry": carry(),
+}
+→ ForecastCombiner(weights={"trend": 0.75, "carry": 0.25})
 ```
 
 ### Nesting Rules
@@ -252,74 +182,15 @@ Pipeline([
 
 ---
 
-## Pipeline Composition API
-
-### .then() -- Sequential Composition
-
-Compose two pipelines end-to-end with type checking:
-
-```python
-signal_pipeline = Pipeline([...])    # Output: ForecastSeries
-position_pipeline = Pipeline([...])  # Input: ForecastSeries
-
-full = signal_pipeline.then(position_pipeline)
-# TypeError if signal output is incompatible with position input
-```
-
-### .with_params() -- Parameter Variants
-
-Create a new pipeline with modified step parameters:
-
-```python
-base = Pipeline([EWMA(window=8), ForecastScaler(avg_abs_target=10.0)])
-variant = base.with_params(**{"steps[0].window": 16})
-# base is unchanged, variant has EWMA(window=16)
-```
-
-### .inject_parameters() -- Location-Based Injection
-
-For optimization, inject parameters using location-based keys:
-
-```python
-params = pipeline.discover_all_parameters()
-# Returns {"0:EWMA:window": {...}, "1:ForecastScaler:avg_abs_target": {...}, ...}
-
-new_pipeline = pipeline.inject_parameters(**{"0:EWMA:window": 16})
-```
-
-### .compile() / .fingerprint() -- Serialization
-
-```python
-spec = pipeline.compile()          # Canonical JSON dict
-fp = pipeline.fingerprint()        # SHA-256 hex string
-restored = Pipeline.from_compiled(spec)  # Round-trip reconstruction
-```
-
----
-
-## Execution Modes
-
-Pipelines accept a `mode` parameter that controls validation, caching,
-and hook behavior:
-
-```python
-from pipeline_engine.modes import PerformanceMode
-
-Pipeline([...], mode=PerformanceMode.BACKTEST)      # Skip validation
-Pipeline([...], mode=PerformanceMode.DEVELOPMENT)    # Cached validation
-Pipeline([...], mode=PerformanceMode.PRODUCTION)     # Validate once
-Pipeline([...], mode=PerformanceMode.DEBUG)           # Validate every call
-```
-
-Nested Pipelines inherit the parent's mode.
-
----
-
 ## Complete Example
 
 A realistic strategy combining all patterns:
 
 ```python
+Globals(target_timeframe="1d")   # the clock (and any offset) live here
+Universe(mode="manual", symbols=["BTC", "ETH", "SOL", "AVAX", "LINK"])
+Execution(rebalance="every_bar")
+
 # Shared post-processing
 xs_post = Pipeline([
     CrossSectionalZScore(),
@@ -342,8 +213,7 @@ def ewmac(fast, slow):
 
 def carry():
     return Pipeline([
-        FundingDataLoader(use_cache=True),
-        TargetSignalResampler(method="mean"),
+        FundingDataLoader(),
         NegateTransform(),
         VolatilityStandardizer(signal_type="percentage", ohlcv_slot="ohlcv_1d"),
         xs_post,
@@ -363,22 +233,18 @@ def position_pipeline():
             return_vol_slot="return_vol",
             ohlcv_slot="ohlcv_1d",
         ),
-        PositionInertia(threshold=0.30),
         LeverageCap(max_leverage=5.0),
     ], name="PositionPipeline")
 
 # Main pipeline
 Pipeline([
-    StoreValue("bar_offset", "12h"),
-    PriceDataLoader(timeframe="15min", use_cache=True),
-    TimeframeResampler(target_timeframe="1d", source_timeframe="15min"),
-    VolumeUniverseReducer(top_n=50, lookback_bars=60),
+    PriceDataLoader(),      # serves 1d bars (00:00 UTC close) — nothing to resample
     Store("ohlcv_1d"),
     {
         "trend": Pipeline([
             {
-                "ewmac_8_32": ewmac(8, 32),
-                "ewmac_16_64": ewmac(16, 64),
+                "ewmac_8_32": ewmac(fast=8, slow=32),
+                "ewmac_16_64": ewmac(fast=16, slow=64),
             },
             ForecastCombiner(weights={"ewmac_8_32": 0.5, "ewmac_16_64": 0.5}),
         ]),

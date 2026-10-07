@@ -6,19 +6,19 @@ sole account/live surface, so the behavior on the CLI and local MCP is
 to return a handoff (`code=handoff_required`) whose `action_url` opens
 the standalone deploy flow (select/connect account, review the
 server-computed sizing, accept risk, go live). The agent does NOT
-enumerate accounts or POST `/v1/live` for the live action — the same
-loop hosted MCP already uses. Reads (`keel_live_monitor`, `keel_status`)
+enumerate accounts or POST `/v1/deployments` for the live action — the same
+loop hosted MCP already uses. Reads (`keel_live_monitor`, `keel_account_status`)
 stay on every surface.
 
 Handoff resume (spec 03 R6): calling with `intent_token` and
 `preview=true` is a pure status poll of `POST
-/v1/live/deploy-intents/status` — it returns `handoff_state`
+/v1/deployments/deploy-intents/status` — it returns `handoff_state`
 (pending|completed|expired) so the agent observes the human completing
 the deploy without a browser return.
 
 Advanced/headless escape hatch (D28 2026-07-20, sdk-v0.7.0 —
 deliberately NOT surfaced in the tool description): the legacy
-in-terminal preview → confirm → `POST /v1/live` path is retained for
+in-terminal preview → confirm → `POST /v1/deployments` path is retained for
 advanced/headless operators only. It PLACES REAL ORDERS, so it is doubly
 hidden:
   * The tool description guides callers ONLY to the web handoff and never
@@ -30,14 +30,14 @@ hidden:
     cannot reach a real-order path — the env gate raises
     `direct_deploy_disabled` and points back to the web handoff.
 When enabled by BOTH the flag AND the env opt-in:
-  1. `direct=true, preview=true` → `POST /v1/live/preview` returns
+  1. `direct=true, preview=true` → `POST /v1/deployments/preview` returns
      derived schedule + estimated slippage/fees + a short-lived local
      `confirmation_token`.
   2. `direct=true, preview=false` + the same `confirmation_token`
-     validates the local preview record and then calls `POST /v1/live`.
+     validates the local preview record and then calls `POST /v1/deployments`.
 Under `direct`: first call `keel_accounts_list` to pick `account_id`;
-do NOT use to update an already-deployed strategy's config — use
-`keel_live_control`.
+do NOT use to update an already-deployed strategy to a new version — use
+`keel_live_update` (mints the update handoff link).
 """
 
 from __future__ import annotations
@@ -54,6 +54,7 @@ from keel.errors import EntitlementError, KeelError, NotFoundError
 
 from . import register
 from ._base import OutcomeResult, OutcomeTool, ToolContext
+from .open_in_app import app_url_for
 
 
 # Env opt-in that arms the in-terminal direct-deploy escape hatch (D28,
@@ -69,7 +70,7 @@ def _direct_deploy_enabled() -> bool:
     in-terminal direct-deploy escape hatch via the environment.
 
     The web-app handoff is the go-live path on every surface (D7). The
-    legacy in-terminal preview → confirm → ``POST /v1/live`` path is kept
+    legacy in-terminal preview → confirm → ``POST /v1/deployments`` path is kept
     for advanced/headless operators, but it is gated behind this env
     opt-in so a caller that merely passes ``direct=true`` (e.g. a model
     guessing the param) lands on the web handoff, never a real-order
@@ -98,7 +99,7 @@ def _live_wall_handoff(e: EntitlementError, *, blocked_action: str, strategy_id:
     return live_scope_handoff(
         e,
         blocked_action=blocked_action,
-        action_url=f"{ctx.app_url}/strategies/{strategy_id}",
+        action_url=app_url_for("strategy", strategy_id, ctx),
         retry_call=retry_call,
     )
 
@@ -287,7 +288,7 @@ def _poll_intent_status(intent_token: str, *, strategy_id: str, ctx: ToolContext
     ``resume.verify_call``: no preview call, no write-through guard, no
     account requirement — it answers exactly one question ("did the human
     finish the handoff?") from server state via
-    ``POST /v1/live/deploy-intents/status``. Nothing relies on a browser
+    ``POST /v1/deployments/deploy-intents/status``. Nothing relies on a browser
     session: completion is DERIVED server-side from the deployment the
     wizard created, so the agent observes it without the user returning
     to the tab.
@@ -296,7 +297,9 @@ def _poll_intent_status(intent_token: str, *, strategy_id: str, ctx: ToolContext
 
     client = ctx.get_client()
     try:
-        resp = client.post("/v1/live/deploy-intents/status", json={"intent_token": intent_token})
+        resp = client.post(
+            "/v1/deployments/deploy-intents/status", json={"intent_token": intent_token}
+        )
     except EntitlementError as e:
         # The status endpoint checks nothing beyond auth + token↔org
         # binding, so an EntitlementError here IS the wrong-org 403. The
@@ -340,7 +343,7 @@ def _poll_intent_status(intent_token: str, *, strategy_id: str, ctx: ToolContext
             suggestion=(
                 "The server returned an unknown handoff status shape — retry "
                 "once; if it persists the API and SDK versions have drifted "
-                "(run `keel_doctor`)."
+                "(run `keel_connection_check`)."
             ),
         )
 
@@ -365,7 +368,7 @@ def _poll_intent_status(intent_token: str, *, strategy_id: str, ctx: ToolContext
             "args": {"deployment_id": deployment_id} if deployment_id else {},
             "reason": "Inspect the running deployment (status, evaluations, orders).",
         }
-        hero = f"{ctx.app_url}/live/{deployment_id}" if deployment_id else f"{ctx.app_url}/live"
+        hero = app_url_for("live", deployment_id, ctx) if deployment_id else f"{ctx.app_url}/live"
         return OutcomeResult(run_id=deployment_id, hero_url=hero, share_url=None, extra=extra)
 
     if status == "expired":
@@ -447,7 +450,7 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
     # in-terminal deploy for the live action — it hands the user into the
     # web deploy flow (select/connect account, review server-computed
     # sizing, accept risk, go live), the same loop hosted MCP already
-    # uses. Reads (`keel_live_monitor`, `keel_status`) stay on every
+    # uses. Reads (`keel_live_monitor`, `keel_account_status`) stay on every
     # surface. The in-terminal preview→confirm→deploy path is a hidden
     # advanced/headless escape hatch, doubly gated below.
     if not direct:
@@ -461,7 +464,7 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
 
     # ── Advanced/headless escape hatch: env gate (D28, sdk-v0.7.0) ─────
     # `direct=true` alone is NOT enough. The in-terminal
-    # preview→confirm→POST /v1/live path (real orders) is inert unless
+    # preview→confirm→POST /v1/deployments path (real orders) is inert unless
     # the operator has explicitly set KEEL_ALLOW_DIRECT_DEPLOY — AND it is
     # refused outright on any hosted surface regardless of that env. The
     # sole hosted endpoint runs profile=listed (where this tool isn't even
@@ -493,7 +496,7 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
         )
 
     # ── Armed in-terminal direct deploy (`direct=True` + env opt-in) ───
-    # Everything below is the legacy preview→confirm→POST /v1/live dance,
+    # Everything below is the legacy preview→confirm→POST /v1/deployments dance,
     # reachable only when the caller explicitly asks for it AND the
     # operator has armed the env gate. The reviewed default is the browser
     # handoff above.
@@ -581,7 +584,7 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
     if preview:
         body: dict[str, Any] = {"strategy_id": strategy_id}
         try:
-            preview_data = client.post("/v1/live/preview", json=body)
+            preview_data = client.post("/v1/deployments/preview", json=body)
         except EntitlementError as e:
             raise _live_wall_handoff(
                 e, blocked_action="live_deploy", strategy_id=strategy_id, ctx=ctx
@@ -620,7 +623,7 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
         # URL fallback line (non-negotiable, R2) is set explicitly.
         from ._render import card_render_block
 
-        _preflight_fallback = extra.get("handoff_url") or f"{ctx.app_url}/strategies/{strategy_id}"
+        _preflight_fallback = extra.get("handoff_url") or app_url_for("strategy", strategy_id, ctx)
         extra["render"] = card_render_block("preflight", fallback_url=_preflight_fallback, ctx=ctx)
         extra["url_line"] = f"View in Keel: {_preflight_fallback}"
         return OutcomeResult(
@@ -645,6 +648,12 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
                     "est_fees": (preview_data or {}).get("est_fees")
                     if isinstance(preview_data, dict)
                     else None,
+                    # The pinned known issues (04-R34): non-empty means the
+                    # deploy itself will be refused until the strategy is
+                    # upgraded (D-42), so the agent can tell before acting.
+                    "known_issues": (preview_data or {}).get("known_issues") or []
+                    if isinstance(preview_data, dict)
+                    else [],
                     "raw": preview_data,
                 },
                 "confirmation_token": token,
@@ -677,7 +686,7 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
         # server-side and never fails the deploy.
         body["intent_token"] = intent_token
     try:
-        result = client.post("/v1/live", json=body)
+        result = client.post("/v1/deployments", json=body)
     except EntitlementError as e:
         raise _live_wall_handoff(
             e, blocked_action="live_deploy", strategy_id=strategy_id, ctx=ctx
@@ -697,12 +706,21 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
                 detail=str(e),
             ) from e
         raise
+    except KeelError as e:
+        # D-42: a strategy pinning a known-issue component is refused until it
+        # is upgraded — no parameter of this tool overrides it (04-R34).
+        from ._known_issue import known_issue_refusal
+
+        refusal = known_issue_refusal(e, strategy_id=strategy_id)
+        if refusal is not None:
+            raise refusal from e
+        raise
     _delete_preview(confirmation_token)
     deployment_id = None
     if isinstance(result, dict):
         deployment_id = result.get("deployment_id") or result.get("id")
 
-    hero_url = f"{ctx.app_url}/live/{deployment_id}" if deployment_id else f"{ctx.app_url}/live"
+    hero_url = app_url_for("live", deployment_id, ctx) if deployment_id else f"{ctx.app_url}/live"
     extra: dict[str, Any] = {"deployment": result}
     # Quota visibility (spec 04 R5): the deploy response carries `remaining`
     # counters (e.g. {"live_slots": 0}) ONLY when remaining capacity is
@@ -725,7 +743,7 @@ LIVE_DEPLOY = register(
         cli_path=("live", "deploy"),
         toolset="live-write",
         # grounded-in: specs/03-golive-handoff-mobile.md (deploy = web-app
-        # handoff; server-computed sizing) + collaboration.md (human authorizes)
+        # handoff; server-computed sizing) + system/chat/collaboration.md (human authorizes)
         description=(
             "Go live with a strategy. Deploying to a live Hyperliquid account is done "
             "by the human in the Keel WEB APP — selecting or connecting an account, "
@@ -734,14 +752,15 @@ LIVE_DEPLOY = register(
             "returns a handoff (`code=handoff_required`) whose `action_url` opens that "
             "web deploy flow, plus a `resume` you can poll to observe completion. Send "
             "the user to `action_url` to go live; do not try to do it in the terminal. "
-            "Reads stay here: use `keel_live_monitor` / `keel_status` to watch a "
+            "Reads stay here: use `keel_live_monitor` / `keel_account_status` to watch a "
             "running deployment. "
             "Handoff resume: calling with `intent_token` (from a handoff envelope's "
             "`resume.token`) and preview=true is a pure status poll — it returns "
             "`handoff_state` (pending|completed|expired) so the agent observes the "
             "human completing the deploy flow without a browser return. "
-            "Do NOT use to update an already-deployed strategy's config — "
-            "use `keel_live_control`."
+            "Do NOT use to update an already-deployed strategy to a new "
+            "version — use `keel_live_update` (it mints the update handoff "
+            "link)."
         ),
         input_schema={
             "type": "object",

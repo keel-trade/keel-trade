@@ -18,8 +18,33 @@ ways that break agents, these tests:
     know both should answer (no exact ordering assertion — bundled
     and rich score differently by design).
 
-If `pipeline_engine.mcp` isn't importable, the rich-path checks are
-skipped — same env contract as the pipx-installed wheel.
+.. warning:: **The rich-path checks never run — not in CI, and not in any
+   normal local invocation either** (Q-0707). Two independent reasons:
+
+   1. No CI lane can satisfy the gate: `sdk-test.yml` deliberately runs in
+      the wheel's own env contract (no ``PYTHONPATH=libs``, no
+      pandas/numpy/TA-Lib), and no other lane collects this directory at
+      all (root ``testpaths = ["libs", "services"]``).
+   2. Even WITH ``PYTHONPATH=libs`` (the dev/.envrc setup this docstring
+      used to claim was enough), pytest's default prepend import mode
+      inserts this package's root — ``packages/keel-trade/keel-sdk``, the
+      first ancestor of ``tests/__init__.py`` without an ``__init__.py`` —
+      at ``sys.path[0]``, so the SDK-BUNDLED ``pipeline_engine`` stub
+      shadows the full ``libs/`` copy and ``pipeline_engine.mcp`` is never
+      importable. The ``rich_only`` skip is therefore unconditional under
+      every pytest entry point that has ever run this file.
+
+   Forcing the rich path (``--import-mode=importlib`` with
+   ``PYTHONPATH=libs:packages/keel-trade/keel-sdk``, from a full dev env)
+   works, and on 2026-08-28 it surfaced one real drift
+   (``components_after('AD')`` jaccard 0.77 < 0.80 — Q-0732) and one
+   structural incompatibility: the live semantic search downloads the
+   sentence-transformers model, which this suite's own network airlock
+   (conftest.py) rightly blocks. Wiring the rich path into CI therefore
+   needs a keel-runtime-image lane with an offline model cache and an
+   import-mode change — a deliberate redesign tracked in Q-0707, not a
+   one-line skip fix. Until then, treat these tests as a manually-invoked
+   diagnostic, and do not read a green run of this file as parity coverage.
 """
 
 from __future__ import annotations
@@ -121,8 +146,12 @@ def test_parity_component_detail_for_known_name():
     assert isinstance(rich, dict) and isinstance(bundled, dict)
     # Both must surface these documented contract fields.
     contract_keys = {"name", "category", "input_type", "output_type", "parameters"}
-    assert contract_keys.issubset(set(rich.keys())), f"rich missing keys: {contract_keys - set(rich.keys())}"
-    assert contract_keys.issubset(set(bundled.keys())), f"bundled missing keys: {contract_keys - set(bundled.keys())}"
+    assert contract_keys.issubset(set(rich.keys())), (
+        f"rich missing keys: {contract_keys - set(rich.keys())}"
+    )
+    assert contract_keys.issubset(set(bundled.keys())), (
+        f"bundled missing keys: {contract_keys - set(bundled.keys())}"
+    )
     assert rich["name"] == "AD"
     assert bundled["name"] == "AD"
     assert rich["category"] == bundled["category"]
@@ -192,9 +221,7 @@ def test_delegate_helper_uses_fallback_when_function_missing():
     def _fallback(**kwargs):
         return {"fell_back": True, "kwargs": kwargs}
 
-    result = _delegate_or_fallback(
-        "this_function_definitely_does_not_exist", _fallback, foo="bar"
-    )
+    result = _delegate_or_fallback("this_function_definitely_does_not_exist", _fallback, foo="bar")
     assert result == {"fell_back": True, "kwargs": {"foo": "bar"}}
 
 

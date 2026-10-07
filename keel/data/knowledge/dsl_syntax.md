@@ -1,22 +1,22 @@
 ## DSL Syntax (Python-based)
 
-**Not registered components — don't call `strategy_components_search` or
-`strategy_component_detail` on these:** `Globals`, `Universe`, `Execution`,
-`Pipeline`, `Parallel`, `Store`, `StoreValue`, `Load`, `Extract`. Their
-params are documented below and in `composition_mechanics.md`.
+**Not registered components:** `Globals`, `Universe`, `Execution`,
+`Pipeline`, `Parallel`, `Store`, `StoreValue`, `Load`, `Extract` are DSL
+declarations and syntax, so the component search and component detail do
+not list them. Their params are documented below and in
+`composition_mechanics.md`.
 
 Strategies use Python syntax, NOT YAML. Example:
 
 ```
-Globals(target_timeframe='1d')
+Globals(target_timeframe='1d')   # the clock (and any offset) live here, and only here
 
-Universe(mode='top_volume', top_n=30, market='perp', resolved=[...], resolved_at='...')
+Universe(mode='top_volume', top_n=30, market='perp')   # criteria modes resolve server-side on save
 
-Execution(rebalance='every_bar')
+Execution(rebalance='buffered', buffer_threshold=0.2, buffer_mode='relative', rebalance_method='to_edge')
 
 Pipeline([
-    PriceDataLoader(timeframe='15min'),
-    TargetTimeframeResampler(),
+    PriceDataLoader(),        # serves 1d bars closing 00:00 UTC — no resampler
     ROC(period=20),
     ForecastScaler(avg_abs_target=10.0),
     ForecastCapper(limit=20.0),
@@ -27,26 +27,17 @@ Pipeline([
 Key patterns:
 
 - **Slots**: `Store('name')` saves pipeline value, `Load('name')` retrieves it. Slot names are strings.
-- **Globals**: `Globals(target_timeframe='1d')` declares pipeline-wide config. Components like TargetTimeframeResampler read from Globals automatically via declaration_refs.
-- **Universe**: `Universe(mode='top_volume', top_n=30, ...)` declares which assets to trade. Use `universe_resolve` tool to resolve, not pipeline components. Selectors: `mode` (`manual`/`category`/`top_volume`), `market` (`perp`/`spot`), `symbols`, `categories`, `top_n`, `inclusions`, `exclusions`, `lookback` (`7d`/`30d`/`90d` — volume-ranking window for `top_volume`, default `7d`), `volume_quartiles` (`q1`–`q4`, q1=top 25% by volume), `groups`.
-- **Execution**: `Execution(rebalance='every_bar')` controls when the engine trades. Modes:
-  - `'every_bar'` — rebalance every bar. Use for continuous forecast strategies (Path 1) where weights change every bar.
-  - `'on_change'` — trade only when weights change. **Use for entry/exit (Path 2) and screen-select (Path 3)** where binary weights only change on signal events. Using `every_bar` on discrete strategies creates unnecessary micro-rebalances.
-  - `'buffered'` — trade only when positions drift outside a buffer band. Best upgrade for continuous strategies (Path 1) to reduce turnover. Params: `buffer_threshold` (0.05-0.30), `buffer_mode` ('relative' = fraction of target / 'absolute' = fraction of portfolio value / 'reference' = fraction of trailing 30d mean |target weight| — keeps tolerance proportional to typical size instead of the instantaneous target), `rebalance_method` ('to_edge'/'to_center').
-    **Default by path**: Path 1 (continuous) → `'every_bar'`, suggest `'buffered'` as improvement. Path 2 (entry/exit) → always `'on_change'`. Path 3 (screen-select) → `'on_change'`.
-- **Parallel**: `{'branch_a': [...], 'branch_b': [...]}` dict for parallel paths. Each branch receives `current` automatically — no Load needed for the value already flowing. Follow with a Composer (ForecastCombiner, Crossover, ApplyMask) to merge, or Extract("branch_name") to select one branch. Use Parallel whenever two computations share the same input but are independent (e.g., signal + filter → ApplyMask).
+- **Globals**: `Globals(target_timeframe='1d')` declares the strategy's clock (and any offset) — the only place they live; data loaders follow it, and an explicit `timeframe=` on a loader is a branch on its own clock (composition mechanics). `bar_offset` is omitted unless the user asks for a different close: omitted, bars close on the timeframe's own boundary (00:00 UTC for `'1d'`). An offset moves every bar and so changes every signal and result — `bar_offset='12h'` closes the daily bar at 12:00 UTC, and one daily strategy measured −7.1% with it against +44.6% without.
+- **Universe**: `Universe(mode='top_volume', top_n=30, ...)` declares which assets to trade. A manual `symbols=[...]` basket needs no resolving; criteria modes are resolved server-side when the strategy is saved (`resolved=[...]` is filled in for you) — never resolve with pipeline components. The selectors are listed in Universe Selection.
+- **Execution**: `Execution(rebalance=...)` controls when the engine trades — the one place the mode rule lives. Choose it by the shape of the weights:
+  - `'on_change'` — trade only when a target weight changes. **The mode for binary weights**: entry/exit (Path 2, including scaling entries and level, session and structure exits) and screen-select (Path 3). With `FixedWeightSizer` each position trades once in and once out; `EqualWeightSizer` re-divides the book whenever the number of holdings changes, and every re-division is a trade.
+  - `'buffered'` — trade only when a position drifts outside a band around its target. **The mode for continuous weights** (Path 1, forecast-combine, factor tilt): `Execution(rebalance='buffered', buffer_threshold=0.2, buffer_mode='relative', rebalance_method='to_edge')`. `on_change` places the same orders as `every_bar` here, because the weights move every bar. Params: `buffer_threshold`, `buffer_mode` ('relative' = fraction of target / 'absolute' = fraction of portfolio value / 'reference' = fraction of trailing 30d mean |target weight| — keeps tolerance proportional to typical size instead of the instantaneous target), `rebalance_method` ('to_edge'/'to_center').
+  - `'every_bar'` — trade every held position back to its target on every bar. Each small trim or add is a trade: the trade count and turnover inflate, and the win rate bends (up for trend following, down for mean reversion). It suits a constant-weight basket, where it (or `buffered`) corrects drift that `on_change` never touches.
+- **Parallel**: a dict step, `{"branch_a": [...], "branch_b": [...]}` — each key names a branch, each value is its step list; there is no Parallel call in the DSL. Follow it with a Composer (ForecastCombiner, Crossover, ApplyMask, WeightConcatenator for weight branches) to merge, or `Extract("branch_name")` to select one branch. Branch semantics: Composition Mechanics.
 - **Variables**: `xs_post = Pipeline([...])` then reference `xs_post` in main pipeline.
 - **Factories**: `def signal(period): return Pipeline([...])` for parameterized sub-pipelines.
-- **update_strategy requires COMPLETE source** — not a diff. Include ALL steps.
+- **A strategy's source is saved whole** — an update carries the COMPLETE source with every step, not a diff.
 
-## Strategy Template & Iterative Changes
+## Strategy Template
 
-Strategies start with three declarations (Globals, Universe, Execution) then a data pipeline: PriceDataLoader, TargetTimeframeResampler. The target_timeframe (e.g. '1d') determines what timeframe all signals operate on. Never remove or replace these blocks unless the user explicitly asks to change the timeframe or execution mode.
-
-Match scope to the request:
-
-- 'Add an RSI signal' → add RSI after the existing pipeline, keep everything else
-- 'Build me a momentum strategy' → build a complete strategy, may restructure
-- 'Change timeframe to 4h' → update Globals(target_timeframe='4h'), may adjust parameters
-
-When the request is specific (add, change, remove), be surgical — modify only what was asked. When the request is broad (build, create, design), you have freedom to compose the full pipeline.
+Strategies start with three declarations (Globals, Universe, Execution) then the loader the signal reads — `PriceDataLoader()` for price-based strategies, `FundingDataLoader()` for funding-only ones (do not add a PriceDataLoader the signal never reads); both follow `Globals(target_timeframe=...)` with no resampler step. The prices a backtest trades at and the perp funding it charges are always loaded by the platform at the `Globals` clock, whatever the loaders load — a loader feeds the signal only. The three declarations change only when the timeframe, universe or execution mode changes.

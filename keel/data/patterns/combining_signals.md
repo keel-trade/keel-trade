@@ -10,7 +10,7 @@ Each signal must be independently normalized and scaled before combining.
 
 1. **Parallel branches** - Each branch produces a ForecastSeries
 2. **ForecastCombiner** (weights=...) - Weighted average of forecasts
-3. **EmpiricalFDM** or **AnalyticalFDM** - Forecast diversification multiplier (optional, Level 2+)
+3. **EmpiricalFDM**, or **AnalyticalFDMCombiner** to combine and apply FDM in one step - Forecast diversification multiplier (optional, Level 2+)
 4. **ForecastCapper** (limit=20.0) - Re-cap after combining
 5. **ForecastWeightNormalizer** - Convert combined forecast to portfolio weights
 
@@ -29,6 +29,7 @@ Better: `{"trend": 0.5, "carry": 0.5}` at the family level.
 ## Hierarchical Combination
 
 For 3+ signal families, combine in two levels:
+
 1. **Level 1**: Combine within each family (e.g., 3 EWMAC speeds → 1 trend forecast)
 2. **Level 2**: Combine family-level forecasts (trend + carry + MR → final forecast)
 
@@ -38,42 +39,46 @@ Use nested Parallel + ForecastCombiner at each level.
 
 When combining correlated forecasts, the combined forecast has lower volatility
 than individual forecasts. FDM scales up to compensate:
+
 - **EmpiricalFDM**: Estimates from data. Simpler, works with 2+ signals.
   Place after ForecastCombiner as a separate sequential step.
 - **AnalyticalFDMCombiner**: Combines forecasts AND applies analytical FDM
   (1/sqrt(w'Rw)) in one step. Preferred for explicit correlation-based FDM.
-  Replaces the old ForecastCombiner + CorrelationEstimator + AnalyticalFDM pattern.
+  Replaces the old ForecastCombiner + CorrelationEstimator + the deprecated AnalyticalFDM pattern.
 
 FDM is optional for simple strategies. Add it when you want to preserve
 forecast scale after combination (Level 2+).
 
 ### Analytical FDM Example
 
-```python
+```python fragment
 {
-    "ewmac_2_8": [ewmac(2, 8)],
-    "ewmac_4_16": [ewmac(4, 16)],
-    "ewmac_8_32": [ewmac(8, 32)],
-},
-AnalyticalFDMCombiner(
+    "ewmac_2_8": [ewmac(fast=2, slow=8)],
+    "ewmac_4_16": [ewmac(fast=4, slow=16)],
+    "ewmac_8_32": [ewmac(fast=8, slow=32)],
+}
+→ AnalyticalFDMCombiner(
     weights={"ewmac_2_8": 0.33, "ewmac_4_16": 0.34, "ewmac_8_32": 0.33},
     correlation_window="90d",
-),
-ForecastCapper(limit=20.0),
+)
+→ ForecastCapper(limit=20.0)
 ```
+
+(`ewmac` is a factory — the `composition` topic shows how to define one.)
 
 ### Empirical FDM Example
 
-```python
-ForecastCombiner(weights={"momentum": 0.6, "carry": 0.4}),
-EmpiricalFDM(window="90d"),
-ForecastCapper(limit=20.0),
+```python fragment
+ForecastCombiner(weights={"momentum": 0.6, "carry": 0.4}) → EmpiricalFDM(window="90d") → ForecastCapper(limit=20.0)
 ```
 
 ## Minimal Example
 
 ```python
-Globals(target_timeframe="1d"),
+Globals(target_timeframe="1d")
+Universe(mode="manual", symbols=["BTC", "ETH", "SOL", "AVAX", "LINK"])
+Execution(rebalance="buffered", buffer_threshold=0.2, buffer_mode="relative", rebalance_method="to_edge")
+
 Pipeline([
     PriceDataLoader(),
     {

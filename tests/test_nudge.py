@@ -83,18 +83,18 @@ def test_backtest_run_nudges_exactly_when_good_result_true():
     client = MagicMock()
     client.post.side_effect = [
         {"id": "btr_1", "status": "queued"},  # POST /v1/backtests
-        MINT_RESPONSE,  # POST /v1/live/deploy-intents (nudge link)
+        MINT_RESPONSE,  # POST /v1/deployments/deploy-intents (nudge link)
     ]
     client.get.return_value = _detail("completed", GOOD_METRICS)
 
     env = (
         get("keel_backtest_run")
-        .handler({"strategy_id": "strat_n", "no_ownership_hint": True}, _ctx(client))
+        .handler({"strategy_id": "strat_n", "skip_readiness": True}, _ctx(client))
         .to_envelope()
     )
 
-    assert "nudge" in env
-    nudge = env["nudge"]
+    assert "deploy" in env  # the full-profile `deploy:` line (spec 02 §2.4)
+    nudge = env["deploy"]
     assert nudge.count("\n") == 0, "the nudge is exactly one line"
     # Honest numbers: Sharpe never cited without its drawdown; range named.
     assert "Sharpe 1.72" in nudge
@@ -106,8 +106,12 @@ def test_backtest_run_nudges_exactly_when_good_result_true():
     assert "do nothing" in nudge.lower()
     assert " earn " not in f" {nudge.lower()} "
     assert client.post.call_args_list[1] == call(
-        "/v1/live/deploy-intents", json={"strategy_id": "strat_n"}
+        "/v1/deployments/deploy-intents", json={"strategy_id": "strat_n"}
     )
+    # The card draws the same sentence from `render.note` (review 2 #1:
+    # it read the retired `nudge` field and the note silently vanished).
+    # SEED: drop `note=extra.get("deploy")` from backtest_run._attach_view.
+    assert env["render"]["note"] == nudge
 
 
 def test_backtest_run_no_nudge_without_good_result():
@@ -117,13 +121,13 @@ def test_backtest_run_no_nudge_without_good_result():
 
     env = (
         get("keel_backtest_run")
-        .handler({"strategy_id": "strat_n", "no_ownership_hint": True}, _ctx(client))
+        .handler({"strategy_id": "strat_n", "skip_readiness": True}, _ctx(client))
         .to_envelope()
     )
 
-    assert "nudge" not in env
+    assert "nudge" not in env and "deploy" not in env
     # No good result → no deploy-intent mint either.
-    assert all(c.args[0] != "/v1/live/deploy-intents" for c in client.post.call_args_list)
+    assert all(c.args[0] != "/v1/deployments/deploy-intents" for c in client.post.call_args_list)
 
 
 # ─── keel_backtest_summarize ─────────────────────────────────────────────
@@ -134,6 +138,7 @@ def test_summarize_nudges_when_good_result_true():
     client.get.side_effect = [
         _detail("completed", GOOD_METRICS),  # GET /v1/backtests/{id}
         {"presigned_url": "https://s3/x", "expires_in": 3600},  # /results
+        {},  # /curve (Q-1505; empty → no `curve` block)
     ]
     client.post.return_value = MINT_RESPONSE
 
@@ -141,9 +146,10 @@ def test_summarize_nudges_when_good_result_true():
         get("keel_backtest_summarize").handler({"backtest_id": "btr_1"}, _ctx(client)).to_envelope()
     )
 
-    assert "nudge" in env
-    assert "https://app.usekeel.io/deploy?intent=tokN" in env["nudge"]
-    assert "max drawdown -14.3%" in env["nudge"]
+    assert "deploy" in env  # the full-profile `deploy:` line (spec 02 §2.4)
+    assert "https://app.usekeel.io/deploy?intent=tokN" in env["deploy"]
+    assert "max drawdown -14.3%" in env["deploy"]
+    assert env["render"]["note"] == env["deploy"]  # what the card draws
 
 
 def test_summarize_no_nudge_without_good_result():
@@ -151,40 +157,49 @@ def test_summarize_no_nudge_without_good_result():
     client.get.side_effect = [
         _detail("completed", SUB_THRESHOLD_METRICS),
         {"presigned_url": "https://s3/x", "expires_in": 3600},
+        {},  # /curve
     ]
 
     env = (
         get("keel_backtest_summarize").handler({"backtest_id": "btr_1"}, _ctx(client)).to_envelope()
     )
 
-    assert "nudge" not in env
-    # No good result → no deploy-intent mint. (The render block's embed
-    # mint POST /v1/embeds is expected and unrelated to the nudge gate.)
-    assert all(c.args[0] != "/v1/live/deploy-intents" for c in client.post.call_args_list)
+    assert "nudge" not in env and "deploy" not in env
+    assert "note" not in env["render"]  # CONTROL: nothing for the card to draw
+    # No good result → no deploy-intent mint, and (Q-1505) no other POST
+    # either: a read tool mints nothing.
+    client.post.assert_not_called()
 
 
 # ─── Listed-profile surface (research/08) ────────────────────────────────
 
 
-def test_listed_profile_nudge_is_navigation_only(monkeypatch):
+def test_listed_profile_carries_no_nudge_only_the_fact_line(monkeypatch):
+    """Spec 02 §2.4 #7: the listed nudge is retired; the `good_result:` FACT
+    line — the marker's own numbers and thresholds — replaces it, and no
+    deploy-intent link is ever minted there.
+
+    SEED: restore the listed branch's old return (the "clears Keel's
+    good-result bar … view this strategy" sentence) — this reds."""
     monkeypatch.setenv("KEEL_SERVER_PROFILE", "listed")
     client = MagicMock()
 
     line = good_result_nudge(
         _detail("completed", GOOD_METRICS), strategy_id="strat_n", ctx=_ctx(client)
     )
-
-    assert line is not None
-    assert "view this strategy in the Keel app" in line
-    assert "https://app.usekeel.io/strategies/strat_n" in line
-    lowered = line.lower()
-    for token in LISTED_BANNED_TOKENS:
-        assert token not in lowered, f"listed nudge must not say {token!r}"
-    # Listed NEVER mints deploy-intent links.
+    assert line is None
     client.post.assert_not_called()
+
+    from keel.tools.outcomes._backtest_view import good_result_line
+
+    fact = good_result_line(
+        GOOD_METRICS["good_result"] | {"max_drawdown": -14.3, "total_return": 39.4}
+    )
+    lowered = fact.lower()
+    for token in LISTED_BANNED_TOKENS:
+        assert token not in lowered, f"the listed fact line must not say {token!r}"
     # Numbers still honest: drawdown named next to Sharpe.
-    assert "Sharpe 1.72" in line
-    assert "max drawdown -14.3%" in line
+    assert "Sharpe 1.72" in fact and "max drawdown 14.3%" in fact
 
 
 # ─── Fallbacks + honesty edge cases ──────────────────────────────────────

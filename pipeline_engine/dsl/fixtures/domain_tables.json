@@ -36,6 +36,12 @@
     "DataFrame": [
       "DataFrame"
     ],
+    "DollarVolumeSeries": [
+      "DataFrame",
+      "DollarVolumeSeries",
+      "SignalSeries",
+      "StreamSeries"
+    ],
     "ForecastSeries": [
       "DataFrame",
       "ForecastSeries",
@@ -68,6 +74,13 @@
     "OrderSeries": [
       "DataFrame",
       "OrderSeries"
+    ],
+    "Position": [
+      "Position",
+      "PositionPlan"
+    ],
+    "PositionPlan": [
+      "PositionPlan"
     ],
     "PriceFrame": [
       "DataFrame",
@@ -205,6 +218,7 @@
   "clocked_bases": [
     "BinarySignal",
     "DataFrame",
+    "DollarVolumeSeries",
     "ForecastSeries",
     "FundingFrame",
     "GlobalSeries",
@@ -212,6 +226,7 @@
     "NormalizedSignal",
     "OHLCVDict",
     "OrderSeries",
+    "Position",
     "PriceFrame",
     "RankSignal",
     "SentimentFrame",
