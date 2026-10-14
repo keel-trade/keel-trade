@@ -64,8 +64,12 @@ _CANONICAL_CLASSES: dict[str, ToolClass] = {
     "keel_strategy_push": "build",
     "keel_strategy_upgrade": "build",
     "keel_strategy_discard": "build",
-    # run: start a backtest
+    # run: start a backtest, or run a strategy forward on paper. Paper is
+    # simulated, so it is never `live`; the funnel's "started paper" stage
+    # reads deploy rows, not this class (paper-trading-v2 S07 §3.13).
     "keel_backtest_run": "run",
+    "keel_paper_deploy": "run",
+    "keel_paper_control": "run",
     # inspect: read results or saved work
     "keel_backtest_summarize": "inspect",
     "keel_backtest_positions": "inspect",

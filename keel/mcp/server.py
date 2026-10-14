@@ -56,18 +56,21 @@ def create_server() -> FastMCP:
     """
 
     from keel.hosting import is_hosted
-    from keel.tools.outcomes import OUTCOMES
+    from keel.tools.outcomes import OUTCOMES, paper_deploy_loaded
     from keel.tools.outcomes import _bootstrap as _outcomes_bootstrap
     from keel.tools.outcomes._mcp_adapter import register_all as _outcomes_mcp_register
     from keel.tools.outcomes._toolsets import is_listed_profile, load_toolsets
 
     active_toolsets = load_toolsets()
     live_write_loaded = "live-write" in active_toolsets
+    # The operating core's `paper` section rides the tool (S06 §3.9 row 3):
+    # false while the paper SDK is held, so the instructions are HEAD's.
+    paper_loaded = paper_deploy_loaded(active_toolsets)
 
     instructions = (
-        LISTED_INSTRUCTIONS
+        listed_instructions()
         if is_listed_profile()
-        else _full_instructions(live_write_loaded, hosted=is_hosted())
+        else _full_instructions(live_write_loaded, hosted=is_hosted(), paper_loaded=paper_loaded)
     )
 
     # serverInfo.version = the published keel-trade wheel version (not the
@@ -381,15 +384,25 @@ def create_server() -> FastMCP:
 # `profiles: [full]` in the corpus and never reach the listed string.
 
 
-def _listed_instructions() -> str:
+def _listed_instructions(paper_listed: bool) -> str:
     """The listed profile's instructions, assembled from the corpus."""
-    return _assemble.instructions("listed")
+    return _assemble.instructions("listed", paper_listed=paper_listed)
 
 
-LISTED_INSTRUCTIONS = _listed_instructions()
+def listed_instructions() -> str:
+    """The listed instructions for the listed flag's current value (S06
+    §3.4.2): read at call time, never frozen at import, so one process can
+    build both states. With the flag off they are the base commit's; on, the
+    amended boundary sentence and the paper row replace their flag-off forms.
+    An invalid ``KEEL_LISTED_PAPER`` raises here, at server creation."""
+    from keel.tools.outcomes._toolsets import listed_paper_enabled
+
+    return _listed_instructions(listed_paper_enabled())
 
 
-def _full_instructions(live_write_loaded: bool, *, hosted: bool = False) -> str:
+def _full_instructions(
+    live_write_loaded: bool, *, hosted: bool = False, paper_loaded: bool = False
+) -> str:
     """Instructions for the full (local MCP / CLI) profile.
 
     ``hosted`` selects the hosted-server SURFACE section (spec 07 R7):
@@ -397,10 +410,14 @@ def _full_instructions(live_write_loaded: bool, *, hosted: bool = False) -> str:
     CLI; local servers get the charts → web-app hint. The live-write
     notice is emitted only when that toolset is absent, exactly as
     before — the condition is the corpus section's
-    ``when: live_write_absent`` key.
+    ``when: live_write_absent`` key. The ``paper`` section is emitted only
+    when ``keel_paper_deploy`` is loaded (``when: paper_loaded``, S06 §3.9
+    row 3).
     """
     profile = "full-hosted" if hosted else "full-local"
-    return _assemble.instructions(profile, live_write_loaded=live_write_loaded)
+    return _assemble.instructions(
+        profile, live_write_loaded=live_write_loaded, paper_loaded=paper_loaded
+    )
 
 
 def _bundled_knowledge_sections() -> tuple[str, ...]:

@@ -3423,7 +3423,7 @@
       "name": "AssetSelect",
       "category": "universe_filter",
       "sub_category": "selection",
-      "description": "Keep only a hard-coded list of assets, dropping every other column or key.\n\nUse for \"just trade BTC and ETH\", \"the DeFi basket\", \"long HYPE against\nshort BNB\", \"run this leg on one name\". The asset set is fixed at\nauthoring time and never changes over the backtest.\n\nA REDUCER, not a mask \u2014 this is the distinction that decides which\ncomponent you want:\n    - ``AssetSelect`` DROPS columns, so the frame gets narrower and every\n      downstream step sees only the kept assets. Cross-sectional\n      operations (z-score, rank, top-N) are then computed over the\n      reduced set, which is usually the point of using it inside a\n      ``Parallel`` leg.\n    - ``ApplyUniverseMask`` keeps the frame's width and NaNs out the\n      excluded assets instead, so the full universe stays visible for\n      ranking. Use that one whenever the selection is time-varying\n      (rolling top-N, regime gating).\n    - ``GroupAssetFilter`` is this component with the list moved into the\n      ``Universe(groups={...})`` declaration, so one named group can be\n      reused across branches and edited in one place.\n\nType-preserving:\n    Runs on either shape, at any point in the pipeline: an OHLCV dict\n    before any indicator (keys are filtered) or a DataFrame after one\n    (columns are selected). The output is the same kind as the input.\n    Anything else raises ``TypeError``.\n\nColumn order differs by input shape (both are deliberate):\n    On a DataFrame the columns come out in the order of ``symbols`` \u2014\n    ``AssetSelect(symbols=[\"C\", \"A\"])`` yields ``[\"C\", \"A\"]``. On an\n    OHLCV dict the keys keep their ORIGINAL order and ``symbols`` acts\n    as set membership. Nothing downstream in the registry depends on\n    column order, but do not read the DataFrame path's ordering as a\n    reordering tool.\n\nMissing symbols:\n    A symbol not present in the data is silently skipped \u2014 a universe\n    that legitimately lacks a listing for part of the backtest should not\n    fail. Selecting NONE of them raises ``ValueError`` listing what was\n    available, so a typo'd or renamed ticker fails loudly rather than\n    producing an empty book.\n\nNaN discipline:\n    None to speak of \u2014 no value is read. Cells are carried through\n    exactly as they arrive, NaN included, with no reindexing, alignment\n    or fill.\n\nCausality / invariance:\n    Selection is on the COLUMN axis only; the time index is untouched, so\n    no bar can influence another and appending or removing bars changes\n    nothing about which assets are kept.\n\nOutput:\n    The same type as the input (dict or DataFrame) with only the listed\n    assets, identical index, identical values.\n\nExample:\n    # Pair trade: one leg per asset, recombined into a single book. Each\n    # leg sizes to half the book so the two sum to 1.0x (M-29).\n    # Globals(target_timeframe=\"1d\", bar_offset=\"12h\"): PriceDataLoader() serves 1d on the 12h grid \u2014 no resampler\n    Pipeline([\n        PriceDataLoader(), Store(\"ohlcv\"),\n        {\n            \"long_leg\": [Load(\"ohlcv\"), AssetSelect(symbols=[\"HYPE\"]),\n                         ROC(period=20), ForecastScaler(),\n                         ForecastWeightNormalizer(target_leverage=0.5)],\n            \"short_leg\": [Load(\"ohlcv\"), AssetSelect(symbols=[\"BNB\"]),\n                          ROC(period=20), ForecastScaler(),\n                          ForecastWeightNormalizer(target_leverage=0.5)],\n        },\n        WeightConcatenator(),\n    ])\n\n    # Multi-asset basket, inline\n    AssetSelect(symbols=[\"AAVE\", \"UNI\", \"COMP\", \"MKR\", \"SNX\"])\n",
+      "description": "Keep only a hard-coded list of assets, dropping every other column or key.\n\nUse for \"just trade BTC and ETH\", \"the DeFi basket\", \"long HYPE against\nshort BNB\", \"run this leg on one name\". The asset set is fixed at\nauthoring time and never changes over the backtest.\n\nA REDUCER, not a mask \u2014 this is the distinction that decides which\ncomponent you want:\n    - ``AssetSelect`` DROPS columns, so the frame gets narrower and every\n      downstream step sees only the kept assets. Cross-sectional\n      operations (z-score, rank, top-N) are then computed over the\n      reduced set, which is usually the point of using it inside a\n      ``Parallel`` leg.\n    - ``ApplyUniverseMask`` keeps the frame's width and NaNs out the\n      excluded assets instead, so the full universe stays visible for\n      ranking. Use that one whenever the selection is time-varying\n      (rolling top-N, regime gating).\n    - ``GroupAssetFilter`` is this component with the list moved into the\n      ``Universe(groups={...})`` declaration, so one named group can be\n      reused across branches and edited in one place.\n\nType-preserving:\n    Runs on either shape, at any point in the pipeline: an OHLCV dict\n    before any indicator (keys are filtered) or a DataFrame after one\n    (columns are selected). The output is the same kind as the input.\n    Anything else raises ``TypeError``.\n\nColumn order differs by input shape (both are deliberate):\n    On a DataFrame the columns come out in the order of ``symbols`` \u2014\n    ``AssetSelect(symbols=[\"C\", \"A\"])`` yields ``[\"C\", \"A\"]``. On an\n    OHLCV dict the keys keep their ORIGINAL order and ``symbols`` acts\n    as set membership. Nothing downstream in the registry depends on\n    column order, but do not read the DataFrame path's ordering as a\n    reordering tool.\n\nMissing symbols:\n    A symbol not present in the data is skipped, never an error, and\n    never silent. A name outside the strategy's ``Universe`` (its\n    resolved list) is never loaded: the validator warns\n    (``ASSET_SELECT_OUTSIDE_UNIVERSE``) and the run says which names it\n    did not trade (a note with the same code). A name inside the\n    Universe with no data in the window gets the run's per-symbol\n    coverage note. Selecting NONE of them raises ``ValueError`` listing\n    what was available, so a typo'd or renamed ticker fails loudly\n    rather than producing an empty book.\n\nNaN discipline:\n    None to speak of \u2014 no value is read. Cells are carried through\n    exactly as they arrive, NaN included, with no reindexing, alignment\n    or fill.\n\nCausality / invariance:\n    Selection is on the COLUMN axis only; the time index is untouched, so\n    no bar can influence another and appending or removing bars changes\n    nothing about which assets are kept.\n\nOutput:\n    The same type as the input (dict or DataFrame) with only the listed\n    assets, identical index, identical values.\n\nExample:\n    # Pair trade: one leg per asset, recombined into a single book. Each\n    # leg sizes to half the book so the two sum to 1.0x (M-29).\n    # Globals(target_timeframe=\"1d\", bar_offset=\"12h\"): PriceDataLoader() serves 1d on the 12h grid \u2014 no resampler\n    Pipeline([\n        PriceDataLoader(), Store(\"ohlcv\"),\n        {\n            \"long_leg\": [Load(\"ohlcv\"), AssetSelect(symbols=[\"HYPE\"]),\n                         ROC(period=20), ForecastScaler(),\n                         ForecastWeightNormalizer(target_leverage=0.5)],\n            \"short_leg\": [Load(\"ohlcv\"), AssetSelect(symbols=[\"BNB\"]),\n                          ROC(period=20), ForecastScaler(),\n                          ForecastWeightNormalizer(target_leverage=0.5)],\n        },\n        WeightConcatenator(),\n    ])\n\n    # Multi-asset basket, inline\n    AssetSelect(symbols=[\"AAVE\", \"UNI\", \"COMP\", \"MKR\", \"SNX\"])\n",
       "usage_hint": "Use for \"just trade BTC and ETH\", \"the DeFi basket\", \"long HYPE against short BNB\", \"run this leg on one name\". The asset set is fixed at authoring time and never changes over the backtest.",
       "input_type": "Any",
       "output_type": "Any",
@@ -3434,7 +3434,7 @@
           "type": "list",
           "default": null,
           "required": true,
-          "description": "The exact asset symbols to keep, as venue tickers (\"BTC\", \"HYPE\", \"AAVE\"). Required and must be non-empty \u2014 an empty list raises rather than meaning \"everything\". Everything else is dropped. Symbols absent from the data are skipped silently; if NONE of them are present the run raises. This list is the strategy's fixed universe for this branch: to vary the set over time use a mask (``RollingVolumeUniverseMask`` + ``ApplyUniverseMask``), and to share one list across branches declare it as a ``Universe`` group and use ``GroupAssetFilter``.",
+          "description": "The exact asset symbols to keep, as venue tickers (\"BTC\", \"HYPE\", \"AAVE\"). Required and must be non-empty \u2014 an empty list raises rather than meaning \"everything\". Everything else is dropped. Symbols absent from the data are skipped (a name outside the Universe gets a validator warning and a run note); if NONE of them are present the run raises. This list is the strategy's fixed universe for this branch: to vary the set over time use a mask (``RollingVolumeUniverseMask`` + ``ApplyUniverseMask``), and to share one list across branches declare it as a ``Universe`` group and use ``GroupAssetFilter``.",
           "suggestions": [],
           "optimizable": true,
           "constraints": {},
@@ -3469,7 +3469,7 @@
               "type": "list",
               "default": null,
               "required": true,
-              "description": "The exact asset symbols to keep, as venue tickers (\"BTC\", \"HYPE\", \"AAVE\"). Required and must be non-empty \u2014 an empty list raises rather than meaning \"everything\". Everything else is dropped. Symbols absent from the data are skipped silently; if NONE of them are present the run raises. This list is the strategy's fixed universe for this branch: to vary the set over time use a mask (``RollingVolumeUniverseMask`` + ``ApplyUniverseMask``), and to share one list across branches declare it as a ``Universe`` group and use ``GroupAssetFilter``.",
+              "description": "The exact asset symbols to keep, as venue tickers (\"BTC\", \"HYPE\", \"AAVE\"). Required and must be non-empty \u2014 an empty list raises rather than meaning \"everything\". Everything else is dropped. Symbols absent from the data are skipped (a name outside the Universe gets a validator warning and a run note); if NONE of them are present the run raises. This list is the strategy's fixed universe for this branch: to vary the set over time use a mask (``RollingVolumeUniverseMask`` + ``ApplyUniverseMask``), and to share one list across branches declare it as a ``Universe`` group and use ``GroupAssetFilter``.",
               "tier": "strategy",
               "slot_reference": false,
               "suggestions": [],
@@ -5315,7 +5315,7 @@
       "name": "BreakerBlock",
       "category": "indicator",
       "sub_category": "smc",
-      "description": "Track ICT breaker and mitigation blocks \u2014 a failed block whose role flips \u2014 and emit the signed ATR distance to the nearest active one.\n\nUse for the \"the level that failed now holds\" family of SMC entries.\nThe sequence, bullish, is fixed and agreed by every source\n(smc-trader-cohort research/05 \u00a79): a swing low, then a swing high,\nthen a leg that FAILS to continue down, then a close back above that\nswing high (the structure shift). The zone is the down-closing candle\ninside the failed leg \u2014 the failed bearish block \u2014 and it is expected to\nact as demand on the way back. The component keeps every unmitigated\none as an active zone and reports the signed ATR distance from the close\nto the nearest, exactly as `OrderBlock` and `FairValueGap` do.\n\nTHE `mode` AXIS IS A CLASSIFIER, NOT A VARIANT (R4, research/05 \u00a79). In\nICT canon the raid is what NAMES the pattern: a BREAKER is the flip\nwhere the failing leg first took out the prior extreme (the swing low,\nfor a bullish breaker) \u2014 \"find the raid, wait for the failure to\nconfirm, mark the breaker\" (LuxAlgo). A MITIGATION BLOCK is \"the same\nrole-flip without that raid\": the failing leg did NOT take the prior\nextreme (LuxAlgo, howtotrade, opofinance, TFlab all agree). They are two\nnamed things sharing one machine, which is why this is `mode` and not\n`require_sweep: bool`. Breakers are graded higher-probability BY\nPRACTITIONERS because of the raid (TFlab) \u2014 a folk grading, not a\nmeasured one (see the caveat).\n\nTAXONOMY CONFLICT, RECORDED AS FOUND: one educator (theicttrader) uses\n\"mitigation block\" for a HELD order-block retest in trend continuation\ninstead \u2014 a minority reading. This component implements the role-flip\nconsensus above; the held-retest reading is `OrderBlock` with\nmitigation=\"touch\", not this component.\n\nAxes (sourced defaults, spec 01 contract 3):\n    mode: \"breaker\" (default) = the failing leg RAIDED the prior extreme;\n        \"mitigation\" = it did not. The classifier above. When no prior\n        opposite pivot has been confirmed yet the raid is undecidable\n        and NO zone is born under either mode \u2014 never a default verdict.\n    direction: \"bullish\" | \"bearish\" | \"both\" (default). A bullish\n        breaker is demand below price, a bearish one supply above it.\n    candle_select: which candle of the failed leg is the block.\n        \"extreme_in_leg\" (default \u2014 LuxAlgo, smc.py: the candidate at\n        the top of the failed move) or \"last_opposite\" (the candle of\n        the \"series\" nearest the failure). BOTH are restricted to\n        candles that closed against the breaker's direction, which is\n        LuxAlgo's own wording for a breaker and is the one way this\n        differs from `OrderBlock`'s selection.\n    zone: \"full_range\" (default \u2014 LuxAlgo, smc.py) or \"body\" (the ICT\n        mirrors). Contested exactly as for order blocks: \"some traders\n        use bodies only, others the full range\" (LuxAlgo).\n    mitigation: \"touch\" (default \u2014 smc.py), \"midpoint\" (the ICT mean\n        threshold, 50%) or \"close_through\" (LuxAlgo's invalidation, \"a\n        clean trade back through the whole zone\"). Tested from the bar\n        AFTER birth.\n    max_range_atr: LuxAlgo's volatility filter \u2014 a candle whose own\n        range reaches this many ATR is not eligible. Default 0.0 = OFF;\n        2.0 reproduces LuxAlgo's `range < threshold * 2`.\n    expiry_bars: the single bound on EVERY piece of state (default 200) \u2014\n        an unbroken swing level stops being breakable `expiry_bars` bars\n        after confirmation, AND a block is dropped `expiry_bars` bars\n        after birth. A KEEL CONVENTION, not a practitioner one.\n    output: \"distance\" (default) = signed ATR distance (below); \"edge\" =\n        the nearest active block's invalidation boundary PRICE, for an AtEntry(slot=...) structure stop and RiskSizer(distance=...).\n    detector: pivot rule \u2014 \"fractal\" (default) or \"leg_flip\" (LuxAlgo).\n    width: swing width in bars for the pivots whose break confirms the\n        role flip (default 5) \u2014 the SAME axis the structure family\n        takes, spelled the same way. The sourced ladder is 1 (ICT's\n        short-term high), 5 (LuxAlgo's hardcoded INTERNAL structure)\n        and 50 (its SWING structure, and smc.py's `swing_length`\n        default); `structure.TIER_WIDTHS` is that named pair. It is ONE\n        CONTINUOUS AXIS (>= 1, typically 1..100), not two rungs: the\n        two named readings remain reachable as the values 5 and 50, and\n        every width between and beyond them is now available too. The default\n        follows the internal reading \u2014 a width-50 fractal confirms only\n        a handful of levels per 500 bars, too sparse to birth blocks on\n        a normal backtest window. research/05 \u00a71, \u00a73.\n    atr_period: bars in the ATR reference (default 14) \u2014 the simple mean\n        true range of the bars ENDING AT t-1.\n\nNote there is NO `confirm` axis: unlike an order block, the confirmation\nof a breaker is fixed at \"close beyond the broken extreme plus the\nstructure shift\" in ALL sources (research/05 \u00a79), so it is machinery,\nnot an interpretation.\n\nUNITS \u2014 \"distance\" is in ATR multiples (unit-free, comparable across\nassets); \"edge\" is in price units. `max_range_atr` is an ATR multiple.\n\nOutput:\n    SignalSeries (timestamps x symbols), causal, no repaint. \"distance\":\n    > 0 outside every active block, 0 exactly on an edge, < 0 inside\n    (minus the depth to the nearest edge / ATR). Nearest = smallest such\n    value across active blocks (an enclosing block wins; ties go to the\n    older one). NaN when none is active.\n    THE BAR THAT REACHES A BLOCK REPORTS IT (Q-1020): the output at bar\n    t is computed over every block alive at t's close, including the\n    one(s) bar t mitigates \u2014 so under the default \"touch\" the first bar\n    whose low reaches a bullish block emits its distance (<= 0 when the\n    close is inside), and the block is gone from the NEXT bar on. That\n    touch bar is the bar-close entry (\"price is in the block\"); a\n    durable in-block mask over several bars needs mitigation=\"midpoint\"\n    or \"close_through\".\n    A block is BORN at the close of the CONFIRMING bar \u2014 the bar whose\n    close completes the structure shift, never at the block candle's own\n    (earlier) bar \u2014 and is tested for mitigation from the next bar on.\n\nNaN semantics:\n    A bar with NaN in open/high/low/close emits NaN and neither births\n    nor mitigates a block (state untouched; it still ages toward\n    expiry), and can never BE the block candle. A NaN inside the ATR\n    window blanks the reference for `atr_period` bars: \"distance\" is NaN\n    over those bars even with active blocks (\"edge\" still reports). A\n    flat tape (ATR 0) has no reference \u2014 NaN, never a division by zero.\n    A failed leg with no qualifying candle, or an undecidable raid,\n    births NO block. Never zero-filled.\n\nCaveats (research/05 \u00a79, research/06, R5): no controlled test of breaker\nor mitigation blocks has ever been published; the practitioner grading\nthat breakers beat mitigation blocks rests on the raid narrative, not on\nmeasurement, and the two dominant zone conventions disagree. Offered as\nan interpretation of the tape, NEVER as a Keel claim. Execution is\nbar-close.\n\nNote: stops, targets, trails and other price-level rules are checked and filled at the bar's close, with no intra-bar measurement or execution, so a fill can be well past the level.\n\nExample:\n    # Globals(target_timeframe=\"1h\"): PriceDataLoader() serves the 1h bars itself \u2014 no resampler\n    Pipeline([\n        PriceDataLoader(),\n        BreakerBlock(mode=\"breaker\", direction=\"bullish\",\n                     mitigation=\"close_through\"),\n        RangeSelector(low_threshold=-10.0, high_threshold=0.0),   # close inside a live breaker\n        EqualWeightSizer(target_leverage=1.0),\n    ])\n",
+      "description": "Track ICT breaker and mitigation blocks \u2014 a failed block whose role flips \u2014 and emit the signed ATR distance to the nearest active one.\n\nUse for the \"the level that failed now holds\" family of SMC entries.\nThe sequence, bullish, is fixed and agreed by every source\n(smc-trader-cohort research/05 \u00a79): a swing low, then a swing high,\nthen a leg that FAILS to continue down, then a close back above that\nswing high (the structure shift). The zone is the down-closing candle\ninside the failed leg \u2014 the failed bearish block \u2014 and it is expected to\nact as demand on the way back. The component keeps every unmitigated\none as an active zone and reports the signed ATR distance from the close\nto the nearest, exactly as `OrderBlock` and `FairValueGap` do.\n\nTHE `mode` AXIS IS A CLASSIFIER, NOT A VARIANT (R4, research/05 \u00a79). In\nICT canon the raid is what NAMES the pattern: a BREAKER is the flip\nwhere the failing leg first took out the prior extreme (the swing low,\nfor a bullish breaker) \u2014 \"find the raid, wait for the failure to\nconfirm, mark the breaker\" (LuxAlgo). A MITIGATION BLOCK is \"the same\nrole-flip without that raid\": the failing leg did NOT take the prior\nextreme (LuxAlgo, howtotrade, opofinance, TFlab all agree). They are two\nnamed things sharing one machine, which is why this is `mode` and not\n`require_sweep: bool`. Breakers are graded higher-probability BY\nPRACTITIONERS because of the raid (TFlab) \u2014 a folk grading, not a\nmeasured one (see the caveat).\n\nTAXONOMY CONFLICT, RECORDED AS FOUND: one educator (theicttrader) uses\n\"mitigation block\" for a HELD order-block retest in trend continuation\ninstead \u2014 a minority reading. This component implements the role-flip\nconsensus above; the held-retest reading is `OrderBlock` with\nmitigation=\"touch\", not this component.\n\nAxes (sourced defaults, spec 01 contract 3):\n    mode: \"breaker\" (default) = the failing leg RAIDED the prior extreme;\n        \"mitigation\" = it did not. The classifier above. When no prior\n        opposite pivot has been confirmed yet the raid is undecidable\n        and NO zone is born under either mode \u2014 never a default verdict.\n    direction: \"bullish\" | \"bearish\" | \"both\" (default). A bullish\n        breaker is demand below price, a bearish one supply above it.\n    candle_select: which candle of the failed leg is the block.\n        \"extreme_in_leg\" (default \u2014 LuxAlgo, smc.py: the candidate at\n        the top of the failed move) or \"last_opposite\" (the candle of\n        the \"series\" nearest the failure). BOTH are restricted to\n        candles that closed against the breaker's direction, which is\n        LuxAlgo's own wording for a breaker and is the one way this\n        differs from `OrderBlock`'s selection.\n    zone: \"full_range\" (default \u2014 LuxAlgo, smc.py) or \"body\" (the ICT\n        mirrors). Contested exactly as for order blocks: \"some traders\n        use bodies only, others the full range\" (LuxAlgo).\n    mitigation: \"touch\" (default \u2014 smc.py), \"midpoint\" (the ICT mean\n        threshold, 50%) or \"close_through\" (LuxAlgo's invalidation, \"a\n        clean trade back through the whole zone\"). Tested from the bar\n        AFTER birth.\n    max_range_atr: LuxAlgo's volatility filter \u2014 a candle whose own\n        range reaches this many ATR is not eligible. Default 0.0 = OFF;\n        2.0 reproduces LuxAlgo's `range < threshold * 2`.\n    expiry_bars: the single bound on EVERY piece of state (default 200) \u2014\n        an unbroken swing level stops being breakable `expiry_bars` bars\n        after confirmation, AND a block is dropped `expiry_bars` bars\n        after birth. A KEEL CONVENTION, not a practitioner one.\n    output: \"distance\" (default) = signed ATR distance (below); \"edge\" =\n        the nearest active block's invalidation boundary PRICE, for an AtEntry(slot=...) structure stop and RiskSizer(distance=...);\n        see also LevelStop(level=...) / LevelTarget(level=..., r=...).\n    detector: pivot rule \u2014 \"fractal\" (default) or \"leg_flip\" (LuxAlgo).\n    width: swing width in bars for the pivots whose break confirms the\n        role flip (default 5) \u2014 the SAME axis the structure family\n        takes, spelled the same way. The sourced ladder is 1 (ICT's\n        short-term high), 5 (LuxAlgo's hardcoded INTERNAL structure)\n        and 50 (its SWING structure, and smc.py's `swing_length`\n        default); `structure.TIER_WIDTHS` is that named pair. It is ONE\n        CONTINUOUS AXIS (>= 1, typically 1..100), not two rungs: the\n        two named readings remain reachable as the values 5 and 50, and\n        every width between and beyond them is now available too. The default\n        follows the internal reading \u2014 a width-50 fractal confirms only\n        a handful of levels per 500 bars, too sparse to birth blocks on\n        a normal backtest window. research/05 \u00a71, \u00a73.\n    atr_period: bars in the ATR reference (default 14) \u2014 the simple mean\n        true range of the bars ENDING AT t-1.\n\nNote there is NO `confirm` axis: unlike an order block, the confirmation\nof a breaker is fixed at \"close beyond the broken extreme plus the\nstructure shift\" in ALL sources (research/05 \u00a79), so it is machinery,\nnot an interpretation.\n\nUNITS \u2014 \"distance\" is in ATR multiples (unit-free, comparable across\nassets); \"edge\" is in price units. `max_range_atr` is an ATR multiple.\n\nOutput:\n    SignalSeries (timestamps x symbols), causal, no repaint. \"distance\":\n    > 0 outside every active block, 0 exactly on an edge, < 0 inside\n    (minus the depth to the nearest edge / ATR). Nearest = smallest such\n    value across active blocks (an enclosing block wins; ties go to the\n    older one). NaN when none is active.\n    THE BAR THAT REACHES A BLOCK REPORTS IT (Q-1020): the output at bar\n    t is computed over every block alive at t's close, including the\n    one(s) bar t mitigates \u2014 so under the default \"touch\" the first bar\n    whose low reaches a bullish block emits its distance (<= 0 when the\n    close is inside), and the block is gone from the NEXT bar on. That\n    touch bar is the bar-close entry (\"price is in the block\"); a\n    durable in-block mask over several bars needs mitigation=\"midpoint\"\n    or \"close_through\".\n    A block is BORN at the close of the CONFIRMING bar \u2014 the bar whose\n    close completes the structure shift, never at the block candle's own\n    (earlier) bar \u2014 and is tested for mitigation from the next bar on.\n\nNaN semantics:\n    A bar with NaN in open/high/low/close emits NaN and neither births\n    nor mitigates a block (state untouched; it still ages toward\n    expiry), and can never BE the block candle. A NaN inside the ATR\n    window blanks the reference for `atr_period` bars: \"distance\" is NaN\n    over those bars even with active blocks (\"edge\" still reports). A\n    flat tape (ATR 0) has no reference \u2014 NaN, never a division by zero.\n    A failed leg with no qualifying candle, or an undecidable raid,\n    births NO block. Never zero-filled.\n\nCaveats (research/05 \u00a79, research/06, R5): no controlled test of breaker\nor mitigation blocks has ever been published; the practitioner grading\nthat breakers beat mitigation blocks rests on the raid narrative, not on\nmeasurement, and the two dominant zone conventions disagree. Offered as\nan interpretation of the tape, NEVER as a Keel claim. Execution is\nbar-close.\n\nNote: stops, targets, trails and other price-level rules are checked and filled at the bar's close, with no intra-bar measurement or execution, so a fill can be well past the level.\n\nExample:\n    # Globals(target_timeframe=\"1h\"): PriceDataLoader() serves the 1h bars itself \u2014 no resampler\n    Pipeline([\n        PriceDataLoader(),\n        BreakerBlock(mode=\"breaker\", direction=\"bullish\",\n                     mitigation=\"close_through\"),\n        RangeSelector(low_threshold=-10.0, high_threshold=0.0),   # close inside a live breaker\n        EqualWeightSizer(target_leverage=1.0),\n    ])\n",
       "usage_hint": "Use for the \"the level that failed now holds\" family of SMC entries. The sequence, bullish, is fixed and agreed by every source (smc-trader-cohort research/05 \u00a79): a swing low, then a swing high, then a leg that FAILS to continue down, then a close back above that swing high (the structure shift). The zone is the down-closing candle inside the failed leg \u2014 the failed bearish block \u2014 and it is expected to act as demand on the way back. The component keeps every unmitigated one as an active zone and reports the signed ATR distance from the close to the nearest, exactly as `OrderBlock` and `FairValueGap` do.",
       "input_type": "OHLCVDict",
       "output_type": "SignalSeries",
@@ -6487,7 +6487,7 @@
       "name": "CalendarRebalance",
       "category": "position_sizer",
       "sub_category": "rebalance",
-      "description": "Emit periodic rebalance flags on a calendar schedule for time-based portfolio rebalancing.\n\nUse to trigger portfolio weight recalculation on a fixed schedule (daily, weekly,\nor monthly). Output is a sparse flag DataFrame that downstream components like\nEqualWeightRebalancer consume to know when to reassign weights. Useful for\npassive, index-style, or low-turnover strategies.\n\nOutput:\n    1.0 on rebalance dates, NaN otherwise (sparse convention). All columns\n    receive the same flag since rebalancing is portfolio-wide.\n\nExample:\n    CalendarRebalance(period=\"monthly\") -> EqualWeightRebalancer()\n",
+      "description": "Emit periodic rebalance flags on a calendar schedule for time-based portfolio rebalancing.\n\nUse to trigger portfolio weight recalculation on a fixed schedule (daily, weekly,\nor monthly). Output is a sparse flag DataFrame that downstream components like\nEqualWeightRebalancer consume to know when to reassign weights. Useful for\npassive, index-style, or low-turnover strategies.\n\nOutput:\n    1.0 on rebalance dates, NaN otherwise (sparse convention). The schedule\n    is portfolio-wide, but only coins present that bar are flagged: a coin\n    whose input is NaN (not listed yet, no data, delisted) is absent and\n    stays NaN on a rebalance row too, so EqualWeightRebalancer divides by\n    the coins present that day (Q-2135). Any finite input, including 0.0\n    or a short sign, is flagged 1.0. A bar with no coin present emits no\n    flags.\n\nExample:\n    CalendarRebalance(period=\"monthly\") -> EqualWeightRebalancer()\n",
       "usage_hint": "Use to trigger portfolio weight recalculation on a fixed schedule (daily, weekly, or monthly). Output is a sparse flag DataFrame that downstream components like EqualWeightRebalancer consume to know when to reassign weights. Useful for passive, index-style, or low-turnover strategies.",
       "input_type": "WeightSeries",
       "output_type": "WeightSeries",
@@ -13386,7 +13386,7 @@
       "name": "FairValueGap",
       "category": "indicator",
       "sub_category": "smc",
-      "description": "Track ICT fair value gaps (3-bar imbalance zones) and emit the signed ATR distance to the nearest active gap.\n\nUse for SMC \"imbalance\" entries and gap-fill logic: a fair value gap\n(FVG, also \"imbalance\" / \"inefficiency\") is the price range a fast\nthree-bar move skipped \u2014 the third bar's low sits above the first bar's\nhigh (bullish) or its high below the first bar's low (bearish). The\ncomponent keeps every unfilled gap as an ACTIVE zone and reports how far\nthe close is from the nearest one, in ATR units, so \"price is inside /\nreturning to an FVG\" is a threshold recipe on this scalar (RangeSelector\n/ AboveThresholdFilter): inside <= 0, approaching from outside is a\nsmall positive number. Every interpretation axis below is a parameter\nwith each option pinned to the school that uses it (smc-trader-cohort\nresearch/05 \u00a72); Keel does not adjudicate whose FVG is correct.\n\nAxes (sourced defaults, spec 01 contract 3):\n    direction: \"bullish\" | \"bearish\" | \"both\" (default). Which gaps are\n        tracked. A bullish gap is demand below price, a bearish gap supply\n        above it.\n    min_size_atr: minimum gap height in ATR units (default 0.0 = no size\n        filter, the smc.py convention). LuxAlgo's \"auto threshold\" filters\n        small gaps by a running-average size; ICT canon has no size rule.\n        ATR denomination is a Keel normalization (no source states one).\n    middle_candle: qualifier on the middle bar. \"none\" (default) = the pure\n        3-bar core all sources agree on; \"direction\" = the middle bar must\n        close in the gap's direction (smc.py); \"close_beyond\" = the middle\n        bar must CLOSE beyond the first bar's extreme (LuxAlgo).\n    fill: when a gap stops being active. \"touch\" (default) = first bar\n        whose low reaches the gap top / high reaches the gap bottom\n        (smc.py mitigation); \"midpoint\" = price reaches the 50% level\n        (ICT \"consequent encroachment\"); \"full\" = price traverses the\n        whole gap (LuxAlgo deletes the box). Tested from the bar AFTER\n        the gap is born.\n    expiry_bars: safety bound \u2014 a gap is dropped `expiry_bars` bars after\n        its birth whether or not it filled (default 200). A KEEL\n        CONVENTION, not a practitioner one: no surveyed source uses\n        bar-count expiry (they fill or cap the displayed count); it is\n        what keeps state bounded and warmup finite.\n    require_displacement: True = the middle bar must also be a\n        displacement candle (body >= 1.5x the ATR reference \u2014 ICT's\n        \"valid FVG\" grading; the same test `Displacement` runs). Default\n        False.\n    output: \"distance\" (default) = signed ATR distance (below); \"edge\" =\n        the nearest active gap's invalidation boundary PRICE (bottom of a\n        bullish gap, top of a bearish one) for an AtEntry(slot=...) structure stop and RiskSizer(distance=...).\n        One scalar series either\n        way; \"edge\" carries price units and is not cross-asset comparable.\n    atr_period: bars in the ATR reference (default 14). The reference at\n        bar t is the simple mean true range of the `atr_period` bars ENDING\n        AT t-1, so a pattern is never measured against its own range.\n\nUNITS \u2014 \"distance\" is in ATR multiples (unit-free, comparable across\nassets); \"edge\" is in price units.\n\nOutput:\n    SignalSeries (timestamps x symbols), causal, no repaint. \"distance\":\n    > 0 outside every active gap (price distance to the nearest gap's\n    nearest edge / ATR), 0 exactly on an edge, < 0 inside (minus the depth\n    to the nearest edge / ATR) \u2014 so `<= 0` is the in-gap mask. Nearest =\n    smallest such value across active gaps (an enclosing gap wins; ties go\n    to the older gap). NaN when no gap is active.\n    THE BAR THAT REACHES A GAP REPORTS IT (Q-1020): the output at bar t\n    is computed over every gap alive at t's close, including the one(s)\n    bar t fills \u2014 so under the default \"touch\" the FIRST bar whose low\n    reaches a bullish gap emits its distance (< 0 when the close is\n    inside), and the gap is gone from the NEXT bar on. That touch bar is\n    the bar-close entry (\"price is in the gap\"). A durable in-gap mask\n    over several bars needs fill=\"midpoint\" (price may sit between the\n    50% level and the near edge) or fill=\"full\" (anywhere above the far\n    edge) \u2014 the Example below uses \"midpoint\".\n    A gap is BORN at the\n    close of the bar that completes the 3-bar pattern and is reflected in\n    that bar's output; it is tested for fill from the next bar on.\n\nNaN semantics:\n    The first `atr_period + 1` bars are NaN (ATR warmup: the reference at\n    bar t averages the `atr_period` true ranges ending at t-1 and the\n    first true range is undefined for want of a previous close, so the\n    earliest defined reference \u2014 and hence the earliest possible birth \u2014\n    is at bar `atr_period + 1`). A bar with NaN in open/high/low/\n    close emits NaN and neither births nor fills a gap (state untouched;\n    it still ages toward expiry); a NaN inside the ATR window blanks the\n    reference for `atr_period` bars \u2014 no gap is born and \"distance\" is\n    NaN over those bars even with active gaps (\"edge\" still reports). A\n    flat tape (ATR 0) has no reference \u2014 NaN, never a division by zero.\n    Never zero-filled: NaN means \"no active gap / undefined\", not 0.\n\nCaveats (research/06 \u00a72.2, R5): the FVG construct has never been tested\nin a controlled study; the academic gap-fill literature is mostly\nnegative on exploitability and the vendor \"70% fill\" figures carry no\nmatched-control baseline. Offered as an interpretation, never as a Keel\nclaim. Execution is bar-close: \"in the gap\" means the CLOSE is in the\ngap.\n\nNote: stops, targets, trails and other price-level rules are checked and filled at the bar's close, with no intra-bar measurement or execution, so a fill can be well past the level.\n\nExample:\n    # Globals(target_timeframe=\"1h\"): PriceDataLoader() serves the 1h bars itself \u2014 no resampler\n    Pipeline([\n        PriceDataLoader(),\n        FairValueGap(direction=\"bullish\", fill=\"midpoint\", middle_candle=\"direction\"),\n        RangeSelector(low_threshold=-10.0, high_threshold=0.0),   # close inside an unfilled bullish gap\n        EqualWeightSizer(target_leverage=1.0),\n    ])\n",
+      "description": "Track ICT fair value gaps (3-bar imbalance zones) and emit the signed ATR distance to the nearest active gap.\n\nUse for SMC \"imbalance\" entries and gap-fill logic: a fair value gap\n(FVG, also \"imbalance\" / \"inefficiency\") is the price range a fast\nthree-bar move skipped \u2014 the third bar's low sits above the first bar's\nhigh (bullish) or its high below the first bar's low (bearish). The\ncomponent keeps every unfilled gap as an ACTIVE zone and reports how far\nthe close is from the nearest one, in ATR units, so \"price is inside /\nreturning to an FVG\" is a threshold recipe on this scalar (RangeSelector\n/ AboveThresholdFilter): inside <= 0, approaching from outside is a\nsmall positive number. Every interpretation axis below is a parameter\nwith each option pinned to the school that uses it (smc-trader-cohort\nresearch/05 \u00a72); Keel does not adjudicate whose FVG is correct.\n\nAxes (sourced defaults, spec 01 contract 3):\n    direction: \"bullish\" | \"bearish\" | \"both\" (default). Which gaps are\n        tracked. A bullish gap is demand below price, a bearish gap supply\n        above it.\n    min_size_atr: minimum gap height in ATR units (default 0.0 = no size\n        filter, the smc.py convention). LuxAlgo's \"auto threshold\" filters\n        small gaps by a running-average size; ICT canon has no size rule.\n        ATR denomination is a Keel normalization (no source states one).\n    middle_candle: qualifier on the middle bar. \"none\" (default) = the pure\n        3-bar core all sources agree on; \"direction\" = the middle bar must\n        close in the gap's direction (smc.py); \"close_beyond\" = the middle\n        bar must CLOSE beyond the first bar's extreme (LuxAlgo).\n    fill: when a gap stops being active. \"touch\" (default) = first bar\n        whose low reaches the gap top / high reaches the gap bottom\n        (smc.py mitigation); \"midpoint\" = price reaches the 50% level\n        (ICT \"consequent encroachment\"); \"full\" = price traverses the\n        whole gap (LuxAlgo deletes the box). Tested from the bar AFTER\n        the gap is born.\n    expiry_bars: safety bound \u2014 a gap is dropped `expiry_bars` bars after\n        its birth whether or not it filled (default 200). A KEEL\n        CONVENTION, not a practitioner one: no surveyed source uses\n        bar-count expiry (they fill or cap the displayed count); it is\n        what keeps state bounded and warmup finite.\n    require_displacement: True = the middle bar must also be a\n        displacement candle (body >= 1.5x the ATR reference \u2014 ICT's\n        \"valid FVG\" grading; the same test `Displacement` runs). Default\n        False.\n    output: \"distance\" (default) = signed ATR distance (below); \"edge\" =\n        the nearest active gap's invalidation boundary PRICE (bottom of a\n        bullish gap, top of a bearish one) for an AtEntry(slot=...) structure stop and RiskSizer(distance=...);\n        see also LevelStop(level=...) / LevelTarget(level=..., r=...).\n        One scalar series either\n        way; \"edge\" carries price units and is not cross-asset comparable.\n    atr_period: bars in the ATR reference (default 14). The reference at\n        bar t is the simple mean true range of the `atr_period` bars ENDING\n        AT t-1, so a pattern is never measured against its own range.\n\nUNITS \u2014 \"distance\" is in ATR multiples (unit-free, comparable across\nassets); \"edge\" is in price units.\n\nOutput:\n    SignalSeries (timestamps x symbols), causal, no repaint. \"distance\":\n    > 0 outside every active gap (price distance to the nearest gap's\n    nearest edge / ATR), 0 exactly on an edge, < 0 inside (minus the depth\n    to the nearest edge / ATR) \u2014 so `<= 0` is the in-gap mask. Nearest =\n    smallest such value across active gaps (an enclosing gap wins; ties go\n    to the older gap). NaN when no gap is active.\n    THE BAR THAT REACHES A GAP REPORTS IT (Q-1020): the output at bar t\n    is computed over every gap alive at t's close, including the one(s)\n    bar t fills \u2014 so under the default \"touch\" the FIRST bar whose low\n    reaches a bullish gap emits its distance (< 0 when the close is\n    inside), and the gap is gone from the NEXT bar on. That touch bar is\n    the bar-close entry (\"price is in the gap\"). A durable in-gap mask\n    over several bars needs fill=\"midpoint\" (price may sit between the\n    50% level and the near edge) or fill=\"full\" (anywhere above the far\n    edge) \u2014 the Example below uses \"midpoint\".\n    A gap is BORN at the\n    close of the bar that completes the 3-bar pattern and is reflected in\n    that bar's output; it is tested for fill from the next bar on.\n\nNaN semantics:\n    The first `atr_period + 1` bars are NaN (ATR warmup: the reference at\n    bar t averages the `atr_period` true ranges ending at t-1 and the\n    first true range is undefined for want of a previous close, so the\n    earliest defined reference \u2014 and hence the earliest possible birth \u2014\n    is at bar `atr_period + 1`). A bar with NaN in open/high/low/\n    close emits NaN and neither births nor fills a gap (state untouched;\n    it still ages toward expiry); a NaN inside the ATR window blanks the\n    reference for `atr_period` bars \u2014 no gap is born and \"distance\" is\n    NaN over those bars even with active gaps (\"edge\" still reports). A\n    flat tape (ATR 0) has no reference \u2014 NaN, never a division by zero.\n    Never zero-filled: NaN means \"no active gap / undefined\", not 0.\n\nCaveats (research/06 \u00a72.2, R5): the FVG construct has never been tested\nin a controlled study; the academic gap-fill literature is mostly\nnegative on exploitability and the vendor \"70% fill\" figures carry no\nmatched-control baseline. Offered as an interpretation, never as a Keel\nclaim. Execution is bar-close: \"in the gap\" means the CLOSE is in the\ngap.\n\nNote: stops, targets, trails and other price-level rules are checked and filled at the bar's close, with no intra-bar measurement or execution, so a fill can be well past the level.\n\nExample:\n    # Globals(target_timeframe=\"1h\"): PriceDataLoader() serves the 1h bars itself \u2014 no resampler\n    Pipeline([\n        PriceDataLoader(),\n        FairValueGap(direction=\"bullish\", fill=\"midpoint\", middle_candle=\"direction\"),\n        RangeSelector(low_threshold=-10.0, high_threshold=0.0),   # close inside an unfilled bullish gap\n        EqualWeightSizer(target_leverage=1.0),\n    ])\n",
       "usage_hint": "Use for SMC \"imbalance\" entries and gap-fill logic: a fair value gap (FVG, also \"imbalance\" / \"inefficiency\") is the price range a fast three-bar move skipped \u2014 the third bar's low sits above the first bar's high (bullish) or its high below the first bar's low (bearish). The component keeps every unfilled gap as an ACTIVE zone and reports how far the close is from the nearest one, in ATR units, so \"price is inside / returning to an FVG\" is a threshold recipe on this scalar (RangeSelector / AboveThresholdFilter): inside <= 0, approaching from outside is a small positive number. Every interpretation axis below is a parameter with each option pinned to the school that uses it (smc-trader-cohort research/05 \u00a72); Keel does not adjudicate whose FVG is correct.",
       "input_type": "OHLCVDict",
       "output_type": "SignalSeries",
@@ -20637,6 +20637,548 @@
       }
     },
     {
+      "name": "LevelStop",
+      "category": "position_manager",
+      "sub_category": "trade_factory",
+      "description": "A structure stop: exit once the close crosses the price level frozen at entry (inclusive).\n\nPosition layer: TradeManager turns entry signals into a Position; each rule is a reader, then\nordinary components, then an action (Exit, Reduce, ScaleIn, AllowEntry). ``level`` is a slot\nholding a per-asset PRICE series (an ``OrderBlock(output=\"edge\")``, a swing low, a lowest\nlow, an EMA); its value at the entry bar is the stop. LevelStop is sugar for\n``{left: [{fast: [Load(<prices>), ExtractSeries(series_name=\"close\")], slow:\n[AtEntry(slot=level)]}, Crossover()], right: [TradeDirection()]} -> SignalProduct() ->\nBelowThresholdFilter(threshold=0.0, inclusive=True) -> Exit()``: (close \u2212 level) \u00d7 direction\n\u2264 0, so a long exits at or below the level and a short at or above it.\n\nNote: stops, targets, trails and other price-level rules are checked and filled at the bar's close, with no intra-bar measurement or execution, so a fill can be well past the level.\nNote: a NaN level at the entry bar refuses that entry (AtEntry's required=True).\nNote: LevelTarget(level=..., r=2) is the matching R-multiple target.\n\nExample:\n    OrderBlock(direction=\"bullish\", output=\"edge\") -> Store(\"ob_edge\") ->\n      TradeManager(entries=\"entries\", prices=\"ohlcv\") ->\n      {\"stop\": [LevelStop(level=\"ob_edge\")], \"target\": [LevelTarget(level=\"ob_edge\", r=2.0)]} ->\n      Exposure() -> FixedWeightSizer(weight_per_position=0.1)\n",
+      "usage_hint": "Position layer: TradeManager turns entry signals into a Position; each rule is a reader, then ordinary components, then an action (Exit, Reduce, ScaleIn, AllowEntry). ``level`` is a slot holding a per-asset PRICE series (an ``OrderBlock(output=\"edge\")``, a swing low, a lowest low, an EMA); its value at the entry bar is the stop. LevelStop is sugar for ``{left: [{fast: [Load(<prices>), ExtractSeries(series_name=\"close\")], slow: [AtEntry(slot=level)]}, Crossover()], right: [TradeDirection()]} -> SignalProduct() -> BelowThresholdFilter(threshold=0.0, inclusive=True) -> Exit()``: (close \u2212 level) \u00d7 direction \u2264 0, so a long exits at or below the level and a short at or above it.",
+      "input_type": "Position",
+      "output_type": "Position",
+      "deterministic": true,
+      "parameters": [
+        {
+          "name": "level",
+          "type": "str",
+          "default": null,
+          "required": true,
+          "description": "Slot holding the stop's price series (stored above the TradeManager, on the strategy's clock); its value at each trade's entry bar is that trade's stop. Required.",
+          "suggestions": [],
+          "optimizable": true,
+          "constraints": {},
+          "tier": "strategy",
+          "slot_reference": false,
+          "expected_slot_type": null,
+          "type_structure": {
+            "kind": "class",
+            "name": "str"
+          }
+        }
+      ],
+      "implicit_slot_reads": [],
+      "param_constraints": [],
+      "declaration_refs": null,
+      "optional_declaration_refs": null,
+      "composer_inputs": null,
+      "latest": 1,
+      "version": 1,
+      "status": "active",
+      "changelog": {
+        "1": "Initial release (position layer, Q-2448)"
+      },
+      "versions": {
+        "1": {
+          "parameters": [
+            {
+              "name": "level",
+              "type": "str",
+              "default": null,
+              "required": true,
+              "description": "Slot holding the stop's price series (stored above the TradeManager, on the strategy's clock); its value at each trade's entry bar is that trade's stop. Required.",
+              "tier": "strategy",
+              "slot_reference": false,
+              "suggestions": [],
+              "optimizable": true,
+              "constraints": {},
+              "expected_slot_type": null,
+              "type_structure": {
+                "kind": "class",
+                "name": "str"
+              }
+            }
+          ],
+          "input_type": "Position",
+          "output_type": "Position",
+          "declaration_refs": null,
+          "optional_declaration_refs": null,
+          "changelog_entry": "Initial release (position layer, Q-2448)",
+          "implicit_slot_reads": [],
+          "param_constraints": [],
+          "record_tolerant": "full",
+          "clock_direction": "keep",
+          "binding": {
+            "role": "factory"
+          },
+          "factory_expansion": [
+            {
+              "parallel": {
+                "left": [
+                  {
+                    "parallel": {
+                      "fast": [
+                        {
+                          "load": {
+                            "$scope": "prices"
+                          }
+                        },
+                        {
+                          "component": "ExtractSeries",
+                          "params": {
+                            "series_name": "close"
+                          }
+                        }
+                      ],
+                      "slow": [
+                        {
+                          "component": "AtEntry",
+                          "params": {
+                            "slot": {
+                              "$arg": "level"
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "component": "Crossover",
+                    "params": {}
+                  }
+                ],
+                "right": [
+                  {
+                    "component": "TradeDirection",
+                    "params": {}
+                  }
+                ]
+              }
+            },
+            {
+              "component": "SignalProduct",
+              "params": {}
+            },
+            {
+              "component": "BelowThresholdFilter",
+              "params": {
+                "threshold": 0.0,
+                "inclusive": true
+              }
+            },
+            {
+              "component": "Exit",
+              "params": {}
+            }
+          ]
+        }
+      },
+      "record_tolerant": "full",
+      "clock_direction": "keep",
+      "binding": {
+        "role": "factory"
+      },
+      "factory_expansion": [
+        {
+          "parallel": {
+            "left": [
+              {
+                "parallel": {
+                  "fast": [
+                    {
+                      "load": {
+                        "$scope": "prices"
+                      }
+                    },
+                    {
+                      "component": "ExtractSeries",
+                      "params": {
+                        "series_name": "close"
+                      }
+                    }
+                  ],
+                  "slow": [
+                    {
+                      "component": "AtEntry",
+                      "params": {
+                        "slot": {
+                          "$arg": "level"
+                        }
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "component": "Crossover",
+                "params": {}
+              }
+            ],
+            "right": [
+              {
+                "component": "TradeDirection",
+                "params": {}
+              }
+            ]
+          }
+        },
+        {
+          "component": "SignalProduct",
+          "params": {}
+        },
+        {
+          "component": "BelowThresholdFilter",
+          "params": {
+            "threshold": 0.0,
+            "inclusive": true
+          }
+        },
+        {
+          "component": "Exit",
+          "params": {}
+        }
+      ]
+    },
+    {
+      "name": "LevelTarget",
+      "category": "position_manager",
+      "sub_category": "trade_factory",
+      "description": "An R-multiple target: take profit once the trade has made r times its entry-to-level distance (inclusive).\n\nPosition layer: TradeManager turns entry signals into a Position; each rule is a reader, then\nordinary components, then an action (Exit, Reduce, ScaleIn, AllowEntry). The distance (1R) is\n|entry close \u2212 level at entry|, from the same ``level`` slot as LevelStop, so a 2R target is\n``LevelTarget(level=..., r=2.0)``. Sugar for ``{numerator: [TradePnL()], denominator:\n[{fast: [EntryPrice()], slow: [AtEntry(slot=level)]}, Crossover(), Abs()]} ->\nSignalRatio() -> AboveThresholdFilter(threshold=r, inclusive=True) -> Exit()``, or ``->\nReduce(fraction=fraction)`` when ``fraction`` is set.\n\nNote: stops, targets, trails and other price-level rules are checked and filled at the bar's close, with no intra-bar measurement or execution, so a fill can be well past the level.\nNote: a NaN level at the entry bar refuses that entry; a zero distance never fires.\n\nExample:\n    ExtractSeries(series_name=\"low\") -> Store(\"entry_low\") ->\n      TradeManager(entries=\"entries\", prices=\"ohlcv\") ->\n      {\"stop\": [LevelStop(level=\"entry_low\")], \"tp1\": [LevelTarget(level=\"entry_low\", r=2.0, fraction=0.5)]} ->\n      Exposure() -> FixedWeightSizer(weight_per_position=0.1)\n",
+      "usage_hint": "Position layer: TradeManager turns entry signals into a Position; each rule is a reader, then ordinary components, then an action (Exit, Reduce, ScaleIn, AllowEntry). The distance (1R) is |entry close \u2212 level at entry|, from the same ``level`` slot as LevelStop, so a 2R target is ``LevelTarget(level=..., r=2.0)``. Sugar for ``{numerator: [TradePnL()], denominator: [{fast: [EntryPrice()], slow: [AtEntry(slot=level)]}, Crossover(), Abs()]} -> SignalRatio() -> AboveThresholdFilter(threshold=r, inclusive=True) -> Exit()``, or ``-> Reduce(fraction=fraction)`` when ``fraction`` is set.",
+      "input_type": "Position",
+      "output_type": "Position",
+      "deterministic": true,
+      "parameters": [
+        {
+          "name": "level",
+          "type": "str",
+          "default": null,
+          "required": true,
+          "description": "Slot holding the stop's price series (the LevelStop level); the distance from the entry close to its value at entry is 1R.",
+          "suggestions": [],
+          "optimizable": true,
+          "constraints": {},
+          "tier": "strategy",
+          "slot_reference": false,
+          "expected_slot_type": null,
+          "type_structure": {
+            "kind": "class",
+            "name": "str"
+          }
+        },
+        {
+          "name": "r",
+          "type": "float",
+          "default": null,
+          "required": true,
+          "description": "The R multiple that triggers (2.0 = twice the stop distance).",
+          "suggestions": [],
+          "optimizable": true,
+          "constraints": {
+            "min": 0.0,
+            "min_exclusive": true,
+            "typical": [
+              1.0,
+              5.0
+            ]
+          },
+          "tier": "strategy",
+          "slot_reference": false,
+          "expected_slot_type": null,
+          "type_structure": {
+            "kind": "class",
+            "name": "float"
+          }
+        },
+        {
+          "name": "fraction",
+          "type": "float",
+          "default": null,
+          "required": false,
+          "description": "Sell this fraction of the position instead of exiting (0.5 = half). None (default) exits the whole trade.",
+          "suggestions": [],
+          "optimizable": true,
+          "constraints": {
+            "min": 0.0,
+            "min_exclusive": true,
+            "max": 1.0,
+            "typical": [
+              0.25,
+              1.0
+            ]
+          },
+          "tier": "strategy",
+          "slot_reference": false,
+          "expected_slot_type": null,
+          "type_structure": {
+            "kind": "union",
+            "members": [
+              {
+                "kind": "class",
+                "name": "float"
+              },
+              {
+                "kind": "none"
+              }
+            ]
+          }
+        }
+      ],
+      "implicit_slot_reads": [],
+      "param_constraints": [],
+      "declaration_refs": null,
+      "optional_declaration_refs": null,
+      "composer_inputs": null,
+      "latest": 1,
+      "version": 1,
+      "status": "active",
+      "changelog": {
+        "1": "Initial release (position layer, Q-2448)"
+      },
+      "versions": {
+        "1": {
+          "parameters": [
+            {
+              "name": "level",
+              "type": "str",
+              "default": null,
+              "required": true,
+              "description": "Slot holding the stop's price series (the LevelStop level); the distance from the entry close to its value at entry is 1R.",
+              "tier": "strategy",
+              "slot_reference": false,
+              "suggestions": [],
+              "optimizable": true,
+              "constraints": {},
+              "expected_slot_type": null,
+              "type_structure": {
+                "kind": "class",
+                "name": "str"
+              }
+            },
+            {
+              "name": "r",
+              "type": "float",
+              "default": null,
+              "required": true,
+              "description": "The R multiple that triggers (2.0 = twice the stop distance).",
+              "tier": "strategy",
+              "slot_reference": false,
+              "suggestions": [],
+              "optimizable": true,
+              "constraints": {
+                "min": 0.0,
+                "min_exclusive": true,
+                "typical": [
+                  1.0,
+                  5.0
+                ]
+              },
+              "expected_slot_type": null,
+              "type_structure": {
+                "kind": "class",
+                "name": "float"
+              }
+            },
+            {
+              "name": "fraction",
+              "type": "float",
+              "default": null,
+              "required": false,
+              "description": "Sell this fraction of the position instead of exiting (0.5 = half). None (default) exits the whole trade.",
+              "tier": "strategy",
+              "slot_reference": false,
+              "suggestions": [],
+              "optimizable": true,
+              "constraints": {
+                "min": 0.0,
+                "min_exclusive": true,
+                "max": 1.0,
+                "typical": [
+                  0.25,
+                  1.0
+                ]
+              },
+              "expected_slot_type": null,
+              "type_structure": {
+                "kind": "union",
+                "members": [
+                  {
+                    "kind": "class",
+                    "name": "float"
+                  },
+                  {
+                    "kind": "none"
+                  }
+                ]
+              }
+            }
+          ],
+          "input_type": "Position",
+          "output_type": "Position",
+          "declaration_refs": null,
+          "optional_declaration_refs": null,
+          "changelog_entry": "Initial release (position layer, Q-2448)",
+          "implicit_slot_reads": [],
+          "param_constraints": [],
+          "record_tolerant": "full",
+          "clock_direction": "keep",
+          "binding": {
+            "role": "factory"
+          },
+          "factory_expansion": [
+            {
+              "parallel": {
+                "numerator": [
+                  {
+                    "component": "TradePnL",
+                    "params": {}
+                  }
+                ],
+                "denominator": [
+                  {
+                    "parallel": {
+                      "fast": [
+                        {
+                          "component": "EntryPrice",
+                          "params": {}
+                        }
+                      ],
+                      "slow": [
+                        {
+                          "component": "AtEntry",
+                          "params": {
+                            "slot": {
+                              "$arg": "level"
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "component": "Crossover",
+                    "params": {}
+                  },
+                  {
+                    "component": "Abs",
+                    "params": {}
+                  }
+                ]
+              }
+            },
+            {
+              "component": "SignalRatio",
+              "params": {}
+            },
+            {
+              "component": "AboveThresholdFilter",
+              "params": {
+                "threshold": {
+                  "$arg": "r"
+                },
+                "inclusive": true
+              }
+            },
+            {
+              "$when": "fraction",
+              "set": [
+                {
+                  "component": "Reduce",
+                  "params": {
+                    "fraction": {
+                      "$arg": "fraction"
+                    }
+                  }
+                }
+              ],
+              "unset": [
+                {
+                  "component": "Exit",
+                  "params": {}
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "record_tolerant": "full",
+      "clock_direction": "keep",
+      "binding": {
+        "role": "factory"
+      },
+      "factory_expansion": [
+        {
+          "parallel": {
+            "numerator": [
+              {
+                "component": "TradePnL",
+                "params": {}
+              }
+            ],
+            "denominator": [
+              {
+                "parallel": {
+                  "fast": [
+                    {
+                      "component": "EntryPrice",
+                      "params": {}
+                    }
+                  ],
+                  "slow": [
+                    {
+                      "component": "AtEntry",
+                      "params": {
+                        "slot": {
+                          "$arg": "level"
+                        }
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "component": "Crossover",
+                "params": {}
+              },
+              {
+                "component": "Abs",
+                "params": {}
+              }
+            ]
+          }
+        },
+        {
+          "component": "SignalRatio",
+          "params": {}
+        },
+        {
+          "component": "AboveThresholdFilter",
+          "params": {
+            "threshold": {
+              "$arg": "r"
+            },
+            "inclusive": true
+          }
+        },
+        {
+          "$when": "fraction",
+          "set": [
+            {
+              "component": "Reduce",
+              "params": {
+                "fraction": {
+                  "$arg": "fraction"
+                }
+              }
+            }
+          ],
+          "unset": [
+            {
+              "component": "Exit",
+              "params": {}
+            }
+          ]
+        }
+      ]
+    },
+    {
       "name": "LeverageCap",
       "category": "risk_manager",
       "sub_category": "leverage",
@@ -26482,7 +27024,7 @@
       "name": "OrderBlock",
       "category": "indicator",
       "sub_category": "smc",
-      "description": "Track ICT/SMC order blocks \u2014 the candle a confirmed impulse originated from \u2014 and emit the signed ATR distance to the nearest active block.\n\nUse for the \"return to the origin of the move\" family of SMC entries: an\norder block is the candle a leg came FROM, marked only once the leg has\nCONFIRMED itself (a structure break, a displacement, or either). The\ncomponent keeps every unmitigated block as an active zone and reports\nhow far the close is from the nearest one in ATR units, so \"price is\nback at the order block\" is a threshold recipe on this scalar\n(RangeSelector / AboveThresholdFilter): inside <= 0, approaching from\noutside is a small positive number. Every contested clause below is a\nparameter whose options are pinned to the school that uses them\n(smc-trader-cohort research/05 \u00a78); Keel does not adjudicate between\nthem.\n\nTHE HEADLINE SPLIT (research/05 \u00a78, R4): ICT canon teaches\n`candle_select=\"last_opposite\"` \u2014 \"a bullish order block is the last\ndown candle before a strong push up\" \u2014 while BOTH dominant deployed\nimplementations (LuxAlgo's Pine, smc.py) mark the EXTREME candle in the\nleg instead. Both ship. The default is `\"extreme_in_leg\"` because it is\nwhat the deployed majority computes, not because it is more correct;\nno controlled test of either exists (see the caveat below).\n\nAxes (sourced defaults, spec 01 contract 3):\n    direction: \"bullish\" | \"bearish\" | \"both\" (default). Which blocks\n        are tracked. A bullish block is demand below price, a bearish\n        one supply above it.\n    candle_select: \"extreme_in_leg\" (default \u2014 LuxAlgo, smc.py: the\n        lowest low / highest high in the confirmed leg) or\n        \"last_opposite\" (ICT canon: the last candle that CLOSED against\n        the push). See the headline split above.\n    confirm: what makes the candle a block. \"structure_break\" (default\n        \u2014 LuxAlgo, smc.py: the first CLOSE beyond the active swing\n        level; the leg scanned is the broken swing's bar through the\n        breaking bar), \"displacement\" (the Displacement-Order-Blocks\n        school: a body >= 1.5x the ATR reference, no structure break\n        needed; the leg scanned is the contiguous same-direction close\n        run ending at the impulse, plus the bar that begins it), or\n        \"either\" (a block at every bar that carries one; when a bar\n        carries both, the structure-break leg wins).\n    zone: the block's bounds. \"full_range\" (default \u2014 LuxAlgo, smc.py:\n        the candle's high/low) or \"body\" (the ICT mirrors: \"marked\n        using the candle body \u2014 not the full candle range\").\n    mitigation: when a block stops being active. \"touch\" (default \u2014\n        smc.py: the first bar whose low reaches the block top / high\n        reaches its bottom), \"midpoint\" (the ICT mean threshold, 50%)\n        or \"close_through\" (ICT-strict / LuxAlgo removal: only a body\n        CLOSE beyond the far edge). Tested from the bar AFTER birth.\n    require_fvg: True = the confirming leg must also contain a fair\n        value gap completing inside it (DOB / ICT-strict); False\n        (default \u2014 LuxAlgo, smc.py).\n    max_range_atr: LuxAlgo's volatility filter \u2014 a candle whose own\n        range reaches this many ATR is not eligible to be the block.\n        Default 0.0 = OFF (smc.py has no such filter); 2.0 reproduces\n        LuxAlgo's `range < threshold * 2`.\n    expiry_bars: the single bound on EVERY piece of state this component\n        holds (default 200) \u2014 an unbroken swing level stops being\n        breakable `expiry_bars` bars after it is confirmed, AND a block\n        is dropped `expiry_bars` bars after birth whether or not it\n        mitigated. One knob, so nothing can outlive it; lowering it far\n        enough starves the confirmation itself, which is intended and\n        visible (no levels, no blocks). A KEEL CONVENTION, not a\n        practitioner one: the surveyed sources cap the DISPLAYED count\n        instead (LuxAlgo shows the 5 most recent).\n    output: \"distance\" (default) = signed ATR distance (below); \"edge\"\n        = the nearest active block's invalidation boundary PRICE\n        (bottom of a bullish block, top of a bearish one) for an AtEntry(slot=...) structure stop and RiskSizer(distance=...).\n        One scalar series either way; \"edge\" carries price units and is\n        not cross-asset comparable.\n    detector: pivot rule for `confirm=\"structure_break\"` \u2014 \"fractal\"\n        (default, the symmetric window smc.py's swing_length uses) or\n        \"leg_flip\" (LuxAlgo's rolling-extreme state flip). research/05 \u00a71.\n    width: swing width in bars for the `confirm=\"structure_break\"`\n        pivots (default 5) \u2014 the SAME axis the structure family takes,\n        spelled the same way. The sourced ladder is 1 (ICT's short-term\n        high, \"a candle with lower highs on both sides\"), 5 (LuxAlgo's\n        hardcoded INTERNAL structure) and 50 (its SWING structure, and\n        smc.py's `swing_length` default); `structure.TIER_WIDTHS` is\n        that named pair. It is ONE CONTINUOUS AXIS (>= 1, typically\n        1..100), not two rungs: the two named readings remain reachable\n        as the values 5 and 50, and every width between and beyond them\n        is now available too. The default follows the internal reading \u2014 a\n        width-50 fractal must be the strict extreme of a 101-bar window\n        and so confirms only a handful of levels per 500 bars, too\n        sparse to birth blocks on a normal backtest window.\n        research/05 \u00a71, \u00a73.\n    atr_period: bars in the ATR reference (default 14). The reference at\n        bar t is the simple mean true range of the `atr_period` bars\n        ENDING AT t-1, so a leg is never measured against its own range.\n\nUNITS \u2014 \"distance\" is in ATR multiples (unit-free, comparable across\nassets); \"edge\" is in price units. `max_range_atr` is an ATR multiple.\n\nOutput:\n    SignalSeries (timestamps x symbols), causal, no repaint. \"distance\":\n    > 0 outside every active block (price distance to the nearest\n    block's nearest edge / ATR), 0 exactly on an edge, < 0 inside (minus\n    the depth to the nearest edge / ATR). Nearest = smallest such value\n    across active blocks (an enclosing block wins; ties go to the older\n    one). NaN when no block is active.\n    THE BAR THAT REACHES A BLOCK REPORTS IT (Q-1020): the output at bar\n    t is computed over every block alive at t's close, including the\n    one(s) bar t mitigates \u2014 so under the default \"touch\" the first bar\n    whose low reaches a bullish block emits its distance (<= 0 when the\n    close is inside), and the block is gone from the NEXT bar on. That\n    touch bar is the bar-close entry (\"price is in the block\"); a\n    durable in-block mask over several bars needs mitigation=\"midpoint\"\n    or \"close_through\" \u2014 the Example below uses \"close_through\".\n    A block is BORN at the close of the CONFIRMING bar \u2014 never at the\n    block candle's own bar, which is in the past \u2014 and is reflected in\n    that bar's output; it is tested for mitigation from the next bar on.\n    The block candle itself always PRECEDES the confirming bar (Q-1021):\n    the candidate range for `candle_select` ends the bar before the\n    confirmation, so a displacement candle is never its own block.\n\nNaN semantics:\n    A bar with NaN in open/high/low/close emits NaN and neither births\n    nor mitigates a block (state untouched; it still ages toward\n    expiry), and it can never BE the block candle. A NaN inside the ATR\n    window blanks the reference for `atr_period` bars: \"distance\" is NaN\n    over those bars even with active blocks (\"edge\" still reports), and\n    a displacement confirmation cannot be judged there. A flat tape\n    (ATR 0) has no reference \u2014 NaN, never a division by zero. A\n    confirming leg that holds no qualifying candle births NO block\n    (undefined, never a default candle). Never zero-filled: NaN means\n    \"no active block / undefined\", not 0.\n\nCaveats (research/05 \u00a78, research/06, R5): the order-block construct has\nnever been tested in a controlled study \u2014 the zone-revisit claim (\"price\nreturns to the origin of the move\") carries no published evidence, no\nmatched-control baseline, and no agreed definition, which is why the two\ndominant definitions here disagree. Offered as an interpretation of the\ntape, NEVER as a Keel claim that order blocks work. Execution is\nbar-close: \"at the block\" means the CLOSE is at it.\n\nNote: stops, targets, trails and other price-level rules are checked and filled at the bar's close, with no intra-bar measurement or execution, so a fill can be well past the level.\n\nExample:\n    # Globals(target_timeframe=\"1h\"): PriceDataLoader() serves the 1h bars itself \u2014 no resampler\n    Pipeline([\n        PriceDataLoader(),\n        OrderBlock(direction=\"bullish\", confirm=\"structure_break\",\n                   mitigation=\"close_through\"),\n        RangeSelector(low_threshold=-10.0, high_threshold=0.0),   # close inside a live bullish block\n        EqualWeightSizer(target_leverage=1.0),\n    ])\n",
+      "description": "Track ICT/SMC order blocks \u2014 the candle a confirmed impulse originated from \u2014 and emit the signed ATR distance to the nearest active block.\n\nUse for the \"return to the origin of the move\" family of SMC entries: an\norder block is the candle a leg came FROM, marked only once the leg has\nCONFIRMED itself (a structure break, a displacement, or either). The\ncomponent keeps every unmitigated block as an active zone and reports\nhow far the close is from the nearest one in ATR units, so \"price is\nback at the order block\" is a threshold recipe on this scalar\n(RangeSelector / AboveThresholdFilter): inside <= 0, approaching from\noutside is a small positive number. Every contested clause below is a\nparameter whose options are pinned to the school that uses them\n(smc-trader-cohort research/05 \u00a78); Keel does not adjudicate between\nthem.\n\nTHE HEADLINE SPLIT (research/05 \u00a78, R4): ICT canon teaches\n`candle_select=\"last_opposite\"` \u2014 \"a bullish order block is the last\ndown candle before a strong push up\" \u2014 while BOTH dominant deployed\nimplementations (LuxAlgo's Pine, smc.py) mark the EXTREME candle in the\nleg instead. Both ship. The default is `\"extreme_in_leg\"` because it is\nwhat the deployed majority computes, not because it is more correct;\nno controlled test of either exists (see the caveat below).\n\nAxes (sourced defaults, spec 01 contract 3):\n    direction: \"bullish\" | \"bearish\" | \"both\" (default). Which blocks\n        are tracked. A bullish block is demand below price, a bearish\n        one supply above it.\n    candle_select: \"extreme_in_leg\" (default \u2014 LuxAlgo, smc.py: the\n        lowest low / highest high in the confirmed leg) or\n        \"last_opposite\" (ICT canon: the last candle that CLOSED against\n        the push). See the headline split above.\n    confirm: what makes the candle a block. \"structure_break\" (default\n        \u2014 LuxAlgo, smc.py: the first CLOSE beyond the active swing\n        level; the leg scanned is the broken swing's bar through the\n        breaking bar), \"displacement\" (the Displacement-Order-Blocks\n        school: a body >= 1.5x the ATR reference, no structure break\n        needed; the leg scanned is the contiguous same-direction close\n        run ending at the impulse, plus the bar that begins it), or\n        \"either\" (a block at every bar that carries one; when a bar\n        carries both, the structure-break leg wins).\n    zone: the block's bounds. \"full_range\" (default \u2014 LuxAlgo, smc.py:\n        the candle's high/low) or \"body\" (the ICT mirrors: \"marked\n        using the candle body \u2014 not the full candle range\").\n    mitigation: when a block stops being active. \"touch\" (default \u2014\n        smc.py: the first bar whose low reaches the block top / high\n        reaches its bottom), \"midpoint\" (the ICT mean threshold, 50%)\n        or \"close_through\" (ICT-strict / LuxAlgo removal: only a body\n        CLOSE beyond the far edge). Tested from the bar AFTER birth.\n    require_fvg: True = the confirming leg must also contain a fair\n        value gap completing inside it (DOB / ICT-strict); False\n        (default \u2014 LuxAlgo, smc.py).\n    max_range_atr: LuxAlgo's volatility filter \u2014 a candle whose own\n        range reaches this many ATR is not eligible to be the block.\n        Default 0.0 = OFF (smc.py has no such filter); 2.0 reproduces\n        LuxAlgo's `range < threshold * 2`.\n    expiry_bars: the single bound on EVERY piece of state this component\n        holds (default 200) \u2014 an unbroken swing level stops being\n        breakable `expiry_bars` bars after it is confirmed, AND a block\n        is dropped `expiry_bars` bars after birth whether or not it\n        mitigated. One knob, so nothing can outlive it; lowering it far\n        enough starves the confirmation itself, which is intended and\n        visible (no levels, no blocks). A KEEL CONVENTION, not a\n        practitioner one: the surveyed sources cap the DISPLAYED count\n        instead (LuxAlgo shows the 5 most recent).\n    output: \"distance\" (default) = signed ATR distance (below); \"edge\"\n        = the nearest active block's invalidation boundary PRICE\n        (bottom of a bullish block, top of a bearish one) for an AtEntry(slot=...) structure stop and RiskSizer(distance=...);\n        see also LevelStop(level=...) / LevelTarget(level=..., r=...).\n        One scalar series either way; \"edge\" carries price units and is\n        not cross-asset comparable.\n    detector: pivot rule for `confirm=\"structure_break\"` \u2014 \"fractal\"\n        (default, the symmetric window smc.py's swing_length uses) or\n        \"leg_flip\" (LuxAlgo's rolling-extreme state flip). research/05 \u00a71.\n    width: swing width in bars for the `confirm=\"structure_break\"`\n        pivots (default 5) \u2014 the SAME axis the structure family takes,\n        spelled the same way. The sourced ladder is 1 (ICT's short-term\n        high, \"a candle with lower highs on both sides\"), 5 (LuxAlgo's\n        hardcoded INTERNAL structure) and 50 (its SWING structure, and\n        smc.py's `swing_length` default); `structure.TIER_WIDTHS` is\n        that named pair. It is ONE CONTINUOUS AXIS (>= 1, typically\n        1..100), not two rungs: the two named readings remain reachable\n        as the values 5 and 50, and every width between and beyond them\n        is now available too. The default follows the internal reading \u2014 a\n        width-50 fractal must be the strict extreme of a 101-bar window\n        and so confirms only a handful of levels per 500 bars, too\n        sparse to birth blocks on a normal backtest window.\n        research/05 \u00a71, \u00a73.\n    atr_period: bars in the ATR reference (default 14). The reference at\n        bar t is the simple mean true range of the `atr_period` bars\n        ENDING AT t-1, so a leg is never measured against its own range.\n\nUNITS \u2014 \"distance\" is in ATR multiples (unit-free, comparable across\nassets); \"edge\" is in price units. `max_range_atr` is an ATR multiple.\n\nOutput:\n    SignalSeries (timestamps x symbols), causal, no repaint. \"distance\":\n    > 0 outside every active block (price distance to the nearest\n    block's nearest edge / ATR), 0 exactly on an edge, < 0 inside (minus\n    the depth to the nearest edge / ATR). Nearest = smallest such value\n    across active blocks (an enclosing block wins; ties go to the older\n    one). NaN when no block is active.\n    THE BAR THAT REACHES A BLOCK REPORTS IT (Q-1020): the output at bar\n    t is computed over every block alive at t's close, including the\n    one(s) bar t mitigates \u2014 so under the default \"touch\" the first bar\n    whose low reaches a bullish block emits its distance (<= 0 when the\n    close is inside), and the block is gone from the NEXT bar on. That\n    touch bar is the bar-close entry (\"price is in the block\"); a\n    durable in-block mask over several bars needs mitigation=\"midpoint\"\n    or \"close_through\" \u2014 the Example below uses \"close_through\".\n    A block is BORN at the close of the CONFIRMING bar \u2014 never at the\n    block candle's own bar, which is in the past \u2014 and is reflected in\n    that bar's output; it is tested for mitigation from the next bar on.\n    The block candle itself always PRECEDES the confirming bar (Q-1021):\n    the candidate range for `candle_select` ends the bar before the\n    confirmation, so a displacement candle is never its own block.\n\nNaN semantics:\n    A bar with NaN in open/high/low/close emits NaN and neither births\n    nor mitigates a block (state untouched; it still ages toward\n    expiry), and it can never BE the block candle. A NaN inside the ATR\n    window blanks the reference for `atr_period` bars: \"distance\" is NaN\n    over those bars even with active blocks (\"edge\" still reports), and\n    a displacement confirmation cannot be judged there. A flat tape\n    (ATR 0) has no reference \u2014 NaN, never a division by zero. A\n    confirming leg that holds no qualifying candle births NO block\n    (undefined, never a default candle). Never zero-filled: NaN means\n    \"no active block / undefined\", not 0.\n\nCaveats (research/05 \u00a78, research/06, R5): the order-block construct has\nnever been tested in a controlled study \u2014 the zone-revisit claim (\"price\nreturns to the origin of the move\") carries no published evidence, no\nmatched-control baseline, and no agreed definition, which is why the two\ndominant definitions here disagree. Offered as an interpretation of the\ntape, NEVER as a Keel claim that order blocks work. Execution is\nbar-close: \"at the block\" means the CLOSE is at it.\n\nNote: stops, targets, trails and other price-level rules are checked and filled at the bar's close, with no intra-bar measurement or execution, so a fill can be well past the level.\n\nExample:\n    # Globals(target_timeframe=\"1h\"): PriceDataLoader() serves the 1h bars itself \u2014 no resampler\n    Pipeline([\n        PriceDataLoader(),\n        OrderBlock(direction=\"bullish\", confirm=\"structure_break\",\n                   mitigation=\"close_through\"),\n        RangeSelector(low_threshold=-10.0, high_threshold=0.0),   # close inside a live bullish block\n        EqualWeightSizer(target_leverage=1.0),\n    ])\n",
       "usage_hint": "Use for the \"return to the origin of the move\" family of SMC entries: an order block is the candle a leg came FROM, marked only once the leg has CONFIRMED itself (a structure break, a displacement, or either). The component keeps every unmitigated block as an active zone and reports how far the close is from the nearest one in ATR units, so \"price is back at the order block\" is a threshold recipe on this scalar (RangeSelector / AboveThresholdFilter): inside <= 0, approaching from outside is a small positive number. Every contested clause below is a parameter whose options are pinned to the school that uses them (smc-trader-cohort research/05 \u00a78); Keel does not adjudicate between them.",
       "input_type": "OHLCVDict",
       "output_type": "SignalSeries",
@@ -36352,7 +36894,7 @@
       "name": "RiskParityAllocator",
       "category": "position_sizer",
       "sub_category": "weighting",
-      "description": "Allocate inverse-volatility weights for risk parity across instruments.\n\nUse when assets have meaningfully different volatility profiles and you want\neach instrument to contribute roughly equal risk. Reads volatility estimates\nfrom a named slot (typically the output of ReturnVolatility stored\nvia Store). Placed after VolTargetWeightConverter and before IDMPortfolioAggregator.\n\nOutput:\n    Weighted blocks (DataFrame, same shape as input). Each instrument's blocks\n    are multiplied by its inverse-volatility weight. Weights sum to 1.0 unless\n    ``min_weight``/``max_weight`` bind \u2014 the bounds are applied LAST and are\n    hard, so a binding cap leaves gross below 1.0 (excess to cash) and a\n    binding floor leaves it above. Lower-volatility assets get higher weights.\n\nFormula:\n    w_i = (1 / sigma_i) / sum(1 / sigma_j)\n    weighted_blocks[asset] = subsystem_blocks[asset] * w_i\n\nExample:\n    VolTargetWeightConverter(return_vol_slot=\"return_vol\")\n    -> RiskParityAllocator(volatility_slot=\"return_vol\") -> IDMPortfolioAggregator(...)\n",
+      "description": "Allocate inverse-volatility weights for risk parity across instruments.\n\nUse when assets have meaningfully different volatility profiles and you want\neach instrument to contribute roughly equal risk. Reads volatility estimates\nfrom a named slot (typically the output of ReturnVolatility stored\nvia Store). Placed after VolTargetWeightConverter and before IDMPortfolioAggregator.\n\nOutput:\n    Weighted blocks (DataFrame, same shape as input). Each instrument's blocks\n    are multiplied by its inverse-volatility weight FOR THAT BAR. On every\n    bar the weights sum to 1.0 over the assets present on that bar unless\n    ``min_weight``/``max_weight`` bind \u2014 the bounds are applied LAST and are\n    hard, so a binding cap leaves gross below 1.0 (excess to cash) and a\n    binding floor leaves it above. Lower-volatility assets get higher weights.\n\nFormula (per bar t, over the active set A_t):\n    A_t = assets with a non-NaN input AND a finite volatility at t\n    w_t,i = (1 / sigma_t,i) / sum_{j in A_t} (1 / sigma_t,j)   for i in A_t\n    weighted_blocks[t, asset] = subsystem_blocks[t, asset] * w_t,i\n\nMissing is absent (Q-2473): an asset with no input on a bar (not listed\nyet, delisted, masked) or no volatility estimate yet takes no share of\nthat bar's budget, so the coins present are fully invested between them.\nA bar on which no asset is active is NaN (warm-up). A NaN input stays NaN.\n\nCausality: stateless per bar. The value at t is a function of the input\nand the volatility at t only \u2014 no lookback of its own \u2014 so it is\nwindow-stable exactly when its volatility input is. Until Q-2473 the\nweights came from each asset's volatility averaged over the WHOLE run, a\nsingle vector applied to every bar: bar t used volatility observed after\nt, and coins that listed later held budget before they existed. The\nvolatility slot must share the input's index exactly (no alignment is\nperformed; a different clock raises).\n\nExample:\n    VolTargetWeightConverter(return_vol_slot=\"return_vol\")\n    -> RiskParityAllocator(volatility_slot=\"return_vol\") -> IDMPortfolioAggregator(...)\n",
       "usage_hint": "Use when assets have meaningfully different volatility profiles and you want each instrument to contribute roughly equal risk. Reads volatility estimates from a named slot (typically the output of ReturnVolatility stored via Store). Placed after VolTargetWeightConverter and before IDMPortfolioAggregator.",
       "input_type": "SignalSeries",
       "output_type": "WeightSeries",
@@ -44895,8 +45437,8 @@
       "name": "StopLoss",
       "category": "position_manager",
       "sub_category": "trade_factory",
-      "description": "A stop loss: exit the whole trade once its return falls to -pct (inclusive).\n\nPosition layer: TradeManager turns entry signals into a Position; each rule is a reader, then\nordinary components, then an action (Exit, Reduce, ScaleIn, AllowEntry). StopLoss is\nsugar for ``TradeReturn() -> BelowThresholdFilter(threshold=-pct,\ninclusive=True) -> Exit()`` inside a TradeManager's rules; the branch name\nis the exit reason. ``pct`` is a fraction: 0.05 is 5%.\n\nNote: stops, targets, trails and other price-level rules are checked and filled at the bar's close, with no intra-bar measurement or execution, so a fill can be well past the level.\n\nExample:\n    StopLoss(pct=0.05)\n",
-      "usage_hint": "Position layer: TradeManager turns entry signals into a Position; each rule is a reader, then ordinary components, then an action (Exit, Reduce, ScaleIn, AllowEntry). StopLoss is sugar for ``TradeReturn() -> BelowThresholdFilter(threshold=-pct, inclusive=True) -> Exit()`` inside a TradeManager's rules; the branch name is the exit reason. ``pct`` is a fraction: 0.05 is 5%.",
+      "description": "A stop loss: exit the whole trade once its return falls to -pct (inclusive).\n\nPosition layer: TradeManager turns entry signals into a Position; each rule is a reader, then\nordinary components, then an action (Exit, Reduce, ScaleIn, AllowEntry). StopLoss is\nsugar for ``TradeReturn() -> BelowThresholdFilter(threshold=-pct,\ninclusive=True) -> Exit()`` inside a TradeManager's rules; the branch name\nis the exit reason. ``pct`` is a fraction: 0.05 is 5%. See also LevelStop, a stop at a\nprice level frozen at entry (a zone edge, a swing low).\n\nNote: stops, targets, trails and other price-level rules are checked and filled at the bar's close, with no intra-bar measurement or execution, so a fill can be well past the level.\n\nExample:\n    StopLoss(pct=0.05)\n",
+      "usage_hint": "Position layer: TradeManager turns entry signals into a Position; each rule is a reader, then ordinary components, then an action (Exit, Reduce, ScaleIn, AllowEntry). StopLoss is sugar for ``TradeReturn() -> BelowThresholdFilter(threshold=-pct, inclusive=True) -> Exit()`` inside a TradeManager's rules; the branch name is the exit reason. ``pct`` is a fraction: 0.05 is 5%. See also LevelStop, a stop at a price level frozen at entry (a zone edge, a swing low).",
       "input_type": "Position",
       "output_type": "Position",
       "deterministic": true,
@@ -46149,8 +46691,8 @@
       "name": "TakeProfit",
       "category": "position_manager",
       "sub_category": "trade_factory",
-      "description": "Take profit once the trade's return reaches pct (inclusive): exit, or sell a fraction.\n\nPosition layer: TradeManager turns entry signals into a Position; each rule is a reader, then\nordinary components, then an action (Exit, Reduce, ScaleIn, AllowEntry). TakeProfit\nis sugar for ``TradeReturn() -> AboveThresholdFilter(threshold=pct,\ninclusive=True) -> Exit()``, or ``-> Reduce(fraction=fraction)`` when\n``fraction`` is set.\n\nNote: stops, targets, trails and other price-level rules are checked and filled at the bar's close, with no intra-bar measurement or execution, so a fill can be well past the level.\n\nExample:\n    TakeProfit(pct=0.10, fraction=0.5)\n",
-      "usage_hint": "Position layer: TradeManager turns entry signals into a Position; each rule is a reader, then ordinary components, then an action (Exit, Reduce, ScaleIn, AllowEntry). TakeProfit is sugar for ``TradeReturn() -> AboveThresholdFilter(threshold=pct, inclusive=True) -> Exit()``, or ``-> Reduce(fraction=fraction)`` when ``fraction`` is set.",
+      "description": "Take profit once the trade's return reaches pct (inclusive): exit, or sell a fraction.\n\nPosition layer: TradeManager turns entry signals into a Position; each rule is a reader, then\nordinary components, then an action (Exit, Reduce, ScaleIn, AllowEntry). TakeProfit\nis sugar for ``TradeReturn() -> AboveThresholdFilter(threshold=pct,\ninclusive=True) -> Exit()``, or ``-> Reduce(fraction=fraction)`` when\n``fraction`` is set. See also LevelTarget, a target at r times the distance to a price\nlevel frozen at entry.\n\nNote: stops, targets, trails and other price-level rules are checked and filled at the bar's close, with no intra-bar measurement or execution, so a fill can be well past the level.\n\nExample:\n    TakeProfit(pct=0.10, fraction=0.5)\n",
+      "usage_hint": "Position layer: TradeManager turns entry signals into a Position; each rule is a reader, then ordinary components, then an action (Exit, Reduce, ScaleIn, AllowEntry). TakeProfit is sugar for ``TradeReturn() -> AboveThresholdFilter(threshold=pct, inclusive=True) -> Exit()``, or ``-> Reduce(fraction=fraction)`` when ``fraction`` is set. See also LevelTarget, a target at r times the distance to a price level frozen at entry.",
       "input_type": "Position",
       "output_type": "Position",
       "deterministic": true,

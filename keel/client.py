@@ -20,7 +20,7 @@ from typing import Any
 
 import httpx
 
-from keel.config import KeelConfig, load_config
+from keel.config import CREDENTIAL_SOURCE_ENV, KeelConfig, load_config
 from keel.errors import (
     AuthError,
     KeelError,
@@ -57,6 +57,25 @@ _NOT_SENT = (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout)
 #: The longest a 429's Retry-After is waited out INSIDE one call; a longer
 #: wait is returned to the caller as `retry_after_s` instead of blocking it.
 _RETRY_AFTER_CAP_S = 5.0
+
+
+def _env_key_rejected(api_url: str) -> AuthError:
+    """A 401 on ``KEEL_API_KEY`` (Q-2579): the key is the whole credential,
+    so it fails as a rejected key — never retried as the stored login."""
+    err = AuthError(
+        f"Your API key was rejected: {api_url} answered 401 to the key in the "
+        "KEEL_API_KEY environment variable (expired, revoked, or minted for "
+        "another Keel environment). While KEEL_API_KEY is set this process "
+        "uses only that key; the stored login in ~/.keel/config.yaml is not "
+        "used. Set a valid key, or unset KEEL_API_KEY to use `keel auth login`.",
+        suggestion="Replace KEEL_API_KEY with a valid key, or unset it to use the stored login.",
+        docs_url="https://app.usekeel.io/settings?tab=api-keys",
+    )
+    # `keel_auth_login` writes the stored login, which this process ignores
+    # while KEEL_API_KEY is set — pointing an agent at it would loop.
+    err.recovery_tool = None
+    err.recovery_tool_args = None
+    return err
 
 
 class KeelClient:
@@ -136,9 +155,16 @@ class KeelClient:
                 docs_url="https://app.usekeel.io/settings?tab=api-keys",
             )
 
-    def get(self, path: str, **params: Any) -> Any:
-        """GET request with retries and error handling."""
+    def get(self, path: str, *, headers: dict[str, str] | None = None, **params: Any) -> Any:
+        """GET request with retries and error handling.
+
+        ``headers`` are merged over the client-wide headers for this request
+        only (paper-trading-v2 S06 §3.5.1: the agent-telemetry marker a read
+        carries when it is not an owner visit).
+        """
         self._require_auth()
+        if headers:
+            return self._request("GET", path, params=params or None, headers=headers)
         return self._request("GET", path, params=params or None)
 
     def get_public(self, path: str, **params: Any) -> Any:
@@ -150,9 +176,22 @@ class KeelClient:
         """
         return self._request("GET", path, params=params or None)
 
-    def post(self, path: str, json: dict | None = None, **params: Any) -> Any:
-        """POST request with retries and error handling."""
+    def post(
+        self,
+        path: str,
+        json: dict | None = None,
+        *,
+        headers: dict[str, str] | None = None,
+        **params: Any,
+    ) -> Any:
+        """POST request with retries and error handling.
+
+        ``headers`` are merged over the client-wide headers for this request
+        only (S06 §3.5.1).
+        """
         self._require_auth()
+        if headers:
+            return self._request("POST", path, json=json, params=params or None, headers=headers)
         return self._request("POST", path, json=json, params=params or None)
 
     def patch(self, path: str, json: dict | None = None) -> Any:
@@ -285,6 +324,11 @@ class KeelClient:
                     continue
                 err = translate_http_error(response.status_code, response.text)
                 raise err if idempotent else write_unconfirmed(method, err)
+            if (
+                response.status_code == 401
+                and self._config.credential_source == CREDENTIAL_SOURCE_ENV
+            ):
+                raise _env_key_rejected(self._config.api_url)
             if response.status_code >= 400:
                 raise translate_http_error(response.status_code, response.text)
             try:

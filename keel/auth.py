@@ -14,7 +14,14 @@ returning identity to the caller.
 from __future__ import annotations
 
 from keel.client import KeelClient
-from keel.config import KeelConfig, load_config, save_config
+from keel.config import (
+    KeelConfig,
+    credential_source_label,
+    load_config,
+    load_file_config,
+    save_config,
+    stored_login_api_url,
+)
 
 
 def _default_client_name() -> str:
@@ -46,9 +53,12 @@ def store_api_key(api_key: str, api_url: str | None = None) -> dict:
     the anonymous workspace is auto-claimed into the key's account —
     same behavior as the browser login path.
     """
-    prior_config = load_config()
-    info = validate_api_key(api_key, api_url)
-    config = load_config()
+    # Q-2579: a login writes the STORED login — read and write the file,
+    # never the env view (KEEL_API_KEY / KEEL_API_URL belong to the process).
+    prior_config = load_file_config()
+    resolved_url = api_url or stored_login_api_url()
+    info = validate_api_key(api_key, resolved_url)
+    config = load_file_config()
     config.api_key = api_key
     # A PAT has no refresh capability — leaving a stale (anon/OAuth)
     # refresh token behind would trigger proactive-refresh 401s that
@@ -57,8 +67,7 @@ def store_api_key(api_key: str, api_url: str | None = None) -> dict:
     config.token_expires_at = None
     # Spec 09 CL-9: fresh credentials start with a clean org context.
     config.active_org_id = None
-    if api_url:
-        config.api_url = api_url
+    config.api_url = resolved_url
     save_config(config)
 
     from keel.anon import maybe_claim_after_login
@@ -109,9 +118,11 @@ def browser_login(
     # grant (spec 05 R3/R4), the post-OAuth step claims that workspace
     # into the new account (auto-claim). store_oauth_tokens overwrites
     # the anon tokens, so the proof material must be captured now.
-    prior_config = load_config()
+    # Q-2579: the stored login, not the env view — KEEL_API_KEY never
+    # decides what a login claims or which identity it reports.
+    prior_config = load_file_config()
 
-    resolved_url = api_url or prior_config.api_url
+    resolved_url = api_url or stored_login_api_url()
     resolved_name = client_name or _default_client_name()
 
     result = bl.run(
@@ -143,7 +154,9 @@ def browser_login(
         prior_config, attach_decision=attach_decision, confirm=confirm_attach
     )
 
-    identity = get_identity()
+    from keel.anon import _stored_login_config
+
+    identity = get_identity(config=_stored_login_config())
     if claim_result is not None:
         if "pending_claim" in claim_result:
             identity = {**identity, "pending_claim": claim_result["pending_claim"]}
@@ -152,9 +165,10 @@ def browser_login(
     return identity
 
 
-def get_identity() -> dict:
-    """Get current identity via GET /v1/me."""
-    client = KeelClient()
+def get_identity(config: KeelConfig | None = None) -> dict:
+    """Get current identity via GET /v1/me (the active credential unless
+    ``config`` names another)."""
+    client = KeelClient(config=config)
     try:
         return client.get("/v1/me")
     finally:
@@ -162,11 +176,20 @@ def get_identity() -> dict:
 
 
 def get_status() -> dict:
-    """Get identity + entitlements via GET /v1/me and GET /v1/entitlements."""
-    client = KeelClient()
+    """Get identity + entitlements via GET /v1/me and GET /v1/entitlements.
+
+    ``credential_source`` names which credential answered (Q-2579):
+    ``env KEEL_API_KEY`` or ``stored login``; ``org`` is the org it acts in.
+    """
+    config = load_config()
+    client = KeelClient(config=config)
     try:
         me = client.get("/v1/me")
         entitlements = client.get("/v1/entitlements")
-        return {**me, "entitlements": entitlements}
+        return {
+            **me,
+            "entitlements": entitlements,
+            "credential_source": credential_source_label(config),
+        }
     finally:
         client.close()

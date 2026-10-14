@@ -50,8 +50,12 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
             extra={"account": account},
         )
 
-    # List mode — all accounts in org.
-    params: dict[str, Any] = {}
+    # List mode — the org's exchange accounts. The paper account is never a
+    # user-facing object (paper-trading-v2 PT2-3), so the list asks for `real`
+    # by name (S06 §3.5.1, PT2-16): the route reads an absent class as `real`
+    # too (PT2-28), so the rows are today's; the client says what it means.
+    # No public text, so not held behind PAPER_SDK_RELEASED.
+    params: dict[str, Any] = {"capital_class": "real"}
     limit = args.get("limit")
     if limit is not None:
         params["limit"] = limit

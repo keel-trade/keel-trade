@@ -48,8 +48,32 @@ def _is_id_arg(prop: str, schema_prop: dict) -> bool:
     return prop.endswith("_id") or prop in {"target_id", "topic"}
 
 
+def _cli_input_schema(tool: OutcomeTool) -> dict:
+    """The schema the CLI binds: the full profile's, paper form included.
+
+    The CLI is the local full surface, so an existing tool's paper form (the
+    deployments list's ``capital_class``, the share tool's ``paper`` target;
+    S06 §3.5.1, §3.7) reaches its flags exactly as it reaches the local MCP
+    server's ``inputSchema`` (``_mcp_adapter.effective_input_schema``).
+    """
+    from . import _toolsets
+
+    if _toolsets.PAPER_SDK_RELEASED and tool.paper_input_schema is not None:
+        return tool.paper_input_schema
+    return tool.input_schema
+
+
+def _cli_description(tool: OutcomeTool) -> str:
+    """The full profile's description, paper form included (see above)."""
+    from . import _toolsets
+
+    if _toolsets.PAPER_SDK_RELEASED and tool.paper_description is not None:
+        return tool.paper_description
+    return tool.description
+
+
 def _build_click_command(tool: OutcomeTool) -> click.Command:
-    schema = tool.input_schema
+    schema = _cli_input_schema(tool)
     properties: dict = schema.get("properties", {})
     required: list[str] = list(schema.get("required", []))
 
@@ -196,7 +220,7 @@ def _build_click_command(tool: OutcomeTool) -> click.Command:
 
     # Last leaf name is the verb.
     leaf = tool.cli_path[-1].replace("_", "-")
-    cmd = click.command(name=leaf, help=_one_line_help(tool.description))(cmd)
+    cmd = click.command(name=leaf, help=_one_line_help(_cli_description(tool)))(cmd)
     return cmd
 
 
@@ -211,8 +235,13 @@ _DEFAULT_SHORT_FLAGS = {
 
 
 def _flag_aliases(prop: str, schema: dict) -> list[str]:
-    """Build the click.option flag args (long + optional short)."""
-    flags = [_flag_name(prop)]
+    """Build the click.option flag args (long + optional short).
+
+    ``x-cli-flag`` names the long flag when it differs from the property
+    (``keel paper deploy --capital`` for ``simulated_capital``, S06 §3.2.6);
+    the value still reaches the handler under the property name.
+    """
+    flags = [schema.get("x-cli-flag") or _flag_name(prop)]
     short = schema.get("x-cli-short") or _DEFAULT_SHORT_FLAGS.get(prop)
     if short:
         flags.append(short)
@@ -244,6 +273,24 @@ def _prop_to_option(prop: str, schema: dict, *, required: bool, hidden: bool = F
     help_text = schema.get("description", "")
     schema_type = schema.get("type", "string")
     default = schema.get("default")
+
+    if "enum" in schema and schema_type == "integer":
+        # An integer enum (S06 §3.2.2's simulated_capital presets): Click
+        # matches the typed text against the choices as strings on every
+        # supported version, and the handler receives the int. A value
+        # outside the enum is a usage error before any request is sent.
+        choices = [str(v) for v in schema["enum"]]
+        return click.option(
+            *flags,
+            prop,
+            type=click.Choice(choices),
+            callback=lambda _ctx, _param, value: None if value is None else int(value),
+            required=required,
+            default=None if default is None else str(default),
+            show_default=default is not None,
+            help=help_text,
+            hidden=hidden,
+        )
 
     if "enum" in schema:
         return click.option(
@@ -465,6 +512,16 @@ def _render(result: OutcomeResult, fmt: str) -> None:
             # json` is untouched and still carries it.
             if k == "curve" and isinstance(v, dict) and v.get("points"):
                 continue
+            # The period table (Q-2565) prints as the same GFM table the MCP
+            # text block carries (`periods_markdown`, the one renderer), not
+            # as its JSON rows; `--format json` keeps the block.
+            if k == "periods" and isinstance(v, dict):
+                from ._backtest_view import periods_markdown
+
+                table = periods_markdown(v)
+                if table:
+                    click.echo(f"periods: {table}")
+                    continue
             # Renderer-first (Q-0913): `keel.output.FIELD_RENDERERS` is the
             # ONE owner of how an execution field reads, so the CLI and the
             # CLI-only verbs in keel/cli/commands cannot drift. Unknown
@@ -495,6 +552,7 @@ _GROUP_HELP: dict[tuple[str, ...], str] = {
     ("backtest",): "Run backtests and read their results.",
     ("live",): "Deploy, monitor, and control live trading deployments.",
     ("deployments",): "List the deployments in your org (ids, accounts, status).",
+    ("paper",): "Start and control paper (simulated) runs; no real orders are placed.",
     ("components",): "Search the component catalog and inspect schemas.",
     ("accounts",): "Read Hyperliquid trading accounts attached to your org.",
     ("share",): "Publish strategies and backtests at public usekeel.io/share URLs.",

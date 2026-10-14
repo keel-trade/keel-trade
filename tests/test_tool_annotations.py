@@ -63,6 +63,9 @@ EXPECTED_HINTS: dict[str, tuple[bool, bool]] = {
     # it applies nothing and accepts no config, so it is additive, not
     # destructive; the destructive act (the update) is the human's, in-app.
     "keel_live_update": (False, False),
+    # Starts a simulated paper run: no real orders, no funds at risk, and a
+    # stop frees the slot (paper-trading-v2 S06 §3.2.5).
+    "keel_paper_deploy": (False, False),
     "keel_strategy_checkout": (False, False),
     "keel_strategy_compose": (False, False),
     "keel_strategy_fork": (False, False),
@@ -80,6 +83,9 @@ EXPECTED_HINTS: dict[str, tuple[bool, bool]] = {
     "keel_feedback": (False, True),
     "keel_live_control": (False, True),  # pause/resume/stop live capital
     "keel_live_deploy": (False, True),  # deploys live capital
+    # `stop` ends a paper record for good and `update` replaces the version it
+    # runs in place, so hosts confirm each call (S10, PT2-90).
+    "keel_paper_control": (False, True),
     # Public disclosure cannot be retracted from recipients (Q-2080; reverses Q-1506).
     "keel_share_create": (False, True),
     "keel_strategy_delete": (False, True),
@@ -88,15 +94,16 @@ EXPECTED_HINTS: dict[str, tuple[bool, bool]] = {
 
 
 def test_catalog_size_matches_expectations():
-    """48 tools today (Q-1893 added keel_backtest_positions, Q-2448
-    keel_strategy_upgrade). A new tool
+    """50 tools today (Q-1893 added keel_backtest_positions, Q-2448
+    keel_strategy_upgrade, PT2-91 released keel_paper_deploy and
+    keel_paper_control). A new tool
     must be added to EXPECTED_HINTS (and a removed one taken out) — that
     diff is the review event."""
     assert set(OUTCOMES) == set(EXPECTED_HINTS), (
         f"catalog drift — unclassified: {sorted(set(OUTCOMES) - set(EXPECTED_HINTS))}, "
         f"stale entries: {sorted(set(EXPECTED_HINTS) - set(OUTCOMES))}"
     )
-    assert len(OUTCOMES) == 48
+    assert len(OUTCOMES) == 50
 
 
 @pytest.mark.parametrize("name", sorted(EXPECTED_HINTS))
@@ -161,7 +168,7 @@ def test_annotations_are_valid_mcp_tool_annotations():
 def test_registered_fastmcp_tools_carry_annotations(monkeypatch):
     """tools/list-visible FastMCP tool objects carry the annotations —
     proving the sweep survives the registration path end-to-end."""
-    monkeypatch.setenv("KEEL_TOOLSETS", "read-only,backtest,share,live-read,live-write")
+    monkeypatch.setenv("KEEL_TOOLSETS", "read-only,backtest,share,live-read,paper,live-write")
     monkeypatch.delenv("KEEL_EXECUTION_MODE", raising=False)
     from fastmcp import FastMCP
     from keel.tools.outcomes._mcp_adapter import register_all
@@ -255,6 +262,18 @@ EXPECTED_BEHAVIOUR_HINTS: dict[str, tuple[bool, bool, str]] = {
     "keel_live_quality": (True, False, "read of sealed receipts; reads the Keel API"),
     "keel_live_receipt": (True, False, "read of one sealed receipt; reads the Keel API"),
     "keel_live_update": (False, True, "every call mints a NEW signed update-intent link"),
+    "keel_paper_deploy": (
+        False,
+        False,
+        "every call starts a NEW simulated run; bounded to the caller's Keel workspace, "
+        "no exchange account (S10, PT2-90)",
+    ),
+    "keel_paper_control": (
+        False,
+        False,
+        "a repeated action is refused once the run is in that state; simulated, bounded to "
+        "the caller's Keel workspace (S10, PT2-90)",
+    ),
     "keel_app_link": (True, False, "builds a link; no API call"),
     "keel_strategy_readiness": (True, False, "read; reads the Keel API"),
     "keel_plan_usage": (True, False, "read; reads the Keel API"),
@@ -302,7 +321,7 @@ EXPECTED_BEHAVIOUR_HINTS: dict[str, tuple[bool, bool, str]] = {
 
 
 def test_behaviour_hint_table_covers_the_catalog():
-    """Not vacuous: the second table classifies exactly the same 48 tools
+    """Not vacuous: the second table classifies exactly the same 50 tools
     as the first, so a new tool cannot slip past it either."""
     assert set(EXPECTED_BEHAVIOUR_HINTS) == set(EXPECTED_HINTS) == set(OUTCOMES)
 
@@ -362,4 +381,4 @@ def test_all_four_hints_survive_the_mcp_annotation_object():
         assert ta.idempotentHint == tool.annotations["idempotentHint"], name
         assert ta.openWorldHint == tool.annotations["openWorldHint"], name
         checked += 1
-    assert checked == len(OUTCOMES) == 48
+    assert checked == len(OUTCOMES) == 50

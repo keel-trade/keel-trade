@@ -381,6 +381,54 @@ def test_translate_http_404_empty_body():
     assert "Resource not found" in str(e)
 
 
+
+# ── paper_not_enabled (paper-trading-v2 S06 §3.2.4 (c), AC-06-28, PT2-12) ──
+#
+# Seeds: delete the arm ⇒ the code arm reds (the paper 404 is `not_found`
+# with the route's own sentence); match on the detail sentence instead of
+# the code ⇒ the second code case (a different sentence) and the uncoded
+# control red.
+
+_PAPER_OFF_404 = '{"detail": "Paper trading is not available yet.", "code": "paper_not_enabled"}'
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        _PAPER_OFF_404,
+        '{"type": "about:blank", "title": "Not Found", "status": 404, '
+        '"detail": "Some other sentence.", "code": "paper_not_enabled"}',
+    ],
+)
+def test_translate_http_404_paper_not_enabled_is_typed_on_the_code(body):
+    e = translate_http_error(404, body)
+    assert isinstance(e, NotFoundError)
+    assert e.error_code == "paper_not_enabled"
+    assert str(e) == "Paper trading is not available on this Keel environment yet."
+    assert e.suggestion is None
+    assert e.exit_code == 3
+    env = e.to_envelope()
+    assert env["code"] == "paper_not_enabled"
+    assert "suggested_next_action" not in env or not (
+        env["suggested_next_action"] or {}
+    ).get("reason")
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        '{"detail": "Paper trading is not available yet."}',  # same sentence, no code
+        '{"detail": "Not found", "code": "deployment_not_found"}',  # another code
+        "Not found",
+    ],
+)
+def test_translate_http_404_without_the_code_keeps_not_found(body):
+    e = translate_http_error(404, body)
+    assert isinstance(e, NotFoundError)
+    assert e.error_code == "not_found"
+    assert e.suggestion  # today's "verify the id" pointer
+
+
 def test_translate_http_409():
     e = translate_http_error(409, "Conflict")
     assert isinstance(e, ConflictError)
@@ -472,6 +520,89 @@ def test_422_expectation_is_specific_to_the_error_class():
     dsl = translate_http_error(422, body).to_envelope()
     assert "dry_run" in dsl["what_was_expected"]
     assert dsl["message"].startswith("Strategy has 1 validation error(s). (issues=")
+
+
+def _issues_refusal(text: str, *codes: str) -> str:
+    """keel-api's validator-refusal body — `HTTPException(detail={"detail": …,
+    "issues": [issue, …]})` (routers/strategies.py, Q-1695/Q-2207): no
+    top-level code; each issue carries its catalog code."""
+    import json
+
+    return json.dumps(
+        {
+            "detail": {
+                "detail": text,
+                "issues": [
+                    {"severity": "error", "code": c, "tier": "gate", "message": "m"} for c in codes
+                ],
+            }
+        }
+    )
+
+
+def test_a_coded_400_carries_the_refusal_code_the_way_keel_api_reads_it():
+    """Q-2564: a parse-refused save's envelope (and so the mcp-server audit
+    row, which records the envelope `code`) names the rule — the FIRST
+    issue's code, exactly what keel-api's own `refusal_code` stashes for the
+    `api_request refused` line — instead of `usage_error`, the code of a
+    wrong-ARGUMENT call. The class, exit code and message are unchanged; the
+    issues ride `detail`, the 422/409 shape.
+
+    Non-vacuity: two bodies, two different codes, each read back — the code
+    comes from the body, not from a constant.
+
+    # SEED (run 2026-10-08): `error_code=code` → `error_code=None` in
+    # translate_http_error(400) — this arm reds on `'usage_error' ==
+    # 'PARAM_EXPRESSION_NOT_ALLOWED'`; the uncoded control below stays green.
+    """
+    for code in ("PARAM_EXPRESSION_NOT_ALLOWED", "VARIABLE_ASSIGN_SHAPE"):
+        e = translate_http_error(400, _issues_refusal("Invalid strategy input: x", code))
+        env = e.to_envelope()
+        assert env["code"] == code
+        assert isinstance(e, UsageError) and env["exit_code"] == 2
+        assert env["message"].startswith("Invalid strategy input: x")
+        assert env["detail"]["issues"][0]["code"] == code
+    # The first issue is the refusal's code — keel-api's reader, mirrored.
+    both = translate_http_error(400, _issues_refusal("x", "VARIABLE_ASSIGN_SHAPE", "TYPE_MISMATCH"))
+    assert both.to_envelope()["code"] == "VARIABLE_ASSIGN_SHAPE"
+
+
+def test_control_an_uncoded_400_is_still_a_usage_error():
+    """Every 400 that names no code keeps today's envelope: the deploy-link
+    token verdict (plain text), the `{"error": …}` base_ref shape, an empty
+    issues list, a non-JSON body."""
+    import json
+
+    bodies = [
+        '{"detail": "The deploy link failed verification."}',
+        json.dumps({"detail": {"error": "base_ref_unresolved", "detail": "No HEAD."}}),
+        _issues_refusal("Strategy has 1 validation error(s).", *()),
+        "<html>bad gateway</html>",
+        "",
+    ]
+    for body in bodies:
+        e = translate_http_error(400, body)
+        env = e.to_envelope()
+        assert isinstance(e, UsageError)
+        assert env["code"] == "usage_error", body
+        assert env["exit_code"] == 2
+        assert "detail" not in env, body
+
+
+def test_an_issues_only_422_names_its_gate_issue():
+    """The same reader on the 422 arm (Q-2564): keel-api's lock-gate refusal
+    (`{"detail": …, "issues": [LOCK_ERROR]}`, no top-level code) audits
+    LOCK_ERROR — the code the dry run records for the same failure (Q-2563)
+    — not `validation_failed`. The hint keys on `detail.code`, which this
+    shape still lacks, so the DSL advice is unchanged."""
+    e = translate_http_error(
+        422, _issues_refusal("Cannot create strategy: component version lock failed", "LOCK_ERROR")
+    )
+    env = e.to_envelope()
+    assert isinstance(e, ValidationError) and env["exit_code"] == 7
+    assert env["code"] == "LOCK_ERROR"
+    assert env["detail"]["issues"][0]["code"] == "LOCK_ERROR"
+    assert "dry_run" in env["what_was_expected"]
 
 
 def test_uncoded_409_keeps_its_recovery_hint_in_the_text():

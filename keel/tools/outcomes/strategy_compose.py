@@ -223,6 +223,97 @@ def _error_codes(errors: list[Any]) -> list[str] | None:
     return codes or None
 
 
+#: `/v1/strategies/compile`'s refusal prefixes (routers/sdk.py) → the catalog's
+#: gate codes. Anything else the compiler refused is COMPILE_FAILED, keel-api's
+#: own code for a save that does not compile (Q-2258).
+_COMPILE_GATE_CODES = (("Parse error:", "PARSE_ERROR"), ("Lock error:", "LOCK_ERROR"))
+
+
+def _compile_issue_code(compile_error: str | None) -> str | None:
+    """The gate code a dry run's COMPILE-stage refusal records (Q-2563).
+
+    The audit row recorded only the local validator's rule codes (Q-2368), so
+    a dry run the server refused after local validation passed — every
+    position-factory dry run between v1.183 and this fix — audited
+    ``validation_ok: false`` with no code at all, invisible to any census
+    keyed on ``issue_codes``. The server's ``errors`` are strings; their
+    prefix is the route's own classification, and this is its one reader.
+    Recorded only when the local validator named NO rule: a failure the
+    validator already coded (a parse error's UNKNOWN_DECLARATION_KEY, a
+    PARAM_OUT_OF_RANGE the server also refuses) is one failure, not two.
+    ``None`` when nothing was refused.
+    """
+    if not compile_error:
+        return None
+    for prefix, code in _COMPILE_GATE_CODES:
+        if compile_error.startswith(prefix):
+            return code
+    return "COMPILE_FAILED"
+
+
+def _refusal_issue_codes(detail: dict[str, Any] | None) -> list[str]:
+    """The rule codes keel-api's REFUSAL of a save names, for the audit row (Q-2564).
+
+    A refused save reaches this tool as a ``KeelError`` whose ``detail`` is
+    the server's structured body. Nothing was written, so the success path's
+    ``record_outcome`` (``validation_ok`` + the response's error codes,
+    Q-2368) never runs, and the row carried only the adapter's ``is_error``:
+    a refused ``PARAM_EXPRESSION_NOT_ALLOWED`` save was indistinguishable
+    from a call with a bad argument. Read in the order the body is
+    authoritative, one failure recorded once:
+
+    * ``validation.errors`` — the compiler's 422 (``COMPILE_FAILED``,
+      keel-api ``_compile_failed_detail``) ships the validator's findings on
+      the same input; their codes ARE the failure, exactly as the success
+      path records them (errors only — ``issues`` there is every issue,
+      warnings included);
+    * ``issues`` (error severity) — the parse and unknown-Universe-mode 400s
+      and the lock-gate 422 carry their one gate issue (Q-1695/Q-2207), the
+      first of which is the code keel-api's own ``refusal_code`` stashes;
+    * else the body's own ``code`` when the body IS a validation refusal (it
+      carries an ``issues`` or ``validation`` slot): a ``COMPILE_FAILED``
+      the validator could not name — Q-2563's rule for the dry run: never a
+      codeless validation failure, never one failure counted twice.
+
+    Empty for a refusal that judged no source (a 409 ``HEAD_MOVED``, the
+    uncoded lock-hash conflict, a 404, an entitlement block): those carry no
+    verdict and record none.
+    """
+    if not isinstance(detail, dict):
+        return []
+    validation = detail.get("validation")
+    if isinstance(validation, dict) and isinstance(validation.get("errors"), list):
+        codes = _error_codes(validation["errors"])
+        if codes:
+            return codes
+    issues = detail.get("issues")
+    if isinstance(issues, list):
+        codes = _error_codes(
+            [i for i in issues if isinstance(i, dict) and i.get("severity", "error") == "error"]
+        )
+        if codes:
+            return codes
+    code = detail.get("code")
+    if isinstance(code, str) and code and ("issues" in detail or "validation" in detail):
+        return [code]
+    return []
+
+
+def _record_refused_save(err: KeelError) -> None:
+    """A refused save's verdict on the audit row (Q-2564).
+
+    The server judged the source and refused it, so the row says
+    ``validation_ok: false`` with the rules the refusal names — the same pair
+    the dry run and the successful save record (Q-1840/Q-2368/Q-2563); the
+    adapter adds ``is_error`` when the error is re-raised, and the envelope
+    ``code`` is the refusal's first code (``errors.translate_http_error``).
+    A refusal that judged no source records nothing here.
+    """
+    codes = _refusal_issue_codes(err.detail)
+    if codes:
+        record_outcome(validation_ok=False, issue_codes=codes)
+
+
 def _universe_block(source: str, *, as_stored: bool) -> dict[str, Any] | None:
     """What this source will HOLD, read the one way every runtime reads it
     (``pipeline_engine.universe_symbols``, Q-1147/Q-1504).
@@ -779,10 +870,20 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
         if upgrade_lock is not None:
             body["lock_changes"] = upgrade_lock["lock_changes"]
         # The audit row's verdict (Q-1840): a dry run that found errors did
-        # its job, so it is not `is_error` — but it is not a clean pass.
+        # its job, so it is not `is_error` — but it is not a clean pass. The
+        # codes are the validator's rules — or, when the validator named none
+        # and the server still refused, the compile stage's gate code
+        # (Q-2563): never a codeless failure, never one failure counted twice
+        # (a parse failure the validator already named is the same failure
+        # the server calls "Parse error:").
+        issue_codes = list(_error_codes(body["validation"]["errors"]) or [])
+        if not issue_codes and not compiled_ok:
+            compile_code = _compile_issue_code(compile_error)
+            if compile_code is not None:
+                issue_codes.append(compile_code)
         record_outcome(
             validation_ok=bool(body["validation"]["ok"] and compiled_ok),
-            issue_codes=_error_codes(body["validation"]["errors"]),
+            issue_codes=issue_codes or None,
         )
         universe = _dry_run_universe_block(source, ctx)
         if universe is not None:
@@ -921,6 +1022,7 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
                 raise handoff from e
             raise
         except KeelError as e:
+            _record_refused_save(e)
             detail = e.detail or {}
             if (
                 isinstance(e, ConflictError)
@@ -1027,7 +1129,8 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
             if handoff is not None:
                 raise handoff from e
             raise
-        except KeelError:
+        except KeelError as e:
+            _record_refused_save(e)
             raise
         except Exception as e:  # noqa: BLE001
             raise KeelError(

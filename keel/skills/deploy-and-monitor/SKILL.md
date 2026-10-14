@@ -7,6 +7,8 @@ description: >
   completing, then read the first monitoring views. Use when the user says
   "deploy", "go live", "start trading this", "put it on my account". Not for
   surveying running deployments (portfolio-review) or for backtesting.
+  Not for paper trading — "paper trade this" / "try it without real money" go
+  to `keel_paper_deploy` directly (one call, no workflow).
 tools:
   - keel_strategy_readiness
   - keel_accounts_list
@@ -30,9 +32,7 @@ references:
 evidence and hand off (`backtest-and-analyze`, `overfit-check` when the
 baseline looked too good). Check the `Execution(...)` matches the path:
 continuous strategies go live `buffered` (every-bar rebalancing bleeds to
-fees); entry/exit and screen-select strategies are `on_change`. There is no
-paper mode; the bounded way to watch a strategy behave is a minimal-capital
-deployment scaled up later.
+fees); entry/exit and screen-select strategies are `on_change`.
 
 ## Step 2 — Accounts
 

@@ -25,6 +25,14 @@ Per spec §4 row "share_create" + §8 sharing model:
   `expires_at` is sent on both routes and must be a future, timezone-aware
   ISO-8601 instant.
 
+The link is returned ready to post (Q-2587, founder 2026-10-09: "for create
+share, yes just wait till generation done so it's ready"). Both routes are
+called with `wait_for_card=true`, and keel-api — the one owner of the wait,
+so the CLI, the local MCP server and the hosted one inherit it identically —
+returns once the link-preview card exists, bounded at ~10 s. A link whose
+card is not there yet comes back with `preview_note` saying so, because a
+crawler that unfurls it before the card lands caches a text-only preview.
+
 Do NOT use to fetch an existing share URL — read the strategy or
 backtest resource instead.
 """
@@ -87,6 +95,30 @@ def parsed_expiry(value: Any) -> str | None:
     return when.isoformat()
 
 
+#: Asks keel-api to hold the create until the share card exists (Q-2587).
+#: A query parameter, not a body field: the strict body models refuse
+#: unknown fields, and an older keel-api ignores an unknown query parameter.
+_WAIT_FOR_CARD = {"wait_for_card": "true"}
+
+PREVIEW_PENDING_NOTE = (
+    "The preview image is still generating; wait a few seconds before posting the link."
+)
+PREVIEW_FAILED_NOTE = (
+    "The preview image could not be generated; the link works but will unfurl without an image."
+)
+
+
+def preview_note(result: dict) -> str | None:
+    """One honest line when the link's preview card is not ready, else None.
+
+    Silent when keel-api did not report a status, or renders no cards at all
+    (`artifacts_enabled=false`): there is no image to wait for."""
+    status = result.get("artifacts_status")
+    if not status or status == "ready" or result.get("artifacts_enabled") is False:
+        return None
+    return PREVIEW_FAILED_NOTE if status == "failed" else PREVIEW_PENDING_NOTE
+
+
 def _infer_target_type(target_id: str) -> str:
     if target_id.startswith("str_"):
         return "strategy"
@@ -94,6 +126,48 @@ def _infer_target_type(target_id: str) -> str:
         return "backtest"
     # Unknown prefix — let the caller force it via `target_type`.
     return ""
+
+
+def _paper_targets_enabled() -> bool:
+    """Whether this process serves the `paper` target (S06 §3.7, §3.11 item 1):
+    on the full profile once the paper SDK is released, and on listed only
+    with the listed flag on too (§3.4.2). Otherwise the tool is HEAD's."""
+    from . import _toolsets
+
+    if not _toolsets.PAPER_SDK_RELEASED:
+        return False
+    return not _toolsets.is_listed_profile() or _toolsets.listed_paper_enabled()
+
+
+def _share_run(target_id: str, target_type: str, include_source: bool, ctx: ToolContext) -> dict:
+    """A `dep_` id's share (S06 §3.7, R-10): the venue block decides, read once
+    before any share call. A `practice` row creates through the paper share
+    route (S05 IC-05-5); a `real` row is refused, also when the caller passed
+    `target_type="paper"`: sharing a live run is not this tool's job. The
+    tool never calls a live share route."""
+    from ._paper_guard import AGENT_TELEMETRY_HEADERS
+
+    client = ctx.get_client()
+    # The share inference read is never an owner visit (S06 §3.5.1, R-61).
+    row = client.get(f"/v1/deployments/{target_id}", headers=AGENT_TELEMETRY_HEADERS)
+    venue = row.get("venue") if isinstance(row, dict) else None
+    capital_class = venue.get("capital_class") if isinstance(venue, dict) else None
+    if capital_class != "practice":
+        page = app_url_for("live", target_id, ctx)
+        raise KeelError(
+            f"{target_id} is a live deployment, not a paper run; this tool shares strategies, "
+            "backtests and paper runs only. Nothing was published.",
+            error_code="unsupported_target",
+            exit_code=2,
+            suggestion=f"Share a live run from its page in the Keel web app: {page}",
+            input={"target_id": target_id, "target_type": target_type or None},
+        )
+    # The paper family mirrors the live family's strict configuration body
+    # (S05 §3.12.1): every disclosure defaults off; the source switch is the
+    # one control this tool carries.
+    return client.post(
+        f"/v1/paper/{target_id}/share-links", json={"include_strategy_source": include_source}
+    )
 
 
 def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
@@ -110,9 +184,15 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
 
     # Resolve target_type — explicit override beats prefix inference.
     target_type: str = (args.get("target_type") or "").strip()
+    paper_targets = _paper_targets_enabled()
     if not target_type:
         target_type = _infer_target_type(target_id)
-    if target_type not in {"strategy", "backtest"}:
+        if not target_type and paper_targets and target_id.startswith("dep_"):
+            # A `dep_` id is a live deployment or a paper run; the prefix
+            # cannot say which, so the venue block decides (§3.7).
+            target_type = "paper"
+    allowed = {"strategy", "backtest"} | ({"paper"} if paper_targets else set())
+    if target_type not in allowed:
         raise KeelError(
             f"Cannot infer share target from id {target_id!r}.",
             error_code="ambiguous_target",
@@ -161,7 +241,24 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
 
     client = ctx.get_client()
 
-    if target_type == "strategy":
+    if target_type == "paper":
+        if expires_at:
+            raise KeelError(
+                "`expires_at` is not available for a paper run share; nothing was published.",
+                error_code="invalid_expires_at",
+                exit_code=2,
+                suggestion="Omit `expires_at`; the link can be revoked from the run's page.",
+            )
+        try:
+            result = _share_run(target_id, args.get("target_type") or "", include_source, ctx)
+        except KeelError:
+            raise
+        except Exception as e:  # noqa: BLE001
+            raise KeelError(
+                f"Failed to create paper run share link for {target_id}: {e}",
+                suggestion="Run `keel_connection_check` to diagnose auth issues.",
+            )
+    elif target_type == "strategy":
         # Exactly the fields the strict route declares (Q-2255): the source
         # switch, the expiry, and the pinned latest backtest so the share
         # card always has metrics. Never `permission` — derived server-side.
@@ -170,7 +267,9 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
             body["expires_at"] = expires_at
         body["pin_latest_backtest"] = True
         try:
-            result = client.post(f"/v1/strategies/{target_id}/share-links", json=body)
+            result = client.post(
+                f"/v1/strategies/{target_id}/share-links", json=body, **_WAIT_FOR_CARD
+            )
         except KeelError:
             raise
         except Exception as e:  # noqa: BLE001
@@ -186,7 +285,9 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
         if expires_at:
             body["expires_at"] = expires_at
         try:
-            result = client.post(f"/v1/backtests/{target_id}/share-link", json=body)
+            result = client.post(
+                f"/v1/backtests/{target_id}/share-link", json=body, **_WAIT_FOR_CARD
+            )
         except KeelError:
             raise
         except Exception as e:  # noqa: BLE001
@@ -227,6 +328,9 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
         "permission": result.get("permission") or permission,
         "expires_at": result.get("expires_at"),
     }
+    note = preview_note(result)
+    if note:
+        extra["preview_note"] = note
 
     return OutcomeResult(
         run_id=share_id,
@@ -283,6 +387,49 @@ SHARE_INPUT_SCHEMA: dict[str, Any] = {
 }
 
 
+#: The held paper form of the schema (S06 §3.7; §3.11 item 1): `paper` joins
+#: the target enum and `dep_` ids are named. Listed gets its twin only with
+#: the listed flag on (§3.4.2).
+PAPER_SHARE_INPUT_SCHEMA: dict[str, Any] = {
+    **SHARE_INPUT_SCHEMA,
+    "properties": {
+        **SHARE_INPUT_SCHEMA["properties"],
+        "target_id": {
+            "type": "string",
+            "x-cli-positional": True,
+            "description": (
+                "str_xxx (strategy share), btr_xxx (backtest share) or dep_xxx (a paper "
+                "run, simulated). Type inferred from prefix unless target_type is set; "
+                "a dep_ id is read first and shared only if it is a paper run."
+            ),
+        },
+        "target_type": {
+            "type": "string",
+            "enum": ["strategy", "backtest", "paper"],
+            "description": "Explicit override when the id prefix is ambiguous.",
+        },
+    },
+}
+
+_DESCRIPTION = (
+    "Publish a strategy (`str_*`) or a backtest (`btr_*`) at a public "
+    "usekeel.io/share/<id> URL. The page shows the strategy's name, "
+    "description, backtest metrics, fork count, live status, market count and "
+    "risk settings; `include_source` (or `permission`) decides whether viewers "
+    "also see and can copy the DSL source. `expires_at` ends it later. What "
+    "recipients copied cannot be taken back. Returns `share_url`, `share_id` "
+    "and the applied `include_source`, `permission` and `expires_at`."
+)
+
+#: §3.7's touch-up, in a form clean for the listed scan too (§3.4.4): it
+#: names no verb the listed rules ban, and `paper run` is not a compound.
+_PAPER_SENTENCE = (
+    " A paper run (`dep_*`, simulated) is shared the same way: its page is "
+    "stamped as simulated. A `dep_*` id that is not a paper run is refused "
+    "(`unsupported_target`); share those from their page in the Keel web app."
+)
+
+
 SHARE_CREATE = register(
     OutcomeTool(
         name="keel_share_create",
@@ -294,19 +441,17 @@ SHARE_CREATE = register(
         # content public, a write rather than a destructive update);
         # context-architecture-design
         # (default app URLs are authenticated + private).
-        description=(
-            "Publish a strategy (`str_*`) or a backtest (`btr_*`) at a public "
-            "usekeel.io/share/<id> URL. The page shows the strategy's name, "
-            "description, backtest metrics, fork count, live status, market count and "
-            "risk settings; `include_source` (or `permission`) decides whether viewers "
-            "also see and can copy the DSL source. `expires_at` ends it later. What "
-            "recipients copied cannot be taken back. Returns `share_url`, `share_id` "
-            "and the applied `include_source`, `permission` and `expires_at`."
-        ),
+        description=_DESCRIPTION,
         input_schema=SHARE_INPUT_SCHEMA,
         # The listed twin keeps `permission` (Anthropic review, 2026-10-01):
         # it is the same control as `include_source`, applied as requested.
         listed_input_schema=listed_schema("keel_share_create", SHARE_INPUT_SCHEMA),
+        # The `paper` target (S06 §3.7): held with the paper SDK on the full
+        # profile (§3.11 item 1), and on listed also behind the listed flag.
+        paper_description=_DESCRIPTION + _PAPER_SENTENCE,
+        paper_input_schema=PAPER_SHARE_INPUT_SCHEMA,
+        listed_paper_description=_DESCRIPTION + _PAPER_SENTENCE,
+        listed_paper_input_schema=listed_schema("keel_share_create", PAPER_SHARE_INPUT_SCHEMA),
         annotations={
             "title": "Create Public Share Link",
             "readOnlyHint": False,

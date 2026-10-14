@@ -155,9 +155,9 @@ def test_listed_instructions_route_beyond_chat_to_the_web_app():
     serves THIS same 23-tool surface, so the old copy claiming live
     management lived on a full endpoint there was stale/false — it is gone;
     the operating core carries the correct routing."""
-    from keel.mcp.server import LISTED_INSTRUCTIONS
+    from keel.mcp.server import listed_instructions
 
-    assert "keel_app_link" in LISTED_INSTRUCTIONS
+    assert "keel_app_link" in listed_instructions()
     # The per-surface guide URL is on the FULL profiles' SURFACE block.
     # It left the listed string on 2026-09-22 (W2 §2.1) to fit the 2 KB
     # host limit: a URL is not a route a tools-only agent can follow, and
@@ -165,12 +165,12 @@ def test_listed_instructions_route_beyond_chat_to_the_web_app():
     # chat. The URL is still asserted where it is served.
     from pipeline_engine.reference.system import assemble
 
-    assert "https://usekeel.io/agents" not in LISTED_INSTRUCTIONS
+    assert "https://usekeel.io/agents" not in listed_instructions()
     for profile in ("full-hosted", "full-local"):
         assert "https://usekeel.io/agents" in assemble.instructions(profile)
     # The stale/false full-endpoint claim must not reappear.
-    assert "mcp.usekeel.io" not in LISTED_INSTRUCTIONS
-    assert "Live strategy management" not in LISTED_INSTRUCTIONS
+    assert "mcp.usekeel.io" not in listed_instructions()
+    assert "Live strategy management" not in listed_instructions()
 
 
 def test_hosted_full_instructions_carry_files_hint():

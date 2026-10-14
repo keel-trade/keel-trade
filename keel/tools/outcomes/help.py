@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import difflib
 import re
+from collections.abc import Callable
 from importlib import resources
 
 from keel import __version__ as _sdk_version
@@ -97,9 +98,9 @@ def _try_bundled(topic: str) -> tuple[str, str, str] | None:
     hit = index.get(topic)
     if hit is None:
         # A doc's own declared name (Q-2504): a pattern doc says
-        # `<!-- pattern: entry_exit -->`, the loaders and the docs' prose cite
-        # it by that name, and it resolves to the file. A file name always
-        # wins (the alias table never shadows an index key).
+        # `<!-- pattern: entry_exit -->`, a knowledge doc may say
+        # `<!-- topic: universe -->`, and the name resolves to the file. A
+        # file name always wins (the alias table never shadows an index key).
         alias = _declared_aliases(index).get(topic)
         hit = index.get(alias) if alias is not None else None
     if hit is None:
@@ -112,7 +113,12 @@ def _try_bundled(topic: str) -> tuple[str, str, str] | None:
         return None
 
 
-_DECLARED_NAME = re.compile(r"<!--\s*pattern:\s*([A-Za-z0-9_\-]+)\s*-->")
+# A doc names itself in its first lines: a pattern doc with
+# `<!-- pattern: x -->` (the name the pattern loaders key on), any doc with one
+# or more `<!-- topic: x -->` (a name agents ask by that no file carries —
+# `universe` for `universe_selection`). One syntax family, one reader.
+_DECLARED_NAME = re.compile(r"<!--\s*(?:pattern|topic):\s*([A-Za-z0-9_\-]+)\s*-->")
+_DECLARATION_HEAD_LINES = 5
 
 
 def _read_bundled(stem: str, subdir: str) -> str:
@@ -123,20 +129,60 @@ def _read_bundled(stem: str, subdir: str) -> str:
         return ""
 
 
+def _declared_names(
+    index: dict[str, tuple[str, str]],
+    read: Callable[[str, str], str] = _read_bundled,
+) -> list[tuple[str, str]]:
+    """Every ``(declared slug, index key of the declaring doc)`` pair.
+
+    Read off the docs themselves — the first lines' ``<!-- pattern: x -->``
+    and ``<!-- topic: x -->`` headers — never a hand table, so the corpus
+    describes itself (Q-2504; the founder's 2026-10-06 ruling). ``read`` is
+    a seam for the duplicate-declaration guard's fixture, nothing else.
+    """
+    pairs: list[tuple[str, str]] = []
+    for key, (stem, subdir) in index.items():
+        head = "\n".join(read(stem, subdir).splitlines()[:_DECLARATION_HEAD_LINES])
+        for match in _DECLARED_NAME.finditer(head):
+            pairs.append((_normalize_topic(match.group(1)), key))
+    return pairs
+
+
+def declaration_conflicts(
+    pairs: list[tuple[str, str]], index: dict[str, tuple[str, str]]
+) -> list[str]:
+    """Declarations that cannot resolve as written — the shadowing guard.
+
+    Two docs declaring one name (only one could win, silently), or a
+    declared name that is ANOTHER doc's file name (the file name wins, so
+    the declaration is dead). Empty on a healthy corpus; asserted empty by
+    ``tests/test_help_declared_names.py`` rather than raised at request time,
+    so a corpus mistake reds CI and never a user's lookup.
+    """
+    owners: dict[str, set[str]] = {}
+    for alias, key in pairs:
+        owners.setdefault(alias, set()).add(key)
+    problems = [
+        f"{alias!r} declared by {sorted(keys)}"
+        for alias, keys in sorted(owners.items())
+        if len(keys) > 1
+    ]
+    problems += [
+        f"{alias!r} declared by {key!r} is the file name of another doc"
+        for alias, key in pairs
+        if alias != key and alias in index
+    ]
+    return problems
+
+
 def _declared_aliases(index: dict[str, tuple[str, str]]) -> dict[str, str]:
     """Declared-name slug → the index key of the doc that declares it.
 
-    Read off the docs themselves (the first lines' ``<!-- pattern: x -->``),
-    never a hand table, so the corpus describes itself (Q-2504). A declared
-    name equal to some index key adds nothing — the file name wins.
+    A declared name equal to some index key adds nothing — the file name
+    wins. Collisions are a test failure (:func:`declaration_conflicts`).
     """
     aliases: dict[str, str] = {}
-    for key, (stem, subdir) in index.items():
-        head = "\n".join(_read_bundled(stem, subdir).splitlines()[:5])
-        match = _DECLARED_NAME.search(head)
-        if match is None:
-            continue
-        alias = _normalize_topic(match.group(1))
+    for alias, key in _declared_names(index):
         if alias != key and alias not in index:
             aliases.setdefault(alias, key)
     return aliases
@@ -147,9 +193,11 @@ def _docs_mentioning(term: str, limit: int = 3) -> list[str]:
 
     A concept with no doc named after it (``Execution``, ``Globals``) is
     still documented somewhere; a miss names where. Separators fold like the
-    topic itself (``top volume`` matches ``top_volume``). Ranked by a hit in
-    a heading or a bold definition first, then by count. Empty when nothing
-    mentions it — the caller still raises not_found; nothing is guessed.
+    topic itself (``top volume`` matches ``top_volume``). A doc whose own
+    NAME contains the word comes first (``universe`` → ``universe_selection``
+    ahead of ``data_loading``, which says it more often); then a hit in a
+    heading or a bold definition, then by count. Empty when nothing mentions
+    it — the caller still raises not_found; nothing is guessed.
     """
     words = [w for w in re.split(r"[\s_\-]+", term.strip()) if w]
     if not words:
@@ -158,19 +206,22 @@ def _docs_mentioning(term: str, limit: int = 3) -> list[str]:
         r"(?<![A-Za-z0-9])" + r"[\s_\-]+".join(map(re.escape, words)) + r"(?![A-Za-z0-9])",
         re.IGNORECASE,
     )
-    scored: list[tuple[int, int, str]] = []
+    folded = [w.lower() for w in words]
+    scored: list[tuple[int, int, int, str]] = []
     for stem, subdir in _bundled_index().values():
+        name = [w for w in re.split(r"[_\-]+", stem.lower()) if w]
+        named = any(name[i : i + len(folded)] == folded for i in range(len(name)))
         body = _read_bundled(stem, subdir)
         hits = pattern.findall(body)
-        if not hits:
+        if not hits and not named:
             continue
         defined = any(
             pattern.search(line)
             for line in body.splitlines()
             if line.lstrip().startswith("#") or "**" in line
         )
-        scored.append((0 if defined else 1, -len(hits), stem))
-    return [stem for _defined, _count, stem in sorted(scored)[:limit]]
+        scored.append((0 if named else 1, 0 if defined else 1, -len(hits), stem))
+    return [row[-1] for row in sorted(scored)[:limit]]
 
 
 def _bundled_resource_uri(topic: str, subdir: str) -> str | None:
@@ -316,10 +367,6 @@ def _skill_result(requested: str) -> OutcomeResult:
 # tests/test_help_rule_explain.py) not to collide with a bundled doc stem.
 _RULES_TOPIC = "rules"
 _RULE_PREFIX = "rule:"
-
-# The placeholder a skill's reference index carries when the code is only
-# known at runtime ("the lesson behind whatever code the dry run returns").
-RULE_TOPIC_PLACEHOLDER = "rule:<CODE>"
 
 # Related pull-tier topics by validator pass — a small static map beside the
 # channel, never a hand-typed row per rule (94+ rules, one drift source each).

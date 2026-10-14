@@ -26,8 +26,16 @@ if str(SDK_ROOT) not in sys.path:
     sys.path.insert(0, str(SDK_ROOT))
 
 from keel.cli.main import cli as KEEL_CLI  # noqa: E402
-from keel.tools.outcomes import OUTCOMES, _bootstrap  # noqa: E402
-from keel.tools.outcomes._toolsets import LISTED_PROFILE_TOOLS, is_tool_loaded  # noqa: E402
+from keel.tools.outcomes import (  # noqa: E402
+    OUTCOMES,
+    _bootstrap,
+    _toolsets,  # noqa: E402
+)
+from keel.tools.outcomes._toolsets import (  # noqa: E402
+    LISTED_PROFILE_TOOLS,
+    default_toolsets,
+    is_tool_loaded,
+)
 
 
 PACKAGE_REFERENCE = REPO_ROOT / "packages" / "keel-trade" / "docs" / "tool-reference.md"
@@ -35,7 +43,9 @@ SITE_REFERENCE = (
     REPO_ROOT / "services" / "keel-site" / "content" / "docs" / "sdk" / "tool-reference.mdx"
 )
 
-DEFAULT_TOOLSETS = frozenset({"always", "read-only", "backtest", "share", "live-read"})
+# The default local toolsets, read from the SDK (it gains `paper` with the
+# released paper SDK, PT2-91), never typed here.
+DEFAULT_TOOLSETS = default_toolsets()
 # The hosted endpoint URL comes from the agent-surface source, never typed.
 AGENT_SURFACE = REPO_ROOT / "shared" / "agent-surface.json"
 
@@ -72,8 +82,23 @@ def _param_label(prop: str, schema: dict) -> str:
     return f"`{prop}`{required_marker} ({typ})"
 
 
+def _full_schema(tool) -> dict:
+    """The local full surface's schema: an existing tool's paper form once the
+    paper SDK is released (the CLI and local MCP server publish it; PT2-91)."""
+    if _toolsets.PAPER_SDK_RELEASED and tool.paper_input_schema is not None:
+        return tool.paper_input_schema
+    return tool.input_schema
+
+
+def _full_description(tool) -> str:
+    """The local full surface's description, paper form included (see above)."""
+    if _toolsets.PAPER_SDK_RELEASED and tool.paper_description is not None:
+        return tool.paper_description
+    return tool.description
+
+
 def _schema_args(tool_name: str) -> tuple[str, str]:
-    schema = OUTCOMES[tool_name].input_schema
+    schema = _full_schema(OUTCOMES[tool_name])
     properties = schema.get("properties", {})
     required = set(schema.get("required", []))
 
@@ -198,6 +223,7 @@ def _tool_descriptions(*, mdx: bool) -> str:
         "backtest",
         "share",
         "live-read",
+        "paper",
         "live-write",
     ):
         names = by_toolset.get(toolset, [])
@@ -206,7 +232,7 @@ def _tool_descriptions(*, mdx: bool) -> str:
         sections.append(f"### `{toolset}`")
         for name in names:
             tool = OUTCOMES[name]
-            description = _one_line(tool.description)
+            description = _one_line(_full_description(tool))
             if mdx:
                 description = _mdx_escape(description)
             sections.append(f"- `{name}`: {description}.")

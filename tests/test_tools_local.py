@@ -457,6 +457,35 @@ Pipeline([ROC(period=8)], name='s')
         assert captured["body"]["mode"] == "manual"
         assert captured["body"]["symbols"] == ["BTC", "ETH"]
         assert result["resolved"] == ["BTC", "ETH"]
+        # A manual basket is never sealed (Q-2434): its own name check applies.
+        assert "resolution=" not in result["source"]
+
+    def test_universe_resolve_seals_a_top_volume_list_and_a_swap_breaks_it(self, monkeypatch):
+        """Q-2434 2b: the resolve writes the resolution seal over the list the
+        API returned; the vendored validator accepts it, and the same list
+        with one member swapped by hand is refused (STALE_UNIVERSE)."""
+        from keel.tools.local import universe_resolve
+
+        from pipeline_engine.dsl import parse_strategy
+        from pipeline_engine.dsl.universe_seal import LIST_EDITED, VALID, seal_verdict
+
+        class _StubClient:
+            def post(self, path: str, json: dict):
+                return {
+                    "resolved": ["BTC", "ETH", "SOL"],
+                    "resolved_at": "2026-06-03T12:00:00+00:00",
+                    "count": 3,
+                }
+
+        monkeypatch.setattr("keel.client.KeelClient", _StubClient)
+        result = universe_resolve(
+            source='Universe(mode="top_volume", top_n=3)\nPipeline([ROC(period=8)], name=\'s\')\n'
+        )
+        assert 'resolution="u1:' in result["source"]
+        assert seal_verdict(parse_strategy(result["source"]).universe) == VALID
+        swapped = result["source"].replace("'SOL'", "'MORPHO'")
+        assert swapped != result["source"]
+        assert seal_verdict(parse_strategy(swapped).universe) == LIST_EDITED
 
 
 # ─────────────────────────────────────────────────────────────────────────

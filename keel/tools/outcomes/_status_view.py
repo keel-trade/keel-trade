@@ -25,10 +25,12 @@ from ._base import election_key
 
 __all__ = [
     "CAPABILITY_PHRASE",
+    "CAPABILITY_PHRASE_PAPER_LISTED",
     "LIVE_WRITE_TOOLS",
     "build_status_view",
     "capabilities_for",
     "capability_line",
+    "capability_phrase",
     "status_next",
 ]
 
@@ -59,20 +61,48 @@ CAPABILITY_PHRASE = (
     "research and backtests; it cannot place orders, move funds or connect wallets; "
     "strategies that are running are managed in the Keel web app"
 )
+#: The same clause with the listed flag on (paper-trading-v2 S06 §3.4.5,
+#: agreed wording PT2-2, amended by S10 §6 / PT2-90): the instructions' amended
+#: boundary sentence in the
+#: status view's register. Served on the listed profile only while
+#: `listed_paper_enabled()` is true (`capability_phrase()`).
+CAPABILITY_PHRASE_PAPER_LISTED = (
+    "research, backtests and paper-trading runs; it cannot place real orders, move "
+    "funds or connect wallets; paper-trading runs are simulated, and they can be "
+    "started, paused, updated and stopped here; real-capital strategies are managed in "
+    "the Keel web app"
+)
 _NOT_LOADED_PHRASE = (
     "research and backtests; live status is not loaded; it cannot place orders, move "
     "funds or connect wallets; strategies that are running are managed in the Keel web app"
 )
-_LINE_3: dict[tuple[str, str, str], str] = {
-    ("listed", "read-only", "web app"): f"This connector: {CAPABILITY_PHRASE}.",
-    ("listed", "none", "web app"): f"This connector: {_NOT_LOADED_PHRASE}.",
-    ("full", "none", "web app"): f"This server: {_NOT_LOADED_PHRASE}.",
-    ("full", "read-only", "web app"): f"This server: {CAPABILITY_PHRASE}.",
-    ("full", "read-write", "here"): (
-        "This server: research, backtests, live status, and live tools that start, "
-        "stop and update strategies with explicit consent."
-    ),
-}
+
+
+def capability_phrase() -> str:
+    """The listed capability clause: :data:`CAPABILITY_PHRASE`, or with the
+    listed flag on :data:`CAPABILITY_PHRASE_PAPER_LISTED` (S06 §3.4.2).
+    Read at call time."""
+    from ._toolsets import is_listed_profile, listed_paper_enabled
+
+    if is_listed_profile() and listed_paper_enabled():
+        return CAPABILITY_PHRASE_PAPER_LISTED
+    return CAPABILITY_PHRASE
+
+
+def _line_3() -> dict[tuple[str, str, str], str]:
+    """Line 3 by (profile, monitor, live actions), built at call time so the
+    listed row follows the listed flag (S06 §3.4.2); every other row, and the
+    listed row with the flag off, is the import-time table it replaced."""
+    return {
+        ("listed", "read-only", "web app"): f"This connector: {capability_phrase()}.",
+        ("listed", "none", "web app"): f"This connector: {_NOT_LOADED_PHRASE}.",
+        ("full", "none", "web app"): f"This server: {_NOT_LOADED_PHRASE}.",
+        ("full", "read-only", "web app"): f"This server: {CAPABILITY_PHRASE}.",
+        ("full", "read-write", "here"): (
+            "This server: research, backtests, live status, and live tools that start, "
+            "stop and update strategies with explicit consent."
+        ),
+    }
 
 
 def capabilities_for(loaded: Any) -> dict[str, Any]:
@@ -93,7 +123,7 @@ def capabilities_for(loaded: Any) -> dict[str, Any]:
 
 def capability_line(profile: str, capabilities: dict[str, Any]) -> str | None:
     key = (profile, str(capabilities.get("monitor")), str(capabilities.get("live_actions")))
-    return _LINE_3.get(key)
+    return _line_3().get(key)
 
 
 def _unit_block(entry: dict) -> dict[str, Any] | None:

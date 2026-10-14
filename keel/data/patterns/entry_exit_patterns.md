@@ -1,5 +1,8 @@
-<!-- keywords: entry, exit, stop loss, stop, take profit, target, trailing stop, trail, breakeven, partial, scale out, scale in, dca, safety order, pyramid, ladder, max hold, time exit, cooldown, re-entry, daily limit, R multiple, risk per trade, TradeManager, position, trade, binary, threshold, RSI, mean reversion, breakout -->
+<!-- keywords: entry, exit, stop loss, stop, take profit, target, trailing stop, trail, structure stop, level stop, risk reward, breakeven, partial, scale out, scale in, dca, safety order, pyramid, ladder, max hold, time exit, cooldown, re-entry, daily limit, R multiple, risk per trade, TradeManager, position, trade, binary, threshold, RSI, mean reversion, breakout -->
 <!-- pattern: entry_exit -->
+<!-- topic: structure_stop -->
+<!-- topic: risk_reward -->
+<!-- topic: position_manager -->
 
 # Entries, exits and the position layer
 
@@ -48,7 +51,19 @@ Return readers are fractions: −0.05 is a 5% loss; `-5` is −500%. Windows are
 - `AllowEntry()` gates new entries: a trade opens only where every gate is 1 and the entry signal has reset.
 - `Exposure()` turns the Position into signed units held. It sits between the rules and every sizer except `RiskSizer`, which takes the Position.
 
-Short forms expand to the same rules: `StopLoss(pct=0.05)`, `TakeProfit(pct=0.10)` (`fraction=` makes it a `Reduce`), `TrailingStop(pct=0.08)` or `TrailingStop(atr=2.5, period=14)`, `MaxHold(bars=48)`, `Cooldown(bars=4)`; `MaxHold` and `Cooldown` also take `window='2d'`.
+Short forms expand to the same rules: `StopLoss(pct=0.05)`, `TakeProfit(pct=0.10)` (`fraction=` makes it a `Reduce`), `TrailingStop(pct=0.08)` or `TrailingStop(atr=2.5, period=14)`, `LevelStop(level='ob_edge')`, `LevelTarget(level='ob_edge', r=2.0)`, `MaxHold(bars=48)`, `Cooldown(bars=4)`; `MaxHold` and `Cooldown` also take `window='2d'`.
+
+## Exits
+
+| Exit                                   | One rule branch                                                                                                  |
+| -------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Stop at a % loss                       | `'stop': [StopLoss(pct=0.05)]`                                                                                   |
+| Target at a % gain, or a partial       | `'tp': [TakeProfit(pct=0.10, fraction=0.5)]`                                                                     |
+| Trailing stop                          | `'trail': [TrailingStop(atr=2.5)]`                                                                               |
+| Structure stop: a price level at entry | `'stop': [LevelStop(level='ob_edge')]`, any stored price series (zone edge, swing low, EMA)                      |
+| Target at r × the entry-to-level risk  | `'target': [LevelTarget(level='ob_edge', r=2.0)]`                                                                |
+| Time exit                              | `'hold': [MaxHold(bars=48)]`, or `[BarsHeld(), AboveThresholdFilter(threshold=48, inclusive=True), Exit()]`      |
+| R multiple of any 1R frozen at entry   | `{'numerator': [TradePnL()], 'denominator': [AtEntry(slot='one_r')]}, SignalRatio()`, then thresholds at −1 / +2 |
 
 ## Defaults
 
@@ -56,7 +71,7 @@ Short forms expand to the same rules: `StopLoss(pct=0.05)`, `TakeProfit(pct=0.10
 - Rules start the bar after entry.
 - State readers report the start of the bar and see only stages above (and earlier steps of their own branch).
 - On one bar: full exit, then partials, then adds; an add is skipped on a partial's bar.
-- An opposite entry flips the trade, as its own event.
+- An opposite entry flips the trade, as its own event, and outranks the exit rules: the old side closes and the new side opens on that same bar, so an exit that only mirrors the opposite entry never fires.
 - A market exit's bar refuses a new entry.
 - `max_units` is derived from the `ScaleIn` rules, and the validator states it.
 - A missing `AtEntry` value (or `RiskSizer` distance) refuses that entry.
@@ -118,6 +133,35 @@ Pipeline([
 `ThresholdCross → EqualWeightSizer` holds a position only while the signal is beyond its threshold, with no memory. Move to `TradeManager` when the user names a stop, target, separate exit, partial, add or re-entry rule.
 
 ## More rules
+
+**Structure stop, 2R target, 1% risk.** `OrderBlock(output='edge')` is the zone's invalidation price; `LevelStop` freezes it at each entry and exits when the close crosses it, and `LevelTarget` exits at twice the entry-to-edge distance. `RiskSizer` sizes on the same distance. A level with a buffer is a difference: `Load('ohlcv'), {'fast': [Load('ob_edge')], 'slow': [ATR(period=14), Scale(by=0.5)]}, Crossover(), Store('stop_level')` is the edge minus 0.5 ATR.
+
+```python
+# canonical: structure_stop_2r
+Globals(target_timeframe='4h')
+Universe(mode='manual', symbols=['BTC', 'ETH', 'SOL'])
+Execution(rebalance='on_change')
+Pipeline([
+    PriceDataLoader(),
+    Store('ohlcv'),
+    OrderBlock(direction='bullish', mitigation='close_through', output='edge'),
+    Store('ob_edge'),
+    Load('ohlcv'),
+    {'fast': [ExtractSeries(series_name='close')], 'slow': [Load('ob_edge')]},
+    Crossover(),
+    Store('stop_dist'),
+    Load('ohlcv'),
+    OrderBlock(direction='bullish', mitigation='close_through'),
+    BelowThresholdFilter(threshold=0.0, inclusive=True),
+    Store('entries'),
+    TradeManager(entries='entries', prices='ohlcv'),
+    {
+        'stop':   [LevelStop(level='ob_edge')],
+        'target': [LevelTarget(level='ob_edge', r=2.0)],
+    },
+    RiskSizer(risk=0.01, distance='stop_dist', max_weight=1.0),
+])
+```
 
 **ATR trail and a trend exit.** The trail compares give-back with 2.5 ATR by difference: a ratio never fires on a zero-ATR bar. A % trail is `[DrawdownFromPeak(), BelowThresholdFilter(threshold=-0.08), Exit()]`.
 

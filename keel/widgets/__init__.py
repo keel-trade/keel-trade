@@ -288,17 +288,44 @@ def _asset(name: str) -> str:
     return (_ASSETS / name).read_text(encoding="utf-8")
 
 
-def build_card_html(kind: str) -> str:
+#: Where the live card's PAPER stamp fragment is served ahead of the card's
+#: own script (paper-trading-v2 S06 §3.5.6).
+_PAPER_STAMP_SLOT = "<script>\n      {{CARD_JS}}"
+
+
+def paper_stamp_served() -> bool:
+    """Whether the live card carries the PAPER stamp fragment (S06 §3.5.6):
+    on the full profile, and on listed only with the listed flag on (R-60);
+    with it off the listed server serves the base commit's card bytes."""
+    from keel.tools.outcomes._toolsets import is_listed_profile, listed_paper_enabled
+
+    return not is_listed_profile() or listed_paper_enabled()
+
+
+def build_card_html(kind: str, *, paper_stamp: bool = False) -> str:
     """Compose one card's self-contained HTML from the shared bundle.
 
     One codebase: every card inlines the same ``host-adapter.js`` (host
     detection + the ``window.openai`` mapping) and ``card.css``; only
     the per-card renderer differs. No external scripts/styles, no
     frames, no fetches — a card is a pure function of its tool envelope.
+
+    ``paper_stamp`` (the ``live`` card only) inlines the PAPER stamp
+    fragment ahead of the card's script (S06 §3.5.6); without it the card's
+    bytes are exactly what they were before paper.
     """
     if kind not in CARD_KINDS:
         raise ValueError(f"Unknown card kind {kind!r}. Valid: {', '.join(CARD_KINDS)}")
     template = _asset("card.html.tmpl")
+    if paper_stamp:
+        if kind != "live":
+            raise ValueError("the PAPER stamp is the live card's only")
+        if template.count(_PAPER_STAMP_SLOT) != 1:
+            raise ValueError("card.html.tmpl has no single card-script slot for the stamp")
+        template = template.replace(
+            _PAPER_STAMP_SLOT,
+            "<script>\n      {{PAPER_JS}}\n    </script>\n    " + _PAPER_STAMP_SLOT,
+        ).replace("{{PAPER_JS}}", _asset("card-live-paper.js"))
     return (
         template.replace("{{KIND}}", kind)
         .replace("{{TITLE}}", _CARD_TITLES[kind])
@@ -455,7 +482,7 @@ def register_card_resources(mcp_server) -> list[str]:
 
     registered: list[str] = []
     for kind in active_card_kinds():
-        html = build_card_html(kind)
+        html = build_card_html(kind, paper_stamp=kind == "live" and paper_stamp_served())
         title = _CARD_TITLES[kind]
         mcp_server.add_resource(
             TextResource(

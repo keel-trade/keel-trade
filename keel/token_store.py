@@ -5,16 +5,57 @@ The CLI loopback flow (`keel/browser_login.py`) ends by calling
 `needs_refresh()` proactively and `attempt_refresh()` reactively on 401.
 Refresh hits ``POST /v1/auth/oauth/refresh`` on keel-api, which already
 implements OAuth 2.1 §6.1 rotation with lineage-burn reuse detection.
+
+One stored login, many clients (Q-2602). A CLI and a key-less local MCP
+server on one machine both act as the login in ``~/.keel/config.yaml``, and
+each ``KeelClient`` decides from the snapshot it loaded. keel-api rotates a
+refresh token exactly once and refuses a second presentation (401; after
+60 s it also burns the lineage, Q-2532). So a refresh here:
+
+- runs under an advisory lock beside the config file, so two processes on
+  one machine never present the same token at once;
+- re-reads the file once it holds the lock, and adopts a login another
+  process already refreshed (or a new login) instead of refreshing a token
+  that is no longer the current one;
+- on a refusal, clears the stored login only when the file still holds the
+  very refresh token that was refused. A newer login on disk is adopted,
+  never deleted.
+
+Keyed processes (``KEEL_API_KEY``, Q-2579) and hosted mode carry no refresh
+token and never reach this path.
 """
 
 from __future__ import annotations
 
+import contextlib
+import dataclasses
+import logging
+import os
+import time
+from collections.abc import Iterator
 from datetime import datetime, timedelta, timezone
 
 import httpx
 
-from keel.config import KeelConfig, load_config, save_config
+import keel.config as _config_module
+from keel.config import KeelConfig, load_file_config, save_config
 from keel.errors import AuthError
+
+
+logger = logging.getLogger(__name__)
+
+try:  # POSIX
+    import fcntl as _fcntl
+
+    _msvcrt = None
+except ImportError:  # pragma: no cover — Windows
+    _fcntl = None  # type: ignore[assignment]
+    import msvcrt as _msvcrt  # type: ignore[no-redef]
+
+# How long a refresh waits for another process's refresh of the same login.
+# Longer than one refresh's HTTP timeout, so a waiter outlasts the holder.
+_LOCK_WAIT_MARGIN_SECONDS = 10.0
+_LOCK_POLL_SECONDS = 0.05
 
 
 # Refresh when the access token has this many seconds (or fewer) of life left.
@@ -40,7 +81,7 @@ def store_oauth_tokens(
 
     Returns the updated KeelConfig (also persisted).
     """
-    config = load_config()
+    config = load_file_config()  # Q-2579: the file, never the env view
     config.api_key = access_token
     config.refresh_token = refresh_token
     config.token_expires_at = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
@@ -62,7 +103,7 @@ def clear_oauth_tokens() -> None:
     OAuth-specific ``refresh_token``, ``token_expires_at``, ``client_name``.
     Leaves ``api_url`` intact (the user's chosen environment).
     """
-    config = load_config()
+    config = load_file_config()  # Q-2579: the file, never the env view
     config.api_key = None
     config.refresh_token = None
     config.token_expires_at = None
@@ -98,18 +139,113 @@ def needs_refresh(
     return expires <= deadline
 
 
+def _lock_path():
+    # Resolved at call time: the config location is a module attribute.
+    cfg = _config_module.CONFIG_FILE
+    return cfg.with_name(cfg.name + ".lock")
+
+
+def _try_lock(fd: int) -> bool:
+    try:
+        if _fcntl is not None:
+            _fcntl.flock(fd, _fcntl.LOCK_EX | _fcntl.LOCK_NB)
+        else:  # pragma: no cover — Windows
+            _msvcrt.locking(fd, _msvcrt.LK_NBLCK, 1)
+    except OSError:
+        return False
+    return True
+
+
+def _unlock(fd: int) -> None:
+    if _fcntl is not None:
+        _fcntl.flock(fd, _fcntl.LOCK_UN)
+    else:  # pragma: no cover — Windows
+        os.lseek(fd, 0, os.SEEK_SET)
+        _msvcrt.locking(fd, _msvcrt.LK_UNLCK, 1)
+
+
+@contextlib.contextmanager
+def stored_login_lock(wait_seconds: float) -> Iterator[bool]:
+    """Hold the machine-wide advisory lock on the stored login (Q-2602).
+
+    Yields whether the lock was acquired. A holder that outlives
+    ``wait_seconds`` (a hung process) does not wedge this one: the refresh
+    proceeds unserialised, still re-reading the file first and still never
+    clearing a login newer than the token it sent."""
+    path = _lock_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(path, os.O_RDWR | os.O_CREAT, 0o600)
+    acquired = False
+    try:
+        deadline = time.monotonic() + wait_seconds
+        while not (acquired := _try_lock(fd)):
+            if time.monotonic() >= deadline:
+                logger.warning(
+                    "Another keel process held the login lock for %.0fs; refreshing without it.",
+                    wait_seconds,
+                )
+                break
+            time.sleep(_LOCK_POLL_SECONDS)
+        yield acquired
+    finally:
+        if acquired:
+            _unlock(fd)
+        os.close(fd)
+
+
+def _session_expired() -> AuthError:
+    return AuthError(
+        "Your session has expired. Run `keel auth login` to re-authenticate.",
+        suggestion="keel auth login",
+        docs_url="https://app.usekeel.io/settings?tab=api-keys",
+    )
+
+
+def _newer_stored_login(config: KeelConfig) -> KeelConfig | None:
+    """The stored login, if the file no longer holds ``config``'s refresh
+    token: another process refreshed it, or the user logged in again.
+
+    Returns ``config`` with the file's token fields (its ``api_url`` and
+    other process-level fields are kept), None when the file still holds
+    the same token, or no login at all (a config the caller built itself,
+    or a login another process cleared: refreshing ours then answers for
+    itself)."""
+    stored = load_file_config()
+    if stored.refresh_token == config.refresh_token or not stored.api_key:
+        return None
+    return dataclasses.replace(
+        config,
+        api_key=stored.api_key,
+        refresh_token=stored.refresh_token,
+        token_expires_at=stored.token_expires_at,
+        client_name=stored.client_name,
+    )
+
+
+def _refused(config: KeelConfig, error: AuthError) -> KeelConfig:
+    """A refresh of ``config.refresh_token`` was refused. Clear the stored
+    login only if it is still the one refused; a newer one is adopted."""
+    newer = _newer_stored_login(config)
+    if newer is not None:
+        logger.debug("Refresh refused, but the stored login is newer; using it.")
+        return newer
+    clear_oauth_tokens()
+    raise error
+
+
 def attempt_refresh(config: KeelConfig, *, timeout: float = 10.0) -> KeelConfig:
-    """Refresh the access token. On success persists new tokens and returns
-    the updated KeelConfig. On failure clears all OAuth fields and raises
-    AuthError.
+    """Refresh the access token, serialised across processes (Q-2602).
 
-    Failure scenarios that clear the lineage:
-      - Refresh token unknown / expired / already used (401 invalid_grant)
-      - Lineage burn — keel-api detected refresh-token reuse and revoked
-        the entire lineage server-side. Wipe local state to match.
+    Under :func:`stored_login_lock`, re-reads the stored login: if another
+    process already refreshed it (or the user logged in again), that login
+    is returned and no refresh is sent, unless it is itself due. Otherwise
+    the refresh is sent, persisted and returned.
 
-    Transient failures (network, 5xx) re-raise AuthError as ``retryable``
-    without clearing — caller can retry on the next request.
+    A refusal (401 or other 4xx: unknown / expired / already-used token,
+    lineage burn) clears the stored login ONLY when the file still holds
+    the refresh token that was refused, then raises AuthError; a newer
+    stored login is returned instead. Transient failures (network, 5xx)
+    raise AuthError as ``retryable`` without clearing.
     """
     if not config.refresh_token:
         raise AuthError(
@@ -117,7 +253,16 @@ def attempt_refresh(config: KeelConfig, *, timeout: float = 10.0) -> KeelConfig:
             suggestion="keel auth login",
             docs_url="https://app.usekeel.io/settings?tab=api-keys",
         )
+    with stored_login_lock(timeout + _LOCK_WAIT_MARGIN_SECONDS):
+        newer = _newer_stored_login(config)
+        if newer is not None:
+            if not needs_refresh(newer):
+                return newer
+            config = newer
+        return _send_refresh(config, timeout=timeout)
 
+
+def _send_refresh(config: KeelConfig, *, timeout: float) -> KeelConfig:
     url = config.api_url.rstrip("/") + "/v1/auth/oauth/refresh"
     try:
         response = httpx.post(
@@ -134,23 +279,21 @@ def attempt_refresh(config: KeelConfig, *, timeout: float = 10.0) -> KeelConfig:
         ) from e
 
     if response.status_code == 401:
-        # Lineage burn or expired token — local state is provably invalid.
-        clear_oauth_tokens()
-        raise AuthError(
-            "Your session has expired. Run `keel auth login` to re-authenticate.",
-            suggestion="keel auth login",
-            docs_url="https://app.usekeel.io/settings?tab=api-keys",
-        )
+        # Lineage burn, expired token, or a token another process already
+        # rotated — invalid only if the file still holds it.
+        return _refused(config, _session_expired())
     if response.status_code >= 500:
         raise AuthError(
             f"Token refresh server error (HTTP {response.status_code}). Try again shortly.",
             retryable=True,
         )
     if response.status_code >= 400:
-        clear_oauth_tokens()
-        raise AuthError(
-            f"Token refresh rejected (HTTP {response.status_code}): {response.text}",
-            suggestion="keel auth login",
+        return _refused(
+            config,
+            AuthError(
+                f"Token refresh rejected (HTTP {response.status_code}): {response.text}",
+                suggestion="keel auth login",
+            ),
         )
 
     body = response.json()
@@ -170,4 +313,5 @@ __all__ = [
     "clear_oauth_tokens",
     "needs_refresh",
     "store_oauth_tokens",
+    "stored_login_lock",
 ]

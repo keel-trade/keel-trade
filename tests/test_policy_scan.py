@@ -32,12 +32,20 @@ profile.
 
 from __future__ import annotations
 
+import ast
 import asyncio
 import re
+from contextlib import contextmanager
+from pathlib import Path
 
 import pytest
 from keel.tools.outcomes import OUTCOMES, _bootstrap
-from keel.tools.outcomes._toolsets import LISTED_PROFILE_TOOLS
+from keel.tools.outcomes import _paper_strings as paper_strings
+from keel.tools.outcomes._toolsets import (
+    LISTED_PAPER_TOOLS,
+    LISTED_PROFILE_TOOLS,
+    listed_profile_tools,
+)
 
 
 try:
@@ -156,28 +164,158 @@ FORBIDDEN_PARAM_DESC_RE = re.compile(
 # Enum values: outright money tokens only (see module docstring).
 FORBIDDEN_ENUM_TOKENS = ("amount", "wallet", "leverage")
 
+# ─── The listed paper carve-out (PT2-2; paper-trading-v2 S06 §3.4.3) ─────
+#
+# Two allowances, each applied ONLY when the surface under test was built
+# with KEEL_LISTED_PAPER on, each a no-op off (the scan is then byte-identical
+# to its pre-paper self). Nothing above this block moves with the flag.
+#
+# 1. An exact-name stem allowance: `keel_paper_deploy` and nothing else —
+#    never a `keel_paper_` prefix rule (a `keel_paper_fund` still fails).
+LISTED_PAPER_NAME_ALLOWANCE = frozenset({"keel_paper_deploy"})
+
+# 2. A paper-compound phrase allowance: a verb token carrying "paper" in the
+#    same breath is replaced by one neutral word with no banned stem before
+#    FORBIDDEN_TEXT_RE runs unchanged over the remainder. "simulated" was
+#    never banned.
+PAPER_COMPOUND_RE = re.compile(
+    r"\bpaper[ -]?(?:trading|trade[sd]?"
+    r"|deploy(?:s|ed|ing|ment|ments)?)\b",
+    re.IGNORECASE,
+)
+PAPER_COMPOUND_NEUTRAL = "papercompound"
+
+#: The flag-on boundary (S06 §3.4.5): the instructions' amended sentence and
+#: the status view's clause, one boundary in two registers.
+LISTED_PAPER_BOUNDARY_SENTENCE = (
+    "It cannot place real orders, move funds or connect wallets; paper-trading runs are "
+    "simulated, and they can be started, paused, updated and stopped here; real-capital "
+    "strategies are managed in the Keel web app (keel_app_link)."
+)
+LISTED_PAPER_BOUNDARY_LINE = (
+    "This connector is for research, backtests and paper-trading runs. "
+    + LISTED_PAPER_BOUNDARY_SENTENCE
+)
+STATUS_PAPER_BOUNDARY_CLAUSE = "it cannot place real orders, move funds or connect wallets"
+
+
+def listed_boundary_sentence(paper: bool) -> str:
+    return LISTED_PAPER_BOUNDARY_SENTENCE if paper else LISTED_BOUNDARY_SENTENCE
+
+
+def listed_boundary_line(paper: bool) -> str:
+    return LISTED_PAPER_BOUNDARY_LINE if paper else LISTED_BOUNDARY_LINE
+
+
+def status_boundary_clause(paper: bool) -> str:
+    return STATUS_PAPER_BOUNDARY_CLAUSE if paper else STATUS_BOUNDARY_CLAUSE
+
+
+def boundary_clause(paper: bool) -> str:
+    """The instructions' clause: the status clause with a sentence-initial capital."""
+    clause = status_boundary_clause(paper)
+    return clause[0].upper() + clause[1:]
+
+
+#: Every listed state the scan runs, as (KEEL_LISTED_PAPER_HOSTS, the
+#: caller's host key, paper expected on the surface). ``flag_off`` is HEAD's
+#: default; ``flag_on`` is the deprecated ``KEEL_LISTED_PAPER=1`` alias (all
+#: hosts). The ``claude_on-*`` states are FDR-10's per-host switch with only
+#: Claude on: a Claude session gets paper, a ChatGPT session and an unknown
+#: client (no host key) in the SAME process get exactly HEAD's surface. The
+#: ``chatgpt_on-*`` and ``all_on-*`` states run every gate for the later
+#: ChatGPT flip (S10 §10).
+_LISTED_STATE_SPECS: dict[str, tuple[str | None, str | None, bool]] = {
+    "flag_off": (None, None, False),
+    "flag_on": ("legacy", None, True),
+    "claude_on-claude": ("claude", "claude", True),
+    "claude_on-chatgpt": ("claude", "chatgpt", False),
+    "claude_on-unknown": ("claude", None, False),
+    # ChatGPT readiness (S10 §10, PT2-90): the same gates with the switch at
+    # `chatgpt` and at `all`, so a later ChatGPT flip is a values change only.
+    "chatgpt_on-chatgpt": ("chatgpt", "chatgpt", True),
+    "chatgpt_on-claude": ("chatgpt", "claude", False),
+    "all_on-unknown": ("all", None, True),
+}
+
+
+@contextmanager
+def listed_flag_state(paper: bool, state: str | None = None):
+    """The listed + hosted environment with the listed flag off or on. On also
+    releases the held paper SDK (the flag is refused while it is held,
+    S06 §3.4.2), and every one of those is restored on exit.
+
+    ``state`` (a :data:`_LISTED_STATE_SPECS` key) selects a per-host state
+    instead (FDR-10): the SDK is released whenever any host is switched on,
+    and the caller's host key is bound for the enclosed build."""
+    import os
+
+    from keel.tools.outcomes._toolsets import listed_host_context
+
+    if state is None:
+        state = "flag_on" if paper else "flag_off"
+    hosts, host, _expected = _LISTED_STATE_SPECS[state]
+    keys = (
+        "KEEL_SERVER_PROFILE",
+        "KEEL_EXECUTION_MODE",
+        "KEEL_TOOLSETS",
+        "KEEL_LISTED_PAPER",
+        "KEEL_LISTED_PAPER_HOSTS",
+    )
+    saved = {k: os.environ.get(k) for k in keys}
+    os.environ["KEEL_SERVER_PROFILE"] = "listed"
+    os.environ["KEEL_EXECUTION_MODE"] = "hosted"
+    os.environ.pop("KEEL_TOOLSETS", None)
+    os.environ.pop("KEEL_LISTED_PAPER", None)
+    os.environ.pop("KEEL_LISTED_PAPER_HOSTS", None)
+    try:
+        if hosts is not None:
+            from tests._paper_sdk import paper_sdk_release
+
+            with paper_sdk_release(), listed_host_context(host):
+                if hosts == "legacy":
+                    os.environ["KEEL_LISTED_PAPER"] = "1"
+                else:
+                    os.environ["KEEL_LISTED_PAPER_HOSTS"] = hosts
+                yield
+        else:
+            yield
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+
+
+class ListedSurface(tuple):
+    """(tools_json, instructions, prompt_names), plus the flag state it was
+    built in: `paper`, the registry then (`registry`) and the listed set the
+    server then served by `listed_profile_tools()` (`listed_tools`)."""
+
+    paper: bool
+    registry: frozenset
+    listed_tools: frozenset
+
+
+#: Both flag states: every listed-surface arm runs off (HEAD's surface) and on.
+LISTED_FLAG_STATES = tuple(_LISTED_STATE_SPECS)
+
 
 # ─── Build the listed surface exactly as the hosted server would ────────
 
 
-@pytest.fixture(scope="module")
-def listed_surface():
+@pytest.fixture(scope="module", params=LISTED_FLAG_STATES)
+def listed_surface(request):
     """(tools_json, instructions, prompt_names) from a real FastMCP
     server built under KEEL_SERVER_PROFILE=listed +
     KEEL_EXECUTION_MODE=hosted — the deployment configuration a
-    directory registration actually runs."""
-    import os
-
+    directory registration actually runs — once with KEEL_LISTED_PAPER off
+    and once on (paper SDK released; S06 §3.4.3, AC-06-6)."""
     from keel.mcp.server import create_server
 
-    saved = {
-        k: os.environ.get(k)
-        for k in ("KEEL_SERVER_PROFILE", "KEEL_EXECUTION_MODE", "KEEL_TOOLSETS")
-    }
-    os.environ["KEEL_SERVER_PROFILE"] = "listed"
-    os.environ["KEEL_EXECUTION_MODE"] = "hosted"
-    os.environ.pop("KEEL_TOOLSETS", None)
-    try:
+    paper = _LISTED_STATE_SPECS[request.param][2]
+    with listed_flag_state(paper, request.param):
         server = create_server()
         tools = asyncio.run(server.list_tools())
         prompts = asyncio.run(server.list_prompts())
@@ -191,16 +329,18 @@ def listed_surface():
             }
             for t in tools
         ]
-        return tools_json, server.instructions or "", {p.name for p in prompts}
-    finally:
-        for k, v in saved.items():
-            if v is None:
-                os.environ.pop(k, None)
-            else:
-                os.environ[k] = v
+        surface = ListedSurface((tools_json, server.instructions or "", {p.name for p in prompts}))
+        surface.paper = paper
+        surface.registry = frozenset(OUTCOMES)
+        surface.listed_tools = listed_profile_tools()
+    return surface
 
 
-def _text_violations(owner: str, field: str, text: str) -> list[str]:
+def _text_violations(owner: str, field: str, text: str, *, paper: bool = False) -> list[str]:
+    """FORBIDDEN_TEXT_RE over `text`. `paper` applies the paper-compound
+    allowance first (flag-on surfaces only, S06 §3.4.3)."""
+    if paper:
+        text = PAPER_COMPOUND_RE.sub(PAPER_COMPOUND_NEUTRAL, text or "")
     hits = sorted({m.group(0).lower() for m in FORBIDDEN_TEXT_RE.finditer(text or "")})
     return [f"{owner}.{field}: forbidden term(s) {hits}"] if hits else []
 
@@ -210,11 +350,17 @@ def _text_violations(owner: str, field: str, text: str) -> list[str]:
 
 def test_listed_surface_is_exactly_the_allow_list(listed_surface):
     tools_json, _, _ = listed_surface
+    allowed = listed_surface.listed_tools
     names = {t["name"] for t in tools_json}
-    assert names == LISTED_PROFILE_TOOLS, (
-        f"listed surface drifted — unexpected: {sorted(names - LISTED_PROFILE_TOOLS)}, "
-        f"missing: {sorted(LISTED_PROFILE_TOOLS - names)}"
+    assert names == allowed, (
+        f"listed surface drifted — unexpected: {sorted(names - allowed)}, "
+        f"missing: {sorted(allowed - names)}"
     )
+    assert len(names) == 29 + len(LISTED_PAPER_TOOLS) * int(listed_surface.paper)
+    # Both simulated paper tools ride the flag together (S10 §3, PT2-90);
+    # no live tool is ever added (PT2-27, EXPLICITLY_EXCLUDED_TOOLS).
+    assert (names >= LISTED_PAPER_TOOLS) is listed_surface.paper
+    assert not names & LISTED_PAPER_TOOLS or listed_surface.paper
 
 
 def test_no_excluded_tool_present(listed_surface):
@@ -223,18 +369,180 @@ def test_no_excluded_tool_present(listed_surface):
     leaked = names & EXPLICITLY_EXCLUDED_TOOLS
     assert not leaked, f"excluded tools leaked into the listed profile: {sorted(leaked)}"
     # And the allow-list itself must never quietly admit one.
-    assert not (LISTED_PROFILE_TOOLS & EXPLICITLY_EXCLUDED_TOOLS)
+    assert not (listed_surface.listed_tools & EXPLICITLY_EXCLUDED_TOOLS)
+
+
+def _name_stem_violations(names, *, paper: bool) -> list[str]:
+    """FORBIDDEN_NAME_STEMS over `names`; on a flag-on surface the exact
+    names in LISTED_PAPER_NAME_ALLOWANCE are skipped, nothing else."""
+    return [
+        f"{name}: name contains forbidden stem {stem!r}"
+        for name in names
+        if not (paper and name in LISTED_PAPER_NAME_ALLOWANCE)
+        for stem in FORBIDDEN_NAME_STEMS
+        if stem in name.lower()
+    ]
 
 
 def test_no_forbidden_stems_in_tool_names(listed_surface):
     tools_json, _, _ = listed_surface
-    violations = [
-        f"{t['name']}: name contains forbidden stem {stem!r}"
-        for t in tools_json
-        for stem in FORBIDDEN_NAME_STEMS
-        if stem in t["name"].lower()
-    ]
+    violations = _name_stem_violations([t["name"] for t in tools_json], paper=listed_surface.paper)
     assert not violations, "\n".join(violations)
+
+
+# ─── The carve-out still refuses what it must (AC-06-6, AC-06-8) ─────────
+#
+# Seeds (each by an exact reversible edit, then reversed): remove
+# PAPER_COMPOUND_RE's pre-substitution from `_text_violations` ⇒ the flag-on
+# description scan reds on keel_paper_deploy's "paper-trading"; widen
+# LISTED_PAPER_NAME_ALLOWANCE to a `keel_paper_` prefix rule in
+# `_name_stem_violations` ⇒ the synthetic keel_paper_fund passes the stem test
+# and test_hypothetical_listings_still_fail reds.
+
+_LIVE_VERBS = (
+    "deploy this strategy",
+    "start trading",
+    "go live",
+    "going live",
+    "trading",
+    "funded",
+)
+_PAPER_PHRASES = ("paper trading", "paper-trading", "paper-deploy", "simulated")
+
+
+def test_the_carve_out_admits_only_paper_compounds():
+    for phrase in _LIVE_VERBS:
+        assert _text_violations("probe", "text", phrase, paper=True), phrase
+        assert _text_violations("probe", "text", phrase), phrase
+    for phrase in _PAPER_PHRASES:
+        assert not _text_violations("probe", "text", phrase, paper=True), phrase
+    # Off, no allowance applies: "paper trading" violates (AC-06-7).
+    assert _text_violations("probe", "text", "paper trading")
+
+
+def test_paper_compound_re_needs_the_paper_prefix():
+    """Property (AC-06-8): no token without the `paper` prefix matches."""
+    tokens = [
+        *(m.group(0) for m in FORBIDDEN_TEXT_RE.finditer(" ".join(_LIVE_VERBS))),
+        "trade",
+        "trades",
+        "traded",
+        "deploys",
+        "deployment",
+        "deployments",
+        "papers",
+        "newspaper trading",
+    ]
+    assert len(tokens) >= 10
+    for token in tokens:
+        if token.lower().startswith("paper"):
+            continue
+        m = PAPER_COMPOUND_RE.search(token)
+        assert m is None or m.group(0).lower().startswith("paper"), token
+    assert PAPER_COMPOUND_RE.search("newspaper trading") is None  # word-bounded
+
+
+def test_hypothetical_listings_still_fail():
+    """AC-06-8: with the flag on, an allow-list copy holding keel_live_deploy
+    trips the exclusion intersection and the name-stem rule; a synthetic
+    keel_paper_fund trips the `fund` stem; the allowance is one exact name;
+    keel_paper_control is listed with the flag on only (S10, PT2-90)."""
+    with listed_flag_state(True):
+        on_tools = listed_profile_tools()
+    with listed_flag_state(False):
+        off_tools = listed_profile_tools()
+    hypothetical = set(on_tools) | {"keel_live_deploy"}
+    assert hypothetical & EXPLICITLY_EXCLUDED_TOOLS == {"keel_live_deploy"}
+    names = ("keel_live_deploy", "keel_paper_fund", "keel_paper_deploy")
+    violations = _name_stem_violations(names, paper=True)
+    assert any(v.startswith("keel_live_deploy:") for v in violations)
+    assert any(v.startswith("keel_paper_fund:") for v in violations)
+    assert not any(v.startswith("keel_paper_deploy:") for v in violations)
+    # The name allowance stays one exact name: keel_paper_control carries no
+    # banned stem, so it needs none (S10, PT2-90; never widened).
+    assert LISTED_PAPER_NAME_ALLOWANCE == {"keel_paper_deploy"}
+    assert not _name_stem_violations(("keel_paper_control",), paper=False)
+    assert on_tools - off_tools == {"keel_paper_deploy", "keel_paper_control"}
+    assert "keel_paper_control" in on_tools and "keel_paper_control" not in off_tools
+
+
+def test_paper_deploy_listed_params_pass_the_unchanged_param_rules(listed_surface):
+    """AC-06-9: keel_paper_deploy's listed schema passes the param rules with
+    zero rule edits. Seed: put "fund" in simulated_capital's description ⇒
+    the text rule reds here. Count: its four listed properties are scanned."""
+    if not listed_surface.paper:
+        pytest.skip("keel_paper_deploy is listed only with the flag on")
+    tools_json, _, _ = listed_surface
+    (tool,) = [t for t in tools_json if t["name"] == "keel_paper_deploy"]
+    props = tool["inputSchema"].get("properties") or {}
+    assert len(props) == 4, sorted(props)
+    violations: list[str] = []
+    for pname, pschema in props.items():
+        segments = pname.lower().split("_")
+        violations += [
+            f"{pname}: name token {tok}" for tok in FORBIDDEN_PARAM_TOKENS if tok in segments
+        ]
+        desc = pschema.get("description", "")
+        violations += [f"{pname}: {m.group(0)}" for m in FORBIDDEN_PARAM_DESC_RE.finditer(desc)]
+        violations += _text_violations("keel_paper_deploy", f"param[{pname}]", desc, paper=True)
+    assert not violations, violations
+
+
+# ─── PT2-27: a listed paper tool says it is simulated (AC-06-32 (b)) ─────
+#
+# S06 §3.4.1: any paper tool the hosted connector gains says in its name that
+# it is paper and in its title and the first sentence of its description that
+# it is simulated. (Its card says so too: the stamped live card arm of
+# test_listed_card_html_passes_the_string_rules.) Seed: drop "(Simulated)"
+# from keel_paper_deploy's listed title ⇒ the flag-on arm reds; the control
+# below proves the check refuses such a tool without any edit.
+
+_FIRST_SENTENCE_RE = re.compile(r"^.*?[.!?](?=\s|$)", re.DOTALL)
+
+
+def _paper_tool_simulated_violations(tools_json) -> tuple[list[str], list[str]]:
+    """(paper tool names, violations): every tool whose name contains
+    `paper` must carry `simulated` (any case) in its title and in the first
+    sentence of its description."""
+    paper = sorted(t["name"] for t in tools_json if "paper" in t["name"])
+    violations: list[str] = []
+    for t in tools_json:
+        if "paper" not in t["name"]:
+            continue
+        title = t.get("title") or ""
+        if "simulated" not in title.lower():
+            violations.append(f"{t['name']}: title {title!r} does not say simulated")
+        m = _FIRST_SENTENCE_RE.match((t.get("description") or "").strip())
+        first = m.group(0) if m else (t.get("description") or "")
+        if "simulated" not in first.lower():
+            violations.append(f"{t['name']}: first sentence {first!r} does not say simulated")
+    return paper, violations
+
+
+def test_a_listed_paper_tool_says_it_is_simulated(listed_surface):
+    tools_json, _, _ = listed_surface
+    paper, violations = _paper_tool_simulated_violations(tools_json)
+    assert not violations, "\n".join(violations)
+    # Count: no paper tool among the 29 off, exactly the two simulated paper
+    # tools among the 31 on (S10 §3).
+    assert len(tools_json) == 29 + len(LISTED_PAPER_TOOLS) * int(listed_surface.paper)
+    assert paper == (sorted(LISTED_PAPER_TOOLS) if listed_surface.paper else [])
+
+
+def test_the_simulated_check_refuses_an_unmarked_paper_tool():
+    """Control: a synthetic listed paper tool whose title drops
+    "(Simulated)" is refused, and so is one whose first sentence does not
+    say it; a marked one passes."""
+    marked = {
+        "name": "keel_paper_probe",
+        "title": "Paper Probe (Simulated)",
+        "description": "Starts a simulated probe. Nothing else.",
+    }
+    untitled = {**marked, "title": "Paper Probe"}
+    late = {**marked, "description": "Starts a probe. Fills are simulated."}
+    assert _paper_tool_simulated_violations([marked]) == (["keel_paper_probe"], [])
+    assert len(_paper_tool_simulated_violations([untitled])[1]) == 1
+    assert len(_paper_tool_simulated_violations([late])[1]) == 1
 
 
 #: The no-trading boundary the listed instructions state (mcp-conversion 04
@@ -247,27 +555,35 @@ BOUNDARY_CLAUSE = "It cannot place orders, move funds or connect wallets"
 
 def test_no_forbidden_verbs_in_titles_descriptions_or_instructions(listed_surface):
     tools_json, instructions, _ = listed_surface
-    assert instructions.count(BOUNDARY_CLAUSE) == 1, "the boundary clause moved"
-    instructions = instructions.replace(BOUNDARY_CLAUSE, "")
+    paper = listed_surface.paper
+    sentence = listed_boundary_sentence(paper)
+    assert instructions.count(sentence) == 1, "the boundary sentence moved"
+    assert instructions.count(boundary_clause(paper)) == 1, "the boundary clause moved"
     violations: list[str] = []
     for t in tools_json:
-        violations += _text_violations(t["name"], "title", t["title"] or "")
+        violations += _text_violations(t["name"], "title", t["title"] or "", paper=paper)
         description = t["description"]
         if t["name"] == "keel_account_status":
-            assert description.count(STATUS_BOUNDARY_CLAUSE) == 1, "the status boundary moved"
-            description = description.replace(STATUS_BOUNDARY_CLAUSE, "")
-        violations += _text_violations(t["name"], "description", description)
+            clause = status_boundary_clause(paper)
+            assert description.count(clause) == 1, "the status boundary moved"
+            description = description.replace(clause, "")
+        violations += _text_violations(t["name"], "description", description, paper=paper)
         for pname, pschema in (t["inputSchema"].get("properties") or {}).items():
             violations += _text_violations(
-                t["name"], f"param[{pname}].description", pschema.get("description", "")
+                t["name"],
+                f"param[{pname}].description",
+                pschema.get("description", ""),
+                paper=paper,
             )
     # The D-12 no-trading boundary NEGATES the money nouns ("cannot … move
     # funds or connect wallets"): exempt as that one exact sentence, never as
     # the field — any other use of those words in the instructions still reds.
     violations += _text_violations(
-        "server", "instructions", instructions.replace(LISTED_BOUNDARY_SENTENCE, "")
+        "server", "instructions", instructions.replace(sentence, ""), paper=paper
     )
     assert not violations, "\n".join(violations)
+    # Count (AC-06-6): every served tool's description was scanned.
+    assert len(tools_json) == 29 + len(LISTED_PAPER_TOOLS) * int(paper)
 
 
 def test_output_schema_copy_passes_the_string_rules(listed_surface):
@@ -283,7 +599,9 @@ def test_output_schema_copy_passes_the_string_rules(listed_surface):
         texts = _schema_strings(t["outputSchema"])
         described += len(texts)
         for text in texts:
-            violations += _text_violations(t["name"], "outputSchema", text)
+            violations += _text_violations(
+                t["name"], "outputSchema", text, paper=listed_surface.paper
+            )
     assert not violations, "\n".join(violations)
     # Not vacuous: the ten view tools each carry described output schemas.
     assert described >= 20, described
@@ -320,12 +638,15 @@ def test_no_routing_to_tools_absent_from_the_listed_surface(listed_surface):
     a reviewer) a `keel_*` tool that this profile does not register."""
     tools_json, instructions, _ = listed_surface
     tool_name_re = re.compile(r"\bkeel_[a-z0-9_]+\b")
-    known_tool_names = set(OUTCOMES)
+    # The registry and the listed set the server was built with (flag on:
+    # released, and keel_paper_deploy listed, S06 §3.4.3).
+    known_tool_names = set(listed_surface.registry)
+    listed = listed_surface.listed_tools
     violations: list[str] = []
 
     def scan(owner: str, text: str) -> None:
         for ref in sorted(set(tool_name_re.findall(text or ""))):
-            if ref in known_tool_names and ref not in LISTED_PROFILE_TOOLS:
+            if ref in known_tool_names and ref not in listed:
                 violations.append(f"{owner}: references non-listed tool {ref}")
 
     for t in tools_json:
@@ -347,26 +668,27 @@ def test_listed_prompts_exclude_deploy_workflow(listed_surface):
 # ─── Widget-card surface (spec 06 R2 — same deployment config) ──────────
 
 
-@pytest.fixture(scope="module")
-def listed_widget_surface():
-    """(ui_resources, tool_wire_metas) from a real listed+hosted server.
+class ListedWidgetSurface(tuple):
+    """(ui_resources, tool_wire_metas), plus the listed flag state it was
+    built in (`paper`)."""
+
+    paper: bool
+
+
+@pytest.fixture(scope="module", params=LISTED_FLAG_STATES)
+def listed_widget_surface(request):
+    """(ui_resources, tool_wire_metas) from a real listed+hosted server,
+    with KEEL_LISTED_PAPER off and on (S06 §3.5.6: the live card's PAPER
+    stamp is served on listed only with the flag on).
 
     ``ui_resources`` maps each ``ui://`` URI to its served HTML text;
     ``tool_wire_metas`` maps tool name → the ``_meta`` dict published
     in tools/list.
     """
-    import os
-
     from keel.mcp.server import create_server
 
-    saved = {
-        k: os.environ.get(k)
-        for k in ("KEEL_SERVER_PROFILE", "KEEL_EXECUTION_MODE", "KEEL_TOOLSETS")
-    }
-    os.environ["KEEL_SERVER_PROFILE"] = "listed"
-    os.environ["KEEL_EXECUTION_MODE"] = "hosted"
-    os.environ.pop("KEEL_TOOLSETS", None)
-    try:
+    paper = _LISTED_STATE_SPECS[request.param][2]
+    with listed_flag_state(paper, request.param):
         server = create_server()
         resources = asyncio.run(server.list_resources())
         ui_resources = {
@@ -376,13 +698,9 @@ def listed_widget_surface():
         }
         tools = asyncio.run(server.list_tools())
         tool_wire_metas = {t.name: (t.to_mcp_tool().meta or {}) for t in tools}
-        return ui_resources, tool_wire_metas
-    finally:
-        for k, v in saved.items():
-            if v is None:
-                os.environ.pop(k, None)
-            else:
-                os.environ[k] = v
+    surface = ListedWidgetSurface((ui_resources, tool_wire_metas))
+    surface.paper = paper
+    return surface
 
 
 def test_deploy_preflight_card_absent_on_listed_profile(listed_widget_surface):
@@ -422,12 +740,19 @@ def test_listed_card_html_passes_the_string_rules(listed_widget_surface):
     scans labels/comments/prose, exactly what a reviewer's scanner
     sees."""
     ui_resources, _ = listed_widget_surface
+    paper = listed_widget_surface.paper
     violations: list[str] = []
     for uri, html in ui_resources.items():
-        hits = sorted({m.group(0).lower() for m in FORBIDDEN_TEXT_RE.finditer(html or "")})
-        if hits:
-            violations.append(f"{uri}: forbidden term(s) {hits}")
+        violations += _text_violations(uri, "html", html or "", paper=paper)
     assert not violations, "\n".join(violations)
+    # Count (AC-06-6): at least one card resource was scanned; the stamped
+    # live card is among them exactly when the flag is on (S06 §3.5.6).
+    from keel.widgets import card_resource_uri
+
+    assert ui_resources, "no card resource served"
+    stamped = [uri for uri, html in ui_resources.items() if "PAPER — simulated" in (html or "")]
+    live = card_resource_uri("live")
+    assert (live in stamped) is paper, stamped
 
 
 # ─── ChatGPT tool-row `_meta` strings (BUILD §2.6) ──────────────────────
@@ -455,7 +780,7 @@ def test_meta_invocation_strings_pass_the_string_rules(listed_widget_surface):
     strings = _invocation_strings(tool_wire_metas)
     violations: list[str] = []
     for owner, text in sorted(strings.items()):
-        violations += _text_violations(owner, "meta", text)
+        violations += _text_violations(owner, "meta", text, paper=listed_widget_surface.paper)
         hits = sorted({m.group(0).lower() for m in FORBIDDEN_PARAM_DESC_RE.finditer(text)})
         if hits:
             violations.append(f"{owner}.meta: money-semantics {hits}")
@@ -525,7 +850,7 @@ def test_listed_descriptions_carry_no_behavioural_directives(listed_surface):
     # sentence the exemption was written for, so the exemption matches
     # almost nothing; a scanner exempting everything would report
     # exempted == scanned.
-    assert len(descriptions) == len(LISTED_PROFILE_TOOLS)
+    assert len(descriptions) == len(listed_surface.listed_tools)
     assert scanned >= 100, f"only {scanned} description sentences scanned"
     assert exempted * 10 < scanned, f"{exempted} of {scanned} sentences exempted"
     naming = sum(
@@ -579,7 +904,7 @@ def test_listed_copy_never_addresses_the_host_or_its_classifier(listed_surface):
         hits.append(f"instructions: {m.group(0)!r}")
     assert not hits, "listed copy addresses the host/classifier:\n" + "\n".join(hits)
     # Non-vacuous: every listed description plus its parameter copy was read.
-    assert scanned >= 2 * len(LISTED_PROFILE_TOOLS)
+    assert scanned >= 2 * len(listed_surface.listed_tools)
 
 
 # ─── The descriptive register (Q-1804) ──────────────────────────────────
@@ -647,7 +972,11 @@ def test_listed_descriptions_are_descriptive_not_imperative(listed_surface):
     # tools were read, each description is non-trivial, and the four
     # surface hints plus the two card prefaces (a result's and a dry
     # run's, Q-1896) were scanned.
-    assert len(tools_json) == len(LISTED_PROFILE_TOOLS) == 29
+    assert (
+        len(tools_json)
+        == len(listed_surface.listed_tools)
+        == 29 + len(LISTED_PAPER_TOOLS) * int(listed_surface.paper)
+    )
     assert all(len(t["description"]) >= 200 for t in tools_json)
     assert len(_result_level_copy()) == 6
 
@@ -695,7 +1024,7 @@ def test_listed_copy_does_not_sort_the_users_request(listed_surface):
             hits += [f"{tool['name']}: {m.group(0)!r}" for m in REQUEST_SORTING_RE.finditer(text)]
     assert not hits, "listed copy sorts the user's request:\n" + "\n".join(hits)
     # Non-vacuous: every listed description plus its parameter copy was read.
-    assert scanned >= 2 * len(LISTED_PROFILE_TOOLS)
+    assert scanned >= 2 * len(listed_surface.listed_tools)
 
 
 # ─── Steering copy (2026-09-25, Q-1947 round 3 sweep) ───────────────────
@@ -758,7 +1087,7 @@ def test_listed_copy_describes_rather_than_steers(listed_surface):
             hits += [f"{tool['name']}: {m.group(0)!r}" for m in STEERING_RE.finditer(text)]
     assert not hits, "listed copy steers the model:\n" + "\n".join(hits)
     # Non-vacuous: every listed description plus its parameter copy was read.
-    assert scanned >= 2 * len(LISTED_PROFILE_TOOLS)
+    assert scanned >= 2 * len(listed_surface.listed_tools)
 
 
 # ─── Capability copy states tools, not a session permission (Q-1960) ────
@@ -790,7 +1119,7 @@ def test_listed_capability_copy_states_tools_not_a_session_permission(
     keel_account_status's description and the served status view (and the owner
     pin below, since the instructions no longer quote it) while every
     control arm stays green. Revert by reversing that edit."""
-    from keel.tools.outcomes._status_view import CAPABILITY_PHRASE
+    from keel.tools.outcomes._status_view import CAPABILITY_PHRASE, CAPABILITY_PHRASE_PAPER_LISTED
 
     # Control arms: each retired phrasing matches, ChatGPT's own paraphrase
     # matches, and the rewrite plus a tool-level "read-only" fact do not.
@@ -811,7 +1140,8 @@ def test_listed_capability_copy_states_tools_not_a_session_permission(
         assert not PERMISSION_RE.search(kept), kept
 
     tools_json, instructions, _ = listed_surface
-    text, envelope, _loaded = _served_status(monkeypatch, tmp_path, hosted=True)
+    paper = listed_surface.paper
+    text, envelope, _loaded = _served_status(monkeypatch, tmp_path, hosted=True, paper=paper)
     scanned = 0
     hits: list[str] = []
     for tool in tools_json:
@@ -828,23 +1158,28 @@ def test_listed_capability_copy_states_tools_not_a_session_permission(
 
     # Non-vacuity, on quantities the seed cannot move: every listed tool and
     # its parameter copy, the instructions and the served payload were read.
-    assert scanned >= 2 * len(LISTED_PROFILE_TOOLS) + 15
+    assert scanned >= 2 * len(listed_surface.listed_tools) + 15
     # One phrase, two owners, byte for byte (agent-surface-cleanup fix-wave
     # resolution #10): the status view's line 3 OWNS it; the listed
     # description quotes it. It states the D-12 no-trading boundary in the
     # same words the instructions use (04 §5.3, the exact sentence below) —
     # the fact the refusal needs.
     (status,) = [t for t in tools_json if t["name"] == "keel_account_status"]
-    assert f"This connector: {CAPABILITY_PHRASE}." in text
-    assert f"what this connector can do: {CAPABILITY_PHRASE}." in status["description"]
-    assert LISTED_BOUNDARY_LINE in instructions, (
+    phrase = CAPABILITY_PHRASE_PAPER_LISTED if paper else CAPABILITY_PHRASE
+    assert f"This connector: {phrase}." in text
+    assert f"what this connector can do: {phrase}." in status["description"]
+    assert listed_boundary_line(paper) in instructions, (
         "the listed instructions must state the no-trading boundary verbatim (04 §5.3)"
     )
-    assert STATUS_BOUNDARY_CLAUSE in CAPABILITY_PHRASE
-    assert "managed in the Keel web app" in CAPABILITY_PHRASE
+    assert status_boundary_clause(paper) in phrase
+    assert "managed in the Keel web app" in phrase
     # The status clause and the instructions' clause are one boundary: they
-    # differ only in the sentence-initial capital.
-    assert BOUNDARY_CLAUSE == "I" + STATUS_BOUNDARY_CLAUSE[1:]
+    # differ only in the sentence-initial capital, in each flag state
+    # (S06 §3.4.5), and each owner carries it exactly once.
+    assert boundary_clause(paper) == "I" + status_boundary_clause(paper)[1:]
+    assert BOUNDARY_CLAUSE == boundary_clause(False)
+    assert instructions.count(boundary_clause(paper)) == 1
+    assert status["description"].count(status_boundary_clause(paper)) == 1
 
 
 def test_server_instructions_imperatives_only_ratchet_down(listed_surface):
@@ -862,11 +1197,11 @@ def test_server_instructions_imperatives_only_ratchet_down(listed_surface):
     )
     # Non-vacuous, on quantities the seed cannot move: the assembly is the
     # frozen four sections and names the first call.
-    assert assemble.instruction_section_ids("listed") == (
-        "head",
-        "sequence",
-        "quota",
-        "surface-listed",
+    paper = listed_surface.paper
+    assert assemble.instruction_section_ids("listed", paper_listed=paper) == (
+        ("head", "sequence", "quota", "surface-listed-paper", "paper-listed")
+        if paper
+        else ("head", "sequence", "quota", "surface-listed")
     )
     assert "keel_account_status" in instructions
     # One regex, two owners kept equal: the corpus builder's base-register
@@ -1000,7 +1335,9 @@ def test_nested_parameter_copy_passes_the_string_rules(listed_surface):
     for t in tools_json:
         for text in _nested_descriptions(t["inputSchema"]):
             nested += 1
-            violations += _text_violations(t["name"], "nested-param.description", text)
+            violations += _text_violations(
+                t["name"], "nested-param.description", text, paper=listed_surface.paper
+            )
             hits = sorted({m.group(0).lower() for m in FORBIDDEN_PARAM_DESC_RE.finditer(text)})
             if hits:
                 violations.append(f"{t['name']}.nested-param.description: money-semantics {hits}")
@@ -1053,7 +1390,7 @@ def _payload_strings(node) -> list[str]:
     return [node] if isinstance(node, str) else []
 
 
-def _served_status(monkeypatch, tmp_path, *, hosted: bool):
+def _served_status(monkeypatch, tmp_path, *, hosted: bool, paper: bool = False):
     """(text, envelope, loaded tool names) from keel_account_status on a real server.
 
     Hosted arm: the LISTED profile under KEEL_EXECUTION_MODE=hosted with a
@@ -1082,17 +1419,28 @@ def _served_status(monkeypatch, tmp_path, *, hosted: bool):
     monkeypatch.setattr(
         keel.client.KeelClient, "get", lambda self, path, *a, **k: _STATUS_READS[path]
     )
-    server = create_server()
-    reset = (
-        bind_request_credentials(token="caller-token", api_url="https://staging-api.test")
-        if hosted
-        else None
-    )
-    try:
-        result = asyncio.run(server.call_tool("keel_account_status", {}))
-    finally:
-        if reset is not None:
-            clear_request_credentials(reset)
+    from contextlib import nullcontext
+
+    from tests._paper_sdk import paper_sdk_release
+
+    monkeypatch.delenv("KEEL_LISTED_PAPER", raising=False)
+    released = paper_sdk_release() if paper else nullcontext()
+    with released:
+        if paper:  # the listed flag on (S06 §3.4.2): the SDK released first
+            monkeypatch.setenv("KEEL_LISTED_PAPER", "1")
+        server = create_server()
+        reset = (
+            bind_request_credentials(token="caller-token", api_url="https://staging-api.test")
+            if hosted
+            else None
+        )
+        try:
+            result = asyncio.run(server.call_tool("keel_account_status", {}))
+        finally:
+            if reset is not None:
+                clear_request_credentials(reset)
+        if paper:
+            monkeypatch.delenv("KEEL_LISTED_PAPER")
     text = result.content[0].text
     # The text block is the status view's markdown (spec 02 §2.5); the
     # envelope is `structuredContent` — under the frozen `{"result": string}`
@@ -1191,7 +1539,10 @@ def g4_surface():
 
 @pytest.fixture(scope="module")
 def g4_payloads():
-    return sf.runtime_payloads()
+    # The paper quota wall joins the runtime arm (paper-trading-v2 S06
+    # §3.4.6, AC-06-21; PT2-31 moved it to M8-quota-wall), built through the
+    # real MCP adapter where keel_paper_deploy runs (sf.paper_runtime_payloads).
+    return {**sf.runtime_payloads(), **sf.paper_runtime_payloads()}
 
 
 #: Payload KEYS that are commerce by name (04 §4.3/§4.4 removed fields).
@@ -1303,7 +1654,9 @@ def test_g4_runtime_payloads_carry_no_commerce_or_live_money(g4_payloads):
         "plan_status_paid",
         "critical_run",
         "status",
+        "paper_wall",
     } <= set(g4_payloads)
+    assert g4_payloads["paper_wall"].structured.get("blocked_action") == "paper_deploy"
 
 
 #: Payloads about the caller's PLAN: no link at all (04 §4.1, §4.3 — the walls
@@ -1311,6 +1664,7 @@ def test_g4_runtime_payloads_carry_no_commerce_or_live_money(g4_payloads):
 PLAN_PAYLOADS = (
     "free_wall",
     "paid_wall",
+    "paper_wall",
     "plan_status_free",
     "plan_status_paid",
     "plan_status_first_week",
@@ -1538,3 +1892,382 @@ def test_g4_first_week_payloads_carry_the_sentence_and_nothing_else(g4_payloads)
         for text in payload.strings():
             assert not FIRST_WEEK_BANNED_RE.search(text), (payload.name, text[:200])
             assert not sf.EXPIRY_URGENCY_RE.search(text), (payload.name, text[:200])
+
+
+# ─── Paper runtime strings (paper-trading-v2 S06 §3.4.6, AC-06-21) ───────
+#
+# Every paper envelope, talking-point and label string ships from ONE module,
+# `keel/tools/outcomes/_paper_strings.py`, as a row carrying a full form and a
+# listed-safe form (or an explicit None where a profile never emits it). Three
+# arms:
+#
+# * enumeration — every row the module declares is registered, declares both
+#   forms, and the module carries no stray text outside a row;
+# * listed scan — every non-None listed form passes FORBIDDEN_TEXT_RE WITHOUT
+#   the paper-compound allowance (§3.4.4) and names no non-listed tool;
+# * sourcing — no module under keel/ but the strings module carries any row's
+#   text as a literal, and every declared paper render path imports the module
+#   and references the rows it emits (and every importer is declared).
+#
+# PT2-31: the render paths join PAPER_RENDER_PATHS in the task that builds
+# them — the envelope path at M8-quota-wall, the graduation path at
+# M8-monitor-graduation, each tool's path in its own task — and each must be
+# non-vacuous where it lands (seeding a literal into it reds the sourcing arm).
+#
+# Seeds (exact reversible edits, AC-06-21): drop LADDER_LINE's `listed=` ⇒
+# test_paper_strings_enumeration_declares_every_form reds naming ladder_line;
+# paste a row's text as a literal into any keel/ module (e.g. live_monitor.py)
+# ⇒ test_paper_strings_are_sourced_from_the_module reds naming that file.
+
+#: The nine §3.4.6 rows (PT2-28 added the paper-id refusal). The module may
+#: carry more; it may never carry fewer.
+PAPER_STRING_KEYS_SPEC = frozenset(
+    {
+        "claim_context_point",
+        "permission_refusal_line",
+        "graduation_live_call_line",
+        "graduation_keep_paper_line",
+        "graduation_carry_over_line",
+        "ladder_line",
+        "full_deploy_line_sentence",
+        "monitor_paper_label",
+        "monitor_paper_id_refusal",
+    }
+)
+
+#: Paper render paths (module path relative to keel/) → the row keys it emits.
+#: Each joins in the task that builds it (the PT2-31 note above).
+PAPER_RENDER_PATHS: dict[str, frozenset[str]] = {
+    # M8-paper-deploy-tool: the deploy result's run notes (§3.2.3). The same
+    # module raises the envelope (§3.2.4): the quota wall (M8-quota-wall,
+    # PT2-31) renders HEAD's neutral lines and no paper row. A paper text
+    # retyped anywhere in it reds the package-wide literal scan.
+    "tools/outcomes/paper_deploy.py": frozenset(
+        {"deploy_fill_disclosure", "deploy_auto_pause_disclosure", "ladder_line"}
+    ),
+    # M8-auth-arms: the envelope render path's paper rows, the claim wall's
+    # context point and the permission refusal (§3.2.4a), shared by both
+    # paper tools.
+    "tools/outcomes/_paper_walls.py": frozenset({"claim_context_point", "permission_refusal_line"}),
+    # M8-monitor-venue: the monitor's run label (§3.5.2); M8-monitor-graduation
+    # (PT2-31): the graduation path's rows (§3.5.4); M8-portfolio-paper: the
+    # portfolio's paper section label (§3.5.5).
+    "tools/outcomes/live_monitor.py": frozenset(
+        {
+            "monitor_paper_label",
+            "portfolio_paper_section_label",
+            "graduation_criteria_line",
+            "graduation_live_call_line",
+            "graduation_keep_paper_line",
+            "graduation_carry_over_line",
+        }
+    ),
+    # M8-regen (§3.9 row 7, PT2-28): the full-profile deploy line's paper
+    # sentence, released only with the paper SDK.
+    "tools/outcomes/_nudge.py": frozenset({"full_deploy_line_sentence"}),
+    # QA-W3 / QA-W2: every paper_control outcome carries the paper label, and
+    # its statuses render through the paper status words.
+    "tools/outcomes/paper_control.py": frozenset({"monitor_paper_label"}),
+}
+
+KEEL_PKG_ROOT = Path(paper_strings.__file__).resolve().parents[2]
+PAPER_STRINGS_REL = "tools/outcomes/_paper_strings.py"
+_KEEL_TOOL_NAME_RE = re.compile(r"\bkeel_[a-z0-9_]+\b")
+_TEMPLATE_FIELD_RE = re.compile(r"\{[^{}]*\}")
+#: A literal fragment shorter than this is too generic to attribute to a row.
+_MIN_PROBE_LEN = 12
+
+
+def _module_rows(module) -> list[tuple[str, paper_strings.PaperString]]:
+    return [
+        (name, value)
+        for name, value in vars(module).items()
+        if isinstance(value, paper_strings.PaperString)
+    ]
+
+
+def _paper_string_probes(rows) -> dict[str, str]:
+    """Literal fragment → row key, over every declared text form of every row.
+
+    A template's fields split it; fragments shorter than `_MIN_PROBE_LEN` are
+    dropped, so a probe is always specific to its row."""
+    probes: dict[str, str] = {}
+    for row in rows:
+        for form in (row.full, row.listed):
+            if not isinstance(form, str):
+                continue
+            for fragment in _TEMPLATE_FIELD_RE.split(form):
+                fragment = fragment.strip()
+                if len(fragment) >= _MIN_PROBE_LEN:
+                    probes[fragment] = row.key
+    return probes
+
+
+def _string_constants(tree: ast.AST) -> list[tuple[int, str]]:
+    """Every str constant in a module (docstrings and f-string parts too)."""
+    return [
+        (node.lineno, node.value)
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Constant) and isinstance(node.value, str)
+    ]
+
+
+def _imports_paper_strings(tree: ast.AST) -> bool:
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            if (node.module or "").split(".")[-1] == "_paper_strings":
+                return True
+            if any(alias.name == "_paper_strings" for alias in node.names):
+                return True
+        if isinstance(node, ast.Import) and any(
+            alias.name.split(".")[-1] == "_paper_strings" for alias in node.names
+        ):
+            return True
+    return False
+
+
+def _referenced_names(tree: ast.AST) -> set[str]:
+    names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name):
+            names.add(node.id)
+        elif isinstance(node, ast.Attribute):
+            names.add(node.attr)
+        elif isinstance(node, ast.ImportFrom):
+            names.update(alias.name for alias in node.names)
+    return names
+
+
+def _sourcing_violations(
+    pkg_root: Path, render_paths: dict[str, frozenset[str]], rows
+) -> tuple[list[str], int]:
+    """(violations, modules scanned) for the sourcing arm over `pkg_root`.
+
+    1. No module but the strings module carries a row's text as a literal.
+    2. Every declared render path exists, imports the strings module and
+       references the constant of every row it declares.
+    3. Every module importing the strings module is a declared render path.
+    """
+    probes = _paper_string_probes(rows)
+    const_by_key = {row.key: name for name, row in _rows_by_constant(rows)}
+    violations: list[str] = []
+    importers: set[str] = set()
+    scanned = 0
+    for path in sorted(pkg_root.rglob("*.py")):
+        rel = path.relative_to(pkg_root).as_posix()
+        if rel == PAPER_STRINGS_REL:
+            continue
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        scanned += 1
+        for lineno, value in _string_constants(tree):
+            for probe, key in probes.items():
+                if probe in value:
+                    violations.append(
+                        f"{rel}:{lineno}: retypes paper string {key!r} as a literal; "
+                        f"import it from _paper_strings"
+                    )
+        if _imports_paper_strings(tree):
+            importers.add(rel)
+        if rel in render_paths:
+            if not _imports_paper_strings(tree):
+                violations.append(
+                    f"{rel}: declared paper render path does not import _paper_strings"
+                )
+            missing = sorted(
+                key for key in render_paths[rel] if const_by_key[key] not in _referenced_names(tree)
+            )
+            if missing:
+                violations.append(f"{rel}: declared rows not referenced from the module: {missing}")
+    for rel in sorted(
+        set(render_paths) - {p.relative_to(pkg_root).as_posix() for p in pkg_root.rglob("*.py")}
+    ):
+        violations.append(f"{rel}: declared paper render path does not exist")
+    for rel in sorted(importers - set(render_paths)):
+        violations.append(f"{rel}: imports _paper_strings but is not a declared paper render path")
+    return violations, scanned
+
+
+def _rows_by_constant(rows) -> list[tuple[str, paper_strings.PaperString]]:
+    """(constant name, row) for each row, read off the strings module."""
+    by_id = {id(row): name for name, row in _module_rows(paper_strings)}
+    return [(by_id[id(row)], row) for row in rows]
+
+
+def test_paper_strings_enumeration_declares_every_form():
+    """Enumeration arm (AC-06-21): every row is registered in
+    ALL_PAPER_STRINGS, keys are unique, the nine §3.4.6 rows are present,
+    every row declares BOTH forms (a text or an explicit None, never MISSING),
+    and no public text sits in the module outside a row."""
+    declared = _module_rows(paper_strings)
+    registered = paper_strings.ALL_PAPER_STRINGS
+    assert {id(row) for _, row in declared} == {id(row) for row in registered}, (
+        "a PaperString row is declared but not in ALL_PAPER_STRINGS (or the reverse)"
+    )
+    keys = [row.key for row in registered]
+    assert len(keys) == len(set(keys)), f"duplicate paper string keys: {keys}"
+    assert len(keys) >= 9 and PAPER_STRING_KEYS_SPEC <= set(keys), (
+        f"missing §3.4.6 rows: {sorted(PAPER_STRING_KEYS_SPEC - set(keys))}"
+    )
+    undeclared = [
+        f"{row.key}.{side}"
+        for row in registered
+        for side in ("full", "listed")
+        if not isinstance(getattr(row, side), (str, type(None)))
+    ]
+    assert not undeclared, (
+        f"paper string forms neither a text nor an explicit None: {undeclared} "
+        "(S06 §3.4.6: every row ships a listed variant or an explicit None)"
+    )
+    stray = sorted(
+        name
+        for name, value in vars(paper_strings).items()
+        if not name.startswith("_") and isinstance(value, str)
+    )
+    assert not stray, f"paper text outside a PaperString row: {stray}"
+    # The AC counts the rows whose form is never emitted on a profile; the
+    # spec names at least one None per side (the refusal's full form; the
+    # claim, permission, carry-over and deploy-line listed forms).
+    assert any(row.full is None for row in registered)
+    assert sum(row.listed is None for row in registered) >= 4
+
+
+def test_paper_string_form_refuses_an_undeclared_form():
+    """`form()` raises on MISSING rather than falling back to the other form,
+    and selects by the profile at call time."""
+    row = paper_strings.PaperString(key="probe", context="test", full="full text")
+    assert row.form(listed=False) == "full text"
+    with pytest.raises(LookupError, match="declares no listed form"):
+        row.form(listed=True)
+    # A real row with two distinct forms (not the ladder, which the AC's seed
+    # moves; control arms stay green through every seed).
+    live_call = paper_strings.GRADUATION_LIVE_CALL_LINE
+    assert live_call.form(listed=True) != live_call.form(listed=False)
+
+
+def test_paper_string_for_profile_reads_the_profile_at_call_time(monkeypatch):
+    live_call = paper_strings.GRADUATION_LIVE_CALL_LINE
+    monkeypatch.setenv("KEEL_SERVER_PROFILE", "listed")
+    assert live_call.for_profile() == live_call.listed
+    monkeypatch.setenv("KEEL_SERVER_PROFILE", "full")
+    assert live_call.for_profile() == live_call.full
+    monkeypatch.setenv("KEEL_SERVER_PROFILE", "listed")
+    assert paper_strings.MONITOR_PAPER_ID_REFUSAL.for_profile() == (
+        paper_strings.MONITOR_PAPER_ID_REFUSAL.listed
+    )
+
+
+def test_paper_listed_variants_pass_the_string_rules():
+    """Listed scan (AC-06-21, §3.4.4): every non-None listed form passes
+    FORBIDDEN_TEXT_RE with NO paper-compound allowance, and every keel_* name
+    it carries is a listed tool. Non-vacuity: the population is every row whose
+    listed form is not an explicit None, at least the five §3.4.6 listed
+    variants. A form left undeclared (MISSING) is the enumeration arm's verdict,
+    so the AC's seed reds that arm and leaves this population count standing."""
+    population = [row for row in paper_strings.ALL_PAPER_STRINGS if row.listed is not None]
+    assert len(population) >= 5, f"only {len(population)} listed variants to scan"
+    listed = [(row.key, row.listed) for row in population if isinstance(row.listed, str)]
+    violations: list[str] = []
+    for key, text in listed:
+        violations += _text_violations("paper_strings", key, text)
+        row = next(r for r in population if r.key == key)
+        # A flag-on-only row (S10, PT2-90) is served beside the listed paper
+        # tools, so it may name them; every other row may not.
+        served = LISTED_PROFILE_TOOLS | (LISTED_PAPER_TOOLS if row.listed_flag_on_only else set())
+        for name in _KEEL_TOOL_NAME_RE.findall(text):
+            if name not in served:
+                violations.append(f"paper_strings.{key}: names non-listed tool {name!r}")
+    assert not violations, "\n".join(violations)
+    # Non-vacuity of the flag-on allowance: it is used by at least one row.
+    assert any(r.listed_flag_on_only for r in population)
+
+
+def test_paper_listed_scan_control_arm():
+    """CONTROL: the same scan reds on a full form that is not listed-safe
+    (the ladder's 'going live'; the deploy line's keel_paper_deploy), so the
+    green above is the listed variants' own."""
+    ladder_full = paper_strings.LADDER_LINE.full
+    assert _text_violations("paper_strings", "ladder_line", ladder_full)
+    deploy_full = paper_strings.FULL_DEPLOY_LINE_SENTENCE.full
+    assert any(n not in LISTED_PROFILE_TOOLS for n in _KEEL_TOOL_NAME_RE.findall(deploy_full))
+
+
+def test_paper_strings_are_sourced_from_the_module():
+    """Sourcing arm (AC-06-21): over every module under keel/, no row's text
+    is retyped as a literal, every declared paper render path imports the
+    strings module and references its rows, and every importer is declared.
+    Non-vacuity: the scan reads the whole package and a probe per row."""
+    rows = paper_strings.ALL_PAPER_STRINGS
+    violations, scanned = _sourcing_violations(KEEL_PKG_ROOT, PAPER_RENDER_PATHS, rows)
+    assert scanned > 100, f"the sourcing scan read only {scanned} modules"
+    assert set(_paper_string_probes(rows).values()) == {row.key for row in rows}
+    assert not violations, "\n".join(violations)
+
+
+def test_paper_sourcing_arm_control_arms(tmp_path):
+    """The sourcing checker can fail, on a synthetic package: a retyped
+    literal, an undeclared importer, a declared path that does not import the
+    module, a declared row it never references and a declared path that does
+    not exist each red; the honest twin stays green."""
+    rows = paper_strings.ALL_PAPER_STRINGS
+    pkg = tmp_path / "keel"
+    outcomes = pkg / "tools" / "outcomes"
+    outcomes.mkdir(parents=True)
+    (outcomes / "_paper_strings.py").write_text(
+        f"LADDER = {paper_strings.LADDER_LINE.full!r}\n", encoding="utf-8"
+    )
+    honest = "from ._paper_strings import LADDER_LINE\n\ndef line():\n    return LADDER_LINE.for_profile()\n"
+    (outcomes / "honest.py").write_text(honest, encoding="utf-8")
+    declared = {"tools/outcomes/honest.py": frozenset({"ladder_line"})}
+    violations, scanned = _sourcing_violations(pkg, declared, rows)
+    assert scanned == 1 and violations == []
+
+    cases = {
+        "retyped literal": (
+            {
+                "tools/outcomes/retyped.py": f"X = {paper_strings.MONITOR_PAPER_ID_REFUSAL.listed!r}\n"
+            },
+            declared,
+            "retyped.py:1: retypes paper string 'monitor_paper_id_refusal'",
+        ),
+        "retyped template fragment": (
+            {
+                "tools/outcomes/carry.py": "X = f'your paper run proved commit {n}; the strategy has moved ahead'\n"
+            },
+            declared,
+            "carry.py:1: retypes paper string 'graduation_carry_over_line'",
+        ),
+        "undeclared importer": (
+            {"tools/outcomes/sneaky.py": "from ._paper_strings import LADDER_LINE\n"},
+            declared,
+            "sneaky.py: imports _paper_strings but is not a declared",
+        ),
+        "declared path without the import": (
+            {"tools/outcomes/plain.py": "X = 1\n"},
+            {**declared, "tools/outcomes/plain.py": frozenset({"ladder_line"})},
+            "plain.py: declared paper render path does not import",
+        ),
+        "declared row never referenced": (
+            {},
+            {"tools/outcomes/honest.py": frozenset({"ladder_line", "monitor_paper_label"})},
+            "honest.py: declared rows not referenced from the module: ['monitor_paper_label']",
+        ),
+        "declared path absent": (
+            {},
+            {**declared, "tools/outcomes/gone.py": frozenset({"ladder_line"})},
+            "gone.py: declared paper render path does not exist",
+        ),
+    }
+    for label, (extra_files, render_paths, expected) in cases.items():
+        written = []
+        for rel, text in extra_files.items():
+            path = pkg / rel
+            path.write_text(text, encoding="utf-8")
+            written.append(path)
+        try:
+            violations, _ = _sourcing_violations(pkg, render_paths, rows)
+            assert any(expected in v for v in violations), (label, violations)
+        finally:
+            for path in written:
+                path.unlink()
+    # And the honest package is green again once the seeds are gone.
+    assert _sourcing_violations(pkg, declared, rows)[0] == []

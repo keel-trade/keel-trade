@@ -31,7 +31,7 @@ HOSTED_EXCLUDED = {
     "keel_auth_logout",
 }
 
-ALL_TOOLSETS_ENV = "read-only,backtest,share,live-read,live-write"
+ALL_TOOLSETS_ENV = "read-only,backtest,share,live-read,paper,live-write"
 
 
 @pytest.fixture(autouse=True)

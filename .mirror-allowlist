@@ -99,3 +99,15 @@ tests/fixtures/window-parity.fixture.json
 # Recorded tool-result payloads (spec 02 §2.3) the channel-budget replay guard
 # reads; staging identity ids are scrubbed to same-length placeholders.
 tests/fixtures/payloads/*.json
+# The listed-surface HEAD fixtures (paper-trading-v2 S06 AC-06-7, PT2-28): the
+# served listed tools/list, instructions and card digests, and the listed read
+# tools' outputs over a faked keel-api, captured at the paper build's base
+# commit. Published with the test that compares them; per-file-class, so a new
+# fixture class still reddens G1.
+tests/fixtures/listed_*_head.json
+# The portfolio view's base-commit outputs on the full profile and the CLI
+# (paper-trading-v2 M2-sdk-portfolio-real), beside the listed ones above.
+tests/fixtures/portfolio_outputs_head.json
+# The full-profile instructions at the base commit (paper-trading-v2
+# M8-core-paper-row), pinning that the held paper row leaves them HEAD's.
+tests/fixtures/full_instructions_head.json

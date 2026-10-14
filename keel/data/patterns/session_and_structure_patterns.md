@@ -66,6 +66,9 @@ one reads past 0 or 1 (the expansion state — the same axis ICT's -0.27 /
 deepest-discount bars (a measured 36% shortfall). Use
 `range_anchor="trailing_extremes"` when you want a reading bounded to [0, 1].
 
+The stop and target below have a short form: `LevelStop(level="ob_edge")` and
+`LevelTarget(level="ob_edge", r=2.0)` (`entry_exit_patterns`, the structure_stop_2r recipe).
+
 ```python
 Globals(target_timeframe="1h")
 Universe(mode="manual", symbols=["BTC", "ETH", "SOL"])

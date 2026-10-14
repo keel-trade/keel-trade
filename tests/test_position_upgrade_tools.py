@@ -318,11 +318,16 @@ def _arm(tmp_path, monkeypatch, account_id: str = "acct_1") -> None:
 
 def _assert_mapped(exc: KeelError, *, listed: bool = False) -> None:
     assert exc.error_code == "known_issue_upgrade_required"
-    assert "MaxDrawdownStopLoss v1" in str(exc) and "Q-2448" in str(exc)
+    assert "MaxDrawdownStopLoss v1" in str(exc)
     if listed:
+        # The listed form (S10 review W2) keeps the issue's summary and drops
+        # the internal ledger id and the "upgrade" verb.
+        assert "stale price" in str(exc) and "Q-2448" not in str(exc)
+        assert "upgrade" not in f"{exc} {exc.suggestion}".lower()
         assert "keel_strategy_compose" in exc.suggestion
         assert "keel_strategy_upgrade" not in exc.suggestion
     else:
+        assert "Q-2448" in str(exc)
         assert "keel_strategy_upgrade" in exc.suggestion
         assert exc.recovery_tool == "keel_strategy_upgrade"
         assert exc.recovery_tool_args == {"strategy_id": "str_9"}

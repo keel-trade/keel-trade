@@ -1,0 +1,75 @@
+{
+  "base_commit": "028a89104",
+  "outputs": [
+    {
+      "args": {},
+      "is_error": false,
+      "meta": {
+        "fastmcp": {
+          "wrap_result": true
+        }
+      },
+      "name": "full:no_args",
+      "requests": [
+        {
+          "method": "GET",
+          "params": [],
+          "path": "/v1/deployments/portfolio/summary"
+        }
+      ],
+      "structured": {
+        "result": "{\"share_url\": null, \"hero_url\": \"https://app.usekeel.io/live?tab=portfolio\", \"url_line\": \"View in Keel: https://app.usekeel.io/live?tab=portfolio\", \"view\": \"portfolio\", \"freshness\": {\"source\": \"keel_snapshot_store\", \"mode\": \"latest_recorded_snapshot\", \"realtime\": false, \"note\": \"Aggregated from Keel deployment records, trades, funding, and stored account snapshots. It can lag the web dashboard live-service stream.\"}, \"data\": {\"active_count\": 1, \"deployments\": [{\"deployed_at\": \"2026-09-20T12:00:00Z\", \"deployed_version_string\": \"v4\", \"deployment_id\": \"dep_real\", \"name\": \"Momentum Basket\", \"position_count\": 3, \"schedule\": \"0 * * * *\", \"status\": \"RUNNING\", \"strategy_id\": \"str_real\", \"total_pnl\": 412.37}], \"total_account_value\": 10412.37, \"total_count\": 1, \"total_fees\": 21.85, \"total_funding\": -12.4, \"total_realized_pnl\": 388.12, \"total_unrealized_pnl\": 24.25}, \"render\": {\"card\": \"live\", \"card_resource_uri\": \"ui://keel/cards/live.html\", \"fallback_url\": \"https://app.usekeel.io/live?tab=portfolio\", \"surface_hints\": {\"claude\": \"The card renders automatically when the host supports MCP Apps: one header line, four headline numbers with the rest one tap away, a receipt line, and an in-card chart drawn from the envelope. It carries an Expand action only where the host offers fullscreen. The plain link line is the fallback wherever the card does not render; bare image blocks collapse behind an expander on this host.\", \"claude_code\": \"No widget renders here: `view.markdown` is the complete rendering (a receipt is one line), with the plain link line; `keel open <kind> <id>` opens it in the browser.\", \"cursor\": \"The same card renders inline (MCP Apps), without fullscreen; an inline chart image is acceptable too; the plain link line accompanies it.\", \"chatgpt\": \"The same card renders inline (MCP Apps). The card declares fullscreen and draws its own Expand action when ChatGPT lists that mode, so fullscreen is the user's choice; no PiP on mobile; the plain link line accompanies it.\"}}}"
+      },
+      "text": "{\"share_url\": null, \"hero_url\": \"https://app.usekeel.io/live?tab=portfolio\", \"url_line\": \"View in Keel: https://app.usekeel.io/live?tab=portfolio\", \"view\": \"portfolio\", \"freshness\": {\"source\": \"keel_snapshot_store\", \"mode\": \"latest_recorded_snapshot\", \"realtime\": false, \"note\": \"Aggregated from Keel deployment records, trades, funding, and stored account snapshots. It can lag the web dashboard live-service stream.\"}, \"data\": {\"active_count\": 1, \"deployments\": [{\"deployed_at\": \"2026-09-20T12:00:00Z\", \"deployed_version_string\": \"v4\", \"deployment_id\": \"dep_real\", \"name\": \"Momentum Basket\", \"position_count\": 3, \"schedule\": \"0 * * * *\", \"status\": \"RUNNING\", \"strategy_id\": \"str_real\", \"total_pnl\": 412.37}], \"total_account_value\": 10412.37, \"total_count\": 1, \"total_fees\": 21.85, \"total_funding\": -12.4, \"total_realized_pnl\": 388.12, \"total_unrealized_pnl\": 24.25}, \"render\": {\"card\": \"live\", \"card_resource_uri\": \"ui://keel/cards/live.html\", \"fallback_url\": \"https://app.usekeel.io/live?tab=portfolio\", \"surface_hints\": {\"claude\": \"The card renders automatically when the host supports MCP Apps: one header line, four headline numbers with the rest one tap away, a receipt line, and an in-card chart drawn from the envelope. It carries an Expand action only where the host offers fullscreen. The plain link line is the fallback wherever the card does not render; bare image blocks collapse behind an expander on this host.\", \"claude_code\": \"No widget renders here: `view.markdown` is the complete rendering (a receipt is one line), with the plain link line; `keel open <kind> <id>` opens it in the browser.\", \"cursor\": \"The same card renders inline (MCP Apps), without fullscreen; an inline chart image is acceptable too; the plain link line accompanies it.\", \"chatgpt\": \"The same card renders inline (MCP Apps). The card declares fullscreen and draws its own Expand action when ChatGPT lists that mode, so fullscreen is the user's choice; no PiP on mobile; the plain link line accompanies it.\"}}}"
+    },
+    {
+      "args": {
+        "view": "portfolio"
+      },
+      "is_error": false,
+      "meta": {
+        "fastmcp": {
+          "wrap_result": true
+        }
+      },
+      "name": "full:portfolio",
+      "requests": [
+        {
+          "method": "GET",
+          "params": [],
+          "path": "/v1/deployments/portfolio/summary"
+        }
+      ],
+      "structured": {
+        "result": "{\"share_url\": null, \"hero_url\": \"https://app.usekeel.io/live?tab=portfolio\", \"url_line\": \"View in Keel: https://app.usekeel.io/live?tab=portfolio\", \"view\": \"portfolio\", \"freshness\": {\"source\": \"keel_snapshot_store\", \"mode\": \"latest_recorded_snapshot\", \"realtime\": false, \"note\": \"Aggregated from Keel deployment records, trades, funding, and stored account snapshots. It can lag the web dashboard live-service stream.\"}, \"data\": {\"active_count\": 1, \"deployments\": [{\"deployed_at\": \"2026-09-20T12:00:00Z\", \"deployed_version_string\": \"v4\", \"deployment_id\": \"dep_real\", \"name\": \"Momentum Basket\", \"position_count\": 3, \"schedule\": \"0 * * * *\", \"status\": \"RUNNING\", \"strategy_id\": \"str_real\", \"total_pnl\": 412.37}], \"total_account_value\": 10412.37, \"total_count\": 1, \"total_fees\": 21.85, \"total_funding\": -12.4, \"total_realized_pnl\": 388.12, \"total_unrealized_pnl\": 24.25}, \"render\": {\"card\": \"live\", \"card_resource_uri\": \"ui://keel/cards/live.html\", \"fallback_url\": \"https://app.usekeel.io/live?tab=portfolio\", \"surface_hints\": {\"claude\": \"The card renders automatically when the host supports MCP Apps: one header line, four headline numbers with the rest one tap away, a receipt line, and an in-card chart drawn from the envelope. It carries an Expand action only where the host offers fullscreen. The plain link line is the fallback wherever the card does not render; bare image blocks collapse behind an expander on this host.\", \"claude_code\": \"No widget renders here: `view.markdown` is the complete rendering (a receipt is one line), with the plain link line; `keel open <kind> <id>` opens it in the browser.\", \"cursor\": \"The same card renders inline (MCP Apps), without fullscreen; an inline chart image is acceptable too; the plain link line accompanies it.\", \"chatgpt\": \"The same card renders inline (MCP Apps). The card declares fullscreen and draws its own Expand action when ChatGPT lists that mode, so fullscreen is the user's choice; no PiP on mobile; the plain link line accompanies it.\"}}}"
+      },
+      "text": "{\"share_url\": null, \"hero_url\": \"https://app.usekeel.io/live?tab=portfolio\", \"url_line\": \"View in Keel: https://app.usekeel.io/live?tab=portfolio\", \"view\": \"portfolio\", \"freshness\": {\"source\": \"keel_snapshot_store\", \"mode\": \"latest_recorded_snapshot\", \"realtime\": false, \"note\": \"Aggregated from Keel deployment records, trades, funding, and stored account snapshots. It can lag the web dashboard live-service stream.\"}, \"data\": {\"active_count\": 1, \"deployments\": [{\"deployed_at\": \"2026-09-20T12:00:00Z\", \"deployed_version_string\": \"v4\", \"deployment_id\": \"dep_real\", \"name\": \"Momentum Basket\", \"position_count\": 3, \"schedule\": \"0 * * * *\", \"status\": \"RUNNING\", \"strategy_id\": \"str_real\", \"total_pnl\": 412.37}], \"total_account_value\": 10412.37, \"total_count\": 1, \"total_fees\": 21.85, \"total_funding\": -12.4, \"total_realized_pnl\": 388.12, \"total_unrealized_pnl\": 24.25}, \"render\": {\"card\": \"live\", \"card_resource_uri\": \"ui://keel/cards/live.html\", \"fallback_url\": \"https://app.usekeel.io/live?tab=portfolio\", \"surface_hints\": {\"claude\": \"The card renders automatically when the host supports MCP Apps: one header line, four headline numbers with the rest one tap away, a receipt line, and an in-card chart drawn from the envelope. It carries an Expand action only where the host offers fullscreen. The plain link line is the fallback wherever the card does not render; bare image blocks collapse behind an expander on this host.\", \"claude_code\": \"No widget renders here: `view.markdown` is the complete rendering (a receipt is one line), with the plain link line; `keel open <kind> <id>` opens it in the browser.\", \"cursor\": \"The same card renders inline (MCP Apps), without fullscreen; an inline chart image is acceptable too; the plain link line accompanies it.\", \"chatgpt\": \"The same card renders inline (MCP Apps). The card declares fullscreen and draws its own Expand action when ChatGPT lists that mode, so fullscreen is the user's choice; no PiP on mobile; the plain link line accompanies it.\"}}}"
+    },
+    {
+      "argv": ["live", "monitor"],
+      "exit_code": 0,
+      "name": "cli:no_args",
+      "output": "{\n  \"share_url\": null,\n  \"hero_url\": \"https://app.usekeel.io/live?tab=portfolio\",\n  \"url_line\": \"View in Keel: https://app.usekeel.io/live?tab=portfolio\",\n  \"view\": \"portfolio\",\n  \"freshness\": {\n    \"source\": \"keel_snapshot_store\",\n    \"mode\": \"latest_recorded_snapshot\",\n    \"realtime\": false,\n    \"note\": \"Aggregated from Keel deployment records, trades, funding, and stored account snapshots. It can lag the web dashboard live-service stream.\"\n  },\n  \"data\": {\n    \"active_count\": 1,\n    \"deployments\": [\n      {\n        \"deployed_at\": \"2026-09-20T12:00:00Z\",\n        \"deployed_version_string\": \"v4\",\n        \"deployment_id\": \"dep_real\",\n        \"name\": \"Momentum Basket\",\n        \"position_count\": 3,\n        \"schedule\": \"0 * * * *\",\n        \"status\": \"RUNNING\",\n        \"strategy_id\": \"str_real\",\n        \"total_pnl\": 412.37\n      }\n    ],\n    \"total_account_value\": 10412.37,\n    \"total_count\": 1,\n    \"total_fees\": 21.85,\n    \"total_funding\": -12.4,\n    \"total_realized_pnl\": 388.12,\n    \"total_unrealized_pnl\": 24.25\n  },\n  \"render\": {\n    \"card\": \"live\",\n    \"card_resource_uri\": \"ui://keel/cards/live.html\",\n    \"fallback_url\": \"https://app.usekeel.io/live?tab=portfolio\",\n    \"surface_hints\": {\n      \"claude\": \"The card renders automatically when the host supports MCP Apps: one header line, four headline numbers with the rest one tap away, a receipt line, and an in-card chart drawn from the envelope. It carries an Expand action only where the host offers fullscreen. The plain link line is the fallback wherever the card does not render; bare image blocks collapse behind an expander on this host.\",\n      \"claude_code\": \"No widget renders here: `view.markdown` is the complete rendering (a receipt is one line), with the plain link line; `keel open <kind> <id>` opens it in the browser.\",\n      \"cursor\": \"The same card renders inline (MCP Apps), without fullscreen; an inline chart image is acceptable too; the plain link line accompanies it.\",\n      \"chatgpt\": \"The same card renders inline (MCP Apps). The card declares fullscreen and draws its own Expand action when ChatGPT lists that mode, so fullscreen is the user's choice; no PiP on mobile; the plain link line accompanies it.\"\n    }\n  }\n}\n",
+      "requests": [
+        {
+          "method": "GET",
+          "params": [],
+          "path": "/v1/deployments/portfolio/summary"
+        }
+      ]
+    },
+    {
+      "argv": ["live", "monitor", "--view", "portfolio"],
+      "exit_code": 0,
+      "name": "cli:portfolio",
+      "output": "{\n  \"share_url\": null,\n  \"hero_url\": \"https://app.usekeel.io/live?tab=portfolio\",\n  \"url_line\": \"View in Keel: https://app.usekeel.io/live?tab=portfolio\",\n  \"view\": \"portfolio\",\n  \"freshness\": {\n    \"source\": \"keel_snapshot_store\",\n    \"mode\": \"latest_recorded_snapshot\",\n    \"realtime\": false,\n    \"note\": \"Aggregated from Keel deployment records, trades, funding, and stored account snapshots. It can lag the web dashboard live-service stream.\"\n  },\n  \"data\": {\n    \"active_count\": 1,\n    \"deployments\": [\n      {\n        \"deployed_at\": \"2026-09-20T12:00:00Z\",\n        \"deployed_version_string\": \"v4\",\n        \"deployment_id\": \"dep_real\",\n        \"name\": \"Momentum Basket\",\n        \"position_count\": 3,\n        \"schedule\": \"0 * * * *\",\n        \"status\": \"RUNNING\",\n        \"strategy_id\": \"str_real\",\n        \"total_pnl\": 412.37\n      }\n    ],\n    \"total_account_value\": 10412.37,\n    \"total_count\": 1,\n    \"total_fees\": 21.85,\n    \"total_funding\": -12.4,\n    \"total_realized_pnl\": 388.12,\n    \"total_unrealized_pnl\": 24.25\n  },\n  \"render\": {\n    \"card\": \"live\",\n    \"card_resource_uri\": \"ui://keel/cards/live.html\",\n    \"fallback_url\": \"https://app.usekeel.io/live?tab=portfolio\",\n    \"surface_hints\": {\n      \"claude\": \"The card renders automatically when the host supports MCP Apps: one header line, four headline numbers with the rest one tap away, a receipt line, and an in-card chart drawn from the envelope. It carries an Expand action only where the host offers fullscreen. The plain link line is the fallback wherever the card does not render; bare image blocks collapse behind an expander on this host.\",\n      \"claude_code\": \"No widget renders here: `view.markdown` is the complete rendering (a receipt is one line), with the plain link line; `keel open <kind> <id>` opens it in the browser.\",\n      \"cursor\": \"The same card renders inline (MCP Apps), without fullscreen; an inline chart image is acceptable too; the plain link line accompanies it.\",\n      \"chatgpt\": \"The same card renders inline (MCP Apps). The card declares fullscreen and draws its own Expand action when ChatGPT lists that mode, so fullscreen is the user's choice; no PiP on mobile; the plain link line accompanies it.\"\n    }\n  }\n}\n",
+      "requests": [
+        {
+          "method": "GET",
+          "params": [],
+          "path": "/v1/deployments/portfolio/summary"
+        }
+      ]
+    }
+  ]
+}

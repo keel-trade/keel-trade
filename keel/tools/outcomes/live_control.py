@@ -25,7 +25,7 @@ Do NOT use to go live / deploy a new strategy — call `keel_live_deploy`
 
 from __future__ import annotations
 
-from keel.errors import EntitlementError, KeelError, ValidationError
+from keel.errors import EntitlementError, KeelError, NotFoundError, ValidationError
 
 from . import register
 from ._base import OutcomeResult, OutcomeTool, ToolContext
@@ -134,6 +134,21 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
                 retry_call=retry_call,
             )
         raise handoff from e
+    except NotFoundError as e:
+        # The guard's paper arm (paper-trading-v2 S06 §3.6): the live routes
+        # 404 a practice id with zero writes; one telemetry-marked detail
+        # read names the paper run and keel_paper_control. Held with the
+        # paper SDK (§3.11 item 1, PT2-28): read at call time, so a held
+        # process answers HEAD's 404 with no extra read.
+        from . import _toolsets
+
+        if _toolsets.PAPER_SDK_RELEASED:
+            from ._paper_guard import other_class_refusal
+
+            refusal = other_class_refusal(client, deployment_id, this_class="real")
+            if refusal is not None:
+                raise refusal from e
+        raise
     except KeelError as e:
         # D-42 / 04-R34: resuming a deployment whose commit pins a
         # known-issue component is refused (it stays PAUSED, its schedule
@@ -158,6 +173,23 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
     )
 
 
+_LIVE_CONTROL_DESCRIPTION = (
+    "Control an EXISTING live deployment that the human already deployed and "
+    "authorized in the Keel web app: pause, resume, stop, or trigger a manual "
+    "rebalance. This operates a deployment that is already live — it does not "
+    "go live with a new strategy (that is a human step in the web app). "
+    "Always routes through host confirmation via `destructiveHint=true`: "
+    "`stop` ends the deployment, `pause`/`resume` toggle its schedule, "
+    "`trigger` forces one immediate off-schedule rebalance. Get the "
+    "`deployment_id` and current state from `keel_live_monitor` first. "
+    "Do NOT use to go live / deploy a NEW strategy — that is done by the human "
+    "in the Keel web app; call `keel_live_deploy`, which returns a handoff into "
+    "that web deploy flow. "
+    "Do NOT use to update a deployment to its strategy's newer version — call "
+    "`keel_live_update`, which mints the web update handoff link. "
+    "Do NOT use to read state — call `keel_live_monitor`."
+)
+
 LIVE_CONTROL = register(
     OutcomeTool(
         name="keel_live_control",
@@ -169,21 +201,12 @@ LIVE_CONTROL = register(
         # the web app; going live with a NEW strategy is a web handoff, never
         # an in-terminal write) + _ACTIONS/_NEW_STATE table (per-action
         # lifecycle effect).
-        description=(
-            "Control an EXISTING live deployment that the human already deployed and "
-            "authorized in the Keel web app: pause, resume, stop, or trigger a manual "
-            "rebalance. This operates a deployment that is already live — it does not "
-            "go live with a new strategy (that is a human step in the web app). "
-            "Always routes through host confirmation via `destructiveHint=true`: "
-            "`stop` ends the deployment, `pause`/`resume` toggle its schedule, "
-            "`trigger` forces one immediate off-schedule rebalance. Get the "
-            "`deployment_id` and current state from `keel_live_monitor` first. "
-            "Do NOT use to go live / deploy a NEW strategy — that is done by the human "
-            "in the Keel web app; call `keel_live_deploy`, which returns a handoff into "
-            "that web deploy flow. "
-            "Do NOT use to update a deployment to its strategy's newer version — call "
-            "`keel_live_update`, which mints the web update handoff link. "
-            "Do NOT use to read state — call `keel_live_monitor`."
+        description=_LIVE_CONTROL_DESCRIPTION,
+        # The held touch-up (paper-trading-v2 S06 §3.6, §3.11 item 1):
+        # published only while the paper SDK is released.
+        paper_description=(
+            _LIVE_CONTROL_DESCRIPTION + " It refuses a paper (simulated) run with invalid_target; "
+            "`keel_paper_control` controls paper runs."
         ),
         input_schema={
             "type": "object",

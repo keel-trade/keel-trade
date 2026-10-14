@@ -27,11 +27,55 @@ Server profiles (spec 01 R3; D1 2026-07-19 — ONE hosted endpoint):
 from __future__ import annotations
 
 import os
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 
-from ._base import ALL_TOOLSETS
+
+# ── The released paper SDK (paper-trading-v2 S06 §3.11 item 1; PT2-28, PT2-91) ─
+#
+# The paper CLI and MCP tools landed on main dark behind this constant while
+# the founder held the `sdk-v*` wheel (PT2-28). PT2-91 (2026-10-14) released
+# them: the wheel, the CLI and the local MCP server carry paper. Every paper
+# surface — the paper modules' registration, the `paper` toolset, each paper
+# touch-up of an existing tool and the listed flag — still reads this one
+# constant, so the registry and every public render `check_surface_routing.py`
+# writes agree on one value.
+#
+# A CONSTANT, not an environment read: nothing at runtime sets it. The hosted
+# connector is NOT governed by it: the listed surface serves paper only to the
+# hosts `KEEL_LISTED_PAPER_HOSTS` names (FDR-10; Claude per PT2-90, ChatGPT
+# waits for its own founder decision).
+PAPER_SDK_RELEASED: bool = True
+
+#: The toolset the paper tools load under (S06 §3.3). Held with the SDK.
+PAPER_TOOLSET = "paper"
 
 
-_DEFAULT_TOOLSETS = frozenset({"always", "read-only", "backtest", "share", "live-read"})
+def with_paper_toolset(toolsets: frozenset[str]) -> frozenset[str]:
+    """``toolsets`` plus :data:`PAPER_TOOLSET` once the paper SDK is released.
+
+    The one place a toolset constant learns ``paper``: ``_DEFAULT_TOOLSETS``
+    here and ``_base.ALL_TOOLSETS`` are both built through it, so while
+    :data:`PAPER_SDK_RELEASED` is false neither holds ``paper`` (S06 §3.3).
+    """
+    return toolsets | {PAPER_TOOLSET} if PAPER_SDK_RELEASED else toolsets
+
+
+def default_toolsets() -> frozenset[str]:
+    """The toolsets loaded when ``KEEL_TOOLSETS`` is unset (S06 §3.3).
+
+    ``{always, read-only, backtest, share, live-read}``, plus ``paper`` once the
+    paper SDK is released: a paper run must be creatable and stoppable with
+    zero opt-in, so paper rides the default set, never ``live-write``.
+    :data:`_DEFAULT_TOOLSETS` is this, evaluated at import (the
+    ``paper_sdk_released`` test fixture re-evaluates it after setting the
+    constant).
+    """
+    return with_paper_toolset(frozenset({"always", "read-only", "backtest", "share", "live-read"}))
+
+
+_DEFAULT_TOOLSETS = default_toolsets()
 _ALIASES: dict[str, frozenset[str]] = {
     # Backward compatibility for existing MCP host configs. New docs should use
     # `live-write` when they mean deploy/control.
@@ -242,6 +286,125 @@ def is_listed_profile() -> bool:
     return server_profile() == "listed"
 
 
+LISTED_PAPER_ENV = "KEEL_LISTED_PAPER"
+
+# ── Per-host listed paper (founder ruling FDR-10, 2026-10-12) ───────────
+#
+# ONE hosted endpoint serves claude.ai and ChatGPT, but the two directories
+# review on different clocks: Claude reads the live server, ChatGPT reviews a
+# scanned 29-tool snapshot. So the listed paper exposure is switched PER HOST:
+# ``KEEL_LISTED_PAPER_HOSTS`` is a comma list of host keys (``claude``,
+# ``chatgpt``) or ``all``. Unset/empty is off for every host (the default).
+# ``KEEL_LISTED_PAPER`` (the original single switch) is a DEPRECATED alias:
+# on means ``all``. A host key names the AUTHENTICATED caller's OAuth client,
+# bound per request by the hosted server (``listed_host_context``); a caller
+# with no host key (an unknown or custom client, a local listed server) is
+# covered only by ``all``.
+LISTED_PAPER_HOSTS_ENV = "KEEL_LISTED_PAPER_HOSTS"
+#: The host keys a hosted request can carry.
+LISTED_HOSTS: tuple[str, ...] = ("claude", "chatgpt")
+_LISTED_HOST_ALL = "all"
+
+#: The current request's host key (``None`` outside a hosted request, or for
+#: an unknown client). Set only through :func:`listed_host_context`.
+_LISTED_HOST: ContextVar[str | None] = ContextVar("keel_listed_host", default=None)
+
+
+def _legacy_listed_paper_on() -> bool:
+    raw = os.environ.get(LISTED_PAPER_ENV, "").strip().lower()
+    if raw in ("", "0", "false"):
+        return False
+    if raw not in ("1", "true"):
+        raise ValueError(
+            f"Invalid {LISTED_PAPER_ENV}={raw!r}. Valid values: 1, true, 0, false (or unset)."
+        )
+    return True
+
+
+def listed_paper_hosts() -> frozenset[str]:
+    """The host keys the listed paper surface is on for (FDR-10).
+
+    ``KEEL_LISTED_PAPER_HOSTS`` parsed (each entry one of :data:`LISTED_HOSTS`
+    or ``all``), plus ``all`` when the deprecated ``KEEL_LISTED_PAPER`` is on.
+    Any other entry raises ``ValueError`` (no silent fallback, the
+    :func:`server_profile` rule), so an invalid setting fails server
+    creation. A non-empty set also raises while :data:`PAPER_SDK_RELEASED` is
+    false in this process (PT2-28): it would list a tool the held SDK does not
+    register. Read on every call, never cached.
+    """
+    raw = os.environ.get(LISTED_PAPER_HOSTS_ENV, "")
+    parts = {p.strip().lower() for p in raw.split(",") if p.strip()}
+    invalid = parts - {*LISTED_HOSTS, _LISTED_HOST_ALL}
+    if invalid:
+        raise ValueError(
+            f"Invalid {LISTED_PAPER_HOSTS_ENV}={raw!r}: unknown host key(s) "
+            f"{sorted(invalid)}. Valid: {', '.join(LISTED_HOSTS)}, {_LISTED_HOST_ALL} (or unset)."
+        )
+    if _legacy_listed_paper_on():
+        parts.add(_LISTED_HOST_ALL)
+    if parts and not PAPER_SDK_RELEASED:
+        raise ValueError(
+            f"{LISTED_PAPER_ENV}/{LISTED_PAPER_HOSTS_ENV}={sorted(parts)!r} is refused: the "
+            "paper SDK is held (PAPER_SDK_RELEASED is False until the wheel's follow-up, "
+            "PT2-28), so the listed profile cannot carry a paper tool the SDK does not register."
+        )
+    return frozenset(parts)
+
+
+def listed_host() -> str | None:
+    """The current request's host key, or ``None`` (unknown client / no request)."""
+    return _LISTED_HOST.get()
+
+
+@contextmanager
+def listed_host_context(host: str | None) -> Iterator[None]:
+    """Bind ``host`` as the caller's host key for the enclosed work.
+
+    ``host`` must be one of :data:`LISTED_HOSTS` or ``None``; anything else
+    raises, so a mapping bug can never bind a key no switch names.
+    """
+    if host is not None and host not in LISTED_HOSTS:
+        raise ValueError(f"Unknown listed host key {host!r}. Valid: {', '.join(LISTED_HOSTS)}.")
+    token = _LISTED_HOST.set(host)
+    try:
+        yield
+    finally:
+        _LISTED_HOST.reset(token)
+
+
+def listed_paper_enabled() -> bool:
+    """Whether the listed (hosted connector) profile carries paper for the
+    CURRENT caller (S06 §3.4.2; per host since FDR-10).
+
+    True when :func:`listed_paper_hosts` holds ``all`` or the caller's host key
+    (:func:`listed_host`). Unset ``KEEL_LISTED_PAPER_HOSTS`` and
+    ``KEEL_LISTED_PAPER`` is off for every caller. An invalid value raises
+    ``ValueError``; any non-empty value raises while the paper SDK is held
+    (PT2-28). Read on every call, never cached, so one process serves both
+    states, one per caller.
+    """
+    hosts = listed_paper_hosts()
+    if not hosts:
+        return False
+    return _LISTED_HOST_ALL in hosts or listed_host() in hosts
+
+
+#: The tools the listed flag adds (S06 §3.4.2, §3.4.3; S10 §3-4, PT2-90): exact
+#: names, never a prefix. Both are simulated-only: `keel_paper_deploy` starts a
+#: paper run and `keel_paper_control` pauses, resumes, stops, restarts or
+#: updates one. No live tool is ever added (PT2-27).
+LISTED_PAPER_TOOLS: frozenset[str] = frozenset({"keel_paper_deploy", "keel_paper_control"})
+
+
+def listed_profile_tools() -> frozenset[str]:
+    """The listed surface's tool set: :data:`LISTED_PROFILE_TOOLS` (29), plus
+    :data:`LISTED_PAPER_TOOLS` only while :func:`listed_paper_enabled` is
+    true (31). Read at call time; a server evaluates it at creation."""
+    if listed_paper_enabled():
+        return LISTED_PROFILE_TOOLS | LISTED_PAPER_TOOLS
+    return LISTED_PROFILE_TOOLS
+
+
 def local_tools_registered() -> bool:
     """True where the local/CLI-only tools exist — so a result may name them.
 
@@ -317,6 +480,8 @@ def load_toolsets() -> frozenset[str]:
     `always` is implicit — `keel_account_status`, `keel_connection_check`, `keel_help`
     are always loaded regardless of the env value.
     """
+    from ._base import ALL_TOOLSETS
+
     raw = os.environ.get("KEEL_TOOLSETS")
     if raw is None or not raw.strip():
         return _DEFAULT_TOOLSETS
@@ -374,5 +539,6 @@ def is_tool_loaded(
         if is_hosted():
             return False
     if is_listed_profile():
-        return name in LISTED_PROFILE_TOOLS
+        # The listed flag adds exactly LISTED_PAPER_TOOLS (S06 §3.4.2, S10 §3).
+        return name in listed_profile_tools()
     return tool_toolset == "always" or tool_toolset in active

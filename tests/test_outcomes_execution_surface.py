@@ -61,7 +61,7 @@ def test_deployments_list_reads_the_canonical_endpoint():
     }
     result = get("keel_deployments_list").handler({}, _ctx(client))
 
-    client.get.assert_called_once_with("/v1/deployments")
+    client.get.assert_called_once_with("/v1/deployments", capital_class="all")
     env = result.to_envelope()
     assert env["deployment_count"] == 1
     assert env["deployments"][0]["account_id"] == ACCOUNT_ID
@@ -76,7 +76,7 @@ def test_deployments_list_forwards_include_stopped_and_paging():
         {"include_stopped": True, "limit": 50, "cursor": "abc"}, _ctx(client)
     )
     client.get.assert_called_once_with(
-        "/v1/deployments", limit=50, cursor="abc", include_stopped=True
+        "/v1/deployments", limit=50, cursor="abc", include_stopped=True, capital_class="all"
     )
 
 
@@ -86,7 +86,7 @@ def test_deployments_list_omits_include_stopped_when_not_asked():
     client = MagicMock()
     client.get.return_value = {"data": [], "pagination": {}}
     get("keel_deployments_list").handler({"include_stopped": False}, _ctx(client))
-    client.get.assert_called_once_with("/v1/deployments")
+    client.get.assert_called_once_with("/v1/deployments", capital_class="all")
 
 
 # ─── keel_live_receipt ───────────────────────────────────────────────────
@@ -232,6 +232,19 @@ def test_accounts_safety_without_an_account_refuses_before_calling():
 # ─── keel_live_monitor: expand_orders / execution_run_id ─────────────────
 
 
+def _assert_class_read_first(client) -> None:
+    """A non-overview monitor view first reads the run's detail row once, with
+    the agent-telemetry marker: keel-api serves the venue block there and on
+    no per-view payload (QA B1). Then exactly one read of the view."""
+    import re as _re
+    from unittest.mock import call as _call
+
+    assert client.get.call_count == 2, client.get.call_args_list
+    view_path = client.get.call_args_list[-1].args[0]
+    detail = _re.match(r"^/v1/deployments/[^/]+", view_path).group(0)
+    assert client.get.call_args_list[0] == _call(detail, headers={"X-Keel-Agent-Telemetry": "1"})
+
+
 def test_executions_view_forwards_expand_orders():
     client = MagicMock()
     client.get.return_value = []
@@ -239,8 +252,14 @@ def test_executions_view_forwards_expand_orders():
         {"deployment_id": DEPLOYMENT_ID, "view": "executions", "expand_orders": True, "limit": 5},
         _ctx(client),
     )
-    client.get.assert_called_once_with(
-        f"/v1/deployments/{DEPLOYMENT_ID}/executions", limit=5, expand_orders=True
+    # The read carries the agent-telemetry marker (paper-trading-v2 S06
+    # §3.5.1, R-61: only the overview's detail read is an owner visit).
+    _assert_class_read_first(client)
+    client.get.assert_called_with(
+        f"/v1/deployments/{DEPLOYMENT_ID}/executions",
+        headers={"X-Keel-Agent-Telemetry": "1"},
+        limit=5,
+        expand_orders=True,
     )
 
 
@@ -255,8 +274,10 @@ def test_executions_view_forwards_execution_run_id():
         },
         _ctx(client),
     )
-    client.get.assert_called_once_with(
+    _assert_class_read_first(client)
+    client.get.assert_called_with(
         f"/v1/deployments/{DEPLOYMENT_ID}/executions",
+        headers={"X-Keel-Agent-Telemetry": "1"},
         execution_run_id="ern_01m1fpn80j7n4ghzmh2xjqj6xj",
     )
 

@@ -62,9 +62,19 @@ def served_section(name: str) -> str:
     FILE stays on `load_operating_core()`.
     """
     if name in _BASE_DOCUMENT_SECTIONS:
+        from keel.tools.outcomes import paper_deploy_loaded
+        from keel.tools.outcomes._toolsets import is_listed_profile, listed_paper_enabled
         from pipeline_engine.reference.system import assemble
 
-        return assemble.base_document(profile=active_profile())
+        # The `paper` section is served only where the tool is loaded (S06
+        # §3.11 item 1): a process without keel_paper_deploy names no paper tool.
+        # On listed the boundary sentence and the paper row follow the listed
+        # flag (§3.4.2); with it off the served document is HEAD's.
+        return assemble.base_document(
+            profile=active_profile(),
+            paper_loaded=paper_deploy_loaded(),
+            paper_listed=is_listed_profile() and listed_paper_enabled(),
+        )
     return load_section(name)
 
 

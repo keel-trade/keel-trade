@@ -1,0 +1,1020 @@
+{
+  "base_commit": "028a89104",
+  "outputs": [
+    {
+      "args": {},
+      "is_error": false,
+      "meta": {
+        "fastmcp": {
+          "wrap_result": true
+        }
+      },
+      "name": "live_monitor:no_args",
+      "requests": [
+        {
+          "method": "GET",
+          "params": [],
+          "path": "/v1/deployments/portfolio/summary"
+        }
+      ],
+      "structured": {
+        "result": "{\"share_url\": null, \"hero_url\": \"https://app.usekeel.io/live?tab=portfolio\", \"url_line\": \"View in Keel: https://app.usekeel.io/live?tab=portfolio\", \"view\": \"portfolio\", \"freshness\": {\"source\": \"keel_snapshot_store\", \"mode\": \"latest_recorded_snapshot\", \"realtime\": false, \"note\": \"Aggregated from Keel deployment records, trades, funding, and stored account snapshots. It can lag the web dashboard live-service stream.\"}, \"data\": {\"active_count\": 1, \"deployments\": [{\"deployment_id\": \"dep_real\", \"strategy_id\": \"str_real\", \"name\": \"Momentum Basket\", \"status\": \"RUNNING\", \"schedule\": \"0 * * * *\", \"deployed_at\": \"2026-09-20T12:00:00Z\", \"deployed_version_string\": \"v4\", \"total_pnl\": 412.37, \"position_count\": 3}], \"total_account_value\": 10412.37, \"total_count\": 1, \"total_fees\": 21.85, \"total_funding\": -12.4, \"total_realized_pnl\": 388.12, \"total_unrealized_pnl\": 24.25}, \"render\": {\"card\": \"live\", \"card_resource_uri\": \"ui://keel/cards/live.html\", \"fallback_url\": \"https://app.usekeel.io/live?tab=portfolio\"}}"
+      },
+      "text": "{\"share_url\": null, \"hero_url\": \"https://app.usekeel.io/live?tab=portfolio\", \"url_line\": \"View in Keel: https://app.usekeel.io/live?tab=portfolio\", \"view\": \"portfolio\", \"freshness\": {\"source\": \"keel_snapshot_store\", \"mode\": \"latest_recorded_snapshot\", \"realtime\": false, \"note\": \"Aggregated from Keel deployment records, trades, funding, and stored account snapshots. It can lag the web dashboard live-service stream.\"}, \"data\": {\"active_count\": 1, \"deployments\": [{\"deployment_id\": \"dep_real\", \"strategy_id\": \"str_real\", \"name\": \"Momentum Basket\", \"status\": \"RUNNING\", \"schedule\": \"0 * * * *\", \"deployed_at\": \"2026-09-20T12:00:00Z\", \"deployed_version_string\": \"v4\", \"total_pnl\": 412.37, \"position_count\": 3}], \"total_account_value\": 10412.37, \"total_count\": 1, \"total_fees\": 21.85, \"total_funding\": -12.4, \"total_realized_pnl\": 388.12, \"total_unrealized_pnl\": 24.25}, \"render\": {\"card\": \"live\", \"card_resource_uri\": \"ui://keel/cards/live.html\", \"fallback_url\": \"https://app.usekeel.io/live?tab=portfolio\"}}",
+      "tool": "keel_live_monitor"
+    },
+    {
+      "args": {
+        "view": "portfolio"
+      },
+      "is_error": false,
+      "meta": {
+        "fastmcp": {
+          "wrap_result": true
+        }
+      },
+      "name": "live_monitor:portfolio",
+      "requests": [
+        {
+          "method": "GET",
+          "params": [],
+          "path": "/v1/deployments/portfolio/summary"
+        }
+      ],
+      "structured": {
+        "result": "{\"share_url\": null, \"hero_url\": \"https://app.usekeel.io/live?tab=portfolio\", \"url_line\": \"View in Keel: https://app.usekeel.io/live?tab=portfolio\", \"view\": \"portfolio\", \"freshness\": {\"source\": \"keel_snapshot_store\", \"mode\": \"latest_recorded_snapshot\", \"realtime\": false, \"note\": \"Aggregated from Keel deployment records, trades, funding, and stored account snapshots. It can lag the web dashboard live-service stream.\"}, \"data\": {\"active_count\": 1, \"deployments\": [{\"deployment_id\": \"dep_real\", \"strategy_id\": \"str_real\", \"name\": \"Momentum Basket\", \"status\": \"RUNNING\", \"schedule\": \"0 * * * *\", \"deployed_at\": \"2026-09-20T12:00:00Z\", \"deployed_version_string\": \"v4\", \"total_pnl\": 412.37, \"position_count\": 3}], \"total_account_value\": 10412.37, \"total_count\": 1, \"total_fees\": 21.85, \"total_funding\": -12.4, \"total_realized_pnl\": 388.12, \"total_unrealized_pnl\": 24.25}, \"render\": {\"card\": \"live\", \"card_resource_uri\": \"ui://keel/cards/live.html\", \"fallback_url\": \"https://app.usekeel.io/live?tab=portfolio\"}}"
+      },
+      "text": "{\"share_url\": null, \"hero_url\": \"https://app.usekeel.io/live?tab=portfolio\", \"url_line\": \"View in Keel: https://app.usekeel.io/live?tab=portfolio\", \"view\": \"portfolio\", \"freshness\": {\"source\": \"keel_snapshot_store\", \"mode\": \"latest_recorded_snapshot\", \"realtime\": false, \"note\": \"Aggregated from Keel deployment records, trades, funding, and stored account snapshots. It can lag the web dashboard live-service stream.\"}, \"data\": {\"active_count\": 1, \"deployments\": [{\"deployment_id\": \"dep_real\", \"strategy_id\": \"str_real\", \"name\": \"Momentum Basket\", \"status\": \"RUNNING\", \"schedule\": \"0 * * * *\", \"deployed_at\": \"2026-09-20T12:00:00Z\", \"deployed_version_string\": \"v4\", \"total_pnl\": 412.37, \"position_count\": 3}], \"total_account_value\": 10412.37, \"total_count\": 1, \"total_fees\": 21.85, \"total_funding\": -12.4, \"total_realized_pnl\": 388.12, \"total_unrealized_pnl\": 24.25}, \"render\": {\"card\": \"live\", \"card_resource_uri\": \"ui://keel/cards/live.html\", \"fallback_url\": \"https://app.usekeel.io/live?tab=portfolio\"}}",
+      "tool": "keel_live_monitor"
+    },
+    {
+      "args": {
+        "deployment_id": "dep_real",
+        "view": "overview"
+      },
+      "is_error": false,
+      "meta": {
+        "fastmcp": {
+          "wrap_result": true
+        }
+      },
+      "name": "live_monitor:overview",
+      "requests": [
+        {
+          "method": "GET",
+          "params": [],
+          "path": "/v1/deployments/dep_real"
+        },
+        {
+          "method": "GET",
+          "params": [],
+          "path": "/v1/deployments/dep_real/stats"
+        },
+        {
+          "method": "GET",
+          "params": [],
+          "path": "/v1/deployments/dep_real/equity"
+        }
+      ],
+      "structured": {
+        "result": "{\"share_url\": null, \"run_id\": \"dep_real\", \"hero_url\": \"https://app.usekeel.io/live/dep_real?tab=overview\", \"url_line\": \"View in Keel: https://app.usekeel.io/live/dep_real?tab=overview\", \"view\": \"overview\", \"freshness\": {\"source\": \"keel_backend_records\", \"mode\": \"recorded_state\", \"realtime\": false, \"note\": \"Read from Keel backend records. It updates when runners record evaluations, orders, trades, funding, or account snapshots; it is not a real-time tail.\"}, \"data\": {\"deployment_id\": \"dep_real\", \"strategy_id\": \"str_real\", \"name\": \"Momentum Basket\", \"status\": \"RUNNING\", \"schedule\": \"0 * * * *\", \"deployed_at\": \"2026-09-20T12:00:00Z\", \"stopped_at\": null, \"created_at\": \"2026-09-20T11:58:00Z\", \"updated_at\": \"2026-10-10T08:00:00Z\", \"deployed_commit_id\": \"c_9a8b7c6d\", \"deployed_version_string\": \"v4\", \"total_pnl\": 412.37, \"position_count\": 3, \"universe_warnings\": [{\"detail\": \"No bar since 2026-10-09.\", \"reason\": \"STALE\", \"symbol\": \"KAS\"}], \"account_warnings\": [], \"execution_style\": \"market\", \"paused_reason\": null, \"paused_at\": null, \"money_freshness\": {\"fresh_as_of\": \"2026-10-11T07:00:00Z\", \"state\": \"COVERED\", \"synced_through\": \"2026-10-11T07:00:00Z\"}}, \"stats\": {\"avg_execution_latency_s\": 2.4, \"avg_slippage_bps\": 1.8, \"avg_slippage_lane\": \"SESSION_ARRIVAL_LEDGER_PRICE_ONLY\", \"cancelled_orders\": 0, \"current_drawdown_pct\": -0.6, \"eval_success_rate_pct\": 100.0, \"fee_builder_malformed_count\": 0, \"fee_trade_count\": 48, \"max_drawdown_duration_days\": 2.5, \"max_drawdown_pct\": -3.4, \"net_pnl\": 353.87, \"order_fill_rate_pct\": 97.9, \"profit_factor\": 1.6, \"rejected_orders\": 1, \"sharpe\": 1.42, \"skipped_below_min_trade_sessions\": 0, \"skipped_min_notional_orders\": 0, \"slippage_measured_sessions\": 40, \"sortino\": 2.01, \"today_flows\": 0.0, \"today_pnl\": 12.5, \"total_fees\": 21.85, \"total_funding\": -12.4, \"total_orders\": 49, \"total_realized_pnl\": 388.12, \"total_return_pct\": 4.12, \"total_trades\": 48, \"trade_count_losing\": 21, \"trade_count_winning\": 27, \"win_rate_pct\": 56.0}, \"curve\": {\"points\": [[\"2026-10-01T00:00:00Z\", 10000.0, 0.0], [\"2026-10-02T00:00:00Z\", 10041.2, 0.412], [\"2026-10-03T00:00:00Z\", 10082.4, 0.824], [\"2026-10-04T00:00:00Z\", 10123.6, 1.236], [\"2026-10-05T00:00:00Z\", 10164.8, 1.648], [\"2026-10-06T00:00:00Z\", 10206.0, 2.06], [\"2026-10-07T00:00:00Z\", 10247.2, 2.472], [\"2026-10-08T00:00:00Z\", 10288.4, 2.884], [\"2026-10-09T00:00:00Z\", 10329.6, 3.296], [\"2026-10-10T00:00:00Z\", 10370.8, 3.708], [\"2026-10-11T00:00:00Z\", 10412.0, 4.12]], \"source_points\": 11, \"baseline_value\": 10000.0, \"current_value\": 10412.37}, \"render\": {\"card\": \"live\", \"card_resource_uri\": \"ui://keel/cards/live.html\", \"fallback_url\": \"https://app.usekeel.io/live/dep_real?tab=overview\"}}"
+      },
+      "text": "{\"share_url\": null, \"run_id\": \"dep_real\", \"hero_url\": \"https://app.usekeel.io/live/dep_real?tab=overview\", \"url_line\": \"View in Keel: https://app.usekeel.io/live/dep_real?tab=overview\", \"view\": \"overview\", \"freshness\": {\"source\": \"keel_backend_records\", \"mode\": \"recorded_state\", \"realtime\": false, \"note\": \"Read from Keel backend records. It updates when runners record evaluations, orders, trades, funding, or account snapshots; it is not a real-time tail.\"}, \"data\": {\"deployment_id\": \"dep_real\", \"strategy_id\": \"str_real\", \"name\": \"Momentum Basket\", \"status\": \"RUNNING\", \"schedule\": \"0 * * * *\", \"deployed_at\": \"2026-09-20T12:00:00Z\", \"stopped_at\": null, \"created_at\": \"2026-09-20T11:58:00Z\", \"updated_at\": \"2026-10-10T08:00:00Z\", \"deployed_commit_id\": \"c_9a8b7c6d\", \"deployed_version_string\": \"v4\", \"total_pnl\": 412.37, \"position_count\": 3, \"universe_warnings\": [{\"detail\": \"No bar since 2026-10-09.\", \"reason\": \"STALE\", \"symbol\": \"KAS\"}], \"account_warnings\": [], \"execution_style\": \"market\", \"paused_reason\": null, \"paused_at\": null, \"money_freshness\": {\"fresh_as_of\": \"2026-10-11T07:00:00Z\", \"state\": \"COVERED\", \"synced_through\": \"2026-10-11T07:00:00Z\"}}, \"stats\": {\"avg_execution_latency_s\": 2.4, \"avg_slippage_bps\": 1.8, \"avg_slippage_lane\": \"SESSION_ARRIVAL_LEDGER_PRICE_ONLY\", \"cancelled_orders\": 0, \"current_drawdown_pct\": -0.6, \"eval_success_rate_pct\": 100.0, \"fee_builder_malformed_count\": 0, \"fee_trade_count\": 48, \"max_drawdown_duration_days\": 2.5, \"max_drawdown_pct\": -3.4, \"net_pnl\": 353.87, \"order_fill_rate_pct\": 97.9, \"profit_factor\": 1.6, \"rejected_orders\": 1, \"sharpe\": 1.42, \"skipped_below_min_trade_sessions\": 0, \"skipped_min_notional_orders\": 0, \"slippage_measured_sessions\": 40, \"sortino\": 2.01, \"today_flows\": 0.0, \"today_pnl\": 12.5, \"total_fees\": 21.85, \"total_funding\": -12.4, \"total_orders\": 49, \"total_realized_pnl\": 388.12, \"total_return_pct\": 4.12, \"total_trades\": 48, \"trade_count_losing\": 21, \"trade_count_winning\": 27, \"win_rate_pct\": 56.0}, \"curve\": {\"points\": [[\"2026-10-01T00:00:00Z\", 10000.0, 0.0], [\"2026-10-02T00:00:00Z\", 10041.2, 0.412], [\"2026-10-03T00:00:00Z\", 10082.4, 0.824], [\"2026-10-04T00:00:00Z\", 10123.6, 1.236], [\"2026-10-05T00:00:00Z\", 10164.8, 1.648], [\"2026-10-06T00:00:00Z\", 10206.0, 2.06], [\"2026-10-07T00:00:00Z\", 10247.2, 2.472], [\"2026-10-08T00:00:00Z\", 10288.4, 2.884], [\"2026-10-09T00:00:00Z\", 10329.6, 3.296], [\"2026-10-10T00:00:00Z\", 10370.8, 3.708], [\"2026-10-11T00:00:00Z\", 10412.0, 4.12]], \"source_points\": 11, \"baseline_value\": 10000.0, \"current_value\": 10412.37}, \"render\": {\"card\": \"live\", \"card_resource_uri\": \"ui://keel/cards/live.html\", \"fallback_url\": \"https://app.usekeel.io/live/dep_real?tab=overview\"}}",
+      "tool": "keel_live_monitor"
+    },
+    {
+      "args": {
+        "deployment_id": "dep_real",
+        "view": "positions"
+      },
+      "is_error": false,
+      "meta": {
+        "fastmcp": {
+          "wrap_result": true
+        }
+      },
+      "name": "live_monitor:positions",
+      "requests": [
+        {
+          "method": "GET",
+          "params": [],
+          "path": "/v1/deployments/dep_real/positions"
+        }
+      ],
+      "structured": {
+        "result": "{\"share_url\": null, \"run_id\": \"dep_real\", \"hero_url\": \"https://app.usekeel.io/live/dep_real?tab=positions\", \"url_line\": \"View in Keel: https://app.usekeel.io/live/dep_real?tab=positions\", \"view\": \"positions\", \"freshness\": {\"source\": \"hyperliquid_exchange\", \"mode\": \"on_demand_exchange_query\", \"realtime\": false, \"note\": \"Fetched from Hyperliquid through keel-api at request time: a live read of the linked exchange account, so it can include holdings beyond this one running strategy. This is the freshest SDK live view, but it is a snapshot, not a stream.\"}, \"data\": {\"account_mode\": \"standard\", \"account_value\": 10412.37, \"margin_summary\": {\"account_value\": 10412.37, \"total_margin_used\": 5762.8, \"total_ntl_pos\": 5762.8, \"total_raw_usd\": 4649.57}, \"perp_positions\": [{\"dex\": null, \"entry_price\": 61250.0, \"leverage\": 1.0, \"liquidation_price\": null, \"side\": \"LONG\", \"size\": 0.05, \"symbol\": \"BTC\", \"unrealized_pnl\": 18.5}, {\"dex\": null, \"entry_price\": 2410.0, \"leverage\": 1.0, \"liquidation_price\": null, \"side\": \"LONG\", \"size\": 0.9, \"symbol\": \"ETH\", \"unrealized_pnl\": 9.75}, {\"dex\": null, \"entry_price\": 151.2, \"leverage\": 1.0, \"liquidation_price\": null, \"side\": \"SHORT\", \"size\": 4.0, \"symbol\": \"SOL\", \"unrealized_pnl\": -4.0}], \"spot_balances\": [{\"coin\": \"USDC\", \"entry_ntl\": 0.0, \"hold\": 0.0, \"total\": 10000.0}]}, \"render\": {\"card\": \"live\", \"card_resource_uri\": \"ui://keel/cards/live.html\", \"fallback_url\": \"https://app.usekeel.io/live/dep_real?tab=positions\"}}"
+      },
+      "text": "{\"share_url\": null, \"run_id\": \"dep_real\", \"hero_url\": \"https://app.usekeel.io/live/dep_real?tab=positions\", \"url_line\": \"View in Keel: https://app.usekeel.io/live/dep_real?tab=positions\", \"view\": \"positions\", \"freshness\": {\"source\": \"hyperliquid_exchange\", \"mode\": \"on_demand_exchange_query\", \"realtime\": false, \"note\": \"Fetched from Hyperliquid through keel-api at request time: a live read of the linked exchange account, so it can include holdings beyond this one running strategy. This is the freshest SDK live view, but it is a snapshot, not a stream.\"}, \"data\": {\"account_mode\": \"standard\", \"account_value\": 10412.37, \"margin_summary\": {\"account_value\": 10412.37, \"total_margin_used\": 5762.8, \"total_ntl_pos\": 5762.8, \"total_raw_usd\": 4649.57}, \"perp_positions\": [{\"dex\": null, \"entry_price\": 61250.0, \"leverage\": 1.0, \"liquidation_price\": null, \"side\": \"LONG\", \"size\": 0.05, \"symbol\": \"BTC\", \"unrealized_pnl\": 18.5}, {\"dex\": null, \"entry_price\": 2410.0, \"leverage\": 1.0, \"liquidation_price\": null, \"side\": \"LONG\", \"size\": 0.9, \"symbol\": \"ETH\", \"unrealized_pnl\": 9.75}, {\"dex\": null, \"entry_price\": 151.2, \"leverage\": 1.0, \"liquidation_price\": null, \"side\": \"SHORT\", \"size\": 4.0, \"symbol\": \"SOL\", \"unrealized_pnl\": -4.0}], \"spot_balances\": [{\"coin\": \"USDC\", \"entry_ntl\": 0.0, \"hold\": 0.0, \"total\": 10000.0}]}, \"render\": {\"card\": \"live\", \"card_resource_uri\": \"ui://keel/cards/live.html\", \"fallback_url\": \"https://app.usekeel.io/live/dep_real?tab=positions\"}}",
+      "tool": "keel_live_monitor"
+    },
+    {
+      "args": {
+        "deployment_id": "dep_real",
+        "view": "equity"
+      },
+      "is_error": false,
+      "meta": {
+        "fastmcp": {
+          "wrap_result": true
+        }
+      },
+      "name": "live_monitor:equity",
+      "requests": [
+        {
+          "method": "GET",
+          "params": [],
+          "path": "/v1/deployments/dep_real/equity"
+        }
+      ],
+      "structured": {
+        "result": "{\"share_url\": null, \"run_id\": \"dep_real\", \"hero_url\": \"https://app.usekeel.io/live/dep_real?tab=equity\", \"url_line\": \"View in Keel: https://app.usekeel.io/live/dep_real?tab=equity\", \"view\": \"equity\", \"freshness\": {\"source\": \"keel_backend_records\", \"mode\": \"recorded_state\", \"realtime\": false, \"note\": \"Read from Keel backend records. It updates when runners record evaluations, orders, trades, funding, or account snapshots; it is not a real-time tail.\"}, \"data\": {\"baseline_value\": 10000.0, \"current_value\": 10412.37, \"initial_deposit\": 10000.0, \"managed_segments\": null, \"money_freshness\": {\"fresh_as_of\": \"2026-10-11T07:00:00Z\", \"state\": \"COVERED\", \"synced_through\": \"2026-10-11T07:00:00Z\"}, \"pending_flows\": null, \"points\": [{\"equity\": 10000.0, \"flow\": null, \"pnl\": 0.0, \"timestamp\": \"2026-10-01T00:00:00Z\", \"twr_pct\": 0.0}, {\"equity\": 10041.2, \"flow\": null, \"pnl\": 41.2, \"timestamp\": \"2026-10-02T00:00:00Z\", \"twr_pct\": 0.412}, {\"equity\": 10082.4, \"flow\": null, \"pnl\": 82.4, \"timestamp\": \"2026-10-03T00:00:00Z\", \"twr_pct\": 0.824}, {\"equity\": 10123.6, \"flow\": null, \"pnl\": 123.60000000000001, \"timestamp\": \"2026-10-04T00:00:00Z\", \"twr_pct\": 1.236}, {\"equity\": 10164.8, \"flow\": null, \"pnl\": 164.8, \"timestamp\": \"2026-10-05T00:00:00Z\", \"twr_pct\": 1.648}, {\"equity\": 10206.0, \"flow\": null, \"pnl\": 206.0, \"timestamp\": \"2026-10-06T00:00:00Z\", \"twr_pct\": 2.06}, {\"equity\": 10247.2, \"flow\": null, \"pnl\": 247.20000000000002, \"timestamp\": \"2026-10-07T00:00:00Z\", \"twr_pct\": 2.472}, {\"equity\": 10288.4, \"flow\": null, \"pnl\": 288.40000000000003, \"timestamp\": \"2026-10-08T00:00:00Z\", \"twr_pct\": 2.884}, {\"equity\": 10329.6, \"flow\": null, \"pnl\": 329.6, \"timestamp\": \"2026-10-09T00:00:00Z\", \"twr_pct\": 3.296}, {\"equity\": 10370.8, \"flow\": null, \"pnl\": 370.8, \"timestamp\": \"2026-10-10T00:00:00Z\", \"twr_pct\": 3.708}, {\"equity\": 10412.0, \"flow\": null, \"pnl\": 412.0, \"timestamp\": \"2026-10-11T00:00:00Z\", \"twr_pct\": 4.12}], \"today_flows\": 0.0, \"today_pnl\": 12.5}, \"render\": {\"card\": \"live\", \"card_resource_uri\": \"ui://keel/cards/live.html\", \"fallback_url\": \"https://app.usekeel.io/live/dep_real?tab=equity\"}}"
+      },
+      "text": "{\"share_url\": null, \"run_id\": \"dep_real\", \"hero_url\": \"https://app.usekeel.io/live/dep_real?tab=equity\", \"url_line\": \"View in Keel: https://app.usekeel.io/live/dep_real?tab=equity\", \"view\": \"equity\", \"freshness\": {\"source\": \"keel_backend_records\", \"mode\": \"recorded_state\", \"realtime\": false, \"note\": \"Read from Keel backend records. It updates when runners record evaluations, orders, trades, funding, or account snapshots; it is not a real-time tail.\"}, \"data\": {\"baseline_value\": 10000.0, \"current_value\": 10412.37, \"initial_deposit\": 10000.0, \"managed_segments\": null, \"money_freshness\": {\"fresh_as_of\": \"2026-10-11T07:00:00Z\", \"state\": \"COVERED\", \"synced_through\": \"2026-10-11T07:00:00Z\"}, \"pending_flows\": null, \"points\": [{\"equity\": 10000.0, \"flow\": null, \"pnl\": 0.0, \"timestamp\": \"2026-10-01T00:00:00Z\", \"twr_pct\": 0.0}, {\"equity\": 10041.2, \"flow\": null, \"pnl\": 41.2, \"timestamp\": \"2026-10-02T00:00:00Z\", \"twr_pct\": 0.412}, {\"equity\": 10082.4, \"flow\": null, \"pnl\": 82.4, \"timestamp\": \"2026-10-03T00:00:00Z\", \"twr_pct\": 0.824}, {\"equity\": 10123.6, \"flow\": null, \"pnl\": 123.60000000000001, \"timestamp\": \"2026-10-04T00:00:00Z\", \"twr_pct\": 1.236}, {\"equity\": 10164.8, \"flow\": null, \"pnl\": 164.8, \"timestamp\": \"2026-10-05T00:00:00Z\", \"twr_pct\": 1.648}, {\"equity\": 10206.0, \"flow\": null, \"pnl\": 206.0, \"timestamp\": \"2026-10-06T00:00:00Z\", \"twr_pct\": 2.06}, {\"equity\": 10247.2, \"flow\": null, \"pnl\": 247.20000000000002, \"timestamp\": \"2026-10-07T00:00:00Z\", \"twr_pct\": 2.472}, {\"equity\": 10288.4, \"flow\": null, \"pnl\": 288.40000000000003, \"timestamp\": \"2026-10-08T00:00:00Z\", \"twr_pct\": 2.884}, {\"equity\": 10329.6, \"flow\": null, \"pnl\": 329.6, \"timestamp\": \"2026-10-09T00:00:00Z\", \"twr_pct\": 3.296}, {\"equity\": 10370.8, \"flow\": null, \"pnl\": 370.8, \"timestamp\": \"2026-10-10T00:00:00Z\", \"twr_pct\": 3.708}, {\"equity\": 10412.0, \"flow\": null, \"pnl\": 412.0, \"timestamp\": \"2026-10-11T00:00:00Z\", \"twr_pct\": 4.12}], \"today_flows\": 0.0, \"today_pnl\": 12.5}, \"render\": {\"card\": \"live\", \"card_resource_uri\": \"ui://keel/cards/live.html\", \"fallback_url\": \"https://app.usekeel.io/live/dep_real?tab=equity\"}}",
+      "tool": "keel_live_monitor"
+    },
+    {
+      "args": {
+        "deployment_id": "dep_real",
+        "view": "pnl"
+      },
+      "is_error": false,
+      "meta": {
+        "fastmcp": {
+          "wrap_result": true
+        }
+      },
+      "name": "live_monitor:pnl",
+      "requests": [
+        {
+          "method": "GET",
+          "params": [],
+          "path": "/v1/deployments/dep_real/daily-pnl"
+        }
+      ],
+      "structured": {
+        "result": "{\"share_url\": null, \"run_id\": \"dep_real\", \"hero_url\": \"https://app.usekeel.io/live/dep_real?tab=pnl\", \"url_line\": \"View in Keel: https://app.usekeel.io/live/dep_real?tab=pnl\", \"view\": \"pnl\", \"freshness\": {\"source\": \"keel_backend_records\", \"mode\": \"recorded_state\", \"realtime\": false, \"note\": \"Read from Keel backend records. It updates when runners record evaluations, orders, trades, funding, or account snapshots; it is not a real-time tail.\"}, \"data\": {\"points\": [{\"date\": \"2026-10-09\", \"fees\": 2.05, \"funding\": -1.1, \"net\": 28.05, \"realized_pnl\": 31.2}, {\"date\": \"2026-10-10\", \"fees\": 1.8, \"funding\": -0.9, \"net\": 41.3, \"realized_pnl\": 44.0}]}, \"render\": {\"card\": \"live\", \"card_resource_uri\": \"ui://keel/cards/live.html\", \"fallback_url\": \"https://app.usekeel.io/live/dep_real?tab=pnl\"}}"
+      },
+      "text": "{\"share_url\": null, \"run_id\": \"dep_real\", \"hero_url\": \"https://app.usekeel.io/live/dep_real?tab=pnl\", \"url_line\": \"View in Keel: https://app.usekeel.io/live/dep_real?tab=pnl\", \"view\": \"pnl\", \"freshness\": {\"source\": \"keel_backend_records\", \"mode\": \"recorded_state\", \"realtime\": false, \"note\": \"Read from Keel backend records. It updates when runners record evaluations, orders, trades, funding, or account snapshots; it is not a real-time tail.\"}, \"data\": {\"points\": [{\"date\": \"2026-10-09\", \"fees\": 2.05, \"funding\": -1.1, \"net\": 28.05, \"realized_pnl\": 31.2}, {\"date\": \"2026-10-10\", \"fees\": 1.8, \"funding\": -0.9, \"net\": 41.3, \"realized_pnl\": 44.0}]}, \"render\": {\"card\": \"live\", \"card_resource_uri\": \"ui://keel/cards/live.html\", \"fallback_url\": \"https://app.usekeel.io/live/dep_real?tab=pnl\"}}",
+      "tool": "keel_live_monitor"
+    },
+    {
+      "args": {
+        "deployment_id": "dep_real",
+        "view": "stats"
+      },
+      "is_error": false,
+      "meta": {
+        "fastmcp": {
+          "wrap_result": true
+        }
+      },
+      "name": "live_monitor:stats",
+      "requests": [
+        {
+          "method": "GET",
+          "params": [],
+          "path": "/v1/deployments/dep_real/stats"
+        }
+      ],
+      "structured": {
+        "result": "{\"share_url\": null, \"run_id\": \"dep_real\", \"hero_url\": \"https://app.usekeel.io/live/dep_real?tab=stats\", \"url_line\": \"View in Keel: https://app.usekeel.io/live/dep_real?tab=stats\", \"view\": \"stats\", \"freshness\": {\"source\": \"keel_backend_records\", \"mode\": \"recorded_state\", \"realtime\": false, \"note\": \"Read from Keel backend records. It updates when runners record evaluations, orders, trades, funding, or account snapshots; it is not a real-time tail.\"}, \"data\": {\"avg_execution_latency_s\": 2.4, \"avg_slippage_bps\": 1.8, \"avg_slippage_lane\": \"SESSION_ARRIVAL_LEDGER_PRICE_ONLY\", \"cancelled_orders\": 0, \"current_drawdown_pct\": -0.6, \"eval_success_rate_pct\": 100.0, \"fee_builder_malformed_count\": 0, \"fee_trade_count\": 48, \"max_drawdown_duration_days\": 2.5, \"max_drawdown_pct\": -3.4, \"net_pnl\": 353.87, \"order_fill_rate_pct\": 97.9, \"profit_factor\": 1.6, \"rejected_orders\": 1, \"sharpe\": 1.42, \"skipped_below_min_trade_sessions\": 0, \"skipped_min_notional_orders\": 0, \"slippage_measured_sessions\": 40, \"sortino\": 2.01, \"today_flows\": 0.0, \"today_pnl\": 12.5, \"total_fees\": 21.85, \"total_funding\": -12.4, \"total_orders\": 49, \"total_realized_pnl\": 388.12, \"total_return_pct\": 4.12, \"total_trades\": 48, \"trade_count_losing\": 21, \"trade_count_winning\": 27, \"win_rate_pct\": 56.0}, \"render\": {\"card\": \"live\", \"card_resource_uri\": \"ui://keel/cards/live.html\", \"fallback_url\": \"https://app.usekeel.io/live/dep_real?tab=stats\"}}"
+      },
+      "text": "{\"share_url\": null, \"run_id\": \"dep_real\", \"hero_url\": \"https://app.usekeel.io/live/dep_real?tab=stats\", \"url_line\": \"View in Keel: https://app.usekeel.io/live/dep_real?tab=stats\", \"view\": \"stats\", \"freshness\": {\"source\": \"keel_backend_records\", \"mode\": \"recorded_state\", \"realtime\": false, \"note\": \"Read from Keel backend records. It updates when runners record evaluations, orders, trades, funding, or account snapshots; it is not a real-time tail.\"}, \"data\": {\"avg_execution_latency_s\": 2.4, \"avg_slippage_bps\": 1.8, \"avg_slippage_lane\": \"SESSION_ARRIVAL_LEDGER_PRICE_ONLY\", \"cancelled_orders\": 0, \"current_drawdown_pct\": -0.6, \"eval_success_rate_pct\": 100.0, \"fee_builder_malformed_count\": 0, \"fee_trade_count\": 48, \"max_drawdown_duration_days\": 2.5, \"max_drawdown_pct\": -3.4, \"net_pnl\": 353.87, \"order_fill_rate_pct\": 97.9, \"profit_factor\": 1.6, \"rejected_orders\": 1, \"sharpe\": 1.42, \"skipped_below_min_trade_sessions\": 0, \"skipped_min_notional_orders\": 0, \"slippage_measured_sessions\": 40, \"sortino\": 2.01, \"today_flows\": 0.0, \"today_pnl\": 12.5, \"total_fees\": 21.85, \"total_funding\": -12.4, \"total_orders\": 49, \"total_realized_pnl\": 388.12, \"total_return_pct\": 4.12, \"total_trades\": 48, \"trade_count_losing\": 21, \"trade_count_winning\": 27, \"win_rate_pct\": 56.0}, \"render\": {\"card\": \"live\", \"card_resource_uri\": \"ui://keel/cards/live.html\", \"fallback_url\": \"https://app.usekeel.io/live/dep_real?tab=stats\"}}",
+      "tool": "keel_live_monitor"
+    },
+    {
+      "args": {
+        "deployment_id": "dep_real",
+        "view": "weights"
+      },
+      "is_error": false,
+      "meta": {
+        "fastmcp": {
+          "wrap_result": true
+        }
+      },
+      "name": "live_monitor:weights",
+      "requests": [
+        {
+          "method": "GET",
+          "params": [],
+          "path": "/v1/deployments/dep_real/weights"
+        }
+      ],
+      "structured": {
+        "result": "{\"share_url\": null, \"run_id\": \"dep_real\", \"hero_url\": \"https://app.usekeel.io/live/dep_real?tab=weights\", \"url_line\": \"View in Keel: https://app.usekeel.io/live/dep_real?tab=weights\", \"view\": \"weights\", \"freshness\": {\"source\": \"keel_backend_records\", \"mode\": \"recorded_state\", \"realtime\": false, \"note\": \"Read from Keel backend records. It updates when runners record evaluations, orders, trades, funding, or account snapshots; it is not a real-time tail.\"}, \"data\": {\"as_of_time\": \"2026-10-11T07:00:00Z\", \"signal_run_id\": \"sr_real_0042\", \"weights\": [{\"symbol\": \"BTC\", \"weight\": 0.3}, {\"symbol\": \"ETH\", \"weight\": 0.2}, {\"symbol\": \"SOL\", \"weight\": -0.06}]}, \"render\": {\"card\": \"live\", \"card_resource_uri\": \"ui://keel/cards/live.html\", \"fallback_url\": \"https://app.usekeel.io/live/dep_real?tab=weights\"}}"
+      },
+      "text": "{\"share_url\": null, \"run_id\": \"dep_real\", \"hero_url\": \"https://app.usekeel.io/live/dep_real?tab=weights\", \"url_line\": \"View in Keel: https://app.usekeel.io/live/dep_real?tab=weights\", \"view\": \"weights\", \"freshness\": {\"source\": \"keel_backend_records\", \"mode\": \"recorded_state\", \"realtime\": false, \"note\": \"Read from Keel backend records. It updates when runners record evaluations, orders, trades, funding, or account snapshots; it is not a real-time tail.\"}, \"data\": {\"as_of_time\": \"2026-10-11T07:00:00Z\", \"signal_run_id\": \"sr_real_0042\", \"weights\": [{\"symbol\": \"BTC\", \"weight\": 0.3}, {\"symbol\": \"ETH\", \"weight\": 0.2}, {\"symbol\": \"SOL\", \"weight\": -0.06}]}, \"render\": {\"card\": \"live\", \"card_resource_uri\": \"ui://keel/cards/live.html\", \"fallback_url\": \"https://app.usekeel.io/live/dep_real?tab=weights\"}}",
+      "tool": "keel_live_monitor"
+    },
+    {
+      "args": {
+        "deployment_id": "dep_real",
+        "view": "weights-history"
+      },
+      "is_error": false,
+      "meta": {
+        "fastmcp": {
+          "wrap_result": true
+        }
+      },
+      "name": "live_monitor:weights-history",
+      "requests": [
+        {
+          "method": "GET",
+          "params": [],
+          "path": "/v1/deployments/dep_real/weights/history"
+        }
+      ],
+      "structured": {
+        "result": "{\"share_url\": null, \"run_id\": \"dep_real\", \"hero_url\": \"https://app.usekeel.io/live/dep_real?tab=weights-history\", \"url_line\": \"View in Keel: https://app.usekeel.io/live/dep_real?tab=weights-history\", \"view\": \"weights-history\", \"freshness\": {\"source\": \"keel_backend_records\", \"mode\": \"recorded_state\", \"realtime\": false, \"note\": \"Read from Keel backend records. It updates when runners record evaluations, orders, trades, funding, or account snapshots; it is not a real-time tail.\"}, \"data\": {\"points\": [{\"timestamp\": \"2026-10-11T06:00:00Z\", \"weights\": {\"BTC\": 0.28, \"ETH\": 0.22, \"SOL\": -0.05}}, {\"timestamp\": \"2026-10-11T07:00:00Z\", \"weights\": {\"BTC\": 0.3, \"ETH\": 0.2, \"SOL\": -0.06}}], \"total_count\": 2}, \"render\": {\"card\": \"live\", \"card_resource_uri\": \"ui://keel/cards/live.html\", \"fallback_url\": \"https://app.usekeel.io/live/dep_real?tab=weights-history\"}}"
+      },
+      "text": "{\"share_url\": null, \"run_id\": \"dep_real\", \"hero_url\": \"https://app.usekeel.io/live/dep_real?tab=weights-history\", \"url_line\": \"View in Keel: https://app.usekeel.io/live/dep_real?tab=weights-history\", \"view\": \"weights-history\", \"freshness\": {\"source\": \"keel_backend_records\", \"mode\": \"recorded_state\", \"realtime\": false, \"note\": \"Read from Keel backend records. It updates when runners record evaluations, orders, trades, funding, or account snapshots; it is not a real-time tail.\"}, \"data\": {\"points\": [{\"timestamp\": \"2026-10-11T06:00:00Z\", \"weights\": {\"BTC\": 0.28, \"ETH\": 0.22, \"SOL\": -0.05}}, {\"timestamp\": \"2026-10-11T07:00:00Z\", \"weights\": {\"BTC\": 0.3, \"ETH\": 0.2, \"SOL\": -0.06}}], \"total_count\": 2}, \"render\": {\"card\": \"live\", \"card_resource_uri\": \"ui://keel/cards/live.html\", \"fallback_url\": \"https://app.usekeel.io/live/dep_real?tab=weights-history\"}}",
+      "tool": "keel_live_monitor"
+    },
+    {
+      "args": {
+        "deployment_id": "dep_real",
+        "view": "executions"
+      },
+      "is_error": false,
+      "meta": {
+        "fastmcp": {
+          "wrap_result": true
+        }
+      },
+      "name": "live_monitor:executions",
+      "requests": [
+        {
+          "method": "GET",
+          "params": [],
+          "path": "/v1/deployments/dep_real/executions"
+        }
+      ],
+      "structured": {
+        "result": "{\"share_url\": null, \"run_id\": \"dep_real\", \"hero_url\": \"https://app.usekeel.io/live/dep_real?tab=executions\", \"url_line\": \"View in Keel: https://app.usekeel.io/live/dep_real?tab=executions\", \"view\": \"executions\", \"freshness\": {\"source\": \"keel_backend_records\", \"mode\": \"recorded_state\", \"realtime\": false, \"note\": \"Read from Keel backend records. It updates when runners record evaluations, orders, trades, funding, or account snapshots; it is not a real-time tail.\"}, \"data\": [{\"activity_at\": \"2026-10-11T07:00:09Z\", \"attempt_id\": \"att_real_1\", \"attempt_kind\": \"execution\", \"avg_slippage_bps\": 1.1, \"avg_slippage_lane\": \"SESSION_ARRIVAL_LEDGER_PRICE_ONLY\", \"ended_at\": \"2026-10-11T07:00:09Z\", \"error_summary\": null, \"execution_notices\": [], \"execution_run_id\": \"er_real_1\", \"execution_status\": \"COMPLETED\", \"filled_count\": 1, \"order_count\": 1, \"orders\": null, \"quality_episode_count\": 1, \"quality_provisional_count\": 0, \"quality_sealed_receipt_count\": 1, \"realized_pnl\": 4.2, \"rejected_count\": 0, \"session_outcomes\": null, \"signal_as_of_time\": \"2026-10-11T07:00:00Z\", \"signal_error_summary\": null, \"signal_meta\": {\"receipt\": {\"source_cutoff\": {\"kind\": \"fills\", \"network\": \"mainnet\", \"observed_at\": \"2026-10-11T07:00:09Z\", \"venue\": \"hyperliquid\"}}}, \"signal_run_id\": \"sr_real_0042\", \"signal_status\": \"COMPLETED\", \"skipped_count\": 0, \"slippage_measured_sessions\": 1, \"started_at\": \"2026-10-11T07:00:02Z\", \"supersede_command_id\": null, \"weight_count\": 3}], \"render\": {\"card\": \"live\", \"card_resource_uri\": \"ui://keel/cards/live.html\", \"fallback_url\": \"https://app.usekeel.io/live/dep_real?tab=executions\"}}"
+      },
+      "text": "{\"share_url\": null, \"run_id\": \"dep_real\", \"hero_url\": \"https://app.usekeel.io/live/dep_real?tab=executions\", \"url_line\": \"View in Keel: https://app.usekeel.io/live/dep_real?tab=executions\", \"view\": \"executions\", \"freshness\": {\"source\": \"keel_backend_records\", \"mode\": \"recorded_state\", \"realtime\": false, \"note\": \"Read from Keel backend records. It updates when runners record evaluations, orders, trades, funding, or account snapshots; it is not a real-time tail.\"}, \"data\": [{\"activity_at\": \"2026-10-11T07:00:09Z\", \"attempt_id\": \"att_real_1\", \"attempt_kind\": \"execution\", \"avg_slippage_bps\": 1.1, \"avg_slippage_lane\": \"SESSION_ARRIVAL_LEDGER_PRICE_ONLY\", \"ended_at\": \"2026-10-11T07:00:09Z\", \"error_summary\": null, \"execution_notices\": [], \"execution_run_id\": \"er_real_1\", \"execution_status\": \"COMPLETED\", \"filled_count\": 1, \"order_count\": 1, \"orders\": null, \"quality_episode_count\": 1, \"quality_provisional_count\": 0, \"quality_sealed_receipt_count\": 1, \"realized_pnl\": 4.2, \"rejected_count\": 0, \"session_outcomes\": null, \"signal_as_of_time\": \"2026-10-11T07:00:00Z\", \"signal_error_summary\": null, \"signal_meta\": {\"receipt\": {\"source_cutoff\": {\"kind\": \"fills\", \"network\": \"mainnet\", \"observed_at\": \"2026-10-11T07:00:09Z\", \"venue\": \"hyperliquid\"}}}, \"signal_run_id\": \"sr_real_0042\", \"signal_status\": \"COMPLETED\", \"skipped_count\": 0, \"slippage_measured_sessions\": 1, \"started_at\": \"2026-10-11T07:00:02Z\", \"supersede_command_id\": null, \"weight_count\": 3}], \"render\": {\"card\": \"live\", \"card_resource_uri\": \"ui://keel/cards/live.html\", \"fallback_url\": \"https://app.usekeel.io/live/dep_real?tab=executions\"}}",
+      "tool": "keel_live_monitor"
+    },
+    {
+      "args": {
+        "deployment_id": "dep_real",
+        "view": "order_history"
+      },
+      "is_error": false,
+      "meta": {
+        "fastmcp": {
+          "wrap_result": true
+        }
+      },
+      "name": "live_monitor:order_history",
+      "requests": [
+        {
+          "method": "GET",
+          "params": [],
+          "path": "/v1/deployments/dep_real/orders"
+        }
+      ],
+      "structured": {
+        "result": "{\"share_url\": null, \"run_id\": \"dep_real\", \"hero_url\": \"https://app.usekeel.io/live/dep_real?tab=orders\", \"url_line\": \"View in Keel: https://app.usekeel.io/live/dep_real?tab=orders\", \"view\": \"orders\", \"freshness\": {\"source\": \"keel_backend_records\", \"mode\": \"recorded_state\", \"realtime\": false, \"note\": \"Read from Keel backend records. It updates when runners record evaluations, orders, trades, funding, or account snapshots; it is not a real-time tail.\"}, \"data\": [{\"limit_price\": null, \"order_id\": \"ord_real_1\", \"order_type\": \"MARKET\", \"quantity\": 0.01, \"reject_reason\": null, \"side\": \"BUY\", \"status\": \"FILLED\", \"submit_time\": \"2026-10-11T07:00:04Z\", \"symbol\": \"BTC\", \"venue_order_id\": \"hl_77123\"}], \"render\": {\"card\": \"live\", \"card_resource_uri\": \"ui://keel/cards/live.html\", \"fallback_url\": \"https://app.usekeel.io/live/dep_real?tab=orders\"}}"
+      },
+      "text": "{\"share_url\": null, \"run_id\": \"dep_real\", \"hero_url\": \"https://app.usekeel.io/live/dep_real?tab=orders\", \"url_line\": \"View in Keel: https://app.usekeel.io/live/dep_real?tab=orders\", \"view\": \"orders\", \"freshness\": {\"source\": \"keel_backend_records\", \"mode\": \"recorded_state\", \"realtime\": false, \"note\": \"Read from Keel backend records. It updates when runners record evaluations, orders, trades, funding, or account snapshots; it is not a real-time tail.\"}, \"data\": [{\"limit_price\": null, \"order_id\": \"ord_real_1\", \"order_type\": \"MARKET\", \"quantity\": 0.01, \"reject_reason\": null, \"side\": \"BUY\", \"status\": \"FILLED\", \"submit_time\": \"2026-10-11T07:00:04Z\", \"symbol\": \"BTC\", \"venue_order_id\": \"hl_77123\"}], \"render\": {\"card\": \"live\", \"card_resource_uri\": \"ui://keel/cards/live.html\", \"fallback_url\": \"https://app.usekeel.io/live/dep_real?tab=orders\"}}",
+      "tool": "keel_live_monitor"
+    },
+    {
+      "args": {
+        "deployment_id": "dep_real",
+        "view": "trade_history"
+      },
+      "is_error": false,
+      "meta": {
+        "fastmcp": {
+          "wrap_result": true
+        }
+      },
+      "name": "live_monitor:trade_history",
+      "requests": [
+        {
+          "method": "GET",
+          "params": [],
+          "path": "/v1/deployments/dep_real/trades"
+        }
+      ],
+      "structured": {
+        "result": "{\"share_url\": null, \"run_id\": \"dep_real\", \"hero_url\": \"https://app.usekeel.io/live/dep_real?tab=trades\", \"url_line\": \"View in Keel: https://app.usekeel.io/live/dep_real?tab=trades\", \"view\": \"trades\", \"freshness\": {\"source\": \"keel_backend_records\", \"mode\": \"recorded_state\", \"realtime\": false, \"note\": \"Read from Keel backend records. It updates when runners record evaluations, orders, trades, funding, or account snapshots; it is not a real-time tail.\"}, \"data\": {\"data\": [{\"closed_pnl\": null, \"execution_run_id\": \"er_real_1\", \"fee\": 0.28, \"is_taker\": true, \"notional\": 613.02, \"price\": 61302.0, \"quantity\": 0.01, \"side\": \"BUY\", \"slippage_bps\": 1.1, \"symbol\": \"BTC\", \"trade_id\": \"trd_real_1\", \"trade_time\": \"2026-10-11T07:00:05Z\"}, {\"closed_pnl\": 2.3, \"execution_run_id\": \"er_real_0\", \"fee\": 0.11, \"is_taker\": true, \"notional\": 243.3, \"price\": 2433.0, \"quantity\": 0.1, \"side\": \"SELL\", \"slippage_bps\": 0.8, \"symbol\": \"ETH\", \"trade_id\": \"trd_real_0\", \"trade_time\": \"2026-10-10T07:00:05Z\"}], \"pagination\": {\"cursor\": null, \"has_more\": false}}, \"render\": {\"card\": \"live\", \"card_resource_uri\": \"ui://keel/cards/live.html\", \"fallback_url\": \"https://app.usekeel.io/live/dep_real?tab=trades\"}}"
+      },
+      "text": "{\"share_url\": null, \"run_id\": \"dep_real\", \"hero_url\": \"https://app.usekeel.io/live/dep_real?tab=trades\", \"url_line\": \"View in Keel: https://app.usekeel.io/live/dep_real?tab=trades\", \"view\": \"trades\", \"freshness\": {\"source\": \"keel_backend_records\", \"mode\": \"recorded_state\", \"realtime\": false, \"note\": \"Read from Keel backend records. It updates when runners record evaluations, orders, trades, funding, or account snapshots; it is not a real-time tail.\"}, \"data\": {\"data\": [{\"closed_pnl\": null, \"execution_run_id\": \"er_real_1\", \"fee\": 0.28, \"is_taker\": true, \"notional\": 613.02, \"price\": 61302.0, \"quantity\": 0.01, \"side\": \"BUY\", \"slippage_bps\": 1.1, \"symbol\": \"BTC\", \"trade_id\": \"trd_real_1\", \"trade_time\": \"2026-10-11T07:00:05Z\"}, {\"closed_pnl\": 2.3, \"execution_run_id\": \"er_real_0\", \"fee\": 0.11, \"is_taker\": true, \"notional\": 243.3, \"price\": 2433.0, \"quantity\": 0.1, \"side\": \"SELL\", \"slippage_bps\": 0.8, \"symbol\": \"ETH\", \"trade_id\": \"trd_real_0\", \"trade_time\": \"2026-10-10T07:00:05Z\"}], \"pagination\": {\"cursor\": null, \"has_more\": false}}, \"render\": {\"card\": \"live\", \"card_resource_uri\": \"ui://keel/cards/live.html\", \"fallback_url\": \"https://app.usekeel.io/live/dep_real?tab=trades\"}}",
+      "tool": "keel_live_monitor"
+    },
+    {
+      "args": {
+        "deployment_id": "dep_real",
+        "view": "funding"
+      },
+      "is_error": false,
+      "meta": {
+        "fastmcp": {
+          "wrap_result": true
+        }
+      },
+      "name": "live_monitor:funding",
+      "requests": [
+        {
+          "method": "GET",
+          "params": [],
+          "path": "/v1/deployments/dep_real/funding"
+        }
+      ],
+      "structured": {
+        "result": "{\"share_url\": null, \"run_id\": \"dep_real\", \"hero_url\": \"https://app.usekeel.io/live/dep_real?tab=funding\", \"url_line\": \"View in Keel: https://app.usekeel.io/live/dep_real?tab=funding\", \"view\": \"funding\", \"freshness\": {\"source\": \"keel_backend_records\", \"mode\": \"recorded_state\", \"realtime\": false, \"note\": \"Read from Keel backend records. It updates when runners record evaluations, orders, trades, funding, or account snapshots; it is not a real-time tail.\"}, \"data\": {\"events\": [{\"event_time\": \"2026-10-11T00:00:00Z\", \"funding_rate\": 1.25e-05, \"payment_amount\": -0.42, \"position_side\": \"LONG\", \"position_size\": 0.05, \"symbol\": \"BTC\"}], \"total_by_symbol\": {\"BTC\": -0.42}, \"total_funding\": -0.42}, \"render\": {\"card\": \"live\", \"card_resource_uri\": \"ui://keel/cards/live.html\", \"fallback_url\": \"https://app.usekeel.io/live/dep_real?tab=funding\"}}"
+      },
+      "text": "{\"share_url\": null, \"run_id\": \"dep_real\", \"hero_url\": \"https://app.usekeel.io/live/dep_real?tab=funding\", \"url_line\": \"View in Keel: https://app.usekeel.io/live/dep_real?tab=funding\", \"view\": \"funding\", \"freshness\": {\"source\": \"keel_backend_records\", \"mode\": \"recorded_state\", \"realtime\": false, \"note\": \"Read from Keel backend records. It updates when runners record evaluations, orders, trades, funding, or account snapshots; it is not a real-time tail.\"}, \"data\": {\"events\": [{\"event_time\": \"2026-10-11T00:00:00Z\", \"funding_rate\": 1.25e-05, \"payment_amount\": -0.42, \"position_side\": \"LONG\", \"position_size\": 0.05, \"symbol\": \"BTC\"}], \"total_by_symbol\": {\"BTC\": -0.42}, \"total_funding\": -0.42}, \"render\": {\"card\": \"live\", \"card_resource_uri\": \"ui://keel/cards/live.html\", \"fallback_url\": \"https://app.usekeel.io/live/dep_real?tab=funding\"}}",
+      "tool": "keel_live_monitor"
+    },
+    {
+      "args": {},
+      "is_error": false,
+      "meta": {
+        "fastmcp": {
+          "wrap_result": true
+        }
+      },
+      "name": "account_status",
+      "requests": [
+        {
+          "method": "GET",
+          "params": [],
+          "path": "/v1/me"
+        },
+        {
+          "method": "GET",
+          "params": [],
+          "path": "/v1/entitlements"
+        }
+      ],
+      "structured": {
+        "result": "{\"share_url\": null, \"hero_url\": \"https://app.usekeel.io/strategies\", \"url_line\": \"View in Keel: https://app.usekeel.io/strategies\", \"authenticated\": true, \"app_url\": \"https://app.usekeel.io\", \"profile\": \"listed\", \"capabilities\": {\"research\": true, \"backtest\": true, \"monitor\": \"read-only\", \"live_actions\": \"web app\"}, \"identity\": {\"org_name\": \"Real Org\", \"plan\": \"trader\", \"tier\": \"base\", \"display_name\": \"Real Trader\"}, \"entitlements\": {\"summary\": [{\"unit\": \"backtest_runs\", \"granted\": 500, \"spent\": 54, \"available\": 446, \"consumed_by\": [\"MCP tool calls (keel_backtest_run)\", \"CLI (keel backtest run)\", \"web app backtest UI\"], \"period\": \"weekly\", \"resets_at\": \"2026-10-12T00:00:00Z\", \"reserved\": 0}, {\"unit\": \"backtest_compute_seconds\", \"granted\": 6000, \"spent\": 420, \"available\": 5580, \"consumed_by\": [\"MCP tool calls (keel_backtest_run)\", \"CLI (keel backtest run)\", \"web app backtest UI\"], \"period\": \"weekly\", \"resets_at\": \"2026-10-12T00:00:00Z\", \"reserved\": 0}]}, \"view\": {\"kind\": \"status\", \"size\": \"receipt\", \"object\": \"account\", \"at\": \"2026-10-11T12:00:00.000Z\", \"seq\": 1, \"markdown\": \"**Keel** \\u00b7 signed in as Real Org \\u00b7 trader plan\\n446 of 500 backtest runs and 5,580 of 6,000 backtest compute seconds left this week; they reset Mon 12 Oct 00:00 UTC. Quota is per org and shared across the web app, the CLI and other chats.\\nThis connector: research and backtests; it cannot place orders, move funds or connect wallets; strategies that are running are managed in the Keel web app.\\nView in Keel: https://app.usekeel.io/strategies\\n\"}}"
+      },
+      "text": "**Keel** · signed in as Real Org · trader plan\n446 of 500 backtest runs and 5,580 of 6,000 backtest compute seconds left this week; they reset Mon 12 Oct 00:00 UTC. Quota is per org and shared across the web app, the CLI and other chats.\nThis connector: research and backtests; it cannot place orders, move funds or connect wallets; strategies that are running are managed in the Keel web app.\nView in Keel: https://app.usekeel.io/strategies\n",
+      "tool": "keel_account_status"
+    },
+    {
+      "args": {},
+      "is_error": false,
+      "meta": {
+        "fastmcp": {
+          "wrap_result": true
+        }
+      },
+      "name": "plan_usage",
+      "requests": [
+        {
+          "method": "GET",
+          "params": [],
+          "path": "/v1/me"
+        }
+      ],
+      "structured": {
+        "result": "{\"share_url\": null, \"plan\": \"trader\", \"period\": \"weekly\", \"quota\": [{\"unit\": \"backtest_runs\", \"limit\": \"unlimited\", \"remaining\": \"unlimited\"}, {\"unit\": \"backtest_compute_seconds\", \"limit\": 6000, \"used\": 420, \"remaining\": 5580, \"resets_at\": \"2026-10-12T00:00:00Z\"}], \"talking_points\": [\"Current plan: Trader. This week: unlimited backtest runs and 5,580 of 6,000 compute seconds remaining; resets Mon 12 Oct 00:00 UTC.\"]}"
+      },
+      "text": "{\"share_url\": null, \"plan\": \"trader\", \"period\": \"weekly\", \"quota\": [{\"unit\": \"backtest_runs\", \"limit\": \"unlimited\", \"remaining\": \"unlimited\"}, {\"unit\": \"backtest_compute_seconds\", \"limit\": 6000, \"used\": 420, \"remaining\": 5580, \"resets_at\": \"2026-10-12T00:00:00Z\"}], \"talking_points\": [\"Current plan: Trader. This week: unlimited backtest runs and 5,580 of 6,000 compute seconds remaining; resets Mon 12 Oct 00:00 UTC.\"]}",
+      "tool": "keel_plan_usage"
+    }
+  ],
+  "world": {
+    "deployments": {
+      "real": "dep_real"
+    },
+    "org_id": "org_real",
+    "provenance": "HEAD keel-api responses for one org (org_real) with one real deployment (dep_real), each built from keel-api's own response models at 028a89104 (src.schemas.live, src.models.responses, src.pagination) and serialized with model_dump(mode='json', by_alias=True), as FastAPI serves them.",
+    "routes": [
+      {
+        "body": {
+          "active_count": 1,
+          "deployments": [
+            {
+              "deployed_at": "2026-09-20T12:00:00Z",
+              "deployed_version_string": "v4",
+              "deployment_id": "dep_real",
+              "name": "Momentum Basket",
+              "position_count": 3,
+              "schedule": "0 * * * *",
+              "status": "RUNNING",
+              "strategy_id": "str_real",
+              "total_pnl": 412.37
+            }
+          ],
+          "total_account_value": 10412.37,
+          "total_count": 1,
+          "total_fees": 21.85,
+          "total_funding": -12.4,
+          "total_realized_pnl": 388.12,
+          "total_unrealized_pnl": 24.25
+        },
+        "method": "GET",
+        "path": "/v1/deployments/portfolio/summary",
+        "status": 200
+      },
+      {
+        "body": {
+          "account_id": "acct_real",
+          "account_warnings": [],
+          "config_id": "cfg_real",
+          "created_at": "2026-09-20T11:58:00Z",
+          "deployed_at": "2026-09-20T12:00:00Z",
+          "deployed_commit_id": "c_9a8b7c6d",
+          "deployed_version_string": "v4",
+          "deployment_id": "dep_real",
+          "execution_style": "market",
+          "known_issues": null,
+          "live_window_warnings": null,
+          "money_freshness": {
+            "fresh_as_of": "2026-10-11T07:00:00Z",
+            "state": "COVERED",
+            "synced_through": "2026-10-11T07:00:00Z"
+          },
+          "name": "Momentum Basket",
+          "org_id": "org_real",
+          "paused_at": null,
+          "paused_reason": null,
+          "position_count": 3,
+          "remaining": {
+            "live_slots": 0
+          },
+          "s3_key": "strategies/org_real/str_real/c_9a8b7c6d.py",
+          "schedule": "0 * * * *",
+          "serving_warnings": null,
+          "source_hash": "sha256:5f1d0c",
+          "status": "RUNNING",
+          "stopped_at": null,
+          "strategy_id": "str_real",
+          "total_pnl": 412.37,
+          "tranching": null,
+          "universe_warnings": [
+            {
+              "detail": "No bar since 2026-10-09.",
+              "reason": "STALE",
+              "symbol": "KAS"
+            }
+          ],
+          "updated_at": "2026-10-10T08:00:00Z"
+        },
+        "method": "GET",
+        "path": "/v1/deployments/dep_real",
+        "status": 200
+      },
+      {
+        "body": {
+          "account_mode": "standard",
+          "account_value": 10412.37,
+          "margin_summary": {
+            "account_value": 10412.37,
+            "total_margin_used": 5762.8,
+            "total_ntl_pos": 5762.8,
+            "total_raw_usd": 4649.57
+          },
+          "perp_positions": [
+            {
+              "dex": null,
+              "entry_price": 61250.0,
+              "leverage": 1.0,
+              "liquidation_price": null,
+              "side": "LONG",
+              "size": 0.05,
+              "symbol": "BTC",
+              "unrealized_pnl": 18.5
+            },
+            {
+              "dex": null,
+              "entry_price": 2410.0,
+              "leverage": 1.0,
+              "liquidation_price": null,
+              "side": "LONG",
+              "size": 0.9,
+              "symbol": "ETH",
+              "unrealized_pnl": 9.75
+            },
+            {
+              "dex": null,
+              "entry_price": 151.2,
+              "leverage": 1.0,
+              "liquidation_price": null,
+              "side": "SHORT",
+              "size": 4.0,
+              "symbol": "SOL",
+              "unrealized_pnl": -4.0
+            }
+          ],
+          "spot_balances": [
+            {
+              "coin": "USDC",
+              "entry_ntl": 0.0,
+              "hold": 0.0,
+              "total": 10000.0
+            }
+          ]
+        },
+        "method": "GET",
+        "path": "/v1/deployments/dep_real/positions",
+        "status": 200
+      },
+      {
+        "body": {
+          "baseline_value": 10000.0,
+          "current_value": 10412.37,
+          "initial_deposit": 10000.0,
+          "managed_segments": null,
+          "money_freshness": {
+            "fresh_as_of": "2026-10-11T07:00:00Z",
+            "state": "COVERED",
+            "synced_through": "2026-10-11T07:00:00Z"
+          },
+          "pending_flows": null,
+          "points": [
+            {
+              "equity": 10000.0,
+              "flow": null,
+              "pnl": 0.0,
+              "timestamp": "2026-10-01T00:00:00Z",
+              "twr_pct": 0.0
+            },
+            {
+              "equity": 10041.2,
+              "flow": null,
+              "pnl": 41.2,
+              "timestamp": "2026-10-02T00:00:00Z",
+              "twr_pct": 0.412
+            },
+            {
+              "equity": 10082.4,
+              "flow": null,
+              "pnl": 82.4,
+              "timestamp": "2026-10-03T00:00:00Z",
+              "twr_pct": 0.824
+            },
+            {
+              "equity": 10123.6,
+              "flow": null,
+              "pnl": 123.60000000000001,
+              "timestamp": "2026-10-04T00:00:00Z",
+              "twr_pct": 1.236
+            },
+            {
+              "equity": 10164.8,
+              "flow": null,
+              "pnl": 164.8,
+              "timestamp": "2026-10-05T00:00:00Z",
+              "twr_pct": 1.648
+            },
+            {
+              "equity": 10206.0,
+              "flow": null,
+              "pnl": 206.0,
+              "timestamp": "2026-10-06T00:00:00Z",
+              "twr_pct": 2.06
+            },
+            {
+              "equity": 10247.2,
+              "flow": null,
+              "pnl": 247.20000000000002,
+              "timestamp": "2026-10-07T00:00:00Z",
+              "twr_pct": 2.472
+            },
+            {
+              "equity": 10288.4,
+              "flow": null,
+              "pnl": 288.40000000000003,
+              "timestamp": "2026-10-08T00:00:00Z",
+              "twr_pct": 2.884
+            },
+            {
+              "equity": 10329.6,
+              "flow": null,
+              "pnl": 329.6,
+              "timestamp": "2026-10-09T00:00:00Z",
+              "twr_pct": 3.296
+            },
+            {
+              "equity": 10370.8,
+              "flow": null,
+              "pnl": 370.8,
+              "timestamp": "2026-10-10T00:00:00Z",
+              "twr_pct": 3.708
+            },
+            {
+              "equity": 10412.0,
+              "flow": null,
+              "pnl": 412.0,
+              "timestamp": "2026-10-11T00:00:00Z",
+              "twr_pct": 4.12
+            }
+          ],
+          "today_flows": 0.0,
+          "today_pnl": 12.5
+        },
+        "method": "GET",
+        "path": "/v1/deployments/dep_real/equity",
+        "status": 200
+      },
+      {
+        "body": {
+          "points": [
+            {
+              "date": "2026-10-09",
+              "fees": 2.05,
+              "funding": -1.1,
+              "net": 28.05,
+              "realized_pnl": 31.2
+            },
+            {
+              "date": "2026-10-10",
+              "fees": 1.8,
+              "funding": -0.9,
+              "net": 41.3,
+              "realized_pnl": 44.0
+            }
+          ]
+        },
+        "method": "GET",
+        "path": "/v1/deployments/dep_real/daily-pnl",
+        "status": 200
+      },
+      {
+        "body": {
+          "avg_execution_latency_s": 2.4,
+          "avg_slippage_bps": 1.8,
+          "avg_slippage_lane": "SESSION_ARRIVAL_LEDGER_PRICE_ONLY",
+          "cancelled_orders": 0,
+          "current_drawdown_pct": -0.6,
+          "eval_success_rate_pct": 100.0,
+          "fee_builder_malformed_count": 0,
+          "fee_trade_count": 48,
+          "max_drawdown_duration_days": 2.5,
+          "max_drawdown_pct": -3.4,
+          "net_pnl": 353.87,
+          "order_fill_rate_pct": 97.9,
+          "profit_factor": 1.6,
+          "rejected_orders": 1,
+          "sharpe": 1.42,
+          "skipped_below_min_trade_sessions": 0,
+          "skipped_min_notional_orders": 0,
+          "slippage_measured_sessions": 40,
+          "sortino": 2.01,
+          "today_flows": 0.0,
+          "today_pnl": 12.5,
+          "total_fees": 21.85,
+          "total_funding": -12.4,
+          "total_orders": 49,
+          "total_realized_pnl": 388.12,
+          "total_return_pct": 4.12,
+          "total_trades": 48,
+          "trade_count_losing": 21,
+          "trade_count_winning": 27,
+          "win_rate_pct": 56.0
+        },
+        "method": "GET",
+        "path": "/v1/deployments/dep_real/stats",
+        "status": 200
+      },
+      {
+        "body": {
+          "as_of_time": "2026-10-11T07:00:00Z",
+          "signal_run_id": "sr_real_0042",
+          "weights": [
+            {
+              "symbol": "BTC",
+              "weight": 0.3
+            },
+            {
+              "symbol": "ETH",
+              "weight": 0.2
+            },
+            {
+              "symbol": "SOL",
+              "weight": -0.06
+            }
+          ]
+        },
+        "method": "GET",
+        "path": "/v1/deployments/dep_real/weights",
+        "status": 200
+      },
+      {
+        "body": {
+          "points": [
+            {
+              "timestamp": "2026-10-11T06:00:00Z",
+              "weights": {
+                "BTC": 0.28,
+                "ETH": 0.22,
+                "SOL": -0.05
+              }
+            },
+            {
+              "timestamp": "2026-10-11T07:00:00Z",
+              "weights": {
+                "BTC": 0.3,
+                "ETH": 0.2,
+                "SOL": -0.06
+              }
+            }
+          ],
+          "total_count": 2
+        },
+        "method": "GET",
+        "path": "/v1/deployments/dep_real/weights/history",
+        "status": 200
+      },
+      {
+        "body": [
+          {
+            "activity_at": "2026-10-11T07:00:09Z",
+            "attempt_id": "att_real_1",
+            "attempt_kind": "execution",
+            "avg_slippage_bps": 1.1,
+            "avg_slippage_lane": "SESSION_ARRIVAL_LEDGER_PRICE_ONLY",
+            "ended_at": "2026-10-11T07:00:09Z",
+            "error_summary": null,
+            "execution_notices": [],
+            "execution_run_id": "er_real_1",
+            "execution_status": "COMPLETED",
+            "filled_count": 1,
+            "order_count": 1,
+            "orders": null,
+            "quality_episode_count": 1,
+            "quality_provisional_count": 0,
+            "quality_sealed_receipt_count": 1,
+            "realized_pnl": 4.2,
+            "rejected_count": 0,
+            "session_outcomes": null,
+            "signal_as_of_time": "2026-10-11T07:00:00Z",
+            "signal_error_summary": null,
+            "signal_meta": {
+              "receipt": {
+                "source_cutoff": {
+                  "kind": "fills",
+                  "network": "mainnet",
+                  "observed_at": "2026-10-11T07:00:09Z",
+                  "venue": "hyperliquid"
+                }
+              }
+            },
+            "signal_run_id": "sr_real_0042",
+            "signal_status": "COMPLETED",
+            "skipped_count": 0,
+            "slippage_measured_sessions": 1,
+            "started_at": "2026-10-11T07:00:02Z",
+            "supersede_command_id": null,
+            "weight_count": 3
+          }
+        ],
+        "method": "GET",
+        "path": "/v1/deployments/dep_real/executions",
+        "status": 200
+      },
+      {
+        "body": [
+          {
+            "limit_price": null,
+            "order_id": "ord_real_1",
+            "order_type": "MARKET",
+            "quantity": 0.01,
+            "reject_reason": null,
+            "side": "BUY",
+            "status": "FILLED",
+            "submit_time": "2026-10-11T07:00:04Z",
+            "symbol": "BTC",
+            "venue_order_id": "hl_77123"
+          }
+        ],
+        "method": "GET",
+        "path": "/v1/deployments/dep_real/orders",
+        "status": 200
+      },
+      {
+        "body": {
+          "data": [
+            {
+              "closed_pnl": null,
+              "execution_run_id": "er_real_1",
+              "fee": 0.28,
+              "is_taker": true,
+              "notional": 613.02,
+              "price": 61302.0,
+              "quantity": 0.01,
+              "side": "BUY",
+              "slippage_bps": 1.1,
+              "symbol": "BTC",
+              "trade_id": "trd_real_1",
+              "trade_time": "2026-10-11T07:00:05Z"
+            },
+            {
+              "closed_pnl": 2.3,
+              "execution_run_id": "er_real_0",
+              "fee": 0.11,
+              "is_taker": true,
+              "notional": 243.3,
+              "price": 2433.0,
+              "quantity": 0.1,
+              "side": "SELL",
+              "slippage_bps": 0.8,
+              "symbol": "ETH",
+              "trade_id": "trd_real_0",
+              "trade_time": "2026-10-10T07:00:05Z"
+            }
+          ],
+          "pagination": {
+            "cursor": null,
+            "has_more": false
+          }
+        },
+        "method": "GET",
+        "path": "/v1/deployments/dep_real/trades",
+        "status": 200
+      },
+      {
+        "body": {
+          "events": [
+            {
+              "event_time": "2026-10-11T00:00:00Z",
+              "funding_rate": 1.25e-5,
+              "payment_amount": -0.42,
+              "position_side": "LONG",
+              "position_size": 0.05,
+              "symbol": "BTC"
+            }
+          ],
+          "total_by_symbol": {
+            "BTC": -0.42
+          },
+          "total_funding": -0.42
+        },
+        "method": "GET",
+        "path": "/v1/deployments/dep_real/funding",
+        "status": 200
+      },
+      {
+        "body": {
+          "credential_scopes": ["strategy.*", "backtest.*", "runner.read"],
+          "entitlements": [
+            {
+              "available": 446,
+              "cap_current": null,
+              "enabled": null,
+              "granted": 500,
+              "period": "weekly",
+              "reserved": 0,
+              "resets_at": "2026-10-12T00:00:00Z",
+              "spent": 54,
+              "type": "consumable",
+              "unit": "backtest_runs",
+              "unlimited": false
+            },
+            {
+              "available": 5580,
+              "cap_current": null,
+              "enabled": null,
+              "granted": 6000,
+              "period": "weekly",
+              "reserved": 0,
+              "resets_at": "2026-10-12T00:00:00Z",
+              "spent": 420,
+              "type": "consumable",
+              "unit": "backtest_compute_seconds",
+              "unlimited": false
+            },
+            {
+              "available": 2,
+              "cap_current": null,
+              "enabled": null,
+              "granted": 3,
+              "period": null,
+              "reserved": 0,
+              "resets_at": null,
+              "spent": 1,
+              "type": "capacity",
+              "unit": "live_slots",
+              "unlimited": false
+            }
+          ],
+          "org": {
+            "created_at": "2026-08-01T00:00:00Z",
+            "id": "org_real",
+            "metadata": {},
+            "name": "Real Org",
+            "plan": "trader",
+            "slug": "real-org",
+            "status": "active"
+          },
+          "plan_status": {
+            "builder_fee_bps": 2,
+            "limits": {
+              "backtest_runs": "unlimited",
+              "compute_seconds": 6000,
+              "live_slots": 3
+            },
+            "manage_url": "https://app.usekeel.io/settings?tab=billing",
+            "plan": "trader",
+            "quotas": [
+              {
+                "label": "backtests",
+                "limit": null,
+                "period": "weekly",
+                "remaining": null,
+                "resets_at": null,
+                "seconds_to_reset": null,
+                "unit": "backtest_runs",
+                "unlimited": true,
+                "used": null
+              },
+              {
+                "label": "compute seconds",
+                "limit": 6000,
+                "period": "weekly",
+                "remaining": 5580,
+                "resets_at": "2026-10-12T00:00:00Z",
+                "seconds_to_reset": 86400,
+                "unit": "backtest_compute_seconds",
+                "unlimited": false,
+                "used": 420
+              }
+            ],
+            "remaining": {
+              "backtest_runs": "unlimited",
+              "compute_seconds": 5580,
+              "live_slots": 2
+            },
+            "upgrade_options": [
+              {
+                "plan": "pro",
+                "price": {
+                  "usd_per_month": 199
+                },
+                "what_changes": {}
+              }
+            ]
+          },
+          "principal": {
+            "created_at": "2026-08-01T00:00:00Z",
+            "display_name": "Real Trader",
+            "id": "prn_real",
+            "type": "user"
+          }
+        },
+        "method": "GET",
+        "path": "/v1/me",
+        "status": 200
+      },
+      {
+        "body": {
+          "balances": [
+            {
+              "available": 446,
+              "cap_current": null,
+              "enabled": null,
+              "granted": 500,
+              "period": "weekly",
+              "reserved": 0,
+              "resets_at": "2026-10-12T00:00:00Z",
+              "spent": 54,
+              "type": "consumable",
+              "unit": "backtest_runs",
+              "unlimited": false
+            },
+            {
+              "available": 5580,
+              "cap_current": null,
+              "enabled": null,
+              "granted": 6000,
+              "period": "weekly",
+              "reserved": 0,
+              "resets_at": "2026-10-12T00:00:00Z",
+              "spent": 420,
+              "type": "consumable",
+              "unit": "backtest_compute_seconds",
+              "unlimited": false
+            },
+            {
+              "available": 2,
+              "cap_current": null,
+              "enabled": null,
+              "granted": 3,
+              "period": null,
+              "reserved": 0,
+              "resets_at": null,
+              "spent": 1,
+              "type": "capacity",
+              "unit": "live_slots",
+              "unlimited": false
+            }
+          ],
+          "plan": "trader"
+        },
+        "method": "GET",
+        "path": "/v1/entitlements",
+        "status": 200
+      }
+    ]
+  }
+}

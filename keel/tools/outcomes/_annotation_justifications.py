@@ -241,3 +241,86 @@ LISTED_ANNOTATION_JUSTIFICATIONS: dict[str, AnnotationJustification] = {
         "contacts no system to do so.",
     ),
 }
+
+
+# ── The listed paper tools (S10 §3-4, PT2-90; served only while the listed
+# flag is on for the caller's host, FDR-10) ───────────────────────────────
+#
+# Kept apart from the 29 rows above so the HEAD surface's registry, which the
+# ChatGPT submission export reads, is unchanged while the flag is off for
+# ChatGPT. :func:`served_justifications` and the two set helpers below are the
+# served view: the 29 rows, plus these exactly when `listed_paper_enabled()`.
+# The same policy applies: `keel_paper_deploy` is append-only (each call
+# creates a new run), `keel_paper_control` is destructive (`stop` ends a record
+# for good and `update` replaces the version a run executes), and neither is
+# open-world (a simulated run on Keel's own data, in the caller's workspace).
+
+#: The listed paper write tools that are append-only, with the reason.
+LISTED_PAPER_APPEND_ONLY: dict[str, str] = {
+    "keel_paper_deploy": (
+        "Each call creates a new simulated paper run record; no run is edited or removed."
+    ),
+}
+
+#: The listed paper tools whose ``destructiveHint`` is ``true``.
+LISTED_PAPER_DESTRUCTIVE_TOOLS: frozenset[str] = frozenset({"keel_paper_control"})
+
+#: The listed paper tools whose ``openWorldHint`` is ``true``: none.
+LISTED_PAPER_OPEN_WORLD_TOOLS: frozenset[str] = frozenset()
+
+_SIMULATED_OWN_WORKSPACE = (
+    "A simulated run on Keel's own market data inside the caller's workspace; it places "
+    "no orders, contacts no exchange account and publishes nothing."
+)
+
+LISTED_PAPER_ANNOTATION_JUSTIFICATIONS: dict[str, AnnotationJustification] = {
+    "keel_paper_deploy": AnnotationJustification(
+        "Starts a new simulated paper run, which is recorded in the caller's workspace.",
+        "Append-only: " + LISTED_PAPER_APPEND_ONLY["keel_paper_deploy"],
+        _SIMULATED_OWN_WORKSPACE,
+    ),
+    "keel_paper_control": AnnotationJustification(
+        "Pauses, resumes, stops, restarts or updates one of the caller's paper runs.",
+        "Irreversible in two modes: stop ends the run's record for good, and update "
+        "replaces the strategy version the run executes; restart also ends the current "
+        "record.",
+        _SIMULATED_OWN_WORKSPACE,
+    ),
+}
+
+
+def served_justifications() -> dict[str, AnnotationJustification]:
+    """The rows for the listed surface this caller is served: the 29, plus the
+    paper rows while ``listed_paper_enabled()`` (read at call time)."""
+    from ._toolsets import listed_paper_enabled
+
+    if listed_paper_enabled():
+        return {**LISTED_ANNOTATION_JUSTIFICATIONS, **LISTED_PAPER_ANNOTATION_JUSTIFICATIONS}
+    return dict(LISTED_ANNOTATION_JUSTIFICATIONS)
+
+
+def served_append_only() -> dict[str, str]:
+    """:data:`APPEND_ONLY` for the served surface (paper rows when the flag is on)."""
+    from ._toolsets import listed_paper_enabled
+
+    if listed_paper_enabled():
+        return {**APPEND_ONLY, **LISTED_PAPER_APPEND_ONLY}
+    return dict(APPEND_ONLY)
+
+
+def served_destructive_tools() -> frozenset[str]:
+    """:data:`LISTED_DESTRUCTIVE_TOOLS` for the served surface."""
+    from ._toolsets import listed_paper_enabled
+
+    if listed_paper_enabled():
+        return LISTED_DESTRUCTIVE_TOOLS | LISTED_PAPER_DESTRUCTIVE_TOOLS
+    return LISTED_DESTRUCTIVE_TOOLS
+
+
+def served_open_world_tools() -> frozenset[str]:
+    """:data:`LISTED_OPEN_WORLD_TOOLS` for the served surface."""
+    from ._toolsets import listed_paper_enabled
+
+    if listed_paper_enabled():
+        return LISTED_OPEN_WORLD_TOOLS | LISTED_PAPER_OPEN_WORLD_TOOLS
+    return LISTED_OPEN_WORLD_TOOLS

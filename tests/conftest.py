@@ -355,3 +355,19 @@ def _reset_calling_surface(monkeypatch):
     import keel.surface
 
     monkeypatch.setattr(keel.surface, "_SURFACE", None)
+
+
+@pytest.fixture
+def paper_sdk_released():
+    """Assert the released paper SDK for one test (S06 §3.11 item 1; PT2-91).
+
+    ``_toolsets.PAPER_SDK_RELEASED`` is committed True since the wheel's
+    follow-up. Every SDK, scan or mcp-server arm that drives a paper tool, a
+    paper touch-up or the flag-on listed surface asks for this fixture, which
+    asserts the constant, the paper toolset and the registered paper tools
+    (``tests/_paper_sdk.py``).
+    """
+    from tests._paper_sdk import paper_sdk_release
+
+    with paper_sdk_release():
+        yield

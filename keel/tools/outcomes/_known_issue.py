@@ -133,6 +133,10 @@ def known_issue_refusal(exc: BaseException, *, strategy_id: str | None = None) -
         for c in payload.get("components") or []
         if isinstance(c, dict) and c.get("name")
     )
+    from ._toolsets import is_listed_profile
+
+    if is_listed_profile():
+        return _listed_refusal(payload, action=action, components=components)
     message = (
         f"{action.capitalize()} refused: this strategy pins components with a known issue"
         + (f" ({components})" if components else "")
@@ -162,6 +166,45 @@ def known_issue_refusal(exc: BaseException, *, strategy_id: str | None = None) -
     if upgrade_tool_served() and sid:
         err.recovery_tool = UPGRADE_TOOL
         err.recovery_tool_args = {"strategy_id": sid}
+    return err
+
+
+def _listed_refusal(payload: dict, *, action: str, components: str) -> KeelError:
+    """The listed form (S10 review W2): reached on listed only through
+    ``keel_paper_control``'s update. Neutral, D-12-style: the component and
+    the issue's own summary, no internal ledger id, no "upgrade" verb, no CLI
+    form, and the one listed tool that saves a corrected version."""
+    summaries = [
+        str(i.get("summary")).strip()
+        for i in payload.get("known_issues") or []
+        if isinstance(i, dict) and str(i.get("summary") or "").strip()
+    ]
+    message = (
+        f"{action.capitalize()} refused: this strategy uses a component with a known issue"
+        + (f" ({components})" if components else "")
+        + (f": {'; '.join(summaries)}" if summaries else "")
+        + ". Nothing was changed."
+    )
+    err = KeelError(
+        message,
+        error_code=KNOWN_ISSUE_ERROR_CODE,
+        exit_code=1,
+        suggestion=(
+            f"Save a new version with the current components through `{COMPOSE_TOOL}` "
+            f"(with dry_run=true its validation returns the corrected source), then {action} "
+            "onto that version."
+        ),
+        retryable=False,
+    )
+    err.detail = {
+        k: payload[k] for k in ("action", "strategy_id") if payload.get(k) is not None
+    } | {
+        "components": [
+            {k: c[k] for k in ("name", "version") if k in c}
+            for c in payload.get("components") or []
+            if isinstance(c, dict)
+        ]
+    }
     return err
 
 

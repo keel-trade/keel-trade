@@ -187,6 +187,10 @@ _INVENTORY_TOOLSET_ORDER: tuple[str, ...] = (
     "backtest",
     "share",
     "live-read",
+    # paper-trading-v2 S06 §3.3: the paper toolset rides the default set once
+    # the paper SDK is released (PT2-28). Held, no tool carries it and the
+    # group renders nothing; placed now so the wheel's follow-up renders.
+    "paper",
     "live-write",
     "live",
 )
@@ -198,6 +202,7 @@ _INVENTORY_TOOLSET_HEADINGS: dict[str, str] = {
     "backtest": "Compose, backtest and iterate (`backtest`)",
     "share": "Share (`share`)",
     "live-read": "Live read (`live-read`, loaded by default)",
+    "paper": "Paper trading, simulated (`paper`, loaded by default)",
     "live-write": (
         "Live write (`live-write`, opt-in with "
         "`KEEL_TOOLSETS=always,read-only,backtest,share,live-read,live-write`)"
@@ -450,6 +455,37 @@ def number_consumers() -> list[str]:
     ]
 
 
+#: The hosted connector's prod values: the one place the listed flag is set
+#: (paper-trading-v2 S06 §3.4.2, §3.11 item 4).
+MCP_PROD_VALUES = "infrastructure/helm/mcp-server/values-prod.yaml"
+
+
+def prod_listed_paper_enabled() -> bool:
+    """Whether prod's hosted connector serves the listed flag on (S06 §3.4.2).
+
+    Read from the ``KEEL_LISTED_PAPER`` entry of the mcp-server prod values'
+    ``env`` block, never from the shell: a local ``--write`` and the CI drift
+    gate count what prod serves. Absent is off; ``1``/``true`` on;
+    ``0``/``false`` off; anything else raises, the same rule as
+    ``listed_paper_enabled()``.
+    """
+    import yaml
+
+    values = yaml.safe_load((REPO_ROOT / MCP_PROD_VALUES).read_text(encoding="utf-8")) or {}
+    env = values.get("env") or []
+    entries = [e for e in env if isinstance(e, dict) and e.get("name") == "KEEL_LISTED_PAPER"]
+    if not entries:
+        return False
+    if len(entries) > 1:
+        raise RuntimeError(f"{MCP_PROD_VALUES} sets KEEL_LISTED_PAPER {len(entries)} times")
+    raw = str(entries[0].get("value", "")).strip().lower()
+    if raw in ("", "0", "false"):
+        return False
+    if raw in ("1", "true"):
+        return True
+    raise ValueError(f"{MCP_PROD_VALUES}: invalid KEEL_LISTED_PAPER={raw!r}")
+
+
 def compute_numbers() -> dict:
     """Every number a consumer may print, computed from the live sources."""
     if str(SDK_ROOT) not in sys.path:
@@ -461,7 +497,12 @@ def compute_numbers() -> dict:
     from keel.tools.outcomes._toolsets import LISTED_PROFILE_TOOLS, is_tool_loaded
 
     _bootstrap()
-    local_default = frozenset({"always", "read-only", "backtest", "share", "live-read"})
+    # The local default set, read from its one owner (S06 §3.3): a hand copy
+    # here moved nothing when `paper` joined the default set. Read at call
+    # time, so a held SDK counts HEAD's tools and a released one the paper
+    # tools too.
+    from keel.tools.outcomes._toolsets import _DEFAULT_TOOLSETS as local_default
+
     components = json.loads((REPO_ROOT / COMPONENT_REGISTRY).read_text())["components"]
     if isinstance(components, dict):
         components = list(components.values())
@@ -483,7 +524,9 @@ def compute_numbers() -> dict:
     if not knowledge:
         raise RuntimeError("keel/data/knowledge is empty — run build_data.py")
     return {
-        "tool_count": len(LISTED_PROFILE_TOOLS),
+        # The hosted connector's served count: 29, plus keel_paper_deploy
+        # once prod's values turn the listed flag on (S06 §3.4.2).
+        "tool_count": len(LISTED_PROFILE_TOOLS) + int(prod_listed_paper_enabled()),
         "tools_registry": len(OUTCOMES),
         "tools_local_default": sum(
             1 for t in OUTCOMES.values() if is_tool_loaded(t.toolset, local_default)
@@ -1643,6 +1686,16 @@ def render_docs_setup_page(data: dict, tools: list[dict] | None = None) -> str:
     # must stay byte-identical to the render without a .prettierignore entry
     lines.extend(f"- `{t['name']}` — {_mdx_text(t['description'])}." for t in tools)
     lines += [
+        "",
+        # S10 §9.4 (PT2-90): Claude sessions also get the two simulated paper
+        # tools. Named by what they do, not by tool name: the paper tool names
+        # stay out of every launch render but the paper page's Claude section
+        # while the SDK wheel is held (tests/test_launch_renders_hold_paper.py).
+        # No link: this page is held to the listing copy law, which refuses
+        # the paper page's URL (its path carries "trading").
+        "In Claude, the connector also offers two paper tools that start and change "
+        "simulated runs, with no real orders and no real capital; the paper docs page "
+        "describes them in its Claude section.",
         "",
         "`tools/list` is authoritative; use the live schemas for exact argument names. "
         "The file-based workspace tools and `keel_auth_login` / `keel_auth_logout` are not "

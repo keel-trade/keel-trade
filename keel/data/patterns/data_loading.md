@@ -1,5 +1,6 @@
 <!-- keywords: data, loader, price, funding, predicted funding, open interest, premium, basis, PriceDataLoader, FundingDataLoader, PredictedFundingLoader, OpenInterestLoader, PremiumLoader, Globals, target_timeframe, bar_offset, served grain, agg, resample, project, align, timeframe, multi-timeframe -->
 <!-- pattern: data_loading -->
+<!-- topic: data -->
 
 # Data Sources and Alignment
 

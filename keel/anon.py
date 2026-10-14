@@ -23,7 +23,7 @@ import sys
 
 import httpx
 
-from keel.config import KeelConfig, load_config, save_config
+from keel.config import KeelConfig, load_config, load_file_config, save_config
 from keel.errors import AuthError
 
 
@@ -71,8 +71,8 @@ def anonymous_start(
     is disabled (503 kill switch), rate-limited (429), or unreachable —
     the caller surfaces it next to the normal login instructions.
     """
-    config = load_config()
-    if config.api_key:
+    config = load_file_config()
+    if config.api_key or load_config().api_key:
         raise AuthError(
             "Credentials already exist — anonymous start is only for the "
             "no-credentials first run. Run `keel auth logout` first if you "
@@ -147,7 +147,7 @@ def _save_or_refuse(config: KeelConfig) -> None:
 
     try:
         save_config(config)
-        persisted = load_config().api_key == config.api_key
+        persisted = load_file_config().api_key == config.api_key
     except OSError as e:
         persisted = False
         cause = f" ({e})"
@@ -184,14 +184,15 @@ def _fresh_anon_access_token(api_url: str, refresh_token: str) -> str | None:
 
 
 def claim_anon_org(anon_access_token: str, *, set_default: bool = True) -> dict:
-    """POST /v1/orgs/claim with the CURRENT (new, real) credentials.
+    """POST /v1/orgs/claim with the CURRENT (new, real) STORED credentials.
 
     ``set_default=False`` is the existing-account attach (spec 09 CL-8):
-    the claimant's current default org is preserved.
+    the claimant's current default org is preserved. The claim belongs to
+    the stored login, so it never goes out as ``KEEL_API_KEY`` (Q-2579).
     """
     from keel.client import KeelClient
 
-    client = KeelClient()
+    client = KeelClient(config=_stored_login_config())
     try:
         body: dict = {"anon_token": anon_access_token}
         if not set_default:
@@ -201,6 +202,17 @@ def claim_anon_org(anon_access_token: str, *, set_default: bool = True) -> dict:
         client.close()
 
 
+def _stored_login_config() -> KeelConfig:
+    """The stored login as a client config — the identity a login/claim
+    step acts as, whatever ``KEEL_API_KEY`` says (Q-2579). ``KEEL_API_URL``
+    still targets it, as it always has for the stored login."""
+    config = load_file_config()
+    env_url = os.environ.get("KEEL_API_URL")
+    if env_url:
+        config.api_url = env_url
+    return config
+
+
 def _set_org_context(org_id: str | None) -> None:
     """Spec 09 CL-9: post-claim continuation. OAuth tokens are org-bound
     at mint (BEFORE the claim), so the client pins the claimed org via
@@ -208,7 +220,7 @@ def _set_org_context(org_id: str | None) -> None:
     org while the claimed work lives elsewhere."""
     if not org_id:
         return
-    config = load_config()
+    config = load_file_config()
     config.active_org_id = org_id
     save_config(config)
 
@@ -247,7 +259,7 @@ def _account_has_work() -> bool:
     from keel.client import KeelClient
 
     try:
-        client = KeelClient()
+        client = KeelClient(config=_stored_login_config())
         try:
             resp = client.get("/v1/strategies")
         finally:
@@ -275,14 +287,14 @@ def _store_pending_claim(prior_config: KeelConfig, counts: dict | None, *, decli
         ),
         "declined": declined,
     }
-    config = load_config()
+    config = load_file_config()
     config.pending_claim = pending
     save_config(config)
     return pending
 
 
 def _clear_pending_claim() -> None:
-    config = load_config()
+    config = load_file_config()
     if config.pending_claim is not None:
         config.pending_claim = None
         save_config(config)
@@ -322,7 +334,7 @@ def resolve_pending_claim(attach: bool, *, quiet: bool = False) -> dict | None:
     `keel_auth_login` with `attach_anonymous_work` when a pending claim
     exists. Returns the claim result, a status dict, or None when there
     is nothing pending."""
-    config = load_config()
+    config = load_file_config()
     pending = config.pending_claim
     if not pending:
         return None
@@ -406,7 +418,7 @@ def maybe_claim_after_login(
         # is_anon()/keel_account_status lie about the signed-in account. The
         # expiry-notice fields follow the marker (spec 09 CL-3c); any
         # deferred-claim material lives in pending_claim instead.
-        config = load_config()
+        config = load_file_config()
         if config.anon_org_id or config.anon_org_expires_at:
             config.anon_org_id = None
             config.anon_org_expires_at = None
@@ -511,7 +523,11 @@ def maybe_print_expiry_notice(now=None) -> bool:
     """
     from datetime import datetime, timezone
 
-    config = load_config()
+    from keel.config import CREDENTIAL_SOURCE_STORED
+
+    if load_config().credential_source != CREDENTIAL_SOURCE_STORED:
+        return False  # KEEL_API_KEY in use: the stored workspace is not (Q-2579)
+    config = load_file_config()
     if not (is_anon(config) and config.anon_org_expires_at):
         return False
     now = now or datetime.now(timezone.utc)

@@ -22,6 +22,11 @@ def _bootstrap_outcomes():
     _bootstrap()
 
 
+#: Every non-overview monitor read carries the agent-telemetry marker
+#: (paper-trading-v2 S06 §3.5.1, R-61): it is not an owner visit.
+TELEMETRY = {"X-Keel-Agent-Telemetry": "1"}
+
+
 def _ctx(client: MagicMock) -> ToolContext:
     return ToolContext(api_client=client, app_url="https://app.usekeel.io")
 
@@ -649,7 +654,13 @@ def test_live_monitor_overview_returns_metadata():
 
     # The overview row first; the card's stats + equity enrichment ride
     # behind it (Q-1505) and never replace it.
+    # The detail read is the owner visit: no header (S06 §3.5.1, R-61); the
+    # enrichment reads carry the agent-telemetry marker.
     assert client.get.call_args_list[0] == call("/v1/deployments/dep_42")
+    assert [c.kwargs for c in client.get.call_args_list[1:]] == [
+        {"headers": TELEMETRY},
+        {"headers": TELEMETRY},
+    ]
     assert [c.args[0] for c in client.get.call_args_list] == [
         "/v1/deployments/dep_42",
         "/v1/deployments/dep_42/stats",
@@ -723,11 +734,25 @@ def test_live_monitor_overview_enrichment_is_best_effort():
     assert "curve" not in env
 
 
+def _assert_class_read_first(client) -> None:
+    """A non-overview monitor view first reads the run's detail row once, with
+    the agent-telemetry marker: keel-api serves the venue block there and on
+    no per-view payload (QA B1). Then exactly one read of the view."""
+    import re as _re
+    from unittest.mock import call as _call
+
+    assert client.get.call_count == 2, client.get.call_args_list
+    view_path = client.get.call_args_list[-1].args[0]
+    detail = _re.match(r"^/v1/deployments/[^/]+", view_path).group(0)
+    assert client.get.call_args_list[0] == _call(detail, headers={"X-Keel-Agent-Telemetry": "1"})
+
+
 def test_live_monitor_non_overview_views_do_not_enrich():
     client = MagicMock()
     client.get.return_value = {"points": []}
     get("keel_live_monitor").handler({"deployment_id": "dep_42", "view": "equity"}, _ctx(client))
-    client.get.assert_called_once_with("/v1/deployments/dep_42/equity")
+    _assert_class_read_first(client)
+    client.get.assert_called_with("/v1/deployments/dep_42/equity", headers=TELEMETRY)
 
 
 def test_live_monitor_positions_view():
@@ -737,7 +762,8 @@ def test_live_monitor_positions_view():
 
     result = tool.handler({"deployment_id": "dep_42", "view": "positions"}, _ctx(client))
 
-    client.get.assert_called_once_with("/v1/deployments/dep_42/positions")
+    _assert_class_read_first(client)
+    client.get.assert_called_with("/v1/deployments/dep_42/positions", headers=TELEMETRY)
     env = result.to_envelope()
     assert env["view"] == "positions"
     assert env["hero_url"].endswith("?tab=positions")
@@ -763,7 +789,8 @@ def test_live_monitor_executions_returns_executing_snapshot_without_polling():
         _ctx(client),
     )
 
-    client.get.assert_called_once_with("/v1/deployments/dep_42/executions", limit=25)
+    _assert_class_read_first(client)
+    client.get.assert_called_with("/v1/deployments/dep_42/executions", headers=TELEMETRY, limit=25)
     env = result.to_envelope()
     assert env["view"] == "executions"
     assert env["data"][0]["execution_status"] == "EXECUTING"
@@ -788,8 +815,10 @@ def test_live_monitor_trades_view_with_filters():
         _ctx(client),
     )
 
-    client.get.assert_called_once_with(
+    _assert_class_read_first(client)
+    client.get.assert_called_with(
         "/v1/deployments/dep_42/trades",
+        headers=TELEMETRY,
         limit=25,
         symbol="HYPE",
         side="BUY",
@@ -807,7 +836,15 @@ def test_live_monitor_portfolio_ignores_deployment_id():
 
     result = tool.handler({"deployment_id": "all"}, _ctx(client))
 
-    client.get.assert_called_once_with("/v1/deployments/portfolio/summary")
+    # The summary names its class (paper-trading-v2 S06 §3.5.5, R-71;
+    # M2-sdk-portfolio-real), and the full profile reads the practice summary
+    # second for the paper section (M8-portfolio-paper, AC-06-12): the reads
+    # changed, the output did not (an empty practice summary adds nothing).
+    assert client.get.call_args_list == [
+        call("/v1/deployments/portfolio/summary", headers=TELEMETRY, capital_class="real"),
+        call("/v1/deployments/portfolio/summary", headers=TELEMETRY, capital_class="practice"),
+    ]
+    assert "paper" not in result.to_envelope()
     env = result.to_envelope()
     assert env["view"] == "portfolio"
     assert env.get("run_id") is None
@@ -827,7 +864,15 @@ def test_live_monitor_bare_call_returns_portfolio():
 
     result = tool.handler({}, _ctx(client))
 
-    client.get.assert_called_once_with("/v1/deployments/portfolio/summary")
+    # The summary names its class (paper-trading-v2 S06 §3.5.5, R-71;
+    # M2-sdk-portfolio-real), and the full profile reads the practice summary
+    # second for the paper section (M8-portfolio-paper, AC-06-12): the reads
+    # changed, the output did not (an empty practice summary adds nothing).
+    assert client.get.call_args_list == [
+        call("/v1/deployments/portfolio/summary", headers=TELEMETRY, capital_class="real"),
+        call("/v1/deployments/portfolio/summary", headers=TELEMETRY, capital_class="practice"),
+    ]
+    assert "paper" not in result.to_envelope()
     env = result.to_envelope()
     assert env["view"] == "portfolio"
 

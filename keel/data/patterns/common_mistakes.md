@@ -65,14 +65,20 @@ different timestamps)` although both branches ARE on the declared clock and
 the validator is clean (no `CLOCK_MISMATCH`).
 
 **What it is**: the two branches carry the same `(period, offset)` but a
-different **span** — different first/last labels. The guard says so
-(`This is a SPAN difference`) and names each side's clock, first/last and the
-first divergent label. Every series on one clock inside one run must carry
-the run window's completed-bar grid `(start, end]`; a producer that does not
-is a platform defect, which re-projecting or re-resampling the branch does
-not fix (that is the fix for a CLOCK difference, and the guard names those
-by name: `TargetSignalProjector()` coarse → fine, `TargetSignalResampler()`
-fine → coarse, `Globals(bar_offset=...)` for a phase split).
+different **span** — different first/last labels. Every series on one clock
+inside one run must carry the run window's completed-bar grid `(start, end]`.
+The guard is by design (Q-2533): it classifies WHERE the short side is
+missing labels — **head** (it starts later, usually a coin listed inside the
+window), **tail** (it ends earlier), **interior** (a gap in the source data)
+— and names the side, its coins and timeframe, the exact timestamps and the
+workaround (start the window at or after / end it at or before / choose a
+window that avoids the gap, or a coarser timeframe), plainly and without a
+request to report it; the details line (`This is a SPAN difference`, each
+side's clock, first/last and the first divergent label) follows. Re-projecting
+or re-resampling the branch does not fix a span (that is the fix for a CLOCK
+difference, and the guard names those by name: `TargetSignalProjector()`
+coarse → fine, `TargetSignalResampler()` fine → coarse,
+`Globals(bar_offset=...)` for a phase split).
 
 ## M-35: Measuring a Trade From Its Signal
 

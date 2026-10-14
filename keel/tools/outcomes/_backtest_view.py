@@ -57,6 +57,10 @@ __all__ = [
     "exposure_block",
     "normalized_status",
     "notes_block",
+    "PERIOD_GRAINS",
+    "align_periods",
+    "fetch_periods",
+    "periods_markdown",
     "slice_line",
     "view_metrics",
     "signed_drawdown",
@@ -794,6 +798,12 @@ def exposure_block(metrics: Any) -> dict | None:
     — how big the book actually ran, whatever sized or capped it — and add
     ``· gross on held bars avg 0.30×, max 1.00×`` to the line. Runs stamped
     before them carry neither, and the line then says nothing about size.
+
+    ``bars_net_long`` / ``bars_net_short`` (Q-2580) split the held bars by
+    the sign of the book's net notional and add ``· net long 120, net short
+    0`` right after the held count — the one place a run states which way it
+    leaned (a "short" that held only longs read as a winning short). Both or
+    neither; runs stamped before them carry neither and the clause is absent.
     """
     raw = metrics.get("exposure") if isinstance(metrics, dict) else None
     if not isinstance(raw, dict):
@@ -805,6 +815,12 @@ def exposure_block(metrics: Any) -> dict | None:
         return None
     first, last = raw.get("first_position_at"), raw.get("last_position_at")
     line = f"Held positions on {held:,} of {n_bars:,} bars"
+    net_long, net_short = raw.get("bars_net_long"), raw.get("bars_net_short")
+    has_direction = all(
+        isinstance(v, int) and not isinstance(v, bool) for v in (net_long, net_short)
+    )
+    if has_direction:
+        line += f" · net long {net_long:,}, net short {net_short:,}"
     gross_mean, gross_max = _number(raw.get("gross_mean")), _number(raw.get("gross_max"))
     has_gross = gross_mean is not None and gross_max is not None
     if has_gross:
@@ -821,6 +837,8 @@ def exposure_block(metrics: Any) -> dict | None:
     }
     if has_gross:
         out["gross_mean"], out["gross_max"] = gross_mean, gross_max
+    if has_direction:
+        out["bars_net_long"], out["bars_net_short"] = net_long, net_short
     out["line"] = line
     return out
 
@@ -838,6 +856,188 @@ def slice_line(block: Any) -> str | None:
         return None
     basis = block.get("basis")
     return f"{summary.strip()} {basis.strip()}" if isinstance(basis, str) else summary.strip()
+
+
+# ── The period table (Q-2565) ─────────────────────────────────────────
+#
+# keel-api's `GET /v1/backtests/{id}/periods` is the ONE owner of the
+# numbers: `build_periods` partitions the run's bars by UTC calendar month
+# or quarter (every bar in the period holding the day it covers, Q-2577)
+# from one results.json read, so every row is the run's own bars, each
+# period opens at the previous one's close (the bars sum to the run's and
+# the rows compound to the run) and max drawdown is within the period;
+# `start`/`end` are the covered days of a period's first and last bar, which
+# this module never renders. This module COPIES the
+# block, aligns several runs' blocks by period label for a comparison, and
+# renders the one markdown table every text surface prints — summarize,
+# compare, the MCP text block and the CLI — so no surface re-derives a cell.
+
+#: The grains a table can be asked in — keel-api's `PERIOD_GRAINS`.
+PERIOD_GRAINS: tuple[str, ...] = ("monthly", "quarterly")
+
+#: Max-drawdown columns ride a comparison table only up to this many runs
+#: (beyond it the table is wider than any host frame — `MAX_TABLE_RUNS`'s
+#: rule); the return columns always do.
+PERIODS_DD_MAX_RUNS = 4
+
+
+def fetch_periods(client: Any, backtest_id: str, grain: Any) -> dict | None:
+    """The run's `periods` block from ONE `/periods` read, or None when the
+    server answered no block. Asked for explicitly, so a refusal (a run still
+    running, more periods than a table carries) propagates as the result."""
+    answer = client.get(f"/v1/backtests/{backtest_id}/periods", periods=str(grain))
+    block = answer.get("periods") if isinstance(answer, dict) else None
+    return block if isinstance(block, dict) and isinstance(block.get("rows"), list) else None
+
+
+def _period_cell(row: Any, key: str) -> Any:
+    return row.get(key) if isinstance(row, dict) else None
+
+
+def align_periods(blocks: list[dict | None], labels: list[str]) -> dict | None:
+    """One comparison block from N runs' `periods` blocks, aligned by period
+    label: every row carries one value per run (None where that run has no
+    such period), in the runs' order; the whole-run row the same way."""
+    present = [b for b in blocks if isinstance(b, dict)]
+    if not present or len(blocks) != len(labels):
+        return None
+    grains = {b.get("grain") for b in present}
+    grain = grains.pop() if len(grains) == 1 else None
+    by_run: list[dict[str, dict]] = [
+        {str(r.get("period")): r for r in (b.get("rows") or []) if isinstance(r, dict)}
+        if isinstance(b, dict)
+        else {}
+        for b in blocks
+    ]
+    periods = sorted({label for rows in by_run for label in rows})
+
+    def column(rows_by_period: list[dict[str, Any] | None], key: str) -> list[Any]:
+        return [_period_cell(r, key) for r in rows_by_period]
+
+    rows_out: list[dict[str, Any]] = []
+    for period in periods:
+        picked = [rows.get(period) for rows in by_run]
+        row: dict[str, Any] = {
+            "period": period,
+            "return_pct": column(picked, "return_pct"),
+            "max_drawdown_pct": column(picked, "max_drawdown_pct"),
+            "bars": column(picked, "bars"),
+        }
+        warm = [bool(_period_cell(r, "warmup")) for r in picked]
+        if any(warm):
+            row["warmup"] = warm
+        partial = [bool(_period_cell(r, "partial")) for r in picked]
+        if any(partial):
+            row["partial"] = partial
+        rows_out.append(row)
+    whole = [b.get("run") if isinstance(b, dict) else None for b in blocks]
+    out: dict[str, Any] = {
+        "grain": grain,
+        "labels": list(labels),
+        "rows": rows_out,
+        "run": {
+            "return_pct": column(whole, "return_pct"),
+            "max_drawdown_pct": column(whole, "max_drawdown_pct"),
+            "bars": column(whole, "bars"),
+        },
+    }
+    basis = next((b.get("basis") for b in present if isinstance(b.get("basis"), str)), None)
+    if basis:
+        out["basis"] = basis
+    return out
+
+
+def _pct_cell(value: Any, *, warmup: bool = False, signed: bool = True) -> str:
+    if warmup:
+        return "warm-up"
+    number = _number(value)
+    if number is None:
+        return "—"
+    return _signed(number, 2, "%") if signed else _fixed(number, 2, "%")
+
+
+def periods_markdown(block: Any) -> str | None:
+    """The period table as GFM — the text every surface prints.
+
+    A single run's block (`rows[].return_pct` a number) renders return, max
+    drawdown, positions opened and bars per period; a comparison block
+    (`labels` + per-run lists) renders one return column per run and, up to
+    `PERIODS_DD_MAX_RUNS` runs, one max-drawdown column per run. A warm-up
+    period reads `warm-up` in its number cells; the whole run is the last
+    row. Every cell is the server's number — nothing is computed here.
+    """
+    if not isinstance(block, dict) or not isinstance(block.get("rows"), list):
+        return None
+    rows = [r for r in block["rows"] if isinstance(r, dict)]
+    if not rows:
+        return None
+    grain = block.get("grain")
+    labels = block.get("labels")
+    head = f"{grain} periods" if isinstance(grain, str) else "periods"
+    basis = block.get("basis")
+    lines = [f"{head} — {basis}" if isinstance(basis, str) and basis else head]
+    run = block.get("run") if isinstance(block.get("run"), dict) else None
+    if isinstance(labels, list) and labels:
+        names = [str(label) for label in labels]
+        with_dd = len(names) <= PERIODS_DD_MAX_RUNS
+        header = [f"{n} return" for n in names] + (
+            [f"{n} max DD" for n in names] if with_dd else []
+        )
+        lines.append("| period | " + " | ".join(header) + " |")
+        lines.append("| --- | " + " | ".join(["---:"] * len(header)) + " |")
+
+        def cells(row: dict, period: str) -> str:
+            warm = row.get("warmup") if isinstance(row.get("warmup"), list) else []
+            ret = row.get("return_pct") if isinstance(row.get("return_pct"), list) else []
+            dd = (
+                row.get("max_drawdown_pct") if isinstance(row.get("max_drawdown_pct"), list) else []
+            )
+            out = [
+                _pct_cell(
+                    ret[i] if i < len(ret) else None,
+                    warmup=bool(warm[i]) if i < len(warm) else False,
+                )
+                for i in range(len(names))
+            ]
+            if with_dd:
+                out += [
+                    _pct_cell(
+                        dd[i] if i < len(dd) else None,
+                        warmup=bool(warm[i]) if i < len(warm) else False,
+                        signed=False,
+                    )
+                    for i in range(len(names))
+                ]
+            return f"| {period} | " + " | ".join(out) + " |"
+
+        for row in rows:
+            lines.append(cells(row, str(row.get("period"))))
+        if run:
+            lines.append(cells(run, "run"))
+        return "\n".join(lines)
+
+    lines.append("| period | return | max DD | positions opened | bars |")
+    lines.append("| --- | ---: | ---: | ---: | ---: |")
+
+    def single(row: dict, period: str) -> str:
+        warm = bool(row.get("warmup"))
+        positions = row.get("positions") if isinstance(row.get("positions"), dict) else {}
+        opened = positions.get("opened")
+        return (
+            f"| {period} | {_pct_cell(row.get('return_pct'), warmup=warm)} | "
+            f"{_pct_cell(row.get('max_drawdown_pct'), warmup=warm, signed=False)} | "
+            f"{_count(opened) if isinstance(opened, int) else '—'} | "
+            f"{_count(row.get('bars')) if isinstance(row.get('bars'), int) else '—'} |"
+        )
+
+    for row in rows:
+        period = str(row.get("period"))
+        if row.get("partial"):
+            period += " (part)"
+        lines.append(single(row, period))
+    if run:
+        lines.append(single(run, "run"))
+    return "\n".join(lines)
 
 
 def notes_block(metrics: Any) -> dict | None:
@@ -2259,7 +2459,56 @@ def realism_from_metrics(metrics: Any) -> dict | None:
     }
     if block.get("truncated") is not None:
         out["truncated"] = bool(block["truncated"])
+    capital = min_capital_rungs(block.get("min_capital_for_share"))
+    if capital is not None:
+        out["min_capital_for_share"] = capital
     return out
+
+
+#: The two tolerance rungs of the worker's `min_capital_for_share` block that
+#: an agent reads (Q-2542): the capital at which at most 25 % (the good-result
+#: gate's arm) and at most 5 % of this run's orders sit under the live
+#: minimum. NEVER the `0_pct` rung: on a $10k library fork it is "$4.85M" and
+#: reads as the capital needed, which it is not — the ladder is the fact.
+MIN_CAPITAL_RUNGS: tuple[str, ...] = ("25_pct", "5_pct")
+
+
+def min_capital_rungs(block: Any) -> dict[str, float] | None:
+    """`{"25_pct": X, "5_pct": Y}` copied from the worker's block, or None
+    when either rung is absent or not a number (a run from before Q-2542, or
+    a run with no orders). Copied, never recomputed."""
+    if not isinstance(block, dict):
+        return None
+    out: dict[str, float] = {}
+    for key in MIN_CAPITAL_RUNGS:
+        value = _number(block.get(key))
+        if value is None or value <= 0:
+            return None
+        out[key] = value
+    return out
+
+
+def _capital_words(value: float) -> str:
+    """`$431` — rounded UP to the dollar, so "from $X" stays true."""
+    import math
+
+    return f"${math.ceil(value):,}"
+
+
+def min_capital_clause(realism: Any) -> str | None:
+    """The `realism:` line's capital clause (Q-2542): the two tolerance
+    rungs, labelled as tolerances, read off `realism.min_capital_for_share`."""
+    rungs = (
+        min_capital_rungs(realism.get("min_capital_for_share"))
+        if isinstance(realism, dict)
+        else None
+    )
+    if rungs is None:
+        return None
+    return (
+        f"capital for at most 5% of orders under the minimum: {_capital_words(rungs['5_pct'])}; "
+        f"at most 25%: {_capital_words(rungs['25_pct'])}"
+    )
 
 
 def realism_line(realism: Any) -> str | None:
@@ -2289,6 +2538,11 @@ def realism_line(realism: Any) -> str | None:
         line += f" — avg order ${avg:,.0f}"
     if realism.get("truncated"):
         line += " (the order log was capped; the counts are floors)"
+    # Q-2542: what capital fixes it, from the run's own order notionals —
+    # the worker's answer, never a re-run at another capital.
+    capital = min_capital_clause(realism)
+    if capital:
+        line += f" — {capital}"
     return line
 
 

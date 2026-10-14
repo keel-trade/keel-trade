@@ -289,3 +289,33 @@ def test_bundled_tool_schemas_match_build_data_owner():
     )
 
     assert bundled == json.loads(result.stdout)
+
+
+_SDK_ROOT = Path(__file__).resolve().parents[1]
+_KNOWLEDGE_DIR = _SDK_ROOT / "keel" / "data" / "knowledge"
+_KNOWLEDGE_SOURCE = _SDK_ROOT.parents[2] / "libs" / "pipeline_engine" / "reference" / "system"
+
+
+@pytest.mark.parametrize("name", sorted(p.name for p in _KNOWLEDGE_DIR.glob("*.md")))
+def test_sdk_bundled_knowledge_matches_upstream(name):
+    """Every served knowledge file ships byte-identical to its source.
+
+    ``build_data.py copy_knowledge()`` is a straight ``shutil.copy2`` of the
+    served ``reference/system/*.md`` layer, and ``keel_help`` /
+    ``keel://knowledge/{section}`` read THIS copy — so a source-only edit is
+    a sentence the chat agent reads and the SDK agent does not (Q-2567: the
+    exclusions-after-``top_n`` rule). Seed: edit the source alone → this reds
+    for that file; regenerate → green. Non-vacuity: the parametrization is the
+    bundled dir's glob, pinned non-empty by the test below.
+    """
+    bundled = (_KNOWLEDGE_DIR / name).read_text()
+    upstream = (_KNOWLEDGE_SOURCE / name).read_text()
+    assert bundled == upstream, (
+        f"{name}: bundled knowledge drifted from libs/pipeline_engine/reference/system — "
+        "regenerate with PYTHONPATH=libs python packages/keel-trade/keel-sdk/scripts/build_data.py"
+    )
+
+
+def test_sdk_bundled_knowledge_parametrization_is_not_vacuous():
+    names = {p.name for p in _KNOWLEDGE_DIR.glob("*.md")}
+    assert "universe_selection.md" in names and len(names) >= 14, sorted(names)

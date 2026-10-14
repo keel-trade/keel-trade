@@ -18,6 +18,8 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, Callable, Literal
 
+from ._toolsets import with_paper_toolset
+
 
 Toolset = Literal[
     "always",
@@ -27,6 +29,7 @@ Toolset = Literal[
     "live-read",
     "live-write",
     "live",  # deprecated KEEL_TOOLSETS alias, retained for config compatibility
+    "paper",  # loads only while the paper SDK is released (S06 §3.3, PT2-28)
 ]
 
 
@@ -319,6 +322,25 @@ class OutcomeTool:
     listed_description: str | None = None
     listed_input_schema: dict | None = None
     listed_title: str | None = None
+    # ── Held paper touch-ups (paper-trading-v2 S06 §3.11 item 1, PT2-28) ──
+    # An EXISTING tool's description in its paper form (e.g. keel_live_control
+    # gains the line that it refuses paper runs, §3.6). Published on the full
+    # profile only while `_toolsets.PAPER_SDK_RELEASED` is true, read when the
+    # description is published (`_mcp_adapter.effective_description`), never
+    # at import; while the paper SDK is held the tool publishes `description`,
+    # HEAD's text.
+    paper_description: str | None = None
+    # The same for the input schema (e.g. keel_deployments_list's
+    # `capital_class` parameter, §3.5.1): published on the full profile only
+    # while the paper SDK is released (`effective_input_schema`).
+    paper_input_schema: dict | None = None
+    # ── The listed flag's copy (paper-trading-v2 S06 §3.4.2, R-60) ──
+    # Flag-on listed copy, selected in one place: published on the listed
+    # profile only while `_toolsets.listed_paper_enabled()` is true
+    # (`_mcp_adapter.effective_description` / `effective_input_schema`); with
+    # the flag off the listed profile publishes `listed_*`, HEAD's copy.
+    listed_paper_description: str | None = None
+    listed_paper_input_schema: dict | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "input_schema", normalize_input_schema(self.input_schema))
@@ -327,6 +349,18 @@ class OutcomeTool:
                 self,
                 "listed_input_schema",
                 normalize_input_schema(self.listed_input_schema),
+            )
+        if self.paper_input_schema is not None:
+            object.__setattr__(
+                self,
+                "paper_input_schema",
+                normalize_input_schema(self.paper_input_schema),
+            )
+        if self.listed_paper_input_schema is not None:
+            object.__setattr__(
+                self,
+                "listed_paper_input_schema",
+                normalize_input_schema(self.listed_paper_input_schema),
             )
         # The declared bounds are enforced wherever the handler is invoked
         # (Q-2270): CLI, MCP and a direct call all refuse an argument outside
@@ -337,9 +371,10 @@ class OutcomeTool:
         object.__setattr__(self, "handler", wrap_handler(self, self.handler))
 
 
-# Sentinel set of all toolset names (parsing helper).
-ALL_TOOLSETS: frozenset[str] = frozenset(
-    {"always", "read-only", "backtest", "share", "live-read", "live-write", "live"}
+# Sentinel set of all toolset names (parsing helper). `paper` joins only once
+# the paper SDK is released (`_toolsets.PAPER_SDK_RELEASED`, S06 §3.3).
+ALL_TOOLSETS: frozenset[str] = with_paper_toolset(
+    frozenset({"always", "read-only", "backtest", "share", "live-read", "live-write", "live"})
 )
 
 

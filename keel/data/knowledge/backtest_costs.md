@@ -16,3 +16,10 @@
 - A backtest's `fees=` / `slippage=` parameters override both defaults.
 - Backtest costs model the exchange (**venue**) fee and slippage only; no
   other fee is in any backtest cost path.
+
+### A maker-fee backtest is a scenario, not the live default
+
+- Live execution fills at the taker rate unless the account's org holds the
+  maker execution grant, which users cannot turn on themselves. A backtest
+  run at the maker fee is a what-if, not what a live deployment gets by
+  default: present the taker-fee result as the achievable number.

@@ -129,6 +129,45 @@ class TestExposure:
         assert env["view"]["exposure_line"] == line
         assert f"exposure: {line}" in operational_lines(env)
 
+    def test_the_direction_split_rides_the_line(self, ctx):
+        """Q-2580: the "TRX short" that held only longs — the held bars split
+        by the book's net sign, right after the held count, on the block, the
+        text line and the card.
+
+        SEED (2026-10-09): `exposure_block` without the direction read reds
+        this arm while `test_the_block_is_the_stamp_plus_the_apps_line` and
+        `test_a_partial_direction_stamp_states_no_side` — the no-split
+        controls — stay green. Reverted by reversing the edit."""
+        stamp = {
+            "bars_held": 120,
+            "n_bars": 555,
+            "first_position_at": "2026-09-20T00:00:00+00:00",
+            "gross_mean": 1.0,
+            "gross_max": 1.0,
+            "bars_net_long": 120,
+            "bars_net_short": 0,
+        }
+        line = (
+            "Held positions on 120 of 555 bars · net long 120, net short 0"
+            " · gross on held bars avg 1.00×, max 1.00× · first position Sep 20, 2026"
+        )
+        block = exposure_block({"exposure": stamp})
+        assert block["line"] == line
+        assert (block["bars_net_long"], block["bars_net_short"]) == (120, 0)
+        env, _ = _summarize(ctx, {}, {"sharpe": 0.74, "exposure": stamp})
+        assert env["view"]["exposure_line"] == line
+        assert f"exposure: {line}" in operational_lines(env)
+
+    def test_a_partial_direction_stamp_states_no_side(self):
+        """CONTROL: both counts or neither — a run stamped before Q-2580 (or a
+        half stamp) renders today's line byte-identically."""
+        block = exposure_block({"exposure": {**EXPOSURE, "bars_net_long": 6}})
+        assert block == {**EXPOSURE, "line": LINE}
+        block = exposure_block(
+            {"exposure": {**EXPOSURE, "bars_net_long": True, "bars_net_short": 0}}
+        )
+        assert block == {**EXPOSURE, "line": LINE}
+
     def test_a_partial_gross_stamp_states_no_size(self):
         """CONTROL: both numbers or neither — never half a measurement."""
         block = exposure_block({"exposure": {**EXPOSURE, "gross_mean": 0.3}})
@@ -270,7 +309,7 @@ class TestTheSpec07Text:
     def test_summarize_parameters_carry_the_slice_text(self):
         tool = OUTCOMES["keel_backtest_summarize"]
         props = tool.input_schema["properties"]
-        assert set(props) == {"backtest_id", "start", "end", "capital"}
+        assert set(props) == {"backtest_id", "start", "end", "capital", "periods"}
         assert props["start"]["description"] == _bt_sum_mod.SLICE_PARAM_TEXT
         assert "e.g. its last week on $3,000" in _bt_sum_mod.SLICE_PARAM_TEXT
         assert 'For "if I had started on X", run a backtest from X instead.' in (

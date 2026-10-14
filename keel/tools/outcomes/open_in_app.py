@@ -101,8 +101,8 @@ def app_url_for(
     ``kind`` is one of ``strategy`` (the EDITOR — V-6, ratified
     2026-09-19: every strategy link lands where the work happens, and
     ``/strategies/{id}`` redirects there), ``backtest`` (tearsheet tab),
-    ``live`` (deployment view), or ``share`` (public share page, rooted
-    at ``ctx.share_url_root``).
+    ``live`` (deployment view), ``paper`` (a paper run's page), or
+    ``share`` (public share page, rooted at ``ctx.share_url_root``).
     """
     if kind == "strategy":
         return _with_query(f"{ctx.app_url}/strategies/{target_id}/edit", query)
@@ -112,6 +112,12 @@ def app_url_for(
         )
     if kind == "live":
         return _with_query(f"{ctx.app_url}/live/{target_id}", query)
+    if kind == "paper":
+        # A paper run's page (paper-trading-v2 S06 §3.2.3). Built only by the
+        # paper tools, which know the run's class; the `dep_` prefix map
+        # above keeps resolving to `live`, and the app redirects a paper id
+        # there to this page by its venue block (IC-01-9).
+        return _with_query(f"{ctx.app_url}/paper/{target_id}", query)
     if kind == "share":
         return _with_query(f"{ctx.share_url_root}/{target_id}", query)
     raise KeelError(

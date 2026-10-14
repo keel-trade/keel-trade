@@ -58,10 +58,23 @@ def effective_description(tool: OutcomeTool) -> str:
     """The description published for the active server profile.
 
     Listed-profile registrations carry policy-vetted copy (spec 01 R3,
-    research/08 string rules); everything else uses the shared text.
+    research/08 string rules); everything else uses the shared text, or its
+    held paper form once the paper SDK is released (S06 §3.11 item 1; the
+    constant is read here, at publication, so a held process publishes
+    HEAD's text).
     """
-    if is_listed_profile() and tool.listed_description is not None:
-        return tool.listed_description
+    if is_listed_profile():
+        # The listed surface moves only with the listed flag (S06 §3.4.2),
+        # never with the SDK release.
+        from . import _toolsets
+
+        if tool.listed_paper_description is not None and _toolsets.listed_paper_enabled():
+            return tool.listed_paper_description
+        return tool.listed_description if tool.listed_description is not None else tool.description
+    from . import _toolsets
+
+    if _toolsets.PAPER_SDK_RELEASED and tool.paper_description is not None:
+        return tool.paper_description
     return tool.description
 
 
@@ -74,8 +87,21 @@ def effective_input_schema(tool: OutcomeTool) -> dict:
     default and required status, so tool behavior never diverges between
     profiles (asserted in tests/test_server_profiles.py).
     """
-    if is_listed_profile() and tool.listed_input_schema is not None:
-        return tool.listed_input_schema
+    if is_listed_profile():
+        # The listed surface moves only with the listed flag (S06 §3.4.2).
+        from . import _toolsets
+
+        if tool.listed_paper_input_schema is not None and _toolsets.listed_paper_enabled():
+            return tool.listed_paper_input_schema
+        return (
+            tool.listed_input_schema if tool.listed_input_schema is not None else tool.input_schema
+        )
+    from . import _toolsets
+
+    if _toolsets.PAPER_SDK_RELEASED and tool.paper_input_schema is not None:
+        # The held paper form of an existing tool's schema (§3.11 item 1),
+        # read at publication: a held process publishes HEAD's schema.
+        return tool.paper_input_schema
     return tool.input_schema
 
 
@@ -358,6 +384,10 @@ _OPERATIONAL_FIELDS: tuple[tuple[str, str, str], ...] = (
     # Part of the run the caller asked for (`keel_backtest_summarize`
     # start/end/capital, spec 07 §6): keel-api's sentence + what a slice is.
     ("slice", "slice", DATA),
+    # The period table `periods` asked for (Q-2565): keel-api's slice owner
+    # per calendar month or quarter, as one GFM table — on a summarize and,
+    # aligned across the runs, on a compare.
+    ("periods", "periods", DATA),
     # What the run ran — its commit's universe, clock, rebalance, blocks
     # (Q-1789) and sizing (spec 03 §2.7).
     ("strategy_config", "config", DATA),
@@ -596,6 +626,10 @@ def _render_field(field: str, envelope: dict) -> str | None:
         return line if isinstance(line, str) and line else None
     if field == "slice":
         return slice_line(envelope.get("slice"))
+    if field == "periods":
+        from ._backtest_view import periods_markdown
+
+        return periods_markdown(envelope.get("periods"))
     if field == "good_result":
         return good_result_line(envelope.get("good_result"))
     if field == "validation":
@@ -1158,12 +1192,22 @@ def _wrap_fastmcp_validation_errors(tool_obj: Any, outcome: OutcomeTool) -> None
 
     _validation_errors: tuple[type[Exception], ...] = (ValidationError, _FastMCPValidationError)
 
+    from keel.hosting import record_outcome
+
     original_run = tool_obj.run
 
     async def run_with_keel_validation(arguments: dict[str, Any]):
         try:
             return await original_run(arguments)
         except _validation_errors as e:
+            # This is the second place a tool error is serialised, beside
+            # `_make_handler`, and it stamps the request outcome slot the
+            # same way (Q-2557): on the hosted path FastMCP refuses every
+            # unknown argument and every wrong-typed value HERE, before the
+            # handler's own pre-flight runs, and an unstamped refusal was
+            # audited ALLOW with no outcome and counted as a success.
+            # Outside a hosted request `record_outcome` is a no-op.
+            record_outcome(is_error=True)
             envelope_json = json.dumps(_validation_error_envelope(outcome, e), default=str)
             # The same channel rule as every other result this tool returns:
             # a view tool's error rides as structuredContent (Q-1785) and its
@@ -1181,6 +1225,14 @@ def _json_type_to_py(schema: dict) -> str:
     """Map a JSON Schema primitive type to a Python annotation string."""
     t = schema.get("type")
     if "enum" in schema:
+        # An integer enum (keel_paper_deploy's simulated_capital presets, S06
+        # §3.2.2) takes an int, so an agent's 10000 is not refused as a
+        # non-string; the declared-choices wrapper still holds the value to
+        # the enum. Every other enum is a string enum (no tool declared a
+        # non-string enum before this arm).
+        values = schema["enum"]
+        if t == "integer" and all(type(v) is int for v in values):
+            return "int"
         return "str"
     if isinstance(t, list):
         # A union such as `version` (`integer | string`): pydantic's strict

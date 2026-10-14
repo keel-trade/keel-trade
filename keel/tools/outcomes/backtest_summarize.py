@@ -16,7 +16,7 @@ from typing import Any
 from keel.errors import KeelError, NotFoundError
 
 from . import register
-from ._backtest_view import notes_block
+from ._backtest_view import PERIOD_GRAINS, notes_block
 from ._base import OutcomeResult, OutcomeTool, ToolContext, listed_schema
 from ._surface_hints import tool_ref
 from .open_in_app import app_url_for
@@ -265,6 +265,17 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
         answer = client.get(f"/v1/backtests/{backtest_id}/slice", **slice_params)
         if isinstance(answer, dict) and isinstance(answer.get("slice"), dict):
             extra["slice"] = answer["slice"]
+    if args.get("periods"):
+        # The slice per calendar period as ONE table (Q-2565): keel-api's
+        # `/periods` calls the same owner once per month or quarter, so a
+        # month-by-month read of a run is one call and no backtest unit,
+        # not one summarize per month. Asked for explicitly: a refusal (a
+        # run still running, more periods than a table carries) is the result.
+        from ._backtest_view import fetch_periods
+
+        periods = fetch_periods(client, backtest_id, args["periods"])
+        if periods is not None:
+            extra["periods"] = periods
 
     # The run's served facts: the window object, and on a completed run the
     # reference, realism, sample-size and good-result data (spec 02 §2.4).
@@ -318,6 +329,15 @@ SLICE_PARAM_TEXT = (
 )
 LISTED_SLICE_PARAM_TEXT = SLICE_PARAM_TEXT.replace("already trading", "already running")
 
+#: Q-2565: the period table, on both profiles in the listed word rules' terms
+#: (no count noun but "positions"; "warm-up" is the run's own label).
+PERIODS_PARAM_TEXT = (
+    "Optional: add a period table — `monthly` or `quarterly` rows of return, max "
+    "drawdown, positions opened and bars over this run, plus the whole run. Each period "
+    "is a slice of the run as it ran, so the rows compound to the run's return; a period "
+    "before the first equity move reads warm-up. Omitted, no table."
+)
+
 INPUT_SCHEMA: dict[str, Any] = {
     "type": "object",
     "required": ["backtest_id"],
@@ -343,6 +363,11 @@ INPUT_SCHEMA: dict[str, Any] = {
                 "Starting value the slice is scaled to, e.g. 3000. Optional; defaults to "
                 "the run's own starting capital."
             ),
+        },
+        "periods": {
+            "type": "string",
+            "enum": list(PERIOD_GRAINS),
+            "description": PERIODS_PARAM_TEXT,
         },
     },
 }

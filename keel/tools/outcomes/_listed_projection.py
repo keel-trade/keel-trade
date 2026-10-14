@@ -142,6 +142,53 @@ LISTED_DEPLOYMENT_FIELDS: tuple[str, ...] = (
     "money_freshness",
 )
 
+#: What the paper build adds to a deployment row that the listed connector
+#: shows only with ``KEEL_LISTED_PAPER`` on (paper-trading-v2 S06 §3.5.1,
+#: §3.5.3-3.5.4; R-60, PT2-28): the venue block and the health and graduation
+#: fields. While the flag is off the row is exactly
+#: :data:`LISTED_DEPLOYMENT_FIELDS`, HEAD's allow-list.
+LISTED_PAPER_DEPLOYMENT_FIELDS: tuple[str, ...] = (
+    "venue",
+    "health",
+    "health_detail",
+    "graduation",
+)
+
+#: Keys the paper build adds to keel-api's live payloads (S01 IC-01-9), removed
+#: from every listed live result while ``KEEL_LISTED_PAPER`` is off so a HEAD
+#: call returns HEAD's bytes (S06 §3.5.1, PT2-28): the venue block every
+#: deployment read carries, the trades rows' fill disclosures, and the class a
+#: money aggregate echoes (S01 §3.10). Removed from the payload and from each
+#: row it lists, NEVER from a nested object: an execution receipt's
+#: ``source_cutoff.venue`` (``libs/db/models/trading.py``) is HEAD data.
+LISTED_PAPER_ADDED_KEYS: frozenset[str] = frozenset(
+    {"venue", "disclosure_mid", "disclosure_inception", "capital_class"}
+)
+
+
+def listed_deployment_fields(*, paper: bool) -> tuple[str, ...]:
+    """The listed deployment-row allow-list: HEAD's, plus the paper fields
+    only when the listed flag is on."""
+    return LISTED_DEPLOYMENT_FIELDS + (LISTED_PAPER_DEPLOYMENT_FIELDS if paper else ())
+
+
+def strip_paper_added(value: Any) -> Any:
+    """``value`` without :data:`LISTED_PAPER_ADDED_KEYS` on the payload and on
+    each row it lists; nested objects are left exactly as they are."""
+
+    def row(r: Any) -> Any:
+        if not isinstance(r, dict):
+            return r
+        return {k: v for k, v in r.items() if k not in LISTED_PAPER_ADDED_KEYS}
+
+    if isinstance(value, list):
+        return [row(r) for r in value]
+    if not isinstance(value, dict):
+        return value
+    out = row(value)
+    return {k: ([row(r) for r in v] if isinstance(v, list) else v) for k, v in out.items()}
+
+
 #: Keys no listed live result carries at any depth: tenancy, exchange-account
 #: and storage identifiers, content hashes, request telemetry, contact and
 #: credential material. The live views' payloads differ per view (orders,
@@ -208,17 +255,23 @@ def listed_strategy_metadata(meta: Any) -> Any:
     return out
 
 
-def listed_live_data(view: str, data: Any) -> Any:
+def listed_live_data(view: str, data: Any, *, paper: bool = False) -> Any:
     """One `keel_live_monitor` payload on listed: a deployment row is
     allow-listed (the overview, and each portfolio row); everything else is
-    scrubbed of :data:`LISTED_INTERNAL_KEYS`."""
+    scrubbed of :data:`LISTED_INTERNAL_KEYS`. ``paper`` is the listed flag
+    (S06 §3.4.2): off, the row is HEAD's allow-list and every payload loses
+    :data:`LISTED_PAPER_ADDED_KEYS`; on, the row gains the paper fields and
+    the added keys stay."""
+    fields = listed_deployment_fields(paper=paper)
     if view == "overview" and isinstance(data, dict):
-        return pick(data, LISTED_DEPLOYMENT_FIELDS)
+        return pick(data, fields)
     out = scrub(data)
+    if not paper:
+        out = strip_paper_added(out)
     if view == "portfolio" and isinstance(out, dict):
         rows = out.get("deployments")
         if isinstance(rows, list):
-            out["deployments"] = [pick(r, LISTED_DEPLOYMENT_FIELDS) for r in rows]
+            out["deployments"] = [pick(r, fields) for r in rows]
     return out
 
 
@@ -227,11 +280,15 @@ __all__ = [
     "LISTED_INTERNAL_KEYS",
     "LISTED_LIBRARY_VARIANT_FIELDS",
     "LISTED_NOTE_FIELDS",
+    "LISTED_PAPER_ADDED_KEYS",
+    "LISTED_PAPER_DEPLOYMENT_FIELDS",
     "LISTED_SOURCE_FIELDS",
     "LISTED_STRATEGY_METADATA_FIELDS",
     "LISTED_VERSION_FIELDS",
+    "listed_deployment_fields",
     "listed_live_data",
     "listed_strategy_metadata",
     "pick",
     "scrub",
+    "strip_paper_added",
 ]

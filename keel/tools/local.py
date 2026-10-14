@@ -755,6 +755,7 @@ def universe_resolve(source: str, client: Any = None) -> dict[str, Any]:
     from pipeline_engine.dsl import parse_strategy
     from pipeline_engine.dsl.edits import EditError, set_decl_arg
     from pipeline_engine.dsl.emitter import spec_to_dsl
+    from pipeline_engine.dsl.universe_seal import seal_source, with_seal
 
     parsed = parse_strategy(source)
     if parsed.universe is None:
@@ -867,6 +868,10 @@ def universe_resolve(source: str, client: Any = None) -> dict[str, Any]:
             new_source = set_decl_arg(new_source, "universe", "max_leverages", max_leverages)
         if underfilled and supply is not None:
             new_source = set_decl_arg(new_source, "universe", "top_n", supply)
+        # The resolution seal (Q-2434): this call RESOLVED the list (the API
+        # answered the declared criteria), so it vouches for it — written
+        # last, over the final top_n.
+        new_source = seal_source(new_source)
         reformatted = False
     except EditError:
         _LOGGER.warning(
@@ -874,6 +879,7 @@ def universe_resolve(source: str, client: Any = None) -> dict[str, Any]:
             "(comments and formatting outside Universe(...) will be lost)",
             exc_info=True,
         )
+        parsed.universe = with_seal(parsed.universe)
         new_source = spec_to_dsl(parsed)
         reformatted = True
 
@@ -1057,33 +1063,28 @@ def _universe_to_dict(uni) -> dict[str, Any]:
 
 
 def strategy_lock_generate(source: str) -> dict[str, Any]:
-    """Generate a component lock from a strategy source."""
+    """Generate a component lock from a strategy source: keel-api's ``POST /v1/strategies/lock/generate``, offline.
+
+    ``evolve_lock({}, parsed)`` — the ONE owner of lock derivation
+    (``pipeline_engine.base.lock``), the same call keel-api's create/update
+    and chat-api's ``strategy_lock_generate`` make. Every component the
+    compile needs is pinned at this bundle's latest: the declared steps,
+    pipeline variables, DSL factory bodies, AND the expansion of every
+    registered position factory (``StopLoss`` → ``TradeReturn``, ``Exit``, …;
+    position-layer spec 03-R50). Until Q-2563 this was a hand-rolled walk of
+    the declared steps from the SDK bootstrap; it never learned the expansion,
+    so a dry run's lock lacked the components the server's closed resolver
+    then refused ("Unknown component 'TradeReturn'") while the same source
+    saved. Raises ``LockError`` for an unknown component, where the walk
+    silently skipped the name — ``_try_local_validate`` treats that as "no
+    lock", and the validator then reports UNKNOWN_COMPONENT with a location.
+    """
     _ensure_registry()
 
-    from pipeline_engine.base.registry import get_latest
+    from pipeline_engine.base.lock import evolve_lock
     from pipeline_engine.dsl import parse_strategy
-    from pipeline_engine.dsl.spec import ComponentRef, ParallelSpec, PipelineSpec
 
-    parsed = parse_strategy(source)
-    lock: dict[str, int] = {}
-
-    def _walk(steps):
-        for step in steps:
-            if isinstance(step, ComponentRef):
-                sig = get_latest(step.name)
-                if sig:
-                    lock[step.name] = sig.version
-            elif isinstance(step, ParallelSpec):
-                for branch_steps in step.branches.values():
-                    _walk(branch_steps)
-            elif isinstance(step, PipelineSpec):
-                _walk(step.steps)
-
-    _walk(parsed.pipeline.steps)
-    for factory in parsed.factories:
-        _walk(factory.body.steps)
-
-    return {"component_lock": lock}
+    return {"component_lock": evolve_lock({}, parse_strategy(source))}
 
 
 def strategy_lock_status(

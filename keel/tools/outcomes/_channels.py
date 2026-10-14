@@ -200,6 +200,8 @@ _BACKTEST = ChannelSpec(
             # The capital and costs a run's numbers were computed at (Q-2270).
             "cost_model",
             "slice",
+            # The period table (Q-2565): model-read numbers, no card draws it.
+            "periods",
             "notes",
             "status_url",
             "tearsheet_url",
@@ -262,6 +264,8 @@ _COMPARISON = ChannelSpec(
             # `reference.series` does.
             "references",
             "cost_model",
+            # The runs' period tables aligned by period (Q-2565).
+            "periods",
             "view.kind",
             "view.size",
             "view.name",
@@ -400,6 +404,9 @@ _STRATEGY = ChannelSpec(
             "summary_text",
             "error",
             "restored_from_ref",
+            # Which version the restore brought back (Q-2270); a model-read
+            # number beside the ref it was asked for (Q-2572).
+            "restored_from_sequence",
             "new_sequence",
             "new_commit_id",
             "sync_note",

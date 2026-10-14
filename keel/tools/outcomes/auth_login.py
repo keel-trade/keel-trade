@@ -78,9 +78,11 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
     # resolve it directly — no browser flow.
     if attach is not None:
         from keel.anon import is_anon, resolve_pending_claim
-        from keel.config import load_config
+        from keel.config import load_file_config
 
-        if load_config().pending_claim and not is_anon():
+        # The pending claim belongs to the stored login (Q-2579).
+        stored = load_file_config()
+        if stored.pending_claim and not is_anon(stored):
             result = resolve_pending_claim(bool(attach), quiet=True) or {}
             return OutcomeResult(
                 run_id=None,

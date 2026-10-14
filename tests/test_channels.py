@@ -207,6 +207,88 @@ def test_hold_series_ride_the_card_and_their_numbers_stay_structured(monkeypatch
         assert ref["series"]  # non-vacuity: a real series moved
 
 
+#: The top-level fields a REAL restore emits (Q-2572). Enumerated, not
+#: derived, so the count is a quantity the seed cannot move: dropping a
+#: declaration reds the totality arm, not this list.
+RESTORE_FIELDS = frozenset(
+    {
+        "share_url",
+        "run_id",
+        "hero_url",
+        "url_line",
+        "strategy_id",
+        "restored_from_ref",
+        "restored_from_sequence",
+        "new_sequence",
+        "new_commit_id",
+        "next",
+        "message",
+        "sync_note",
+    }
+)
+
+
+def _built_restore(monkeypatch) -> dict:
+    """A REAL `keel_strategy_restore` envelope (Q-2572): the strategy recording
+    is a `keel_strategy_get`, so it carries no restore field, and the field
+    `3339c247f` added (`restored_from_sequence`, Q-2270) escaped G1 for a
+    week — exactly as compare's `references` did (Q-2223)."""
+    from keel.tools.outcomes import _bootstrap, get
+    from keel.tools.outcomes._base import ToolContext
+
+    monkeypatch.delenv("KEEL_SERVER_PROFILE", raising=False)  # full profile: `sync_note` emitted
+    _bootstrap()
+    client = MagicMock()
+    client.post.return_value = {
+        "id": "str_a",
+        "name": "p",
+        "status": "DRAFT",
+        "current_sequence": 5,
+    }
+
+    def get_(path, **params):
+        if path.endswith("/versions"):
+            return [
+                {
+                    "commit_id": "cmt_5",
+                    "sequence_number": 5,
+                    "message": "Restored from v2",
+                    "meta": {"restored_from": 2},
+                }
+            ]
+        raise RuntimeError("no strategy view in this fake (advisory read)")
+
+    client.get.side_effect = get_
+    ctx = ToolContext(api_client=client, app_url="https://app.usekeel.io")
+    return (
+        get("keel_strategy_restore")
+        .handler({"strategy_id": "str_a", "ref": "champion"}, ctx)
+        .to_envelope()
+    )
+
+
+def test_a_built_restore_is_totally_assigned(monkeypatch) -> None:
+    env = _built_restore(monkeypatch)
+    # Non-vacuity: the restore emitted every field we know it emits, and the
+    # one under test carries the server's source sequence (a tag ref).
+    assert set(env) == RESTORE_FIELDS, sorted(set(env) ^ RESTORE_FIELDS)
+    assert len(env) == len(RESTORE_FIELDS) == 12
+    assert env["restored_from_sequence"] == 2
+    assert unassigned_paths(env, "strategy") == []
+
+
+def test_a_built_restore_partitions_without_a_warning(monkeypatch, caplog) -> None:
+    """The runtime WARNING itself is the failure (Q-2223's optional guard):
+    a restore partitioned under either arm logs nothing from the channel map."""
+    env = _built_restore(monkeypatch)
+    for arm in ("", "1"):
+        monkeypatch.setenv(CARD_META_ENV, arm)
+        with caplog.at_level("WARNING", logger="keel.tools.outcomes._channels"):
+            structured, _card = partition(env, "strategy")
+        assert structured["restored_from_sequence"] == 2  # structured is its home
+    assert [r.getMessage() for r in caplog.records if "no declared home" in r.getMessage()] == []
+
+
 def test_a_strategy_moves_its_graph_and_keeps_a_requested_source(monkeypatch) -> None:
     monkeypatch.setenv(CARD_META_ENV, "1")
     envelope = _recorded("strategy")

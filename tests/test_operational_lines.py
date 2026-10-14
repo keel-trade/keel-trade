@@ -180,6 +180,34 @@ APPEARS: dict[str, tuple[dict, str]] = {
         },
         "Slice covers 7 daily bars 2026-09-19 → 2026-09-25: +4.12% A slice of the run as it ran.",
     ),
+    # Q-2565: the period table `periods` asked for — keel-api's rows as one
+    # GFM table; the cells are the server's numbers.
+    "periods": (
+        {
+            "view": _VIEW_BT,
+            "periods": {
+                "grain": "monthly",
+                "rows": [
+                    {
+                        "period": "2026-08",
+                        "return_pct": 5.0,
+                        "max_drawdown_pct": -2.88,
+                        "bars": 31,
+                        "positions": {"opened": 1, "closed": 1, "carried_in": 0},
+                    },
+                ],
+                "run": {
+                    "period": "run",
+                    "return_pct": 8.0,
+                    "max_drawdown_pct": -2.92,
+                    "bars": 88,
+                    "positions": {"opened": 2, "closed": 2, "carried_in": 0},
+                },
+                "basis": "Each period is a slice of the run as it ran.",
+            },
+        },
+        "| 2026-08 | +5.00% | −2.88% | 1 | 31 |",
+    ),
     # ChatGPT R4 #5: the evidence is another version's run.
     "evidence_matches_version": (
         {
@@ -245,6 +273,8 @@ ABSENT: dict[str, dict] = {
     "exposure": {"view": _VIEW_BT, "exposure": None},
     # No start/end/capital asked: no slice block, no line.
     "slice": {"view": _VIEW_BT, "slice": {"summary": ""}},
+    # No `periods` asked: no block (a block with no rows is no table either).
+    "periods": {"view": _VIEW_BT, "periods": {"grain": "monthly", "rows": []}},
     # The run IS the version shown: no key, no line.
     "evidence_matches_version": {
         "view": {"kind": "strategy", "markdown": "x", "version": 4, "evidence": {"version": 4}},
@@ -263,10 +293,10 @@ def _labels(lines: list[str]) -> list[str]:
 
 
 def test_the_catalogue_is_exercised_in_full() -> None:
-    """Non-vacuity: every listed label has both arms (20), and the full
+    """Non-vacuity: every listed label has both arms (21), and the full
     profile's one extra label is counted separately."""
     labels = [label for _, label, _ in _OPERATIONAL_FIELDS]
-    assert len(labels) == 20 == len(set(labels))
+    assert len(labels) == 21 == len(set(labels))
     assert set(APPEARS) == set(ABSENT) == set(labels)
     assert [label for _, label, _ in _FULL_PROFILE_FIELDS] == ["deploy"]
 
@@ -297,7 +327,7 @@ def test_no_line_is_evaluative(monkeypatch) -> None:
             for word in EVALUATIVE:
                 assert word not in text, (label, word, line)
             checked += 1
-    assert checked == 20
+    assert checked == 21
 
 
 def test_the_first_week_sentence_rides_the_quota_line_only(monkeypatch) -> None:

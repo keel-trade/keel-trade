@@ -210,6 +210,10 @@ class UniverseSpec:
     resolved_at: str | None = None
     groups: dict[str, list[str]] | None = None
     max_leverages: dict[str, float] | None = None
+    # The resolution seal (Q-2434): written by the writers that RESOLVE a
+    # top_volume / category list, verified by the validator and the submit
+    # gate. ``pipeline_engine.dsl.universe_seal`` owns its meaning.
+    resolution: str | None = None
     location: SourceLocation | None = None
 
 
@@ -407,7 +411,9 @@ def dollar_volume_floor_to_emit(universe: UniverseSpec) -> list[tuple[str, Any]]
 #: UniverseSpec fields that are the RESULT of a resolution, not its inputs:
 #: the list, the instant it answers for, and the venue leverage map read
 #: alongside it. They answer the criteria they were resolved for and no other.
-UNIVERSE_RESOLUTION_FIELDS: frozenset[str] = frozenset({"resolved", "resolved_at", "max_leverages"})
+UNIVERSE_RESOLUTION_FIELDS: frozenset[str] = frozenset(
+    {"resolved", "resolved_at", "max_leverages", "resolution"}
+)
 
 #: UniverseSpec fields that are positional render metadata, never identity
 #: (Q-1697: "the span is positional metadata for rendering a caret, never
@@ -539,6 +545,9 @@ def universe_spec_with_declared_state(
         candidate.resolved = existing.resolved
         candidate.resolved_at = existing.resolved_at
         candidate.max_leverages = existing.max_leverages
+        # The seal travels with the resolution it vouches for (Q-2434); when
+        # the criteria changed it is dropped with the list.
+        candidate.resolution = existing.resolution
     return candidate
 
 

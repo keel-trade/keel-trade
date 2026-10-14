@@ -140,11 +140,33 @@ def test_listed_assembly_references_only_listed_tools() -> None:
 
 
 def test_every_core_tool_reference_is_a_real_tool() -> None:
-    """Across the WHOLE file (every profile, every pull-tier section)."""
-    refs = sorted(set(re.findall(r"\bkeel_[a-z0-9_]+\b", load_operating_core())))
-    unknown = [r for r in refs if r not in set(OUTCOMES)]
+    """Across the WHOLE file (every profile, every pull-tier section).
+
+    A `when: paper_loaded` section (paper-trading-v2 S06 §3.9 row 3) is
+    served only where keel_paper_deploy is loaded, which the held paper SDK
+    never registers (§3.11 item 1, PT2-28). So its names are judged against
+    the released registry, and every OTHER section's against the held one:
+    a paper tool named outside a paper section still reds.
+    """
+    from tests._paper_sdk import paper_sdk_release
+
+    tool_re = re.compile(r"\bkeel_[a-z0-9_]+\b")
+    refs = set(tool_re.findall(load_operating_core()))
+    sections = assemble.load_sections()
+    # The listed flag's paper row (`when: paper_listed`, S06 §3.4.2) is held
+    # the same way: the flag is refused while the paper SDK is held.
+    held_whens = ("paper_loaded", "paper_listed")
+    paper_refs = {r for s in sections if s.when in held_whens for r in tool_re.findall(s.body)}
+    held_refs = {r for s in sections if s.when not in held_whens for r in tool_re.findall(s.body)}
+    assert held_refs | paper_refs == refs, "a tool reference sits outside every section body"
+    unknown = sorted(r for r in held_refs if r not in set(OUTCOMES))
     assert not unknown, f"operating core references unknown `keel_*` names: {unknown}"
+    with paper_sdk_release():
+        released = set(OUTCOMES)
+    unknown_paper = sorted(r for r in paper_refs if r not in released)
+    assert not unknown_paper, f"paper sections reference unknown `keel_*` names: {unknown_paper}"
     assert len(refs) >= 10, f"only {len(refs)} tool references found in the core"
+    assert paper_refs, "no paper section names a tool; the released arm judges nothing"
 
 
 # The est-token ratchet that stood here from 2026-09-19 measured the FILE.
@@ -274,7 +296,10 @@ def test_served_operating_core_is_base_register_only() -> None:
 
     handler = OUTCOMES["keel_help"].handler
     served = handler({"topic": "operating_core"}, ToolContext()).to_envelope()["body"]
-    assert served == assemble.base_document(profile=active_profile())
+    # The paper SDK is released (PT2-91), so the served core carries the
+    # `paper` section (`when: paper_loaded`, S06 §3.9 row 3).
+    assert served == assemble.base_document(profile=active_profile(), paper_loaded=True)
+    assert "PAPER — keel_paper_deploy creates a simulated paper-trading run" in served
     assert "quantitative crypto research platform" in served  # the identity anchor
     opinion = [s for s in assemble.load_sections() if s.register == "opinion"]
     for sec in opinion:
@@ -314,7 +339,10 @@ def test_operating_core_resource_serves_the_base_document() -> None:
     from keel.data.knowledge import active_profile
 
     served = asyncio.run(read("keel://knowledge/operating_core"))
-    assert served == assemble.base_document(profile=active_profile())
+    # The paper SDK is released (PT2-91), so the served core carries the
+    # `paper` section (`when: paper_loaded`, S06 §3.9 row 3).
+    assert served == assemble.base_document(profile=active_profile(), paper_loaded=True)
+    assert "PAPER — keel_paper_deploy creates a simulated paper-trading run" in served
     opinion = [s for s in assemble.load_sections() if s.register == "opinion"]
     for sec in opinion:
         for para in sec.paragraphs:

@@ -22,6 +22,17 @@ from ._base import (
     ToolContext,
     listed_enum,
 )
+from ._paper_guard import AGENT_TELEMETRY_HEADERS
+from ._paper_strings import (
+    GRADUATION_CARRY_OVER_LINE,
+    GRADUATION_CRITERIA_LINE,
+    GRADUATION_KEEP_PAPER_LINE,
+    GRADUATION_LIVE_CALL_LINE,
+    HEALTH_LINE_ROWS,
+    MONITOR_PAPER_ID_REFUSAL,
+    MONITOR_PAPER_LABEL,
+    PORTFOLIO_PAPER_SECTION_LABEL,
+)
 from .open_in_app import app_url_for
 
 
@@ -207,17 +218,226 @@ def _bounded_equity(data: Any) -> Any:
     }
 
 
+def _venue_class(row: Any) -> str | None:
+    """``venue.capital_class`` of a deployment row, or ``None`` when the row
+    carries no venue block (a row from before paper, which reads as ``real``).
+    Never keyed on ``status`` or ``venue.code`` (null for a row with no
+    account), S06 §3.5.1."""
+    venue = row.get("venue") if isinstance(row, dict) else None
+    capital_class = venue.get("capital_class") if isinstance(venue, dict) else None
+    return capital_class if isinstance(capital_class, str) else None
+
+
+def _read_run_class(client: Any, deployment_id: str) -> str | None:
+    """The run's class, learned from its detail row in ONE read (QA B1).
+
+    keel-api serves the venue block on the detail row only
+    (``DeploymentResponse.venue``, ``services/keel-api/src/schemas/live.py:393``);
+    no per-view payload (positions, equity, stats, pnl, weights, executions,
+    orders, trades, funding) carries it. So a per-view call reads the detail
+    row first, with the agent-telemetry marker (a guard read is never an owner
+    visit, S06 §3.5.1, the ``_paper_guard`` pattern), before it reads the
+    view: a practice id refused on listed is refused before any of its data is
+    read. One read per call; the overview needs none, its own read is the
+    detail row. A 404 here is the 404 the view read would have raised (both
+    resolve the id through ``_get_deployment_or_404``).
+    """
+    return _venue_class(
+        client.get(f"/v1/deployments/{deployment_id}", headers=AGENT_TELEMETRY_HEADERS)
+    )
+
+
+def _refuse_unlisted_paper(run_class: str | None) -> None:
+    """A paper id on listed with the flag off (S06 §3.5.1, PT2-28), on EVERY
+    per-deployment view: refused with no row data, before the overview's
+    enrichment reads and before anything is projected. HEAD never served a
+    paper id, so no HEAD call reaches this arm."""
+    from ._toolsets import is_listed_profile, listed_paper_enabled
+
+    if run_class == "practice" and is_listed_profile() and not listed_paper_enabled():
+        raise KeelError(
+            # The row declares this listed form; form() raises if it ever
+            # stops doing so, rather than refusing with an empty line.
+            MONITOR_PAPER_ID_REFUSAL.form(listed=True),
+            error_code="paper_run_not_listed",
+            exit_code=2,
+        )
+
+
+def _run_label(data: Any) -> str | None:
+    """The run's label, read from ``venue.capital_class`` and from nothing else.
+
+    paper-trading-v2 S06 §3.5.1-3.5.2: a ``practice`` row is framed "Paper run
+    (simulated)"; a ``real`` row (or one with no venue block) carries no label,
+    so its response stays today's plus the venue block.
+    """
+    return _class_label(_venue_class(data))
+
+
+def _class_label(run_class: str | None) -> str | None:
+    """The run label for a ``practice`` run; ``None`` for any other class."""
+    return MONITOR_PAPER_LABEL.for_profile() if run_class == "practice" else None
+
+
+def _graduation_blocks(data: Any, deployment_id: str, ctx: ToolContext) -> dict[str, Any]:
+    """S06 §3.5.4: the graduation envelope, rendered from IC-03-5's state only.
+
+    A practice detail row's non-null ``graduation`` is embedded verbatim under
+    ``graduation``. Exactly when ``graduation.ready`` is ``true`` the response
+    gains ``graduation_next`` in the handoff form: ``action_url`` is the
+    signed deploy-intent link when ``mint_deploy_intent`` returns one (full
+    profile and CLI) and the run's ``/paper/{id}`` page otherwise (always on
+    listed, where the mint returns ``None`` by policy). Its talking points
+    are the criteria met (the envelope's own values; no return figure), the
+    live-is-your-call line, the keep-paper line, and on full the carry-over
+    line when the strategy has moved ahead. No time-remaining or urgency line;
+    the once-only nudge is S03's server-side machinery.
+    """
+    if not isinstance(data, dict) or _run_label(data) is None:
+        return {}
+    graduation = data.get("graduation")
+    if not isinstance(graduation, dict):
+        return {}
+    out: dict[str, Any] = {"graduation": graduation}
+    if graduation.get("ready") is not True:
+        return out
+
+    from ._handoff import mint_deploy_intent
+
+    strategy_id = data.get("strategy_id")
+    intent = mint_deploy_intent(ctx, strategy_id) if strategy_id else None
+    action_url = (intent or {}).get("handoff_url") or app_url_for("paper", deployment_id, ctx)
+
+    criteria = graduation.get("criteria") or {}
+    age, evals = criteria.get("age") or {}, criteria.get("evals") or {}
+    parity, drawdown = criteria.get("parity") or {}, criteria.get("drawdown") or {}
+    talking_points = [
+        (GRADUATION_CRITERIA_LINE.for_profile() or "").format(
+            days=age.get("days"),
+            evals=evals.get("count"),
+            residual_bps=parity.get("residual_bps"),
+            band_bps=parity.get("band_bps"),
+            paper_max_dd_pct=drawdown.get("paper_max_dd_pct"),
+            backtest_max_dd_pct=drawdown.get("backtest_max_dd_pct"),
+        ),
+        GRADUATION_LIVE_CALL_LINE.for_profile(),
+        GRADUATION_KEEP_PAPER_LINE.for_profile(),
+    ]
+    carry = graduation.get("carry_over") or {}
+    carry_line = GRADUATION_CARRY_OVER_LINE.for_profile()  # None on listed
+    if carry_line and carry.get("commit_ahead") is True:
+        talking_points.append(carry_line.format(commit=carry.get("commit_seq")))
+    out["graduation_next"] = {
+        "action_url": action_url,
+        "talking_points": [p for p in talking_points if p],
+    }
+    return out
+
+
+#: keel-app's placeholder for a fact the row does not carry (status-badge.ts).
+_HEALTH_FACT_PENDING = "\u2026"
+
+
+def _health_blocks(data: Any, deployment_id: str, ctx: ToolContext) -> dict[str, Any]:
+    """S06 §3.5.3: the practice row's health line, in S05's phrases (IC-05-6).
+
+    ``health`` and ``health_detail`` stay in ``data`` exactly as the row
+    carries them; this only words them, from ``HEALTH_LINE_ROWS`` (the mirror
+    of keel-app's map). A null ``health`` (a ``real`` row, or not computed)
+    renders no line. A null reason is the running phrase, which names the
+    schedule's cadence: the SDK reads no cadence off a schedule, so, like the
+    app when it cannot name one, it renders no line rather than guess. A
+    reason the map lacks renders no line (never a guessed phrase). A
+    ``stalled`` run is pointed at its ``/paper/{id}`` page (``health_url``).
+    """
+    if not isinstance(data, dict) or _run_label(data) is None:
+        return {}
+    health = data.get("health")
+    if health is None:
+        return {}
+    detail = data.get("health_detail") if isinstance(data.get("health_detail"), dict) else {}
+    reason = detail.get("reason")
+    out: dict[str, Any] = {}
+    n: int | None = None
+    if reason == "consecutive_missing":
+        missed = detail.get("consecutive_missing")
+        n = missed if isinstance(missed, int) else 0
+        row = HEALTH_LINE_ROWS["consecutive_missing:one" if n == 1 else "consecutive_missing:many"]
+    elif isinstance(reason, str) and reason != "null":
+        row = HEALTH_LINE_ROWS.get(reason)
+    else:
+        row = None
+    text = row.for_profile() if row is not None else None
+    if text:
+        since = detail.get("since")
+        out["health_line"] = text.format(
+            n=n,
+            since=since if isinstance(since, str) and since else _HEALTH_FACT_PENDING,
+        )
+    if health == "stalled":
+        out["health_url"] = app_url_for("paper", deployment_id, ctx)
+    return out
+
+
+def _with_paper_status(row: Any) -> Any:
+    """A practice row with its ``status`` in keel-app's words (Deploying /
+    Paper / Paused / Stopped, ``_paper_status.paper_status_word``), never the
+    raw ``LIVE`` a reader takes for real capital (QA W2, V2; S06 §3.5.2: "Live"
+    never labels practice data). Only called on rows already known to be
+    practice; a row with no ``status`` is relayed as sent."""
+    if not isinstance(row, dict) or "status" not in row:
+        return row
+    from ._paper_status import paper_status_word
+
+    word = paper_status_word(
+        row.get("status"), health=row.get("health"), pause_reason=row.get("pause_reason")
+    )
+    return {**row, "status": word}
+
+
+def _labels_shown() -> bool:
+    """Run labels render on the full profile, and on listed only with the
+    listed flag on (§3.4.2, R-60; the listed flag-off refusal is §3.5.1's)."""
+    from ._toolsets import is_listed_profile, listed_paper_enabled
+
+    return not is_listed_profile() or listed_paper_enabled()
+
+
+def _paper_portfolio(client: Any, path: str) -> dict[str, Any]:
+    """S06 §3.5.5: the ``practice`` summary as its own ``paper`` section.
+
+    The portfolio summary sums ONE named class (S01 §3.10, R-71), so the paper
+    section is a second, explicit read, ``capital_class=practice``, carried
+    under ``paper`` verbatim beside its section label (``paper_label``) and never
+    summed into the live totals (GOAL invariant 3). An empty practice summary
+    (no paper rows) omits the section, so a real-only org's output is today's.
+    A summary read is never an owner visit (IC-01-9): it carries the
+    agent-telemetry marker like the live summary read.
+    """
+    summary = client.get(path, headers=AGENT_TELEMETRY_HEADERS, capital_class="practice")
+    if not isinstance(summary, dict) or not summary.get("deployments"):
+        return {}
+    return {"paper_label": PORTFOLIO_PAPER_SECTION_LABEL.for_profile(), "paper": summary}
+
+
 def _overview_enrichment(client: Any, deployment_id: str) -> dict[str, Any]:
-    """Best-effort ``stats`` + compact ``curve`` for the overview view."""
+    """Best-effort ``stats`` + compact ``curve`` for the overview view.
+
+    Both reads carry the agent-telemetry marker: they are not owner visits
+    (S06 §3.5.1, R-61); only the overview's detail read is."""
     out: dict[str, Any] = {}
     try:
-        stats = client.get(f"/v1/deployments/{deployment_id}/stats")
+        stats = client.get(
+            f"/v1/deployments/{deployment_id}/stats", headers=AGENT_TELEMETRY_HEADERS
+        )
         if isinstance(stats, dict):
             out["stats"] = stats
     except KeelError:
         pass
     try:
-        curve = _compact_curve(client.get(f"/v1/deployments/{deployment_id}/equity"))
+        curve = _compact_curve(
+            client.get(f"/v1/deployments/{deployment_id}/equity", headers=AGENT_TELEMETRY_HEADERS)
+        )
         if curve:
             out["curve"] = curve
     except KeelError:
@@ -271,6 +491,12 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
 
     # Build query params.
     params: dict[str, Any] = {}
+    if effective_view == "portfolio":
+        # The summary sums ONE named class (paper-trading-v2 S01 §3.10, R-71):
+        # this view is the live money, so it asks for `real` by name rather
+        # than leaning on keel-api reading an absent class as `real` — every
+        # client Keel ships says what it means (S06 §3.5.5, PT2-16).
+        params["capital_class"] = "real"
     limit = args.get("limit")
     if limit is not None and effective_view in _PAGINATED_VIEWS:
         cap = _PAGINATED_VIEWS[effective_view]
@@ -311,7 +537,29 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
                 params[key] = True
 
     client = ctx.get_client()
-    data = client.get(path, **params) if params else client.get(path)
+    # Owner visit (S06 §3.5.1, R-61): the overview's detail read is the one
+    # read that refreshes the run's last-viewed time, so it carries no header;
+    # every other view's read carries the agent-telemetry marker, which keel-api
+    # excludes from that refresh (summary and list reads never refresh anyway).
+    # The run's class is learned once per call (QA B1): off the overview's own
+    # detail row, or by one guard read of it before any other view's read.
+    run_class: str | None = None
+    if effective_view == "overview":
+        data = client.get(path, **params) if params else client.get(path)
+        run_class = _venue_class(data)
+        # A refused overview read has already counted as the owner's visit.
+        _refuse_unlisted_paper(run_class)
+    elif effective_view == "portfolio":
+        data = client.get(path, headers=AGENT_TELEMETRY_HEADERS, **params)
+    else:
+        run_class = _read_run_class(client, effective_id)
+        _refuse_unlisted_paper(run_class)
+        data = client.get(path, headers=AGENT_TELEMETRY_HEADERS, **params)
+
+    from ._toolsets import is_listed_profile, listed_paper_enabled
+
+    listed = is_listed_profile()
+    listed_paper = listed and listed_paper_enabled()
 
     # Overview enrichment for the live card (Q-1505, D2.2 render-only):
     # the deployment row alone carries no performance numbers, so the
@@ -324,23 +572,66 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
         overview_extra = _overview_enrichment(client, effective_id)
     if effective_view == "equity":
         data = _bounded_equity(data)
+    # The portfolio's paper section (§3.5.5): a second read, on the full
+    # profile and on listed only with the listed flag on; listed with it off
+    # reads `real` only and renders exactly HEAD (R-60, §3.4.2).
+    paper_section: dict[str, Any] = {}
+    if effective_view == "portfolio" and _labels_shown():
+        paper_section = _paper_portfolio(client, path)
 
-    from ._toolsets import is_listed_profile
+    # The run's framing, on every per-deployment view (QA W5), and its
+    # graduation envelope read the class as keel-api sent it
+    # (venue.capital_class), before any listed projection.
+    is_paper = run_class == "practice" and _labels_shown()
+    label = _class_label(run_class) if is_paper else None
+    graduation_blocks = (
+        _graduation_blocks(data, effective_id, ctx)
+        if effective_view == "overview" and _labels_shown()
+        else {}
+    )
+    health_blocks = (
+        _health_blocks(data, effective_id, ctx)
+        if effective_view == "overview" and _labels_shown()
+        else {}
+    )
 
-    if is_listed_profile():
+    if listed:
         # The directory connector's result (Q-2268): a deployment row is the
         # allow-list `_listed_projection.LISTED_DEPLOYMENT_FIELDS` (no org,
         # exchange-account or config id, storage key or source hash), and
         # every other payload loses `LISTED_INTERNAL_KEYS` at any depth.
-        # The CLI and local server keep keel-api's rows whole.
-        from ._listed_projection import listed_live_data, scrub
+        # While the listed flag is off it also loses what the paper build
+        # adds (`LISTED_PAPER_ADDED_KEYS`, S06 §3.5.1), so a HEAD call
+        # returns HEAD's bytes. The CLI and local server keep keel-api's rows
+        # whole.
+        from ._listed_projection import listed_live_data, scrub, strip_paper_added
 
-        data = listed_live_data(effective_view, data)
+        data = listed_live_data(effective_view, data, paper=listed_paper)
+        if "paper" in paper_section:
+            paper_section["paper"] = listed_live_data(
+                "portfolio", paper_section["paper"], paper=listed_paper
+            )
         if "stats" in overview_extra:
-            overview_extra["stats"] = scrub(overview_extra["stats"])
+            stats = scrub(overview_extra["stats"])
+            overview_extra["stats"] = stats if listed_paper else strip_paper_added(stats)
 
+    # A practice row's status in keel-app's words (QA W2, V2): the overview's
+    # row (and so the graduation render) and each row of the paper section.
+    if is_paper and effective_view == "overview":
+        data = _with_paper_status(data)
+    paper_rows = paper_section.get("paper")
+    if isinstance(paper_rows, dict) and isinstance(paper_rows.get("deployments"), list):
+        paper_section["paper"] = {
+            **paper_rows,
+            "deployments": [_with_paper_status(r) for r in paper_rows["deployments"]],
+        }
+
+    # A paper run's link is its /paper/{id} page, never /live/ (S06 §3.2.3,
+    # PT2-3; QA W5), on the same tab.
     hero_url = (
-        app_url_for("live", effective_id, ctx, query={"tab": effective_view})
+        app_url_for(
+            "paper" if is_paper else "live", effective_id, ctx, query={"tab": effective_view}
+        )
         if effective_id != "all"
         else f"{ctx.app_url}/live?tab=portfolio"
     )
@@ -354,8 +645,12 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
         share_url=None,
         extra={
             "view": effective_view,
+            **({"label": label} if label else {}),
             "freshness": _freshness_for(effective_view),
             "data": data,
+            **paper_section,
+            **graduation_blocks,
+            **health_blocks,
             **overview_extra,
             "render": card_render_block(
                 "live",
@@ -366,6 +661,57 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
         },
     )
 
+
+_DESCRIPTION = (
+    "Read-only observability for live deployments: overview, positions, equity, "
+    "P&L, stats, weights, weights-history, executions, orders, trades, funding "
+    "events, or portfolio summary — one `view` enum in place of ~13 separate live_* "
+    "read endpoints. It only observes and changes no deployment; going live with a "
+    "new strategy is a web-app step (`keel_live_deploy` hands off to it). With no "
+    "arguments it returns the portfolio summary across all deployments; "
+    "`deployment_id` narrows to one. The returned `freshness` qualifies the data: "
+    "`positions` is a live read of the linked Hyperliquid account at request time "
+    "(a snapshot that can include holdings beyond one deployment), while "
+    "portfolio/history views are recorded backend state that can lag the web "
+    "dashboard's live-service stream — not a real-time tail. Executions view: "
+    "`expand_orders=true` returns "
+    "the child orders behind each attempt's counts, and `execution_run_id` narrows "
+    "to one bar. A row's `quality_summary` carries the `session_id` and "
+    "`intent_rev` that address that episode's receipt via `keel_live_receipt`; a "
+    "run with several episodes has one receipt per episode and no run-level "
+    "receipt, which is what its `quality_episode_count` reports. Changing deployment "
+    "state is `keel_live_control`; deploying a new strategy is `keel_live_deploy`."
+)
+
+_LISTED_DESCRIPTION = (
+    "Read-only monitoring of the strategies running on the caller's account; "
+    "acting on one happens in the Keel web app (`keel_app_link` returns the "
+    "link). `view` picks a slice (overview, positions, equity, pnl, stats, "
+    "weights, portfolio, …); with no arguments it returns the portfolio "
+    "summary, and `deployment_id` narrows to one. `freshness` qualifies the data: "
+    "`positions` is a live read of the caller's linked Hyperliquid account, a "
+    "snapshot that can include holdings beyond one running strategy; the other "
+    "views are recorded backend state."
+)
+
+#: §3.5.7's sentence: the full profile's held form.
+_PAPER_SENTENCE = " Results include simulated (paper) runs, labelled by `venue`."
+
+#: Listed, flag on for the caller's host (S10, PT2-90): paper runs are acted on
+#: here with `keel_paper_control`, and `keel_paper_control` takes its run ids
+#: from this tool's no-argument portfolio view, so both facts are stated.
+_LISTED_PAPER_DESCRIPTION = (
+    "Read-only monitoring of the strategies and simulated paper runs on the caller's "
+    "account; a paper run is paused, updated or stopped with `keel_paper_control`, and "
+    "acting on a real-capital strategy happens in the Keel web app (`keel_app_link` "
+    "returns the link). `view` picks a slice (overview, positions, equity, pnl, stats, "
+    "weights, portfolio, …); with no arguments it returns the portfolio "
+    "summary, and `deployment_id` narrows to one. `freshness` qualifies the data: "
+    "`positions` is a live read of the caller's linked Hyperliquid account, a "
+    "snapshot that can include holdings beyond one running strategy; the other "
+    "views are recorded backend state. With no arguments the portfolio summary lists "
+    "paper runs, labelled by `venue`, in their own section."
+)
 
 LIVE_MONITOR = register(
     OutcomeTool(
@@ -378,26 +724,9 @@ LIVE_MONITOR = register(
         # _FRESHNESS (positions = on-demand exchange snapshot vs recorded
         # backend state) + live_control.py D7 note (going live is a web
         # handoff, this tool only observes).
-        description=(
-            "Read-only observability for live deployments: overview, positions, equity, "
-            "P&L, stats, weights, weights-history, executions, orders, trades, funding "
-            "events, or portfolio summary — one `view` enum in place of ~13 separate live_* "
-            "read endpoints. It only observes and changes no deployment; going live with a "
-            "new strategy is a web-app step (`keel_live_deploy` hands off to it). With no "
-            "arguments it returns the portfolio summary across all deployments; "
-            "`deployment_id` narrows to one. The returned `freshness` qualifies the data: "
-            "`positions` is a live read of the linked Hyperliquid account at request time "
-            "(a snapshot that can include holdings beyond one deployment), while "
-            "portfolio/history views are recorded backend state that can lag the web "
-            "dashboard's live-service stream — not a real-time tail. Executions view: "
-            "`expand_orders=true` returns "
-            "the child orders behind each attempt's counts, and `execution_run_id` narrows "
-            "to one bar. A row's `quality_summary` carries the `session_id` and "
-            "`intent_rev` that address that episode's receipt via `keel_live_receipt`; a "
-            "run with several episodes has one receipt per episode and no run-level "
-            "receipt, which is what its `quality_episode_count` reports. Changing deployment "
-            "state is `keel_live_control`; deploying a new strategy is `keel_live_deploy`."
-        ),
+        description=_DESCRIPTION,
+        # §3.5.7's sentence, held with the paper SDK (§3.11 item 1).
+        paper_description=_DESCRIPTION + _PAPER_SENTENCE,
         input_schema={
             "type": "object",
             "required": [],
@@ -493,16 +822,10 @@ LIVE_MONITOR = register(
         # only (no deploy/fund/trade verbs, no routing to tools absent
         # from the listed surface). Enum values are API data, not copy.
         listed_title="Monitor Running Strategies",
-        listed_description=(
-            "Read-only monitoring of the strategies running on the caller's account; "
-            "acting on one happens in the Keel web app (`keel_app_link` returns the "
-            "link). `view` picks a slice (overview, positions, equity, pnl, stats, "
-            "weights, portfolio, …); with no arguments it returns the portfolio "
-            "summary, and `deployment_id` narrows to one. `freshness` qualifies the data: "
-            "`positions` is a live read of the caller's linked Hyperliquid account, a "
-            "snapshot that can include holdings beyond one running strategy; the other "
-            "views are recorded backend state."
-        ),
+        listed_description=_LISTED_DESCRIPTION,
+        # §3.5.7's sentence on listed exists only with the listed flag on,
+        # through this twin (§3.4.2, R-60).
+        listed_paper_description=_LISTED_PAPER_DESCRIPTION,
         listed_input_schema={
             "type": "object",
             "required": [],

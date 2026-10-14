@@ -277,6 +277,8 @@ LIVE_MONEY_RE = re.compile(
     r"|\bgo(?:ing)? live\b|\bdeploy(?:ing)? (?:it )?live\b|\bcanary\b|\brun (?:it )?forward\b",
     re.IGNORECASE,
 )
+
+
 #: Expiry urgency (connect-onboarding spec 01 §1.9) — the SAME pattern the
 #: runtime guard `keel.errors.assert_neutral_wall_text` refuses, read from it
 #: rather than copied. Strict scope only: in a served Reference body "the
@@ -912,8 +914,26 @@ def _route(table: dict[tuple[str, str], Any]):
     return side_effect
 
 
-def _call(tool: str, args: dict, table: dict[tuple[str, str], Any]) -> Payload:
-    """``tools/call`` on a real listed + hosted server with a bound caller."""
+@contextmanager
+def full_hosted_env() -> Iterator[None]:
+    """A full-profile hosted server's environment (default toolsets), restored on exit."""
+    saved = {k: os.environ.get(k) for k in _PROFILE_ENV}
+    os.environ["KEEL_SERVER_PROFILE"] = "full"
+    os.environ["KEEL_EXECUTION_MODE"] = "hosted"
+    os.environ.pop("KEEL_TOOLSETS", None)
+    os.environ.pop("KEEL_LISTED_CLIENT", None)
+    try:
+        yield
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+
+
+def _call(tool: str, args: dict, table: dict[tuple[str, str], Any], *, env=listed_env) -> Payload:
+    """``tools/call`` on a real hosted server with a bound caller (listed by default)."""
     import keel.client
     import keel.tools.outcomes._handoff as handoff
     import respx
@@ -925,7 +945,7 @@ def _call(tool: str, args: dict, table: dict[tuple[str, str], Any]) -> Payload:
     keel.client.time.sleep = lambda *_a, **_k: None
     handoff._is_anon_session = lambda: False  # the hosted surface is never anonymous
     try:
-        with listed_env(), respx.mock(assert_all_called=False) as router:
+        with env(), respx.mock(assert_all_called=False) as router:
             router.route(host="api.surface-guards.test").mock(side_effect=_route(table))
             server = create_server()
             reset = bind_request_credentials(token="guard-token", api_url=API)
@@ -1030,6 +1050,41 @@ def runtime_payloads() -> dict[str, Payload]:
         }
     finally:
         br._POLL_INTERVAL_S, br._POLL_MAX_S = saved
+    for name, payload in out.items():
+        payload.name = name
+    return out
+
+
+#: The paper quota wall as keel-api denies a create (S01 IC-01-10).
+PAPER_CAP_403_BODY = {
+    "type": "about:blank",
+    "title": "Forbidden",
+    "status": 403,
+    "detail": "Insufficient entitlements",
+    "reasons": ["entitlement:cap_exceeded:paper_strategies_max:limit=1:current=1"],
+}
+
+
+@cache
+def paper_runtime_payloads() -> dict[str, Payload]:
+    """The paper runtime fixtures (paper-trading-v2 S06 §3.4.6), built through
+    the real MCP adapter on a full-profile hosted server while the held paper
+    SDK is released for the build only; the held state is restored after.
+
+    The listed connector cannot serve keel_paper_deploy while the SDK is held
+    (the listed flag is refused), so the wall is built where the tool runs.
+    """
+    from tests._paper_sdk import paper_sdk_release
+
+    with paper_sdk_release():
+        out = {
+            "paper_wall": _call(
+                "keel_paper_deploy",
+                {"strategy_id": "str_guard"},
+                {("POST", "/v1/paper"): (403, PAPER_CAP_403_BODY)},
+                env=full_hosted_env,
+            ),
+        }
     for name, payload in out.items():
         payload.name = name
     return out

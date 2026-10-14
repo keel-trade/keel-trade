@@ -405,9 +405,13 @@ def _org_has_no_accounts(ctx: ToolContext) -> bool:
 
     Any fetch failure returns False — the caller then raises its normal
     error; we never claim "no linked account" on a guess.
+
+    The probe counts exchange accounts only (paper-trading-v2 S06 §3.5.1,
+    PT2-16): it asks for ``capital_class=real``, so an org whose only account
+    is a paper one still gets the unlinked-account handoff.
     """
     try:
-        result = ctx.get_client().get("/v1/accounts", limit=1)
+        result = ctx.get_client().get("/v1/accounts", limit=1, capital_class="real")
     except Exception:  # noqa: BLE001 — check is advisory; caller keeps its own error
         return False
     if isinstance(result, dict):

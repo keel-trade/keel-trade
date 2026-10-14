@@ -13,6 +13,8 @@ machinery + the profile matrix.
 
 from __future__ import annotations
 
+import json
+
 import pytest
 from keel.tools.outcomes import OUTCOMES, _bootstrap
 from keel.tools.outcomes._base import listed_enum
@@ -32,7 +34,7 @@ from keel.tools.outcomes._toolsets import (
 _bootstrap()
 
 HOSTED_EXCLUDED = {t.name for t in OUTCOMES.values() if t.local_only}
-ALL_TOOLSETS_ENV = "read-only,backtest,share,live-read,live-write"
+ALL_TOOLSETS_ENV = "read-only,backtest,share,live-read,paper,live-write"
 
 
 # ---------------------------------------------------------------------------
@@ -271,7 +273,9 @@ def test_effective_surface_switches_with_profile(monkeypatch):
     tool = OUTCOMES["keel_live_monitor"]
 
     monkeypatch.setenv("KEEL_SERVER_PROFILE", "full")
-    assert effective_description(tool) == tool.description
+    # The full profile serves the monitor's paper sentence (released, PT2-91).
+    assert tool.paper_description is not None
+    assert effective_description(tool) == tool.paper_description
     assert effective_input_schema(tool) == tool.input_schema
     assert effective_annotations(tool) == tool.annotations
 
@@ -317,7 +321,7 @@ def test_registration_matrix_end_to_end(monkeypatch):
     full = _registered_tools(monkeypatch, "full")
     assert set(full) == set(OUTCOMES) - HOSTED_EXCLUDED
     # Shared copy on full.
-    assert full["keel_live_monitor"].description == OUTCOMES["keel_live_monitor"].description
+    assert full["keel_live_monitor"].description == OUTCOMES["keel_live_monitor"].paper_description
     assert (
         full["keel_live_monitor"].annotations.title
         == OUTCOMES["keel_live_monitor"].annotations["title"]
@@ -335,7 +339,7 @@ def test_registration_matrix_end_to_end(monkeypatch):
 
 
 def test_server_instructions_switch_with_profile(monkeypatch):
-    from keel.mcp.server import LISTED_INSTRUCTIONS, create_server
+    from keel.mcp.server import create_server, listed_instructions
 
     monkeypatch.setenv("KEEL_EXECUTION_MODE", "hosted")
     monkeypatch.setenv("KEEL_SERVER_PROFILE", "full")
@@ -348,5 +352,167 @@ def test_server_instructions_switch_with_profile(monkeypatch):
     assert "live-write toolset" in full_instructions
 
     monkeypatch.setenv("KEEL_SERVER_PROFILE", "listed")
-    assert create_server().instructions == LISTED_INSTRUCTIONS
-    assert "live-write toolset" not in LISTED_INSTRUCTIONS
+    assert create_server().instructions == listed_instructions()
+    assert "live-write toolset" not in listed_instructions()
+
+
+# ---------------------------------------------------------------------------
+# The operating core's paper section rides keel_paper_deploy (S06 §3.9 row 3)
+# ---------------------------------------------------------------------------
+#
+# Released (the paper_sdk_released fixture), a full-profile server that loads
+# keel_paper_deploy carries the `paper` section once, after the live section,
+# which is byte-unchanged; one whose toolsets exclude `paper` carries none;
+# the listed instructions are untouched. The held arm is
+# tests/test_paper_sdk_hold.py (HEAD's instructions, byte for byte).
+
+PAPER_ROW = (
+    "PAPER — keel_paper_deploy creates a simulated paper-trading run from a "
+    "saved strategy and completes here; running with real capital is a "
+    "web-app step."
+)
+
+
+@pytest.mark.parametrize("hosted", [False, True])
+def test_full_instructions_carry_the_paper_section_once_when_loaded(
+    paper_sdk_released, monkeypatch, hosted
+):
+    from keel.mcp.server import create_server
+    from keel.tools.outcomes import paper_deploy_loaded
+
+    from pipeline_engine.reference.system import assemble
+    from tests._full_instructions_head import key, load
+
+    monkeypatch.delenv("KEEL_SERVER_PROFILE", raising=False)
+    monkeypatch.delenv("KEEL_TOOLSETS", raising=False)
+    if hosted:
+        monkeypatch.setenv("KEEL_EXECUTION_MODE", "hosted")
+    else:
+        monkeypatch.delenv("KEEL_EXECUTION_MODE", raising=False)
+    assert paper_deploy_loaded() is True
+    text = create_server().instructions
+    assert text.count(PAPER_ROW) == 1
+    live = assemble.section("live").terse
+    assert text.count(live) == 1
+    assert text.index(live) < text.index(PAPER_ROW)
+    # Everything else is HEAD's: removing the one block gives HEAD's string.
+    head = load()["instructions"][key("full-hosted" if hosted else "full-local", False)]
+    assert text.replace("\n\n" + PAPER_ROW, "", 1) == head
+
+
+def test_full_instructions_omit_the_paper_section_when_not_loaded(paper_sdk_released, monkeypatch):
+    from keel.mcp.server import create_server
+    from keel.tools.outcomes import paper_deploy_loaded
+
+    monkeypatch.delenv("KEEL_SERVER_PROFILE", raising=False)
+    monkeypatch.delenv("KEEL_EXECUTION_MODE", raising=False)
+    monkeypatch.setenv("KEEL_TOOLSETS", "read-only,backtest")
+    assert paper_deploy_loaded() is False
+    assert "keel_paper" not in create_server().instructions
+
+
+def test_listed_instructions_untouched_by_the_paper_section(paper_sdk_released, monkeypatch):
+    from keel.mcp.server import create_server
+
+    from tests._listed_head_fixtures import SURFACE_FIXTURE
+
+    head = json.loads(SURFACE_FIXTURE.read_text(encoding="utf-8"))["instructions"]
+    monkeypatch.setenv("KEEL_SERVER_PROFILE", "listed")
+    monkeypatch.setenv("KEEL_EXECUTION_MODE", "hosted")
+    monkeypatch.delenv("KEEL_LISTED_PAPER", raising=False)
+    text = create_server().instructions
+    assert "keel_paper" not in text
+    assert text == head
+
+
+# ---------------------------------------------------------------------------
+# The `paper` toolset (S06 §3.3, AC-06-3)
+# ---------------------------------------------------------------------------
+#
+# Released, `paper` rides the default set: both keel_paper_* tools load with
+# no KEEL_TOOLSETS; `live-write` alone does not load them, and the `live`
+# alias does not expand to `paper`. compute_numbers() counts the local default
+# from `_DEFAULT_TOOLSETS` itself. Held, the toolsets and both counts are
+# HEAD's. Seed: drop `with_paper_toolset` from `_toolsets.default_toolsets()`
+# ⇒ the default arm and the tools_local_default arm both red. Count: the
+# default arm loads exactly two keel_paper_* tools, and the live-write arm
+# loads at least one live-write tool.
+
+PAPER_TOOLS = {"keel_paper_deploy", "keel_paper_control"}
+
+
+def _paper_loaded_names(monkeypatch, toolsets_env: str | None) -> set[str]:
+    monkeypatch.setenv("KEEL_SERVER_PROFILE", "full")
+    monkeypatch.delenv("KEEL_EXECUTION_MODE", raising=False)
+    if toolsets_env is None:
+        monkeypatch.delenv("KEEL_TOOLSETS", raising=False)
+    else:
+        monkeypatch.setenv("KEEL_TOOLSETS", toolsets_env)
+    return set(loaded_tool_names(OUTCOMES))
+
+
+def test_default_toolsets_load_both_paper_tools(paper_sdk_released, monkeypatch):
+    from keel.tools.outcomes import _toolsets
+
+    assert "paper" in _toolsets._DEFAULT_TOOLSETS
+    loaded = _paper_loaded_names(monkeypatch, None)
+    assert {n for n in loaded if n.startswith("keel_paper_")} == PAPER_TOOLS
+
+
+def test_live_write_alone_does_not_load_paper(paper_sdk_released, monkeypatch):
+    loaded = _paper_loaded_names(monkeypatch, "live-write")
+    assert not loaded & PAPER_TOOLS
+    live_write = {t.name for t in OUTCOMES.values() if t.toolset == "live-write"}
+    assert loaded & live_write, "the live-write toolset did not load; this arm proves nothing"
+
+
+def test_the_live_alias_does_not_expand_to_paper(paper_sdk_released, monkeypatch):
+    from keel.tools.outcomes._toolsets import load_toolsets
+
+    loaded = _paper_loaded_names(monkeypatch, "live")
+    assert "paper" not in load_toolsets()
+    assert not loaded & PAPER_TOOLS
+    assert "keel_live_control" in loaded  # the alias did expand
+
+
+def test_tools_local_default_counts_the_default_set(paper_sdk_released, monkeypatch):
+    from keel.tools.outcomes._toolsets import _DEFAULT_TOOLSETS, is_tool_loaded
+
+    numbers = _checker().compute_numbers()
+    expected = sum(1 for t in OUTCOMES.values() if is_tool_loaded(t.toolset, _DEFAULT_TOOLSETS))
+    assert numbers["tools_local_default"] == expected
+    paper = sum(1 for t in OUTCOMES.values() if t.toolset == "paper")
+    assert paper == 2
+    assert numbers["tools_local_default"] == HELD_TOOLS_LOCAL_DEFAULT + 2
+    assert numbers["tools_registry"] == HELD_TOOLS_REGISTRY + 2
+
+
+def test_compute_numbers_holds_no_toolset_literal():
+    """§3.3: the count reads `_DEFAULT_TOOLSETS`; a hand copy moved nothing."""
+    source = _checker_path().read_text(encoding="utf-8")
+    body = source[source.index("def compute_numbers") :]
+    body = body[: body.index("\ndef ")]
+    assert '"live-read"' not in body and "local_default = frozenset" not in body
+    assert "_DEFAULT_TOOLSETS as local_default" in body
+
+
+#: HEAD's numbers at the paper base (48 registered tools; the local default
+#: set loads every tool outside live-write).
+HELD_TOOLS_REGISTRY = 48
+HELD_TOOLS_LOCAL_DEFAULT = 45
+
+
+def _checker_path():
+    from pathlib import Path
+
+    return Path(__file__).resolve().parents[1] / "scripts" / "check_surface_routing.py"
+
+
+def _checker():
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("check_surface_routing_toolset", _checker_path())
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module

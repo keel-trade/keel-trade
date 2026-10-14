@@ -1467,7 +1467,37 @@ def describe_param_range(constraints: dict | None) -> dict | None:
     return out
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# ASSETSELECT vs UNIVERSE (Q-2610)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+def asset_select_outside_universe(symbols: Any, resolved: Any) -> list[str]:
+    """The AssetSelect ``symbols`` that the Universe's ``resolved`` list lacks.
+
+    In the order written, each once. ``[]`` when either side is not a list of
+    names (a VariableRef, an unresolved universe): only a static list against a
+    resolved universe can be judged. ONE owner for the write-time issue
+    (``ASSET_SELECT_OUTSIDE_UNIVERSE``, DSL validator pass 9) and the run note
+    of the same code (``backtest_framework`` ``asset_select_notes``).
+
+    >>> asset_select_outside_universe(["BTC", "OP", "ETH", "OP"], ["BTC", "ETH"])
+    ['OP']
+    >>> asset_select_outside_universe(["BTC"], None)
+    []
+    """
+    if not isinstance(symbols, (list, tuple)) or not isinstance(resolved, (list, tuple)):
+        return []
+    in_universe = {s for s in resolved if isinstance(s, str)}
+    out: list[str] = []
+    for symbol in symbols:
+        if isinstance(symbol, str) and symbol not in in_universe and symbol not in out:
+            out.append(symbol)
+    return out
+
+
 __all__ = [
+    "asset_select_outside_universe",
     "TypeFlowEntry",
     "ValidationIssue",
     "ValidationResult",

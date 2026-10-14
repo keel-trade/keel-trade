@@ -1,3 +1,5 @@
+<!-- topic: strategies -->
+
 ## Common Strategy Patterns
 
 These are recognition aids, not templates. Novel strategies may not fit any pattern — that's fine. Use component discovery tools for creative composition.

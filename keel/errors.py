@@ -175,6 +175,11 @@ class EntitlementError(KeelError):
     # when it detects billing-quota reasons in the response body.
     recovery_tool = "keel_auth_login"
     recovery_tool_args: dict | None = {"scope": "live"}
+    #: The server's ``reasons`` for a permission-shaped 403 (e.g.
+    #: ``credential:scope_denied:backtest.create``), kept so a tool can tell
+    #: which action was refused (paper-trading-v2 S06 §3.2.4a). Not part of
+    #: the envelope: the refusal's wire shape is unchanged.
+    server_reasons: tuple[str, ...] = ()
 
 
 class ValidationError(KeelError):
@@ -185,6 +190,12 @@ class ValidationError(KeelError):
 class UsageError(KeelError):
     error_code = "usage_error"
     exit_code = 2
+
+
+#: keel-api's paper routes answer ``404 {"code": "paper_not_enabled"}`` while
+#: paper is off on that environment (S06 §3.2.4 (c), IC-01-11).
+PAPER_NOT_ENABLED_CODE = "paper_not_enabled"
+PAPER_NOT_ENABLED_MESSAGE = "Paper trading is not available on this Keel environment yet."
 
 
 def _problem_code(body: str | None) -> dict | None:
@@ -232,6 +243,38 @@ def _server_detail(body: str | None) -> dict | None:
         return None
     out = {k: v for k, v in detail.items() if k not in {"detail", "title", "message"}}
     return out or None
+
+
+def _refusal_detail(body: str | None) -> tuple[str | None, dict | None]:
+    """keel-api's structured refusal, read the ONE way keel-api reads it.
+
+    Mirrors ``services/keel-api/src/errors.py`` ``refusal_code`` (Q-2368), the
+    reader behind the ``api_request refused`` line, so the envelope ``code``
+    the agent and the audit row see is the code keel-api logged for the same
+    response (Q-2564). Three body shapes carry a code: an RFC 7807 /
+    ``CodedHTTPException`` body with a top-level ``code`` (``_problem_code``);
+    an ``HTTPException(detail={"code": …})`` (``_server_detail``); and the
+    validator-refusal shape ``{"detail": …, "issues": [issue, …]}`` — the
+    parse and unknown-Universe-mode 400s (Q-1695/Q-2207) and the lock-gate
+    422 — whose code is the FIRST issue's catalog ``code``. A top-level code
+    wins. Returns ``(code, machine_half)``; a body naming no code gives
+    ``(None, …)`` rather than a fabricated pseudo-code (Q-0425).
+    """
+    coded = _problem_code(body)
+    if coded is not None:
+        return coded["code"], coded
+    served = _server_detail(body)
+    if served is None:
+        return None, None
+    code = served.get("code")
+    if isinstance(code, str) and code:
+        return code, served
+    issues = served.get("issues")
+    if isinstance(issues, list) and issues and isinstance(issues[0], dict):
+        first = issues[0].get("code")
+        if isinstance(first, str) and first:
+            return first, served
+    return None, served
 
 
 #: Location prefixes FastAPI / pydantic put before the field name — where
@@ -376,13 +419,26 @@ def translate_http_error(status: int, body: str) -> KeelError:
         # keel-api 400s carry instructive remediation in `detail` (e.g. the
         # deploy-intent token verdicts, spec 03 R7). Surface that text as the
         # message instead of a raw `HTTP 400: {json}` dump.
-        return UsageError(
+        # A CODED 400 — the parse / unknown-Universe-mode save refusals, whose
+        # code is their first issue's (Q-2564) — carries keel-api's code as the
+        # envelope `code` and its machine half under `detail`, exactly as the
+        # 409 and 422 arms do (Q-1742/Q-1751): the audit row and the agent
+        # then read PARAM_EXPRESSION_NOT_ALLOWED, not `usage_error`, which is
+        # what a wrong-ARGUMENT call reads. The class and its exit code stay:
+        # an uncoded 400 IS a wrong-argument call, and live_deploy /
+        # live_update catch the token verdicts by class.
+        code, served = _refusal_detail(body)
+        err = UsageError(
             _extract_detail(body) or "Bad request — the server rejected the input.",
+            error_code=code,
             suggestion=(
                 "The message names what the server rejected — fix that input "
                 "and retry (a 400 is never fixed by retrying unchanged)."
             ),
         )
+        if code is not None:
+            err.detail = served
+        return err
     if status == 401:
         if not _local_tools_registered():
             # Hosted / listed (spec 05 R-L4): `keel_auth_login` is not on
@@ -415,6 +471,16 @@ def translate_http_error(status: int, body: str) -> KeelError:
     if status == 403:
         return _translate_403(body)
     if status == 404:
+        coded = _problem_code(body)
+        if coded is not None and coded.get("code") == PAPER_NOT_ENABLED_CODE:
+            # Paper-trading-v2 S06 §3.2.4 (c) (PT2-12, IC-01-11): every paper
+            # route answers 404 with this code while keel-api's flag is off.
+            # Typed on the CODE, never the sentence; no suggestion — neither a
+            # retry, a sign-in nor a plan change fixes it (the
+            # `not_provisioned` arm's model).
+            err = NotFoundError(PAPER_NOT_ENABLED_MESSAGE, error_code=PAPER_NOT_ENABLED_CODE)
+            err.detail = coded
+            return err
         # `keel_audit_list_last` is not on the listed or hosted surface
         # (spec 05 §4 item 7): named only where this server registers it.
         backtests_where = (
@@ -466,16 +532,17 @@ def translate_http_error(status: int, body: str) -> KeelError:
             ),
         )
     if status == 422:
-        detail = _server_detail(body)
-        code = detail.get("code") if isinstance(detail, dict) else None
+        code, detail = _refusal_detail(body)
         err = ValidationError(
             _extract_detail(body) or "Validation failed",
             # keel-api's own machine code IS the envelope `code` (Q-1751):
             # every coded 422 used to flatten to `validation_failed`, so the
             # envelope and the mcp-server audit row (which records `code`)
-            # could not tell WINDOW_INVERTED from a DSL error. The class
+            # could not tell WINDOW_INVERTED from a DSL error. Read through
+            # the one refusal reader (Q-2564), so an issues-only body (the
+            # lock-gate 422's LOCK_ERROR) names its gate issue too. The class
             # code stays the fallback for an uncoded body.
-            error_code=code if isinstance(code, str) and code else None,
+            error_code=code,
             suggestion=_expectation_for_422(detail),
         )
         err.detail = detail
@@ -483,13 +550,32 @@ def translate_http_error(status: int, body: str) -> KeelError:
     if status == 429:
         return rate_limited_error(None)
     if status >= 500:
-        return KeelError(
+        err = KeelError(
             f"Server error (HTTP {status})",
             error_code="server_error",
             exit_code=1,
             retryable=True,
             suggestion="Retry in a few seconds. If persistent, check https://status.usekeel.io",
         )
+        # The server's own sentence, when it sent a short plain one (keel-api's
+        # paper routes answer a 503 with fixed prose such as "The run is
+        # paused safely; retry the same update."). Kept off the envelope: only
+        # a tool that knows its route's prose renders it (S10, PT2-90).
+        # Only a 503 (the paper routes' fixed prose); an unhandled 500's body
+        # ("An unexpected error occurred.") must not replace the SDK's
+        # write-unconfirmed message (S10 re-review R1).
+        detail = _extract_detail(body)
+        err.server_message = (
+            detail.strip()
+            if status == 503
+            and isinstance(detail, str)
+            and detail.strip()
+            and detail is not body
+            and len(detail) <= 300
+            and not detail.lstrip().startswith(("{", "[", "<"))
+            else None
+        )
+        return err
     # Any other status (405, 413, 418 …): a plain sentence. The raw body —
     # JSON framing, a request id, an HTML error page — is never the message
     # (Q-2273 L3); a short plain-text detail the server meant for a reader is.
@@ -1074,6 +1160,21 @@ def quota_reset_text(info: dict) -> str | None:
     return quota_reset_sentence(info).strip() or None
 
 
+def quota_is_concurrent_cap(info: dict) -> bool:
+    """True for a limit on how many run AT ONCE (``cap_exceeded``, no reset).
+
+    A concurrent cap (live strategy slots, paper runs) never refills on a
+    clock, so a wall that says it "lifts at the reset" is false for it
+    (finding QA-W1). The wall stays neutral either way (D-12, paper-trading-v2
+    R-59): it says the limit does not reset, and proposes no action.
+    """
+    return info.get("kind") == "cap_exceeded" and quota_reset_instant(info) is None
+
+
+#: The no-reset clause of a concurrent cap's wall (QA-W1): a fact, no action.
+QUOTA_CAP_NO_RESET = "It limits how many run at once and does not reset on a clock"
+
+
 #: The free-plan wall's one plan sentence (D-12 Q1's recorded FALLBACK,
 #: taken 2026-10-01 — Q-2268): where plans are changed, and nothing about
 #: what other plans include. D-12 first shipped "Paid plans include more
@@ -1177,6 +1278,12 @@ def _translate_403(body: str) -> "EntitlementError":
     detail = payload.get("detail")
     detail_text = detail if isinstance(detail, str) and detail else (body or "")
     code = payload.get("code")
+    served_reasons = payload.get("reasons")
+    reasons = tuple(
+        r
+        for r in (served_reasons if isinstance(served_reasons, list) else ())
+        if isinstance(r, str)
+    )
 
     # Provisioning outcomes (keel-api Q-1519): the token authenticated a real
     # principal, and NEITHER re-auth nor a plan change can fix it — so no
@@ -1214,11 +1321,20 @@ def _translate_403(body: str) -> "EntitlementError":
 
     if info is not None:
         # D-12: facts only, and no destination — no `docs_url`, no URL in
-        # `example`. The limit lifts at the reset; the wall says so and stops.
+        # `example`. A metered limit lifts at the reset; a concurrent cap has
+        # no reset (QA-W1). The wall says which and stops.
         suggestion = assert_neutral_wall_text(
-            f"A plan limit on {info['label']} stopped this call; `example` carries "
-            "the numbers and the reset instant. Neither a retry nor a new sign-in "
-            "changes it before the reset.",
+            (
+                f"A plan limit on {info['label']} stopped this call; `example` carries "
+                f"the numbers. {QUOTA_CAP_NO_RESET}; neither a retry nor a new sign-in "
+                "changes it."
+            )
+            if quota_is_concurrent_cap(info)
+            else (
+                f"A plan limit on {info['label']} stopped this call; `example` carries "
+                "the numbers and the reset instant. Neither a retry nor a new sign-in "
+                "changes it before the reset."
+            ),
             free_plan=is_free_plan(info),
         )
         err = EntitlementError(
@@ -1244,10 +1360,11 @@ def _translate_403(body: str) -> "EntitlementError":
         )
         err.recovery_tool = None
         err.recovery_tool_args = None
+        err.server_reasons = reasons
         return err
 
     # Not a plan limit → the scope-missing default shape.
-    return EntitlementError(
+    err = EntitlementError(
         detail_text
         or (
             "403 Forbidden. If this is a live-trading tool "
@@ -1261,3 +1378,5 @@ def _translate_403(body: str) -> "EntitlementError":
             "this is a live-trading tool, or check `keel_account_status` for plan limits."
         ),
     )
+    err.server_reasons = reasons
+    return err

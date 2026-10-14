@@ -6,6 +6,214 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.9.0] — 2026-10-14
+
+0.8.0 is on PyPI. Everything below landed on main after that upload, so it
+publishes under a new version (Q-2611). It is minor, not patch: the registry
+gains two tools (`keel_paper_deploy`, `keel_paper_control`) and a default
+toolset (`paper`), results gain fields (`exposure.bars_net_long` /
+`bars_net_short`, `periods`), the catalogue gains components (`LevelStop`,
+`LevelTarget`), and `KEEL_API_KEY` changes meaning (it is now the whole
+credential).
+
+**Paper trading on the CLI and the local MCP server (paper-trading-v2,
+PT2-91).** A paper run trades a saved strategy forward with simulated fills at
+live Hyperliquid prices under Keel's published fill model; no real orders are
+placed and no funds are at risk.
+
+- `keel_paper_deploy` / `keel paper deploy <strategy_id>` starts one. It
+  completes in band, with no web handoff, exchange account, `--scope live`
+  login or arming, on the access that runs a backtest. `--capital` is the
+  simulated starting capital: 1000, 10000 (default) or 100000 US dollars.
+- `keel_paper_control` / `keel paper control <id> --action
+pause|resume|stop|restart|update` changes it. It refuses a live deployment,
+  and `keel_live_control` refuses a paper run, each naming the other tool.
+- Both load in the new `paper` toolset, which is in the default set, so the
+  default local surface grows from 45 to 47 tools. A `KEEL_TOOLSETS` value
+  that lists toolsets explicitly must name `paper` to keep them.
+- `keel_deployments_list` takes `capital_class` (`real`, `practice` or `all`;
+  CLI `--capital-class`). Naming none asks for `all`, and each row of that
+  mixed result is labelled Live or Paper.
+- `keel_live_monitor` reads a paper run with the live views, framed "Paper run
+  (simulated)", relays its venue block, health and parity, and carries the
+  graduation envelope with its next step once the run is ready to go live.
+  The portfolio view lists paper runs in their own section, never in live
+  totals.
+- `keel_share_create` shares a paper run (`target_type=paper`).
+- `keel_plan_usage` reports the plan's paper slots. A full slot is refused
+  with the plan's limit and how many are in use; an anonymous CLI session is
+  asked to sign in first.
+- keel-api's `paper_not_enabled` 404 is a typed `NotFoundError`
+  (`error_code="paper_not_enabled"`).
+- The deploy line after a backtest offers a paper run after the live link.
+- `deploy-and-monitor` no longer says there is no paper mode; "paper trade
+  this" goes to `keel_paper_deploy`.
+
+**Reads name the capital class they mean.** `keel_accounts_list` asks for real
+accounts only, so it never lists the paper account; the live monitor's
+portfolio summary and `keel_live_deploy`'s no-account probe ask for the real
+class. Outputs for live accounts and runs are unchanged.
+
+**A run whose `AssetSelect` names coins outside the Universe says which it did
+not trade (Q-2610).** The run carries an `ASSET_SELECT_OUTSIDE_UNIVERSE` note
+("OP, APT: named by AssetSelect but not in the strategy's Universe, so not
+loaded and not traded.") instead of quietly returning fewer coins.
+
+**`keel_help` answers the plain words agents ask with (Q-2504).** A knowledge
+doc can declare extra names in a `<!-- topic: x -->` header, read by the same
+reader as `<!-- pattern: x -->`. `universe` serves `universe_selection`, `data`
+serves `data_loading`, `strategies` serves `strategy_patterns`,
+`position_manager` (the phase category) serves `entry_exit_patterns`, and
+`structure_stop` / `risk_reward` serve `entry_exit_patterns`. On a miss, the
+"Mentioned in" hint now lists first a doc whose name contains the word. A test
+fails if two docs declare one name, if a declaration is shadowed by a file
+name, or if a declaration sits below the lines the reader reads.
+
+**`LevelStop` and `LevelTarget` are in the bundled catalogue (Q-2581).**
+`LevelStop(level=)` exits once price crosses back through a level frozen at
+entry. `LevelTarget(level=, r=, fraction=)` exits or reduces at an R multiple of
+that distance. Both are factories over existing position-layer components.
+`entry_exit_patterns` gains an Exits table and a `structure_stop_2r` recipe.
+
+**`keel_share_create` returns a link that is ready to post (Q-2587).** It asks
+keel-api to wait up to 10 s for the share card to render. When the card is
+still missing after that, `preview_note` says so.
+
+**Universe lists carry a resolution seal (Q-2434 2b).** A resolved
+`top_volume` or `category` list carries `resolution="u1:…"`, covering the
+criteria, the resolution time and the members. If the list is edited by hand,
+the criteria move, or the seal was not written by Keel, the validator reports
+`STALE_UNIVERSE`. The vendored validator and the local tools carry the seal.
+
+**Smaller fixes.**
+
+- `keel_strategy_restore`'s `restored_from_sequence` now has a home in the
+  channel map and the strategy `outputSchema`, so it no longer logs "no
+  declared home" (Q-2572).
+- When the hosted server's FastMCP refuses an argument, the refusal is now
+  recorded as an error in the audit and metrics. Before, it was recorded as a
+  success. What the agent reads is unchanged (Q-2557).
+- Catalogue descriptions for `RiskParityAllocator` (inverse vol per bar over
+  the coins present that bar) and `CalendarRebalance` (a coin that is not
+  trading is never flagged) follow the server-side fixes (Q-2473, Q-2135).
+- Bundled docs: a maker-fee backtest is a scenario, and live fills are taker
+  without the maker grant (Q-2599). Universe exclusions apply after the
+  `top_n` cap (Q-2567). M-34 no longer calls a span difference a platform
+  defect (Q-2533).
+
+**A CLI and a local MCP server no longer sign each other out (Q-2602).** When
+both ran on one machine without `KEEL_API_KEY` and their stored login came due
+in the same minute, both sent the same refresh token. keel-api accepts a
+refresh token once, so one of them got a 401, and that process then deleted
+the login the other had just saved ("Your session has expired"). Refreshes of
+the stored login now take a lock beside `~/.keel/config.yaml` and re-read the
+file first, so the second process uses the token the first one minted instead
+of refreshing again. A refused refresh clears the stored login only when the
+file still holds the token that was refused. Processes running on
+`KEEL_API_KEY` never refresh and are unaffected.
+
+**The `exposure:` line says which way the book leaned (Q-2580).** Runs from
+the next backtest-worker image carry `exposure.bars_net_long` /
+`exposure.bars_net_short`: of the held bars, how many held a net long book
+and how many a net short one (the sign of Σ position × mark; a bar hedged to
+exactly zero net is neither). `keel_backtest_run` / `keel_backtest_summarize`
+add them to the `exposure` object, and the `exposure:` line, the card and the
+app's run page gain a clause right after the held count: `Held positions on
+120 of 555 bars · net long 120, net short 0 · …`. A strategy named "short"
+that held only longs now says so on the result. Runs written before this
+carry neither key and their line is unchanged; nothing is backfilled and no
+extra read is made.
+
+**`KEEL_API_KEY` is the whole credential, and the stored login stays separate
+(Q-2579).** Before this change a set `KEEL_API_KEY` replaced only the bearer.
+The stored login in `~/.keel/config.yaml` still applied in three ways:
+
+- When the stored token was due for refresh, the CLI or local MCP server
+  refreshed it, sent the request as the stored identity (a run in the key's
+  org read as "not found"), and rewrote the file.
+- A 401 on the key retried as the stored login.
+- The stored login's claimed org was sent as `X-Org-Id` alongside the key.
+
+Now a set key is used alone, against `KEEL_API_URL` or the default API. A 401
+on it fails as "your API key was rejected" and names `KEEL_API_KEY`. Every
+write to the config file (login, claim, token refresh, expiry notice) reads
+and writes the file itself and never the environment, so a keyed process
+cannot copy its key or URL into the stored login. With no key, the stored
+login works and refreshes as before. A logged-in CLI and an MCP server
+launched with a key can share one machine. `keel auth status`,
+`keel_account_status` / `keel status` and `keel doctor` report
+`credential_source` (`env KEEL_API_KEY` or `stored login`) together with the
+org, and `keel mcp serve` logs the source to stderr at startup.
+
+**The period table partitions the run's bars, so its rows compound to the
+run on every clock (Q-2577).** On a run whose bars do not close at 00:00 UTC
+(a `1d` strategy with `bar_offset` 12h, any intraday clock straddling
+midnight) `keel_backtest_summarize` / `keel_backtest_compare` `periods`
+dropped the bar straddling each month or quarter edge — the row was built as
+a slice clipped to the calendar's midnights — so the rows covered 118 of a
+121-bar run and compounded to +10.86 % against the run row's +11.06 %, and
+the run row itself lost the bar straddling the run's first midnight (the
+headline was +10.96 %). keel-api's `/periods` now assigns every bar of the
+run to exactly one period, the one holding the day the bar covers (the
+platform's covered-day rule), so Σ bars = the run's, Π(1 + r) = the run's
+return exactly, and the `run` row is the run; a row's `start`/`end` are the
+covered days of its first and last bar. An aligned clock (bars closing at
+midnight) is unchanged. `start`/`end` slices (`GET /slice`) keep their
+clipped-window meaning.
+
+**The `realism:` line says what capital fixes a sub-minimum order share
+(Q-2542).** Runs since platform v1.185 carry `realism.min_capital_for_share`
+— the capital at which at most 25 % / 5 % of the run's orders would sit under
+the $10 live minimum, from the run's own order sizes (one run answers it
+exactly; the kernel is scale-invariant in capital). `keel_backtest_summarize`
+/ `keel backtest summarize` (and the run/watch results) now carry the two
+rungs on `realism.min_capital_for_share` and append them to the `realism:`
+line as tolerances — "capital for at most 5% of orders under the minimum:
+$431; at most 25%: $138" — so "how much capital do I need?" is read off the
+first run, not re-run at other capitals. The 0 % rung is never rendered (on
+a $10k library fork it reads $4.85M and misleads). A run from before the
+field is unchanged.
+
+**`keel_backtest_summarize` and `keel_backtest_compare` take `periods`
+(`monthly` | `quarterly`) and answer a period table in one call (Q-2565).**
+A month-by-month comparison of two runs was 36 summarize slices and ~150
+keel-api reads. `keel backtest summarize <id> --periods monthly` /
+`keel backtest compare <id> <id> --periods monthly` now carry a `periods`
+block — per calendar month or quarter: return, max drawdown (within the
+period), positions opened and bars, plus the whole run — rendered as one
+table in the text block and on the CLI, and aligned by period across the
+runs on a compare (null where a run has no such period). The numbers are
+keel-api's `/periods` read: the slice owner (`build_slice`) called once per
+period from one `results.json` read, so each period opens at the previous
+one's close and the rows compound exactly to the run's return; a period
+before the run's first equity move is marked `warmup`. One read, no backtest
+unit; more than 36 periods is refused naming the coarser grain. Omitted,
+every envelope is unchanged.
+
+**A `keel_strategy_compose` dry run of a strategy with a position factory
+(`StopLoss`, `TakeProfit`, …) compiles again (Q-2563).** Since the position
+layer (platform v1.183) a registered factory compiles as its expansion, and
+the lock the SDK built for its dry run walked only the declared steps, so
+`/v1/strategies/compile` refused every such preview "Unknown component
+'TradeReturn'" while the save succeeded. `strategy_lock_generate` now derives
+the lock the one way the platform does (`evolve_lock`: declared steps,
+variables, factory bodies and every expansion component), the platform's
+compile endpoint evolves a supplied lock exactly as a save does, and a
+compile-stage refusal the local validator did not name records a gate code
+(`PARSE_ERROR` / `LOCK_ERROR` / `COMPILE_FAILED`) on the dry run's audit row
+instead of none.
+
+**A save keel-api refuses for its DSL is audited by the rule it broke, not as a
+bad argument (Q-2564).** A `keel_strategy_compose` save refused 400 for a
+parse-stage rule (`PARAM_EXPRESSION_NOT_ALLOWED`, `VARIABLE_ASSIGN_SHAPE`, an
+unknown Universe mode) reached the agent and the audit row as `usage_error` —
+the code of a call with a wrong argument — with no rule code anywhere but
+keel-api's own log line. The envelope `code` is now the refusal's first issue
+code (the same code keel-api logs), its issues ride `detail` as a 422's do,
+and the refused save records `validation_ok: false` with the codes the body
+names (the validator's errors on a 422 `COMPILE_FAILED`, else its gate issue,
+else the gate code). An uncoded 400 is still `usage_error`.
+
 **A first-week backtest allowance is reported as one fact (connect-onboarding
 spec 01 §1.8/§1.9).** When keel-api reports a `first_week` block on a
 backtest balance (`{granted, remaining, ends_at}`), `keel_plan_usage` and

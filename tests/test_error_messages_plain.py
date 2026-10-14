@@ -253,3 +253,62 @@ def test_an_unexpected_exception_is_not_echoed_to_the_caller():
         object.__setattr__(tool, "handler", original)
     assert envelope["code"] == "internal_error"
     assert envelope["message"] == "Unexpected error in keel_help; the call did not complete."
+
+
+#: The two simulated paper tools a Claude session is served (S10, PT2-90;
+#: review W1): the same faults, plus keel-api's paper 503 prose, which the
+#: paper tools now relay as the message (review F3).
+PAPER_API_CALLS = {
+    "keel_paper_deploy": {"strategy_id": "str_x"},
+    "keel_paper_control": {"deployment_id": "dep_x", "action": "update"},
+}
+PAPER_FAULTS = {
+    **FAULTS,
+    "paper503": lambda req: httpx.Response(
+        503,
+        json={
+            "detail": "Paper update could not be finalized. The run is paused safely; "
+            "retry the same update."
+        },
+    ),
+}
+
+
+def test_no_claude_on_paper_error_message_carries_raw_internals():
+    from keel.tools.outcomes._toolsets import listed_host_context
+
+    from tests._paper_sdk import paper_sdk_release
+
+    async def run():
+        from fastmcp import Client
+        from keel.mcp.server import create_server
+
+        out = []
+        async with Client(create_server()) as client:
+            for fault, respond in PAPER_FAULTS.items():
+                for tool, args in PAPER_API_CALLS.items():
+                    with respx.mock(assert_all_called=False) as router:
+                        router.route(host="api.plain.test").mock(side_effect=respond)
+                        result = await client.call_tool(tool, args, raise_on_error=False)
+                    out.append((fault, tool, result))
+        return out
+
+    saved = os.environ.get("KEEL_LISTED_PAPER_HOSTS")
+    with paper_sdk_release(), _hosted_listed_prod_flags(), listed_host_context("claude"):
+        os.environ["KEEL_LISTED_PAPER_HOSTS"] = "claude"
+        try:
+            results = asyncio.run(run())
+        finally:
+            if saved is None:
+                os.environ.pop("KEEL_LISTED_PAPER_HOSTS", None)
+            else:
+                os.environ["KEEL_LISTED_PAPER_HOSTS"] = saved
+    errors = [(f, t, _message(r)) for f, t, r in results if r.is_error]
+    # Non-vacuity: both tools were served (no unknown-tool refusal) and every
+    # (fault, tool) case failed and was read.
+    assert len(errors) == len(PAPER_FAULTS) * len(PAPER_API_CALLS) == len(results)
+    assert not any("Unknown tool" in m for _, _, m in errors), errors
+    leaks = [(f, t, m) for f, t, m in errors if RAW.search(m)]
+    assert not leaks, leaks
+    control_503 = next(m for f, t, m in errors if f == "paper503" and t == "keel_paper_control")
+    assert control_503.startswith("Paper update could not be finalized.")

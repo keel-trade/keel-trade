@@ -994,6 +994,8 @@ _VALID_UNIVERSE_KEYS = {
     "resolved_at",
     "groups",
     "max_leverages",
+    # The resolution seal (Q-2434, pipeline_engine.dsl.universe_seal).
+    "resolution",
 }
 
 
@@ -1106,6 +1108,7 @@ def _parse_universe_call(node: ast.Call, factory_names: set[str]) -> UniverseSpe
         resolved_at=kwargs.get("resolved_at"),
         groups=kwargs.get("groups"),
         max_leverages=kwargs.get("max_leverages"),
+        resolution=kwargs.get("resolution"),
         location=_loc(node, "universe"),
     )
 

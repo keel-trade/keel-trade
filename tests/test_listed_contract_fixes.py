@@ -188,7 +188,9 @@ def test_omitted_view_is_portfolio_without_a_deployment_and_overview_with_one():
 def test_listed_view_spellings_reach_the_same_endpoint(listed, shared):
     paths_listed, env_listed = _monitor({"deployment_id": "dep_1", "view": listed})
     paths_shared, env_shared = _monitor({"deployment_id": "dep_1", "view": shared})
-    assert paths_listed == paths_shared == [f"/v1/deployments/dep_1/{shared}"]
+    # The class read of the detail row first (QA B1), then the view.
+    expected = ["/v1/deployments/dep_1", f"/v1/deployments/dep_1/{shared}"]
+    assert paths_listed == paths_shared == expected
     assert env_listed["view"] == env_shared["view"] == shared
 
 

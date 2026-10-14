@@ -33,6 +33,7 @@ Safety). Running a strategy with real capital happens in the Keel web app.
 | Using Claude/ChatGPT on web or phone | Hosted endpoint — paste the URL (directory one-click coming) | CLI + local MCP |
 | Working in Claude Code / Cursor / terminal | Hosted endpoint — one command, or paste the URL | CLI + local MCP |
 | Running a strategy from the Keel app | Keel web app (connect an account, review sizing, start it there) | reads on every surface |
+| Trying a strategy forward without a connected exchange account | Paper run (simulated) — Keel web app, or `keel paper` on the CLI | in-app chat, local MCP |
 | Building your own agent/scripts | SDK + API key | CLI |
 | Just browsing/running strategies | Web app + library | hosted endpoint |
 <!-- surface-routing:end -->

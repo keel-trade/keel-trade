@@ -414,6 +414,24 @@ class Section:
 
 _VALID_LAYERS = frozenset({"head", "body", "skill", "reference"})
 
+#: The emission conditions a section's `when:` may name. An unknown value
+#: raises at load: a typo'd condition would otherwise emit the section
+#: unconditionally.
+#:
+#: * ``live_write_absent`` — emitted only while the live-write toolset is not
+#:   loaded;
+#: * ``paper_loaded`` — emitted only while ``keel_paper_deploy`` is loaded
+#:   (paper-trading-v2 S06 §3.9 row 3, §3.11 item 1): the held paper SDK
+#:   registers no paper tool, so a paper section reaches no instructions and
+#:   no served document until the wheel's follow-up releases it (PT2-28);
+#: * ``paper_listed`` / ``paper_listed_absent`` — emitted only while the
+#:   listed flag ``KEEL_LISTED_PAPER`` is on / off (S06 §3.4.2): the amended
+#:   boundary sentence and the listed paper row replace their flag-off forms
+#:   only with the flag on, so the flag-off listed instructions are HEAD's.
+WHEN_CONDITIONS = frozenset(
+    {"live_write_absent", "paper_loaded", "paper_listed", "paper_listed_absent"}
+)
+
 #: The two registers (spec 01 §2.1). No default: a silently-defaulted
 #: register is a sentence emitted on the wrong surface.
 REGISTERS = frozenset({"base", "opinion"})
@@ -490,6 +508,12 @@ def load_sections(path: str | None = None) -> tuple[Section, ...]:
                 f"operating_core.md: section '{meta['id']}' has register {register!r}; "
                 f"valid: {sorted(REGISTERS)} (there is no default)"
             )
+        when = str(meta["when"]) if meta.get("when") else None
+        if when is not None and when not in WHEN_CONDITIONS:
+            raise ValueError(
+                f"operating_core.md: section '{meta['id']}' has when {when!r}; "
+                f"valid: {sorted(WHEN_CONDITIONS)}"
+            )
         surfaces = tuple(meta.get("surfaces") or ())  # type: ignore[arg-type]
         if register == "opinion" and layer in ("head", "body") and "mcp" in surfaces:
             raise ValueError(
@@ -504,7 +528,7 @@ def load_sections(path: str | None = None) -> tuple[Section, ...]:
                 layer=layer,
                 surfaces=surfaces,
                 profiles=tuple(meta.get("profiles") or ()),  # type: ignore[arg-type]
-                when=str(meta["when"]) if meta.get("when") else None,
+                when=when,
                 rules=tuple(meta.get("rules") or ()),  # type: ignore[arg-type]
                 body=body,
                 register=register,
@@ -609,7 +633,29 @@ def head_fact_positions(text: str | None = None) -> dict[str, int]:
 # ── Instructions assembly ───────────────────────────────────────────────
 
 
-def _included(sec: Section, profile: str, *, live_write_loaded: bool) -> bool:
+def _when_holds(
+    sec: Section, *, live_write_loaded: bool, paper_loaded: bool, paper_listed: bool = False
+) -> bool:
+    """Whether a section's `when:` condition holds (absent = always)."""
+    if sec.when == "live_write_absent":
+        return not live_write_loaded
+    if sec.when == "paper_loaded":
+        return paper_loaded
+    if sec.when == "paper_listed":
+        return paper_listed
+    if sec.when == "paper_listed_absent":
+        return not paper_listed
+    return True
+
+
+def _included(
+    sec: Section,
+    profile: str,
+    *,
+    live_write_loaded: bool,
+    paper_loaded: bool = False,
+    paper_listed: bool = False,
+) -> bool:
     if "mcp" not in sec.surfaces:
         return False
     if sec.layer not in ("head", "body"):
@@ -621,42 +667,64 @@ def _included(sec: Section, profile: str, *, live_write_loaded: bool) -> bool:
     tags = PROFILE_TAGS[profile]
     if sec.profiles and not (set(sec.profiles) & tags):
         return False
-    if sec.when == "live_write_absent" and live_write_loaded:
-        return False
-    return True
+    return _when_holds(
+        sec,
+        live_write_loaded=live_write_loaded,
+        paper_loaded=paper_loaded,
+        paper_listed=paper_listed,
+    )
 
 
 def instructions(
     profile: str = "listed",
     *,
     live_write_loaded: bool = False,
+    paper_loaded: bool = False,
+    paper_listed: bool = False,
     include_ids: bool = False,
 ) -> str:
     """Assemble the server instructions for one profile.
 
     `profile` is a key of `PROFILE_TAGS` (`listed`, `full-hosted`,
     `full-local`). Each included section contributes its FIRST paragraph;
-    blocks join with a blank line.
+    blocks join with a blank line. ``paper_loaded`` is true when the server
+    loaded ``keel_paper_deploy`` (S06 §3.9 row 3); a `when: paper_loaded`
+    section is emitted only then. ``paper_listed`` is the listed flag (S06
+    §3.4.2): `when: paper_listed` sections are emitted only with it on and
+    `when: paper_listed_absent` sections only with it off.
     """
     if profile not in PROFILE_TAGS:
         raise ValueError(f"unknown profile {profile!r}; valid: {sorted(PROFILE_TAGS)}")
-    blocks = [
-        s.terse
-        for s in load_sections()
-        if _included(s, profile, live_write_loaded=live_write_loaded)
-    ]
+    flags = {
+        "live_write_loaded": live_write_loaded,
+        "paper_loaded": paper_loaded,
+        "paper_listed": paper_listed,
+    }
+    blocks = [s.terse for s in load_sections() if _included(s, profile, **flags)]
     if include_ids:  # pragma: no cover - debugging aid
         return "\n\n".join(
-            f"[{s.id}] {s.terse}"
-            for s in load_sections()
-            if _included(s, profile, live_write_loaded=live_write_loaded)
+            f"[{s.id}] {s.terse}" for s in load_sections() if _included(s, profile, **flags)
         )
     return "\n\n".join(blocks)
 
 
-def instruction_section_ids(profile: str, *, live_write_loaded: bool = False) -> tuple[str, ...]:
+def instruction_section_ids(
+    profile: str,
+    *,
+    live_write_loaded: bool = False,
+    paper_loaded: bool = False,
+    paper_listed: bool = False,
+) -> tuple[str, ...]:
     return tuple(
-        s.id for s in load_sections() if _included(s, profile, live_write_loaded=live_write_loaded)
+        s.id
+        for s in load_sections()
+        if _included(
+            s,
+            profile,
+            live_write_loaded=live_write_loaded,
+            paper_loaded=paper_loaded,
+            paper_listed=paper_listed,
+        )
     )
 
 
@@ -674,7 +742,13 @@ def _in_profile(sec: Section, profile: str) -> bool:
     return not sec.profiles or bool(set(sec.profiles) & PROFILE_TAGS[profile])
 
 
-def base_document(sections: Sequence[Section] | None = None, *, profile: str | None = None) -> str:
+def base_document(
+    sections: Sequence[Section] | None = None,
+    *,
+    profile: str | None = None,
+    paper_loaded: bool = False,
+    paper_listed: bool = False,
+) -> str:
     """The SERVED form of the corpus (spec 01 §2.1.1, R-5).
 
     Every `register: base` section, in file order, front matter stripped,
@@ -687,14 +761,39 @@ def base_document(sections: Sequence[Section] | None = None, *, profile: str | N
     profile is never served the full-only AUTH, write-through STATE, LIVE
     or `KEEL_TOOLSETS` sections. ``None`` is the whole base register, for a
     caller that is not serving one profile; an unknown profile raises.
+
+    Serving a profile, a `when: paper_loaded` section is included only with
+    ``paper_loaded`` true (S06 §3.11 item 1, PT2-28): while the paper SDK is
+    held no surface, `keel_help topic=operating_core` included, names a
+    paper tool. Every other `when:` keeps today's rule (served regardless;
+    the live-write notice is a fact about configuration, not a held
+    surface), and ``profile=None`` stays the whole base register.
+
+    Serving a profile, the listed flag's pair follows ``paper_listed`` (S06
+    §3.4.2): a `when: paper_listed` section is included only with it on and a
+    `when: paper_listed_absent` section only with it off, so the flag-off
+    served document is HEAD's.
     """
     if profile is not None and profile not in PROFILE_TAGS:
         raise ValueError(f"unknown profile {profile!r}; valid: {sorted(PROFILE_TAGS)}")
     return "\n\n".join(
         s.body.strip()
         for s in base_sections(sections)
-        if profile is None or _in_profile(s, profile)
+        if profile is None or (_in_profile(s, profile) and _served(s, paper_loaded, paper_listed))
     )
+
+
+def _served(sec: Section, paper_loaded: bool, paper_listed: bool) -> bool:
+    """`base_document`'s `when:` rule serving one profile: the held paper
+    section and the listed flag's pair follow their flags; every other
+    `when:` is served regardless (a fact about configuration)."""
+    if sec.when == "paper_loaded":
+        return paper_loaded
+    if sec.when == "paper_listed":
+        return paper_listed
+    if sec.when == "paper_listed_absent":
+        return not paper_listed
+    return True
 
 
 def chat_layer(sections: Sequence[Section] | None = None) -> str:

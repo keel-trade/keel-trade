@@ -616,7 +616,7 @@ def test_server_instructions_state_the_model():
     """Spec 08 R1: MCP server instructions state the contract on both
     profiles (full: write-through + conflict envelope; listed: policy-
     safe server-authoritative phrasing only)."""
-    from keel.mcp.server import LISTED_INSTRUCTIONS, _full_instructions
+    from keel.mcp.server import _full_instructions, listed_instructions
 
     full = _full_instructions(live_write_loaded=True)
     # "server HEAD is the truth" since 2026-09-22 (the state block became
@@ -654,9 +654,9 @@ def test_server_instructions_state_the_model():
 
     boundary = "It cannot place orders, move funds or connect wallets"
     surface_block = assemble.section("surface-listed").terse
-    assert surface_block in LISTED_INSTRUCTIONS
+    assert surface_block in listed_instructions()
     assert surface_block.count(boundary) == 1
-    assert "sync_conflict" not in LISTED_INSTRUCTIONS
+    assert "sync_conflict" not in listed_instructions()
     surface = surface_block.replace(boundary, "").lower()
     for banned in ("deploy", "fund", "trade verb", "wallet", "leverage"):
         assert banned not in surface

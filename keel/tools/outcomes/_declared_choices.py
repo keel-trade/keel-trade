@@ -83,11 +83,28 @@ def _props(schema: dict | None) -> dict:
     return (schema or {}).get("properties", {}) or {}
 
 
+def _paper_schemas(tool: Any) -> tuple:
+    """A tool's paper schema forms while they are published (paper-trading-v2
+    S06 §3.11 item 1, §3.4.2): on the full profile once the paper SDK is
+    released, on listed only with the listed flag on too. Otherwise none, so
+    a value only the paper form declares is refused exactly as HEAD refused it."""
+    from . import _toolsets
+
+    if not _toolsets.PAPER_SDK_RELEASED:
+        return ()
+    if _toolsets.is_listed_profile() and not _toolsets.listed_paper_enabled():
+        return ()
+    return (
+        getattr(tool, "paper_input_schema", None),
+        getattr(tool, "listed_paper_input_schema", None),
+    )
+
+
 def _allowed(tool: Any, name: str) -> list | None:
-    """Every accepted spelling of ``name``'s enum across both schemas, or
-    ``None`` when neither declares one."""
+    """Every accepted spelling of ``name``'s enum across both schemas (and
+    their paper forms while published), or ``None`` when none declares one."""
     values: list = []
-    for schema in (tool.input_schema, tool.listed_input_schema):
+    for schema in (tool.input_schema, tool.listed_input_schema, *_paper_schemas(tool)):
         for v in (_props(schema).get(name) or {}).get("enum") or []:
             if v not in values:
                 values.append(v)

@@ -52,12 +52,14 @@ from typing import Any
 
 from keel.errors import (
     FORBIDDEN_UPSELL_RE,
+    QUOTA_CAP_NO_RESET,
     EntitlementError,
     KeelError,
     assert_neutral_wall_text,
     is_free_plan,
     quota_allowance_note,
     quota_headline,
+    quota_is_concurrent_cap,
     quota_plans_line,
     quota_reset_text,
     quota_wall_lines,
@@ -382,8 +384,13 @@ def maybe_quota_handoff(
     *,
     blocked_action: str,
     retry_call: dict[str, Any],
+    extra_points: list[str] | None = None,
 ) -> HandoffRequired | None:
     """Build the plan-limit handoff from a quota-shaped EntitlementError.
+
+    ``extra_points`` are fact lines a caller appends after the wall's own
+    lines (the listed paper wall's slot-freeing line, S10 §5 / PT2-90). They
+    pass the same D-12 scan as every other field of the wall.
 
     Returns ``None`` when ``e`` is not the quota shape (callers re-raise
     the original error). ``limit_details`` carries the EXACT numbers the
@@ -467,7 +474,7 @@ def maybe_quota_handoff(
     # headline reads the server's own `kind` (Q-1590: only the no-grant
     # kinds may say the plan does not include the unit), and the compute
     # edge says "not enough to start this", never "used all" (Q-1806).
-    talking_points = quota_wall_lines(parsed)
+    talking_points = quota_wall_lines(parsed) + list(extra_points or ())
 
     # What the CARD draws (Q-1806): a calm plan-limit state, not a red error
     # line — headline, reset, the free plan's one plan sentence, and what
@@ -483,14 +490,35 @@ def maybe_quota_handoff(
             limit_view[key] = value
 
     reason = f"A plan limit on {label} stopped this call."
-    suggestion = (
-        f"Plan limit on {label}; the numbers are in `limit_details`. It lifts at "
-        "the reset — neither a retry nor a new sign-in changes it before then."
-    )
+    if quota_is_concurrent_cap(parsed):
+        # A limit on how many run at once has no reset to wait for (QA-W1).
+        # Still neutral (D-12, paper-trading-v2 R-59): the fact, no action and
+        # no slot-freeing point; that fact rides the tool description.
+        suggestion = (
+            f"Plan limit on {label}; the numbers are in `limit_details`. "
+            f"{QUOTA_CAP_NO_RESET}; neither a retry nor a new sign-in changes it."
+        )
+        verify_reason = (
+            "The same call, unchanged; it succeeds once this limit is no longer "
+            "reached. It does not reset on a clock."
+        )
+    else:
+        suggestion = (
+            f"Plan limit on {label}; the numbers are in `limit_details`. It lifts at "
+            "the reset — neither a retry nor a new sign-in changes it before then."
+        )
+        verify_reason = "The same call, unchanged; it succeeds after the reset."
     # Every text field of the wall passes the D-12 scan — not only the
     # talking points — so a pitch cannot ride in through a field nobody
-    # thought to check (message, reason, suggestion, card).
-    for text in (str(e), reason, suggestion, *talking_points, *limit_view.values()):
+    # thought to check (message, reason, suggestion, card, resume reason).
+    for text in (
+        str(e),
+        reason,
+        suggestion,
+        verify_reason,
+        *talking_points,
+        *limit_view.values(),
+    ):
         assert_neutral_wall_text(text, free_plan=free)
 
     return HandoffRequired(
@@ -502,7 +530,7 @@ def maybe_quota_handoff(
         resume={
             "verify_call": {
                 **retry_call,
-                "reason": "The same call, unchanged; it succeeds after the reset.",
+                "reason": verify_reason,
             }
         },
         limit_details=limit_details,

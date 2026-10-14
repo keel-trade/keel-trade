@@ -59,6 +59,12 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
                     "org_id": org.get("id"),
                     **detail,
                 }
+                if not hosted:
+                    # Q-2579: which credential answered — `env KEEL_API_KEY`
+                    # (the stored login is not used) or `stored login`.
+                    from keel.config import credential_source_label
+
+                    detail["credential_source"] = credential_source_label(config)
             checks.append({"name": "auth", "ok": True, "detail": detail})
         except Exception as e:  # noqa: BLE001
             checks.append(

@@ -455,7 +455,25 @@ def test_no_prose_names_a_tool_the_registry_does_not_have():
     # Revert by reversing that edit.
     """
     corpus = _corpus()
-    violations = assemble.unknown_tool_violations(corpus, frozenset(OUTCOMES))
+    # A `when: paper_loaded` core section (paper-trading-v2 S06 §3.9 row 3)
+    # is served only where keel_paper_deploy is loaded, which the held paper
+    # SDK never registers (§3.11 item 1, PT2-28): judge it against the
+    # released registry, and everything else against the held one.
+    from tests._paper_sdk import paper_sdk_release
+
+    # The listed flag's paper row (`when: paper_listed`, S06 §3.4.2) is held
+    # the same way: the flag is refused while the paper SDK is held.
+    paper_keys = {
+        f"core:{s.id}"
+        for s in assemble.load_sections()
+        if s.when in ("paper_loaded", "paper_listed")
+    }
+    assert paper_keys <= set(corpus)
+    held = {k: v for k, v in corpus.items() if k not in paper_keys}
+    violations = assemble.unknown_tool_violations(held, frozenset(OUTCOMES))
+    with paper_sdk_release():
+        released = frozenset(OUTCOMES)
+    violations += assemble.unknown_tool_violations({k: corpus[k] for k in paper_keys}, released)
     assert not violations, "prose names unregistered tools:\n" + "\n".join(violations)
     # Non-vacuity: the scan found real tool references to judge.
     names_found = sum(1 for text in corpus.values() if "keel_" in text)

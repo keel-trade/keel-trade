@@ -73,6 +73,17 @@ from pipeline_engine.dsl.trace_shim import (
     active_trace_sink,
 )
 from pipeline_engine.dsl.universe_expectation import expected_resolved_bounds, stale_count_remedy
+from pipeline_engine.dsl.universe_seal import (
+    REFUSING_VERDICTS as SEAL_REFUSING_VERDICTS,
+)
+from pipeline_engine.dsl.universe_seal import (
+    SEALED_MODES,
+    seal_refusal_detail,
+    seal_verdict,
+)
+from pipeline_engine.dsl.universe_seal import (
+    VALID as SEAL_VALID,
+)
 from pipeline_engine.validation_shared import (
     TIMEFRAME_MINUTES,
     UNIVERSE_MASK_APPLIERS,
@@ -83,6 +94,7 @@ from pipeline_engine.validation_shared import (
     ValidationIssue,
     ValidationResult,
     ValidOption,
+    asset_select_outside_universe,
     format_range,
     hard_bounds,
     parse_bar_offset_minutes,
@@ -3592,6 +3604,38 @@ def _validate_loader_markets(
                 )
 
 
+def _validate_asset_select_universe(
+    strategy: StrategyFile,
+    universe: UniverseSpec | None,
+    issues: list[ValidationIssue],
+) -> None:
+    """Pass 9 (B1b): ASSET_SELECT_OUTSIDE_UNIVERSE (Q-2610).
+
+    The Universe is the set a run loads (the save bakes ``resolved``; the
+    loaders compile with it), so an AssetSelect name outside ``resolved`` has
+    no data and AssetSelect drops it. The skip is correct under the universe
+    rule; this says it. One issue per AssetSelect, at that component, naming
+    the missing symbols in written order. Only a STATIC ``symbols`` list
+    against a universe that carries ``resolved`` is judged. Reads the EXPANDED
+    strategy, like the other component scans, so a factory argument is read
+    as the literal it is. Mirrored in TS (rules/declarations.ts
+    ``checkAssetSelectUniverse``).
+    """
+    if universe is None or not universe.resolved:
+        return
+    for ref in _walk_component_refs(strategy):
+        if ref.name != "AssetSelect":
+            continue
+        outside = asset_select_outside_universe(ref.params.get("symbols"), universe.resolved)
+        if outside:
+            emit(
+                issues,
+                "ASSET_SELECT_OUTSIDE_UNIVERSE",
+                location=_format_location(ref.location),
+                symbols=", ".join(outside),
+            )
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # PASS 8: Slot validation
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -3764,6 +3808,11 @@ def _validate_declarations(
     #     (Q-2363, Q-2414, Q-2415) — the loader half of UNSUPPORTED_MARKET
     #     (TS: checkLoaderMarkets).
     _validate_loader_markets(expanded, registry, issues)
+
+    # B1b) An AssetSelect naming symbols the Universe's resolved list lacks
+    #     (Q-2610) — skipped at run time, so say it (TS:
+    #     checkAssetSelectUniverse).
+    _validate_asset_select_universe(expanded, strategy.universe, issues)
 
     # C) Execution validation
     if strategy.execution is not None:
@@ -3992,11 +4041,26 @@ def _validate_universe(
         assert universe.resolved is not None  # for type narrowing
         resolved_count = len(universe.resolved)
 
-        # NOTE: structural checks here are approximate. They catch obvious
-        # drift (top_n changed, manual symbols changed) but not every case.
-        # The rigorous version (a resolution seal recording which criteria
-        # and list a server resolve produced) is not built (Q-2434 2b).
-        if universe.mode == "manual" and universe.symbols:
+        # The resolution seal (Q-2434 2b, `universe_seal`) is the rigorous
+        # check: a SEALED list either is the resolution it claims (no count
+        # heuristics) or is refused saying which part moved — the criteria,
+        # or the members (a hand edit, the same-count swap the count arm
+        # cannot see). An UNSEALED list (every list written before the seal,
+        # library entries imported before it, older clients) and a
+        # SUPERSEDED seal keep the approximate structural checks below,
+        # unchanged: grandfathered, never made stricter after the fact.
+        seal = seal_verdict(universe)
+        if seal in SEAL_REFUSING_VERDICTS:
+            emit(
+                issues,
+                "STALE_UNIVERSE",
+                location=loc,
+                production_mode=production_mode,
+                detail=seal_refusal_detail(universe, seal),
+            )
+        elif seal == SEAL_VALID and universe.mode in SEALED_MODES:
+            pass
+        elif universe.mode == "manual" and universe.symbols:
             symbols_set = set(universe.symbols)
             resolved_set = set(universe.resolved)
             # For manual mode, resolved should equal symbols modulo

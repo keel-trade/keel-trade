@@ -264,8 +264,15 @@ def test_live_monitor_refuses_a_limit_past_the_views_own_cap():
         {"deployment_id": "dep_1", "view": "weights-history", "limit": 300},
         get=lambda p, q: {"snapshots": []},
     )
+    # Both reads carry the agent-telemetry marker (paper-trading-v2 S06
+    # §3.5.1, R-61: only the overview's detail read is an owner visit): the
+    # class read of the detail row first (QA B1), then the view.
     assert [(c[1], c[2]) for c in calls] == [
-        ("/v1/deployments/dep_1/weights/history", {"limit": 300})
+        ("/v1/deployments/dep_1", {"headers": {"X-Keel-Agent-Telemetry": "1"}}),
+        (
+            "/v1/deployments/dep_1/weights/history",
+            {"headers": {"X-Keel-Agent-Telemetry": "1"}, "limit": 300},
+        ),
     ]
 
 

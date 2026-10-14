@@ -19,6 +19,22 @@ Read-only wrapper over ``GET /v1/me``. It returns EXACTLY:
 
       154 of 200 first-week backtests left; they end Tue 13 Oct 15:02 UTC.
 
+* ``paper`` — present only where the caller is served the paper tools
+  (S10 §5, PT2-90): on the listed profile while ``listed_paper_enabled()``
+  is true for the caller's host (per request, FDR-10), and on the full
+  profile once the paper SDK is released. One block,
+  ``{unit: "paper_strategies_max", limit, used, remaining}``, read from the
+  ``/v1/me`` entitlement balance the paper wall's own check computes
+  (``platform_auth.get_all_balances``: the effective cap with bonus grants,
+  and the live count of DEPLOYING/LIVE/PAUSED paper runs), and one more
+  neutral sentence::
+
+      Paper strategies: 1 of 1 in use. It limits how many run at once and
+      does not reset on a clock.
+
+  A concurrent cap has no period and no reset. Absent everywhere else, so a
+  ChatGPT session's output stays HEAD's bytes.
+
 That is the Lovable ``get_workspace`` shape: the caller's own state and
 nothing else (mcp-conversion D-12, 04 §4.3, founder ruling 2026-09-28).
 
@@ -43,6 +59,7 @@ from __future__ import annotations
 from typing import Any
 
 from keel.errors import (
+    QUOTA_CAP_NO_RESET,
     assert_neutral_wall_text,
     format_reset_instant,
     plan_display_name,
@@ -76,6 +93,10 @@ _BLOCK_KEYS: tuple[str, ...] = ("unit", "limit", "used", "remaining", "resets_at
 
 #: The top-level key set, exactly (pinned by test_outcomes_plan_status).
 RESULT_KEYS: frozenset[str] = frozenset({"plan", "period", "quota", "talking_points"})
+#: The one key the paper surface adds, only where paper is served (S10 §5).
+PAPER_KEY = "paper"
+#: The paper slot unit (plans.yaml), a concurrent cap.
+PAPER_UNIT = "paper_strategies_max"
 
 _PERIOD_PHRASES: dict[str, str] = {
     "daily": "Today",
@@ -135,6 +156,58 @@ def _served_blocks(me: dict) -> dict[str, dict[str, Any]]:
                 block[key] = bal[key]
         out[unit] = block
     return out
+
+
+def _paper_served() -> bool:
+    """Whether this caller is served the paper tools, read per call (S10 §5).
+
+    Listed: the host-aware listed flag, so a ChatGPT session with the flag on
+    for Claude only gets HEAD's bytes. Full: the held-SDK constant.
+    """
+    from . import _toolsets
+
+    if _toolsets.is_listed_profile():
+        return _toolsets.listed_paper_enabled()
+    return _toolsets.PAPER_SDK_RELEASED
+
+
+def _paper_block(me: dict) -> dict[str, Any] | None:
+    """The paper slot block from the served cap balance, or ``None``.
+
+    The balance's ``available`` is the cap itself for a cap unit, so the
+    remaining count is ``limit - cap_current`` (the same definition as
+    ``platform_auth.quota.quota_view_from_cap``); nothing is invented.
+    """
+    for bal in me.get("entitlements") or []:
+        if not isinstance(bal, dict) or bal.get("unit") != PAPER_UNIT:
+            continue
+        granted, current = bal.get("granted"), bal.get("cap_current")
+        if not isinstance(granted, int) or not isinstance(current, int):
+            return None
+        if granted >= _UNLIMITED_SENTINEL:
+            return {
+                "unit": PAPER_UNIT,
+                "limit": "unlimited",
+                "used": current,
+                "remaining": "unlimited",
+            }
+        return {
+            "unit": PAPER_UNIT,
+            "limit": granted,
+            "used": current,
+            "remaining": max(0, granted - current),
+        }
+    return None
+
+
+def _paper_point(block: dict[str, Any]) -> str:
+    """The neutral paper sentence: the caller's own count, the cap rule, stop."""
+    if block["limit"] == "unlimited":
+        return "Paper strategies: unlimited."
+    return (
+        f"Paper strategies: {_amount(block['used'])} of {_amount(block['limit'])} in use. "
+        f"{QUOTA_CAP_NO_RESET}."
+    )
 
 
 def _project(block: dict[str, Any]) -> dict[str, Any]:
@@ -212,6 +285,9 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
         first_week = render_first_week_sentence(served["backtest_runs"].get("first_week"))
         if first_week:
             points.append(first_week)
+    paper = _paper_block(me) if _paper_served() else None
+    if paper is not None:
+        points.append(_paper_point(paper))
     # The same validator and D-12 scan as every wall: no other plan, no
     # price, no destination, no expiry urgency. A neutral fact proposes no
     # action, so there is no do-nothing line to require.
@@ -226,7 +302,26 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
         "quota": [_project(b) for b in blocks],
         "talking_points": talking_points,
     }
+    if paper is not None:
+        body[PAPER_KEY] = paper
     return OutcomeResult(run_id=None, hero_url=None, share_url=None, extra=body)
+
+
+PLAN_USAGE_DESCRIPTION = (
+    "Report the org's own Keel plan and its backtest usage this period — auth, "
+    "identity and visible tools are `keel_account_status`. It returns the plan name, the "
+    "period, and for backtest runs and backtest compute seconds the limit, the "
+    "used and remaining counts, and the reset instant. It changes nothing and "
+    "spends no quota."
+)
+PLAN_USAGE_LISTED_PAPER_DESCRIPTION = (
+    "Report the org's own Keel plan and its backtest usage this period — auth, "
+    "identity and visible tools are `keel_account_status`. It returns the plan name, the "
+    "period, and for backtest runs and backtest compute seconds the limit, the "
+    "used and remaining counts, and the reset instant, plus the paper strategies "
+    "limit (simulated runs at once, no reset) with its used and remaining counts. It "
+    "changes nothing and spends no quota."
+)
 
 
 PLAN_STATUS = register(
@@ -241,13 +336,10 @@ PLAN_STATUS = register(
         # served per-unit quota blocks and reset instants — numbers only);
         # mcp-conversion 04 §4.3 / D-12 (the Lovable get_workspace shape:
         # the caller's own state and nothing else).
-        description=(
-            "Report the org's own Keel plan and its backtest usage this period — auth, "
-            "identity and visible tools are `keel_account_status`. It returns the plan name, the "
-            "period, and for backtest runs and backtest compute seconds the limit, the "
-            "used and remaining counts, and the reset instant. It changes nothing and "
-            "spends no quota."
-        ),
+        description=PLAN_USAGE_DESCRIPTION,
+        # The listed twin while paper is served to this host (S10 §5, PT2-90):
+        # the description states the paper block the output then carries.
+        listed_paper_description=PLAN_USAGE_LISTED_PAPER_DESCRIPTION,
         input_schema={"type": "object", "properties": {}, "required": []},
         annotations={
             "title": "Get Plan Usage",

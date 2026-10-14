@@ -14,6 +14,7 @@ it by `scripts/check_agent_surface_docs.py`.
 
 from __future__ import annotations
 
+from . import _toolsets
 from ._base import OutcomeResult, OutcomeTool, ToolContext, envelope_error
 from ._toolsets import load_toolsets
 
@@ -114,6 +115,53 @@ def _bootstrap() -> None:
         strategy_workspaces,
     )
     from . import help as _help
+
+    # The paper modules register only once the paper SDK is released (S06
+    # §3.11 item 1, PT2-28): while `PAPER_SDK_RELEASED` is false the registry,
+    # the CLI command tree and every profile's `tools/list` are HEAD's. Read
+    # off the module at call time so the `paper_sdk_released` test fixture's
+    # setting is the one honoured.
+    if _toolsets.PAPER_SDK_RELEASED:
+        _register_paper_modules()
+
+
+#: The paper family modules (S06 §3.2, §3.6), imported by
+#: :func:`_register_paper_modules` and only while the paper SDK is released.
+#: Each paper tool's task appends its module here as it lands.
+_PAPER_MODULES: tuple[str, ...] = ("paper_deploy", "paper_control")
+
+
+def _register_paper_modules() -> None:
+    """Import every module in :data:`_PAPER_MODULES` so its tools register.
+
+    Called by :func:`_bootstrap` when the paper SDK is released, and by the
+    `paper_sdk_released` test fixture after it sets the constant. A missing
+    module is an ImportError, never a silent gap.
+    """
+    import importlib
+
+    for name in _PAPER_MODULES:
+        importlib.import_module(f"{__name__}.{name}")
+
+
+def paper_deploy_loaded(active_toolsets: frozenset[str] | None = None) -> bool:
+    """Whether this process serves ``keel_paper_deploy`` (S06 §3.9 row 3).
+
+    The operating core's ``paper`` section (``when: paper_loaded``) is
+    assembled into the instructions and the served document only when this
+    is true. While the paper SDK is held the tool is not registered, so it is
+    false on every profile (S06 §3.11 item 1, PT2-28); released, it follows
+    the same toolset and profile rules as the tool's own registration.
+    ``active_toolsets`` defaults to :func:`load_toolsets`.
+    """
+    from ._toolsets import is_tool_loaded, load_toolsets
+
+    _bootstrap()
+    tool = OUTCOMES.get("keel_paper_deploy")
+    if tool is None:  # the held SDK registers no paper tool
+        return False
+    active = load_toolsets() if active_toolsets is None else active_toolsets
+    return is_tool_loaded(tool.toolset, active, local_only=tool.local_only, name=tool.name)
 
 
 _BOOTSTRAPPED = False

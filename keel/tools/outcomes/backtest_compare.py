@@ -24,6 +24,7 @@ from typing import Any
 from keel.errors import KeelError, NotFoundError
 
 from . import register
+from ._backtest_view import PERIOD_GRAINS
 from ._base import OutcomeResult, OutcomeTool, ToolContext
 from ._declarations import DECLARATION_SECTIONS, declaration_view, diff_declarations
 from ._surface_hints import tool_ref, usage_hint
@@ -116,6 +117,14 @@ def _fetch_detail(client, backtest_id: str) -> dict:
 #: comparison stops being readable on any host and starts being a sweep.
 COMPARE_MIN_IDS = 2
 COMPARE_MAX_IDS = 8
+
+#: Q-2565: the period table across the set, in the listed word rules' terms.
+PERIODS_PARAM_TEXT = (
+    "Optional: add a period table — `monthly` or `quarterly` return and max drawdown "
+    "per run, aligned by period with the whole run last, so the runs compare over time "
+    "in one call. Each period is a slice of the run as it ran, so the rows compound to "
+    "the run's return. Omitted, no table."
+)
 
 #: Curve resolution per run, as a BUCKET count — `GET /curve?points=N`
 #: downsamples into N buckets and returns **N + 1** samples, because both
@@ -1042,6 +1051,7 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
         )
 
     holds = _holds_arg(args.get("holds"))
+    grain = args.get("periods") or None
     client = ctx.get_client()
     details = parallel_map(lambda run_id: _fetch_detail(client, run_id), ids)
     metrics_raw = [d.get("metrics") or {} for d in details]
@@ -1255,6 +1265,18 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
     models = [run.get("cost_model") for run in runs]
     if models and all(models) and len({tuple(m[k] for k in COST_MODEL_KEYS) for m in models}) == 1:
         extra["cost_model"] = models[0]
+    if grain:
+        # The period table across the set (Q-2565): one `/periods` read per
+        # run — keel-api's slice owner once per calendar period — aligned by
+        # period label in the runs' order, so "how did v1 vs v2 do each
+        # month" is ONE call and no backtest unit, not one summarize per
+        # (run, month). Asked for explicitly: a refusal is the result.
+        from ._backtest_view import align_periods, fetch_periods
+
+        blocks = parallel_map(lambda run_id: fetch_periods(client, run_id, grain), run_ids)
+        aligned = align_periods(blocks, labels)
+        if aligned is not None:
+            extra["periods"] = aligned
     if references:
         # Spec 03 §2.2 / R-28: the numbers ride `structuredContent`, the
         # series `_meta` (where the host takes it). `reference` keeps its
@@ -1386,6 +1408,11 @@ BACKTEST_COMPARE = register(
                         "every run covers; when the runs share none, over run 1's span, "
                         "marked `common_span: false`. Omitted, no price data is read."
                     ),
+                },
+                "periods": {
+                    "type": "string",
+                    "enum": list(PERIOD_GRAINS),
+                    "description": PERIODS_PARAM_TEXT,
                 },
             },
         },

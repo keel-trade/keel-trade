@@ -12,11 +12,23 @@ import yaml
 CONFIG_DIR = Path.home() / ".keel"
 CONFIG_FILE = CONFIG_DIR / "config.yaml"
 
+#: Where the active credential came from (Q-2579) — never persisted.
+#: ``env``: ``KEEL_API_KEY`` is the WHOLE credential for this process: no
+#: stored refresh token, org context or claim state rides with it, and
+#: nothing it does writes the stored login.
+#: ``stored``: the login in ``~/.keel/config.yaml`` (``keel auth login`` or
+#: the anonymous workspace), refreshed as it always was.
+#: ``hosted``: the per-request credential a hosted server bound.
+CREDENTIAL_SOURCE_ENV = "env"
+CREDENTIAL_SOURCE_STORED = "stored"
+CREDENTIAL_SOURCE_HOSTED = "hosted"
+DEFAULT_API_URL = "https://api.usekeel.io"
+
 
 @dataclass
 class KeelConfig:
     api_key: str | None = None
-    api_url: str = "https://api.usekeel.io"
+    api_url: str = DEFAULT_API_URL
     # OAuth flow state — all optional, backwards-compatible with v0.3.x configs.
     # When refresh_token is set, KeelClient performs transparent refresh.
     refresh_token: str | None = None
@@ -40,6 +52,21 @@ class KeelConfig:
     # anon refresh token, api_url, counts, org expiry, declined flag).
     # Same file/permission class that held the anon credentials pre-login.
     pending_claim: dict | None = None
+    # Q-2579: which credential this config carries (CREDENTIAL_SOURCE_*).
+    # Set by the loaders, never written to the file.
+    credential_source: str | None = None
+
+
+def credential_source_label(config: KeelConfig) -> str | None:
+    """The user-facing name of the active credential source, or None when
+    there is no credential: ``env KEEL_API_KEY`` / ``stored login``."""
+    if not config.api_key:
+        return None
+    return {
+        CREDENTIAL_SOURCE_ENV: "env KEEL_API_KEY",
+        CREDENTIAL_SOURCE_STORED: "stored login",
+        CREDENTIAL_SOURCE_HOSTED: "hosted connector",
+    }.get(config.credential_source or "", "explicit")
 
 
 def _parse_expires_at(raw: object) -> datetime | None:
@@ -56,28 +83,15 @@ def _parse_expires_at(raw: object) -> datetime | None:
     return None
 
 
-def load_config() -> KeelConfig:
-    """Load config with env var precedence: KEEL_API_KEY > config file.
+def load_file_config() -> KeelConfig:
+    """The stored login exactly as ``~/.keel/config.yaml`` holds it.
 
-    Hosted mode (``KEEL_EXECUTION_MODE=hosted``): the ONLY credential
-    source is the per-request binding made by the hosting process
-    (`keel.hosting.bind_request_credentials`). The config file and env
-    vars are never consulted — a hosted request without a binding raises
-    an instructive auth error rather than silently acting as the pod.
+    No environment variable is applied. Every writer of the file
+    read-modify-writes through THIS, never through :func:`load_config`, so
+    a process running on ``KEEL_API_KEY`` / ``KEEL_API_URL`` can never copy
+    its environment into the stored login another process uses (Q-2579).
     """
-    import os
-
-    from keel.hosting import current_request_credentials, hosted_auth_error, is_hosted
-
-    bound = current_request_credentials()
-    if bound is not None:
-        return KeelConfig(api_key=bound.token, api_url=bound.api_url)
-    if is_hosted():
-        raise hosted_auth_error()
-
     config = KeelConfig()
-
-    # Load from file
     if CONFIG_FILE.exists():
         try:
             data = yaml.safe_load(CONFIG_FILE.read_text()) or {}
@@ -94,15 +108,63 @@ def load_config() -> KeelConfig:
             config.pending_claim = raw_pending if isinstance(raw_pending, dict) else None
         except Exception:  # noqa: BLE001, S110 — corrupt/absent config falls back to defaults
             pass  # Corrupt config — use defaults
+    if config.api_key:
+        config.credential_source = CREDENTIAL_SOURCE_STORED
+    return config
 
-    # Env vars override
+
+def stored_login_api_url() -> str:
+    """The API a stored-login action (login, claim) targets when no
+    ``--api-url`` is given: ``KEEL_API_URL``, else the file's, else prod."""
+    import os
+
+    return os.environ.get("KEEL_API_URL") or load_file_config().api_url
+
+
+def load_config() -> KeelConfig:
+    """The credential this process acts as.
+
+    Precedence (Q-2579): ``KEEL_API_KEY`` set → it is the whole credential,
+    against ``KEEL_API_URL`` (else the default API). The stored login's
+    refresh token, org context (``X-Org-Id``), anonymous/claim state and
+    ``api_url`` are NOT read, so they can neither refresh nor redirect the
+    key, and a 401 on the key fails as a rejected key. No key → the stored
+    login in ``~/.keel/config.yaml``, with ``KEEL_API_URL`` overriding its
+    URL, refreshed as before. Callers that PERSIST use
+    :func:`load_file_config` instead.
+
+    Hosted mode (``KEEL_EXECUTION_MODE=hosted``): the ONLY credential
+    source is the per-request binding made by the hosting process
+    (`keel.hosting.bind_request_credentials`). The config file and env
+    vars are never consulted — a hosted request without a binding raises
+    an instructive auth error rather than silently acting as the pod.
+    """
+    import os
+
+    from keel.hosting import current_request_credentials, hosted_auth_error, is_hosted
+
+    bound = current_request_credentials()
+    if bound is not None:
+        return KeelConfig(
+            api_key=bound.token,
+            api_url=bound.api_url,
+            credential_source=CREDENTIAL_SOURCE_HOSTED,
+        )
+    if is_hosted():
+        raise hosted_auth_error()
+
     env_key = os.environ.get("KEEL_API_KEY")
-    if env_key:
-        config.api_key = env_key
     env_url = os.environ.get("KEEL_API_URL")
+    if env_key:
+        return KeelConfig(
+            api_key=env_key,
+            api_url=env_url or DEFAULT_API_URL,
+            credential_source=CREDENTIAL_SOURCE_ENV,
+        )
+
+    config = load_file_config()
     if env_url:
         config.api_url = env_url
-
     return config
 
 
@@ -112,7 +174,7 @@ def save_config(config: KeelConfig) -> None:
     data: dict = {}
     if config.api_key:
         data["api_key"] = config.api_key
-    if config.api_url != "https://api.usekeel.io":
+    if config.api_url != DEFAULT_API_URL:
         data["api_url"] = config.api_url
     if config.refresh_token:
         data["refresh_token"] = config.refresh_token

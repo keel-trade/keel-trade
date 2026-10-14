@@ -16,7 +16,7 @@ from typing import Any
 
 from . import register
 from ._base import OutcomeResult, OutcomeTool, ToolContext
-from ._status_view import CAPABILITY_PHRASE
+from ._status_view import CAPABILITY_PHRASE, CAPABILITY_PHRASE_PAPER_LISTED
 
 
 #: The live-trading route's guidance on a HOSTED server without live-write
@@ -197,6 +197,11 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
         body["app_url"] = ctx.app_url
     else:
         body["api_url"] = config.api_url
+        # Q-2579: which credential this process acts as — `env KEEL_API_KEY`
+        # (the stored login is not used) or `stored login` (None: signed out).
+        from keel.config import credential_source_label
+
+        body["credential_source"] = credential_source_label(config)
 
     # Always read live env — CLI ctx has empty toolsets (CLI exposes
     # every command); MCP ctx mirrors env. Read env directly so both
@@ -418,6 +423,17 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
     )
 
 
+#: The listed description, its capability clause formatted in: HEAD's
+#: `CAPABILITY_PHRASE`, or the listed flag's amended clause in its twin
+#: (paper-trading-v2 S06 §3.4.2, §3.4.5).
+_LISTED_DESCRIPTION = (
+    "Report who is signed in to Keel, on which plan and with how much quota left — "
+    "plan usage per unit is `keel_plan_usage`, a failing connection "
+    "`keel_connection_check`. It carries the account and plan, the remaining quota "
+    "(backtest runs, compute seconds) with the reset instant, and what this "
+    "connector can do: {phrase}."
+)
+
 STATUS = register(
     OutcomeTool(
         name="keel_account_status",
@@ -447,13 +463,9 @@ STATUS = register(
         # "first of a session" (Q-2080, 2026-10-01): OpenAI's scan read it as
         # a trigger beyond the user's request; the instructions say when to
         # call it, the description says what it returns.
-        listed_description=(
-            "Report who is signed in to Keel, on which plan and with how much quota left — "
-            "plan usage per unit is `keel_plan_usage`, a failing connection "
-            "`keel_connection_check`. It carries the account and plan, the remaining quota "
-            "(backtest runs, compute seconds) with the reset instant, and what this "
-            f"connector can do: {CAPABILITY_PHRASE}."
-        ),
+        listed_description=_LISTED_DESCRIPTION.format(phrase=CAPABILITY_PHRASE),
+        # The listed flag's twin (S06 §3.4.2): the amended clause (§3.4.5).
+        listed_paper_description=_LISTED_DESCRIPTION.format(phrase=CAPABILITY_PHRASE_PAPER_LISTED),
         input_schema={"type": "object", "properties": {}, "required": []},
         annotations={
             "title": "Get Account Status",

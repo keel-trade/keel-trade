@@ -594,6 +594,7 @@ def graph_to_spec(graph: GraphModel | dict[str, Any]) -> StrategyFile:
             resolved_at=model.universe.get("resolved_at"),
             groups=model.universe.get("groups"),
             max_leverages=model.universe.get("max_leverages"),
+            resolution=model.universe.get("resolution"),
             location=_loc("universe", lc),
         )
 
@@ -787,6 +788,7 @@ def spec_to_graph(spec: StrategyFile) -> GraphModel:
             "resolved_at",
             "groups",
             "max_leverages",
+            "resolution",
         ):
             val = getattr(spec.universe, attr)
             if val is not None:
@@ -955,6 +957,7 @@ def spec_to_dsl(spec: StrategyFile, registry: dict | None = None) -> str:
             "resolved_at",
             "groups",
             "max_leverages",
+            "resolution",
         ):
             if attr == "min_trailing_dollar_volume":
                 # The floor, under its current name even when it was declared

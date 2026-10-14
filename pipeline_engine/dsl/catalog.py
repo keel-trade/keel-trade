@@ -2402,21 +2402,27 @@ _ALL_RULES: tuple[Rule, ...] = (
         message_template="{detail}",
         template_params=("detail",),
         explain=(
-            "Structural staleness check between `resolved` and the declared "
-            "criteria. Two current shapes: manual-mode symbol/exclusion "
-            "arithmetic mismatch, and top_volume expected-count range mismatch "
-            '("resolved has N items but top_n=K implies X–Y"). The count arm '
-            "cannot tell a hand-edited list from moved criteria or an "
-            "under-supplying venue, so its copy leads with the manual-basket "
-            'remedy (Universe(mode="manual", symbols=[…])), names re-resolving '
-            'second, and gives "lower top_n" only conditionally (Q-2434). '
-            "Warning normally; promoted to error under production_mode "
-            "(promote_in_production=True). APPROXIMATE: it reads the list's "
-            "shape, never whether the list answers the criteria. "
-            "mode='category' is not checked here, and no later runtime check "
-            "exists — the workers trade `resolved` as stored. A list carried "
-            "across a criteria change is caught at the save instead (keel-api's "
-            "carried-list backstop, Q-2435)."
+            "Staleness check between `resolved` and the declared criteria. A "
+            'SEALED list (`resolution="u1:…"`, written by every writer that '
+            "resolves a top_volume / category list — Q-2434) is verified "
+            "exactly: the seal records the criteria, the instant and the "
+            "members a resolve produced, so the rule fires when the members "
+            "were edited after the resolve (manual-basket remedy), when the "
+            "criteria changed without a resolve (re-resolve), or when the seal "
+            "is not one Keel writes; a valid seal passes with no count "
+            "heuristics. An UNSEALED list (written before the seal, or by a "
+            "surface that does not seal) and a SUPERSEDED seal (a later "
+            "resolve that did not reseal) keep the approximate structural "
+            "check, unchanged: manual-mode symbol/exclusion arithmetic, and the "
+            "top_volume expected-count range "
+            '("resolved has N items but top_n=K implies X–Y"), whose copy '
+            "leads with the manual-basket remedy "
+            '(Universe(mode="manual", symbols=[…])), names re-resolving '
+            'second, and gives "lower top_n" only conditionally. An unsealed '
+            "category list is not checked. Warning normally; promoted to error "
+            "under production_mode (promote_in_production=True). A list "
+            "carried across a criteria change is also caught at the save "
+            "(keel-api's carried-list backstop, Q-2435)."
         ),
         passes=("9",),
         surfaces=_PY_ONLY,
@@ -2424,11 +2430,13 @@ _ALL_RULES: tuple[Rule, ...] = (
         ts_absent_reason=(
             "Never ported to the TS editor validator. The visual Universe "
             "editor re-resolves on every criteria edit (its D-12 criteria-key "
-            "machine), so it cannot produce a stale list. Code mode does NOT "
-            "auto-resolve: the save re-resolves a list carried across a "
-            "criteria change (Q-2435), and the code editor warns in place on a "
-            "hand-edited top_volume/category list and offers to make it a "
-            "manual basket (Q-2434), outside the validator."
+            "machine) and reseals what it applies, so it cannot produce a "
+            "stale list. Code mode does NOT auto-resolve: the save re-resolves "
+            "a list carried across a criteria change (Q-2435), and the code "
+            "editor warns in place on a hand-edited top_volume/category list — "
+            "by the resolution seal (the TS twin of universe_seal, pinned by "
+            "shared vectors) or against the buffer's base — and offers to make "
+            "it a manual basket (Q-2434), outside the validator."
         ),
         promote_in_production=True,
     ),
@@ -2445,6 +2453,46 @@ _ALL_RULES: tuple[Rule, ...] = (
         passes=("9",),
         surfaces=_PY_TS,
         ts_mirrored=True,
+    ),
+    Rule(
+        code="ASSET_SELECT_OUTSIDE_UNIVERSE",
+        category=RuleCategory.SUSPICIOUS,
+        summary="AssetSelect names symbols outside the Universe's resolved list.",
+        message_template=(
+            "AssetSelect names symbols outside the Universe's resolved list: {symbols}. "
+            "A symbol outside the universe is never loaded, so it is skipped and never "
+            "traded."
+        ),
+        template_params=("symbols",),
+        explain=(
+            "The declared Universe is the set a run loads and trades (the save "
+            "bakes `resolved` and the loaders are compiled with it), so an "
+            "AssetSelect name outside `resolved` is dropped by AssetSelect "
+            "with no data to select. Skipping it is correct under the universe "
+            "rule (Q-2135 / Q-2473 / Q-2528); saying nothing is not (Q-2610: "
+            "OP, APT and INJ named inside a top-40-by-volume universe that did "
+            "not hold them). The Universe GROUP twin is INVALID_UNIVERSE_GROUP. "
+            "Judged only for a STATIC `symbols` list and only when the Universe "
+            "carries `resolved` (an unresolved criteria universe is "
+            "UNRESOLVED_UNIVERSE's). A warning, never an error: a top_volume or "
+            "category universe re-resolves on every save, so a named coin can "
+            "rank out of it with no edit to the strategy, and an error would "
+            "refuse a stored strategy for a market move. The run carries the "
+            "same fact as a note with this code (backtest_framework "
+            "`asset_select_notes`), so a strategy saved before this rule still "
+            "says it in its results. `{symbols}` lists the names in the order "
+            "written, comma-separated. Minted unstaged: measured at mint, no "
+            "committed fixture, pinned trace or library entry names an "
+            "AssetSelect symbol outside its resolved list."
+        ),
+        passes=("9",),
+        surfaces=_PY_TS,
+        ts_mirrored=True,
+        suggestion_template=(
+            "Add them to the Universe (inclusions=[...] for a top_volume or category "
+            "universe, symbols=[...] for a manual one), or remove them from AssetSelect."
+        ),
+        applicability=Applicability.MAYBE_INCORRECT,
     ),
     Rule(
         code="INVALID_UNIVERSE_LEVERAGE",

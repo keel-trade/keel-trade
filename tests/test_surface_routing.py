@@ -504,12 +504,13 @@ def test_briefing_is_a_generated_whole_file_consumer(tmp_path, monkeypatch):
 
 
 def test_sdk_lane_runs_on_every_gated_path():
-    """Q-1457: both agent-surface gates run ONLY in sdk-test.yml, so its path
-    filter must cover every path either checker reads — including the
-    keel-site directories check_agent_surface_docs.py scans, which the
-    original filter (packages/keel-trade + libs/pipeline_engine) never named.
-    Seeded arm: drop one pattern → uncovered; control: an unrelated service
-    path is NOT matched, so the filter is not simply "everything"."""
+    """Q-1457: both agent-surface gates run ONLY in sdk-test.yml, so the lane
+    must run whenever any path either checker reads changes. Since 2026-10-06
+    (cost-reduction D-11) that holds by construction: the lane has no path
+    filter at all (workflow_dispatch only), and `make release-ci` dispatches it
+    on every release SHA. A path-filtered automatic trigger coming back would
+    reopen Q-1457, so it is refused here (and repo-wide by
+    infrastructure/ci/ci_trigger_policy.py)."""
     import yaml
 
     checker = _load_checker()
@@ -519,28 +520,18 @@ def test_sdk_lane_runs_on_every_gated_path():
     )
     workflow = yaml.safe_load((checker.REPO_ROOT / ".github/workflows/sdk-test.yml").read_text())
     triggers = workflow[True] if True in workflow else workflow["on"]  # PyYAML reads `on:` as True
-    push_paths = triggers["push"]["paths"]
-    pr_paths = triggers["pull_request"]["paths"]
-    assert push_paths == pr_paths, "push and pull_request filters must be the same list"
+    assert set(triggers) == {"workflow_dispatch"}, triggers
+    dispatcher = (checker.REPO_ROOT / "infrastructure/ci/prerelease_ci.py").read_text()
+    assert '"sdk-test.yml",' in dispatcher, "make release-ci no longer dispatches the SDK lane"
 
-    # every directory the docs checker scans → a representative file must match
+    # Non-vacuity: the gates still read a real, non-trivial set of paths.
     scanned = [
         f"{rel}/deep/file.md" if not rel.endswith((".md", ".py")) else rel
         for rel in docs_checker.SCAN_PATHS
     ]
     wanted = scanned + checker.gated_paths()
     assert len(wanted) > 20
-    assert checker.paths_uncovered(push_paths, wanted) == []
 
-    # control: the filter is selective
-    assert checker.paths_uncovered(push_paths, ["services/keel-api/src/main.py"]) == [
-        "services/keel-api/src/main.py"
-    ]
-    # proof it can fail: remove the keel-site content glob and the blog dir is uncovered
-    narrowed = [p for p in push_paths if p != "services/keel-site/content/**"]
-    assert "services/keel-site/content/blog/deep/file.md" in checker.paths_uncovered(
-        narrowed, wanted
-    )
     # glob semantics themselves
     assert checker.workflow_glob_matches(
         "services/keel-site/public/**", "services/keel-site/public/.well-known/agents.md"
@@ -613,6 +604,15 @@ def test_canonical_table_matches_spec_07_rows():
             "Running a strategy from the Keel app",
             "Keel web app (connect an account, review sizing, start it there)",
             "reads on every surface",
+        ),
+        # paper-trading-v2 S06 §3.9 row 9 (PT2-24, PT2-28): the web-app paper
+        # row, after the live row (byte-unchanged above). The CLI clause and
+        # the local-MCP also-works wait for the held wheel's follow-up; the
+        # hosted connector joins at the listed flag's flip (§3.11 items 1, 4).
+        (
+            "Trying a strategy forward without a connected exchange account",
+            "Paper run (simulated) — Keel web app, or `keel paper` on the CLI",
+            "in-app chat, local MCP",
         ),
         ("Building your own agent/scripts", "SDK + API key", "CLI"),
         ("Just browsing/running strategies", "Web app + library", "hosted endpoint"),

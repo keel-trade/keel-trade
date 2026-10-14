@@ -126,9 +126,24 @@ def good_result_nudge(
     url = intent["handoff_url"] if intent else overview_url
     return (
         f"This backtest clears Keel's good-result bar{qualifier}. "
-        f"Taking it live is a human step — review and deploy at {url} — "
-        f"or do nothing: nothing goes live without your explicit approval."
+        f"Taking it live is a human step — review and deploy at {url} "
+        f"{_paper_clause()}"
+        f"— or do nothing: nothing goes live without your explicit approval."
     )
+
+
+def _paper_clause() -> str:
+    """paper-trading-v2 S06 §3.9 row 7: the paper sentence between the live
+    link and the do-nothing clause, only once the paper SDK is released
+    (§3.11 item 1, PT2-28); held, the line is HEAD's byte for byte. The live
+    link stays first and the do-nothing clause stays (§3.10 rules 1, 6)."""
+    from . import _toolsets
+
+    if not _toolsets.PAPER_SDK_RELEASED:
+        return ""
+    from ._paper_strings import FULL_DEPLOY_LINE_SENTENCE
+
+    return f"{FULL_DEPLOY_LINE_SENTENCE.form(listed=False)} "
 
 
 #: The envelope field the full-profile line rides (`_mcp_adapter` renders it

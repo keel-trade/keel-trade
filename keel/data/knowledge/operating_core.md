@@ -78,12 +78,26 @@ id: surface-listed
 layer: body
 surfaces: [mcp]
 profiles: [listed]
+when: paper_listed_absent
 register: base
 rules: [R-OPEN-IN-APP]
 
 ---
 
 This connector is for research and backtests. It cannot place orders, move funds or connect wallets; strategies that are running are managed in the Keel web app (keel_app_link).
+
+---
+
+id: surface-listed-paper
+layer: body
+surfaces: [mcp]
+profiles: [listed]
+when: paper_listed
+register: base
+
+---
+
+This connector is for research, backtests and paper-trading runs. It cannot place real orders, move funds or connect wallets; paper-trading runs are simulated, and they can be started, paused, updated and stopped here; real-capital strategies are managed in the Keel web app (keel_app_link).
 
 ---
 
@@ -123,6 +137,32 @@ rules: [R-FRESHNESS, R-LIVE-HANDOFF]
 ---
 
 LIVE — keel_live_monitor reads; read its freshness first. Deploy and control need the live-write toolset and an explicit request, and hand off to the web app (handoff_required, action_url).
+
+---
+
+id: paper
+layer: body
+surfaces: [mcp]
+profiles: [full]
+when: paper_loaded
+register: base
+
+---
+
+PAPER — keel_paper_deploy creates a simulated paper-trading run from a saved strategy and completes here; running with real capital is a web-app step.
+
+---
+
+id: paper-listed
+layer: body
+surfaces: [mcp]
+profiles: [listed]
+when: paper_listed
+register: base
+
+---
+
+PAPER — keel_paper_deploy creates a simulated paper-trading run from a saved strategy and completes here; running with real capital is a step you take in the Keel web app.
 
 ---
 

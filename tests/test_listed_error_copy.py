@@ -132,15 +132,26 @@ FAULTS: dict[str, object] = {
 }
 
 
-def _calls() -> list[tuple[str, str, dict, object]]:
-    """(case, tool, args, fault|None) — the whole matrix."""
+#: The two simulated paper tools a Claude session is served (S10, PT2-90),
+#: swept by their own Claude-on arm below (S10 review W1).
+PAPER_MIN_ARGS: dict[str, dict] = {
+    "keel_paper_deploy": {"strategy_id": "str_q2273"},
+    "keel_paper_control": {"deployment_id": "dep_q2273", "action": "pause"},
+}
+
+
+def _calls(min_args: dict[str, dict] | None = None) -> list[tuple[str, str, dict, object]]:
+    """(case, tool, args, fault|None) — the whole matrix (the 29 by default)."""
     from keel.tools.outcomes._mcp_adapter import effective_input_schema
 
+    paper = min_args is not None
+    min_args = MIN_ARGS if min_args is None else min_args
+    names = sorted(min_args) if paper else sorted(LISTED_PROFILE_TOOLS)
     out: list[tuple[str, str, dict, object]] = []
-    for name in sorted(LISTED_PROFILE_TOOLS):
+    for name in names:
         schema = effective_input_schema(OUTCOMES[name])
         props = schema.get("properties", {})
-        base = MIN_ARGS[name]
+        base = min_args[name]
         out.append(("empty", name, {}, None))
         for key, spec in props.items():
             if spec.get("type") == "array":
@@ -155,6 +166,8 @@ def _calls() -> list[tuple[str, str, dict, object]]:
                 out.append((f"str:{key}={value!r}", name, {**base, key: value}, None))
         for fault_name, fault in FAULTS.items():
             out.append((f"fault:{fault_name}", name, base, fault))
+    if paper:
+        return out
     out.append(
         (
             "dry-run-unknown",
@@ -167,11 +180,13 @@ def _calls() -> list[tuple[str, str, dict, object]]:
 
 
 @contextmanager
-def _hosted_listed():
+def _hosted_listed(paper_hosts: str | None = None):
     from keel.hosting import bind_request_credentials, clear_request_credentials
+    from keel.tools.outcomes._toolsets import listed_host_context
 
-    saved = {k: os.environ.get(k) for k in _ENV}
-    for k in _ENV:
+    keys = (*_ENV, "KEEL_LISTED_PAPER_HOSTS")
+    saved = {k: os.environ.get(k) for k in keys}
+    for k in keys:
         os.environ.pop(k, None)
     os.environ.update(
         KEEL_SERVER_PROFILE="listed",
@@ -179,9 +194,12 @@ def _hosted_listed():
         KEEL_CARD_META_MOVE="1",
         KEEL_NONVIEW_TEXT_ONLY="1",
     )
+    if paper_hosts:
+        os.environ["KEEL_LISTED_PAPER_HOSTS"] = paper_hosts
     token = bind_request_credentials(token="tok_test", api_url=API)
     try:
-        yield
+        with listed_host_context("claude" if paper_hosts else None):
+            yield
     finally:
         clear_request_credentials(token)
         for k, v in saved.items():
@@ -215,12 +233,10 @@ def _strings(result) -> str:
     return "\n".join(texts)
 
 
-def findings(text: str) -> list[str]:
+def findings(text: str, served: frozenset[str] = LISTED_PROFILE_TOOLS) -> list[str]:
     """Every CLI form and unlisted tool name in ``text``."""
     hits = [m.group(0) for m in CLI_FORM.finditer(text)]
-    hits += [
-        t for t in TOOL_TOKEN.findall(text) if t not in LISTED_PROFILE_TOOLS and t not in NOT_TOOLS
-    ]
+    hits += [t for t in TOOL_TOKEN.findall(text) if t not in served and t not in NOT_TOOLS]
     return hits
 
 
@@ -236,15 +252,14 @@ def test_the_scanner_fires_on_each_form():
     assert findings("Open it in the Keel web app; `keel_strategy_search` lists ids.") == []
 
 
-@pytest.fixture(scope="module")
-def sweep():
+def _run_sweep(calls, paper_hosts: str | None = None):
     async def run():
         from fastmcp import Client
         from keel.mcp.server import create_server
 
         out = []
         async with Client(create_server()) as client:
-            for case, name, args, fault in _calls():
+            for case, name, args, fault in calls:
                 with respx.mock(assert_all_called=False) as router:
                     router.route(host="api.copy.test").mock(side_effect=_responder(fault))
                     result = await client.call_tool(name, args, raise_on_error=False)
@@ -256,10 +271,41 @@ def sweep():
     original_sleep = keel.client.time.sleep
     keel.client.time.sleep = lambda _s: None
     try:
-        with _hosted_listed():
+        with _hosted_listed(paper_hosts):
             return asyncio.run(run())
     finally:
         keel.client.time.sleep = original_sleep
+
+
+@pytest.fixture(scope="module")
+def sweep():
+    return _run_sweep(_calls())
+
+
+@pytest.fixture(scope="module")
+def paper_sweep():
+    """The same matrix over the two paper tools on a Claude session (S10 review
+    W1): `(served set, results)`."""
+    from keel.tools.outcomes._toolsets import LISTED_PAPER_TOOLS
+
+    from tests._paper_sdk import paper_sdk_release
+
+    with paper_sdk_release():
+        calls = _calls(PAPER_MIN_ARGS)
+        return LISTED_PROFILE_TOOLS | LISTED_PAPER_TOOLS, _run_sweep(calls, "claude")
+
+
+def test_the_paper_sweep_drives_both_paper_tools(paper_sweep):
+    _served, results = paper_sweep
+    assert {name for _, name, _ in results} == set(PAPER_MIN_ARGS)
+    errors = [r for _, _, r in results if r.is_error]
+    assert len(results) > 30 and len(errors) > 25, (len(results), len(errors))
+
+
+def test_no_paper_result_names_the_cli_or_an_unserved_tool(paper_sweep):
+    served, results = paper_sweep
+    leaks = sorted({(n, c, h) for c, n, r in results for h in findings(_strings(r), served)})
+    assert not leaks, "\n".join(f"{n} [{c}]: {h}" for n, c, h in leaks)
 
 
 def test_the_sweep_drives_every_listed_tool_through_its_error_paths(sweep):

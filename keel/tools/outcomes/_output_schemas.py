@@ -284,6 +284,31 @@ _SERVED_WINDOW: dict[str, Any] = {
     },
 }
 
+#: The run's recorded order realism (spec 03 §2.6): the share of orders under
+#: the live minimum at the run's capital and, on runs that carry it (Q-2542),
+#: the capital at which at most 25 % / 5 % of its orders would sit under it —
+#: the worker's own numbers from the run's order notionals, never recomputed.
+_REALISM: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "n_orders": _INT,
+        "n_below": _INT,
+        "share": {"type": ["number", "null"]},
+        "avg_order_notional": {"type": ["number", "null"]},
+        "min_notional": {"type": ["number", "null"]},
+        "truncated": _BOOL,
+        "min_capital_for_share": {
+            "type": "object",
+            "description": (
+                "Capital (USD) at which at most 25% / 5% of this run's orders would sit "
+                "under the live minimum, from the run's own order sizes; absent on runs "
+                "that recorded none."
+            ),
+            "properties": {"25_pct": {"type": "number"}, "5_pct": {"type": "number"}},
+        },
+    },
+}
+
 #: The BTC hold reference's numbers (spec 03 §2.2) — never a metric of the run.
 _REFERENCE: dict[str, Any] = {
     "type": "object",
@@ -304,7 +329,9 @@ _EXPOSURE: dict[str, Any] = {
         "Bars that held a position out of the window's bars, and the first and last "
         "such bar. A late first position may be indicator warm-up or the strategy "
         "staying flat. `gross_mean` / `gross_max`: the book's measured gross "
-        "(sum of |position value| / equity) over the held bars, on runs that carry it."
+        "(sum of |position value| / equity) over the held bars, on runs that carry it. "
+        "`bars_net_long` / `bars_net_short`: held bars whose book was net long / net "
+        "short, on runs that carry them."
     ),
     "properties": {
         "bars_held": _INT,
@@ -313,6 +340,8 @@ _EXPOSURE: dict[str, Any] = {
         "last_position_at": _nullable("string"),
         "gross_mean": {"type": "number"},
         "gross_max": {"type": "number"},
+        "bars_net_long": _INT,
+        "bars_net_short": _INT,
         "line": _STR,
     },
 }
@@ -334,6 +363,79 @@ _SLICE: dict[str, Any] = {
         "pnl": {"type": ["number", "null"]},
         "max_drawdown_pct": {"type": "number", "maximum": 0},
         "summary": _STR,
+        "basis": _STR,
+    },
+}
+
+#: One period of a run, as keel-api's `/periods` serves it (Q-2565): the
+#: slice owner over a PARTITION of the run's bars by UTC calendar month or
+#: quarter — every bar in the period holding the day it covers (Q-2577) — so
+#: each period opens at the previous one's close, the bars sum to the run's
+#: and the rows compound to the run. `start`/`end` are the covered days of
+#: the period's first and last bar, not the calendar edge.
+_PERIOD_ROW: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "period": _STR,
+        "start": _STR,
+        "end": _STR,
+        "bars": _INT,
+        "return_pct": {"type": ["number", "null"]},
+        "max_drawdown_pct": {"type": ["number", "null"], "maximum": 0},
+        "equity": {"type": ["object", "null"]},
+        "positions": {"type": ["object", "null"]},
+        "trades_closed": _INT,
+        "partial": _BOOL,
+        "warmup": _BOOL,
+    },
+}
+
+#: `periods` on a single run: the rows, the whole run, and what a period is.
+_PERIODS: dict[str, Any] = {
+    "type": "object",
+    "description": (
+        "Period table (`periods` asked): one row per calendar month or quarter of this run "
+        "— return, max drawdown (≤ 0, within the period), positions opened and bars — plus "
+        "`run`, the whole run. Every bar of the run is in exactly one period (the one holding "
+        "the day it covers), so each period opens at the previous one's close, the bars sum "
+        "to the run's and the rows compound to the run. `warmup` marks a period before the "
+        "first equity move."
+    ),
+    "properties": {
+        "grain": {"type": "string", "enum": ["monthly", "quarterly"]},
+        "rows": {"type": "array", "items": _PERIOD_ROW},
+        "run": _PERIOD_ROW,
+        "basis": _STR,
+    },
+}
+
+#: `periods` on a comparison: the runs' tables aligned by period label, one
+#: value per run (in `labels` order, null where a run has no such period).
+_COMPARISON_PERIODS: dict[str, Any] = {
+    "type": "object",
+    "description": (
+        "Period table across the runs (`periods` asked): per calendar month or quarter, "
+        "each run's return and max drawdown (≤ 0, within the period) in `labels` order, "
+        "null where a run has no such period, plus `run`, the whole run."
+    ),
+    "properties": {
+        "grain": {"type": ["string", "null"], "enum": ["monthly", "quarterly", None]},
+        "labels": {"type": "array", "items": _STR},
+        "rows": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "period": _STR,
+                    "return_pct": _ARR,
+                    "max_drawdown_pct": _ARR,
+                    "bars": _ARR,
+                    "warmup": _ARR,
+                    "partial": _ARR,
+                },
+            },
+        },
+        "run": _OBJ,
         "basis": _STR,
     },
 }
@@ -376,12 +478,13 @@ _BACKTEST_PROPS: dict[str, Any] = {
     "quota_notice": _STR,
     "remaining": _OBJ,
     "good_result": _OBJ,
-    "realism": _OBJ,
+    "realism": _REALISM,
     "reference": _REFERENCE,
     "few_fills_note": _STR,
     "exposure": _EXPOSURE,
     "cost_model": _COST_MODEL,
     "slice": _SLICE,
+    "periods": _PERIODS,
     "notes": _ANY,
     "status_url": _STR,
     "tearsheet_url": _STR,
@@ -416,6 +519,7 @@ _COMPARISON_PROPS: dict[str, Any] = {
         "items": _REFERENCE,
     },
     "cost_model": _COST_MODEL,
+    "periods": _COMPARISON_PERIODS,
 }
 
 _STRATEGY_PROPS: dict[str, Any] = {
@@ -490,6 +594,7 @@ _STRATEGY_PROPS: dict[str, Any] = {
     "summary_text": _STR,
     "error": _ANY,
     "restored_from_ref": _STR,
+    "restored_from_sequence": {"type": ["integer", "null"]},
     "new_sequence": {"type": ["integer", "null"]},
     "new_commit_id": _nullable("string"),
     "sync_note": _STR,
