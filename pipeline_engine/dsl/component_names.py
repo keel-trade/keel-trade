@@ -14,7 +14,7 @@ Tiers, first hit wins:
 (a) case-insensitive exact — ``rsi`` → ``RSI``;
 (b) the curated :data:`COMPONENT_NAME_HINTS` — names agents reach for that no
     string metric can find: abbreviations spelled out (``RateOfChange`` →
-    ``ROC``), synonyms (``EMA`` → ``EWMA``, ``RollingMean`` → ``SMA``) and
+    ``ROC``), synonyms (``EMA`` → ``EWMA``) and
     PATTERN names (``EWMAC`` — a fast/slow ``EWMA`` branch into
     ``Crossover``). Seeded from the prod 404 corpus (Q-2449 RCA); every
     target is asserted to exist in the live registry;
@@ -82,7 +82,6 @@ COMPONENT_NAME_HINTS: dict[str, ComponentNameHint] = {
     "MovingAverageCrossover": ComponentNameHint(("EWMA", "Crossover"), _CROSSOVER_RECIPE),
     # Synonyms seen in the prod 404 corpus (Q-2449).
     "EMA": ComponentNameHint(("EWMA",)),
-    "RollingMean": ComponentNameHint(("SMA",)),
     "StochasticOscillator": ComponentNameHint(("Stochastic",)),
     "ApplyGlobalMask": ComponentNameHint(("ApplyMask",)),
     "VolatilityTargetSizer": ComponentNameHint(("VolTargetWeightConverter",)),

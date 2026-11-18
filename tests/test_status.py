@@ -251,3 +251,100 @@ def test_mcp_status_drops_the_live_permission_booleans(monkeypatch, tmp_path) ->
     served = json.dumps(payload) + "".join(getattr(c, "text", "") for c in result.content)
     assert "live_trading_allowed" not in served
     assert "live_monitoring_allowed" not in served
+
+
+# ── The plan change (spec 01 §C6/§C11): the 30-day cycle and both pots ──
+
+#: A current-plans Free org in its first week (`30d` units, the signup
+#: allowance active on both backtest units), plus `strategies_max`, the one
+#: unit the current plans leave unlimited (D-20) — never displayed.
+_V2_FIRST_WEEK_BALANCES = {
+    "balances": [
+        {
+            "unit": "backtest_runs",
+            "granted": 75,
+            "spent": 10,
+            "available": 65,
+            "period": "30d",
+            "resets_at": "2026-11-29T14:00:00Z",
+            "first_week": {
+                "granted": 50,
+                "remaining": 40,
+                "ends_at": "2026-11-06T14:00:00Z",
+                "then_remaining": 25,
+                "then_limit": 25,
+            },
+        },
+        {
+            "unit": "backtest_compute_seconds",
+            "granted": 2250,
+            "spent": 300,
+            "available": 1950,
+            "period": "30d",
+            "resets_at": "2026-11-29T14:00:00Z",
+            "first_week": {
+                "granted": 1500,
+                "remaining": 1200,
+                "ends_at": "2026-11-06T14:00:00Z",
+                "then_remaining": 750,
+                "then_limit": 750,
+            },
+        },
+        {"unit": "strategies_max", "granted": 2147483647, "spent": 0, "available": 2147483647},
+    ]
+}
+
+
+def test_the_card_states_both_pots_on_the_30_day_cycle(monkeypatch) -> None:
+    """§C6 / Q-7601: the period's numbers with the first-week clause folded
+    into the backtests fraction (what the first-week part leaves and the date
+    it ends); both pots stay in the structured `first_week`; §C11: the
+    account card's window reads "this 30-day period"."""
+    body = _status(
+        monkeypatch, profile="listed", toolsets=None, entitlements=_V2_FIRST_WEEK_BALANCES
+    )
+    line = body["view"]["markdown"].strip().splitlines()[1]
+    (runs,) = [e for e in body["entitlements"]["summary"] if e["unit"] == "backtest_runs"]
+    assert line.startswith(
+        f"65 of 75 backtest runs ({runs['first_week']['remaining']} first-week extras until "
+        "Fri 6 Nov) and 1,950 of 2,250 backtest compute seconds left this 30-day "
+        "period; they reset Sun 29 Nov 14:00 UTC."
+    ), line
+    assert runs["first_week"] == {
+        "granted": 50,
+        "remaining": 40,
+        "ends_at": "2026-11-06T14:00:00Z",
+        "then_remaining": 25,
+        "then_limit": 25,
+    }
+    assert line.count("first-week") == 1
+
+
+def test_no_first_week_sentence_without_the_allowance(monkeypatch) -> None:
+    """Control: the same org after its first week carries no first-week
+    sentence and no `first_week` key."""
+    balances = json.loads(json.dumps(_V2_FIRST_WEEK_BALANCES))
+    for b in balances["balances"]:
+        b.pop("first_week", None)
+    body = _status(monkeypatch, profile="listed", toolsets=None, entitlements=balances)
+    assert "first-week" not in body["view"]["markdown"]
+    assert all("first_week" not in e for e in body["entitlements"]["summary"])
+
+
+def test_the_current_plans_render_no_unlimited(monkeypatch) -> None:
+    """D-6/D-20: no current-plans limit reads "unlimited" on this card
+    (`strategies_max` is never displayed). CONTROL: an older plan's
+    unlimited backtest unit still reads "Unlimited backtest runs." — the
+    renderer is not simply blind to the word."""
+    body = _status(
+        monkeypatch, profile="listed", toolsets=None, entitlements=_V2_FIRST_WEEK_BALANCES
+    )
+    assert "nlimited" not in body["view"]["markdown"]
+    assert all(not e.get("unlimited") for e in body["entitlements"]["summary"])
+    legacy = {
+        "balances": [
+            {"unit": "backtest_runs", "granted": 2147483647, "spent": 0, "available": 2147483647}
+        ]
+    }
+    body = _status(monkeypatch, profile="listed", toolsets=None, entitlements=legacy)
+    assert "Unlimited backtest runs." in body["view"]["markdown"]

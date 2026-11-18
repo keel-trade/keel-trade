@@ -30,6 +30,7 @@ operator authority. The handler below replaces it with the truth.
 
 from __future__ import annotations
 
+from keel.api_path import seg
 from keel.errors import EntitlementError, KeelError, ValidationError
 
 from . import register
@@ -66,7 +67,7 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
 
     client = ctx.get_client()
     try:
-        safety = client.get(f"/internal/v1/execution-safety/{account_id}")
+        safety = client.get(f"/internal/v1/execution-safety/{seg(account_id)}")
     except EntitlementError as e:
         # The operator gate, not an entitlement or a scope tier. Chain so
         # the server's own denial text stays inspectable.

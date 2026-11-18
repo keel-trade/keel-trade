@@ -17,13 +17,15 @@ from typing import Any
 
 from pydantic import ValidationError
 
+from keel.api_path import seg
 from keel.errors import (
+    BACKTEST_ALLOWANCE_CLAUSE,
     EntitlementError,
     KeelError,
-    assert_neutral_wall_text,
+    floor_notice,
+    more_plan_names,
     project_first_week,
-    render_first_week_sentence,
-    render_quota_sentence,
+    render_quota_notice,
 )
 from keel.hosting import record_outcome
 from pipeline_engine.backtest_config import BacktestConfig, adapt_legacy_initial_capital
@@ -230,7 +232,7 @@ def _sequence_range(client: Any, strategy_id: Any) -> str:
     costs the range, never the error the caller is about to see.
     """
     try:
-        meta = client.get(f"/v1/strategies/{strategy_id}")
+        meta = client.get(f"/v1/strategies/{seg(strategy_id)}")
     except Exception:  # noqa: BLE001 — the range is a nicety on an error path
         return ""
     head = meta.get("current_sequence") if isinstance(meta, dict) else None
@@ -308,14 +310,14 @@ def _extract_summary_metrics(metrics: dict | None) -> dict | None:
 _TIER_ORDER = ("exhausted", "critical", "warn", "notice")
 
 
-#: The quota block keys an agent surface passes through (D-12, 04 §4.4):
-#: the caller's own numbers and reset. keel-api's block also carries
-#: `plan` / `higher_plans` (the other plans' limits, near the wall) and
-#: presentation hints; an allow-list — not a strip-list — means a future
-#: server field can never reach a surface whose policy was not reviewed
-#: for it. `first_week` (connect-onboarding spec 01 §1.8) is present only
-#: while a first-week allowance is active, and is itself projected to
-#: `errors.FIRST_WEEK_KEYS`.
+#: The quota block keys an agent surface passes through (D-14, 04 §4.4):
+#: the caller's own numbers and reset, and `more_plans` — the NAMES of the
+#: plans that include more of this unit, projected from keel-api's
+#: `higher_plans` (which also carries their limits: never passed, founder
+#: Q1). An allow-list — not a strip-list — means a future server field can
+#: never reach a surface whose policy was not reviewed for it. `first_week`
+#: (connect-onboarding spec 01 §1.8) is present only while a first-week
+#: allowance is active, and is itself projected to `errors.FIRST_WEEK_KEYS`.
 QUOTA_BLOCK_KEYS: tuple[str, ...] = (
     "unit",
     "limit",
@@ -323,25 +325,22 @@ QUOTA_BLOCK_KEYS: tuple[str, ...] = (
     "remaining",
     "resets_at",
     "first_week",
+    "more_plans",
 )
 
 
-def _project_quota_block(block: dict[str, Any]) -> dict[str, Any]:
-    out = {k: block[k] for k in QUOTA_BLOCK_KEYS if k in block and k != "first_week"}
+def project_quota_block(block: dict[str, Any]) -> dict[str, Any]:
+    """One served quota block projected to :data:`QUOTA_BLOCK_KEYS`."""
+    derived = ("first_week", "more_plans")
+    out = {k: block[k] for k in QUOTA_BLOCK_KEYS if k in block and k not in derived}
     first_week = project_first_week(block.get("first_week"))
     if first_week:
         out["first_week"] = first_week
+    if isinstance(block.get("higher_plans"), list) or isinstance(block.get("more_plans"), list):
+        names = more_plan_names(block)
+        if names:
+            out["more_plans"] = names
     return out
-
-
-def _first_week_sentence(blocks: list[dict[str, Any]]) -> str | None:
-    """The first-week sentence from the ``backtest_runs`` block's
-    ``first_week`` (spec 01 §1.9) — the sentence counts backtests, so the
-    compute unit's block never renders it — or ``None``."""
-    for block in blocks:
-        if block.get("unit") == "backtest_runs":
-            return render_first_week_sentence(block.get("first_week"))
-    return None
 
 
 def _quota_envelope_fields(blocks: Any) -> dict[str, Any]:
@@ -355,10 +354,10 @@ def _quota_envelope_fields(blocks: Any) -> dict[str, Any]:
     keys are absent rather than null (an empty quota key reads as "you have
     none").
 
-    The notice is the same line for every plan (D-12 §4.2): ``4 of 50
-    backtests left this week; they reset Mon 29 Sep 00:00 UTC.`` — and
-    nothing after it. It used to add the higher plans and the billing link
-    near the wall (Q-1806); that is what OpenAI rejected (Q-2080).
+    The notice (doc 07 §5): ``4 of 25 backtests left; resets Sat 5 Dec.``,
+    plus, at the warn/critical/exhausted tiers, the served names of the
+    plans that include more: ``Trader and Pro include more.`` Never their
+    numbers, a price or a link (Q-2080).
     """
     if not isinstance(blocks, list) or not blocks:
         return {}
@@ -367,23 +366,27 @@ def _quota_envelope_fields(blocks: Any) -> dict[str, Any]:
     notable = [b for b in blocks if isinstance(b, dict) and not b.get("unlimited")]
     if not notable:
         return {}
-    fields: dict[str, Any] = {"quota": [_project_quota_block(b) for b in notable]}
+    fields: dict[str, Any] = {"quota": [project_quota_block(b) for b in notable]}
     ranked = sorted(
         notable,
         key=lambda b: (
             _TIER_ORDER.index(b["tier"]) if b.get("tier") in _TIER_ORDER else len(_TIER_ORDER)
         ),
     )
-    sentence = render_quota_sentence(ranked[0])
+    # The first-week clause is folded INTO the line it rides (Q-7601 fix
+    # round): the allowance never makes a response carry a quota line, it is
+    # never a `next` step, and it rides only the backtests line it counts.
+    sentence = render_quota_notice(ranked[0])
     if sentence:
-        # The first-week sentence rides ONLY a line that renders without it
-        # (spec 01 §1.9): the allowance never makes a response carry a quota
-        # line, and it is never a `next` step.
-        first_week = _first_week_sentence(notable)
-        if first_week:
-            sentence = f"{sentence} {first_week}"
-        fields["quota_notice"] = assert_neutral_wall_text(sentence, free_plan=False)
+        fields["quota_notice"] = sentence
     return fields
+
+
+def served_quota_fields(served: Any) -> dict[str, Any]:
+    """:func:`_quota_envelope_fields` over a deploy route's `quota`: one
+    object when that deploy took the last slot (paper create/restart, live
+    deploy), else null; a list reads the same way."""
+    return _quota_envelope_fields([served] if isinstance(served, dict) else served)
 
 
 #: The units a backtest run spends — the ones the headroom block reports.
@@ -416,7 +419,7 @@ def _headroom_blocks(client: Any) -> list[dict[str, Any]]:
             "used": balance.get("spent"),
             "remaining": available,
         }
-        for key in ("period", "resets_at", "tier", "first_week"):
+        for key in ("period", "resets_at", "tier", "first_week", "higher_plans"):
             if balance.get(key) is not None:
                 block[key] = balance[key]
         blocks.append(block)
@@ -447,7 +450,7 @@ def _poll_until_terminal(
     wrote_progress = False
     try:
         while time.monotonic() < deadline:
-            snapshot = client.get(f"/v1/backtests/{backtest_id}")
+            snapshot = client.get(f"/v1/backtests/{seg(backtest_id)}")
             status = (snapshot.get("status") or "").lower()
             if status in _TERMINAL_STATUSES:
                 return snapshot
@@ -629,6 +632,25 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
                 "start_date must be before end_date. The dates look swapped — "
                 "re-run with them the other way round."
             )
+        elif detail.get("code") == "BACKTEST_TOO_LARGE":
+            # Q-3316: of the three fits the server names (fewer symbols, a
+            # coarser clock, a shorter window), only the window is a change to
+            # THIS call — the other two edit the strategy. So the mechanical
+            # next action is the same run over the longest window that fits,
+            # taken verbatim from the server's remedy; with no such window the
+            # refusal re-raises with no tool named.
+            remedy = detail.get("remedy") if isinstance(detail.get("remedy"), dict) else {}
+            fit_start = remedy.get("max_window_start_date")
+            fit_end = remedy.get("max_window_end_date")
+            if isinstance(fit_start, str) and isinstance(fit_end, str):
+                e.recovery_tool = "keel_backtest_run"
+                e.recovery_tool_args = {
+                    "strategy_id": strategy_id,
+                    **({"commit_id": args["commit_id"]} if args.get("commit_id") else {}),
+                    **({"version": args["version"]} if version_ref is not None else {}),
+                    "start_date": fit_start,
+                    "end_date": fit_end,
+                }
         elif detail.get("code") == "VERSION_NOT_FOUND":
             # SDK-envelope fields (spec 03 §2.1), never keel-api body fields:
             # what a ref may be, and the one call that lists the real ones.
@@ -677,6 +699,14 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
     remaining_quota = submission.get("remaining") if isinstance(submission, dict) else None
     quota_blocks = submission.get("quota") if isinstance(submission, dict) else None
     quota_fields = _quota_envelope_fields(quota_blocks)
+    # The paper/live timeframe heads-up (doc 07 §5, founder Q4): keel-api
+    # sends `serving_floor` only when this strategy's clock is faster than
+    # the caller's paper/live floor. Backtests run at every timeframe.
+    floor_line = (
+        floor_notice(submission.get("serving_floor")) if isinstance(submission, dict) else None
+    )
+    if floor_line:
+        quota_fields["floor_notice"] = floor_line
 
     # NOTE(M1.4, spec 01 R5 — MCP Tasks shape): this immediate-return
     # envelope (run_id + status + status_url, polled via
@@ -1046,6 +1076,7 @@ BACKTEST_RUN = register(
     OutcomeTool(
         name="keel_backtest_run",
         required_action="backtest.create",
+        rate_tier="backtest",
         cli_path=("backtest", "run"),
         toolset="backtest",
         # grounded-in: system/backtest_costs.md:9-18 ("Backtest cost defaults"
@@ -1065,9 +1096,7 @@ BACKTEST_RUN = register(
             "Returns `run_id`; with "
             "`wait=true` (the default) also "
             "`summary_metrics` and the tearsheet link, or `status_url` on a polling "
-            "timeout. Each call spends one run of quota; the result "
-            "carries the count left when low, and `keel_plan_usage` reports it before a "
-            "set of runs.\n"
+            "timeout. " + BACKTEST_ALLOWANCE_CLAUSE + "\n"
             "\n" + WARMUP_TEXT + "\n"
             "\n"
             "Write-through on the local server and the CLI (server HEAD is the source of "
@@ -1091,8 +1120,7 @@ BACKTEST_RUN = register(
             "and the declarations and pipeline that ran. Returns `run_id`; with "
             "`wait=true` (the default) also "
             "`summary_metrics` and the tearsheet link, or `status_url` on a polling "
-            "timeout. Each call spends one run of quota; `keel_plan_usage` reports what "
-            "is left."
+            "timeout. " + BACKTEST_ALLOWANCE_CLAUSE
         ),
         input_schema=INPUT_SCHEMA,
         listed_input_schema=LISTED_INPUT_SCHEMA,

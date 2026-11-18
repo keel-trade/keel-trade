@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -9,7 +10,11 @@ from pathlib import Path
 import yaml
 
 
-CONFIG_DIR = Path.home() / ".keel"
+CONFIG_DIR = (
+    Path(os.environ["KEEL_CONFIG_DIR"]).expanduser()
+    if os.environ.get("KEEL_CONFIG_DIR")
+    else Path.home() / ".keel"
+)
 CONFIG_FILE = CONFIG_DIR / "config.yaml"
 
 #: Where the active credential came from (Q-2579) — never persisted.

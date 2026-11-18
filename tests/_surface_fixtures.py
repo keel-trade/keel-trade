@@ -82,7 +82,16 @@ SERVED_KNOWLEDGE_TOPICS: frozenset[str] = frozenset(
     }
 )
 SERVED_REFERENCE_TOPICS: frozenset[str] = frozenset(
-    {"best_practices", "composition", "normalization", "phases", "slots", "types"}
+    {
+        "best_practices",
+        "composition",
+        "normalization",
+        "phases",
+        "slots",
+        "types",
+        "screener",
+        "view_language",
+    }
 )
 SERVED_PATTERN_TOPICS: frozenset[str] = frozenset(
     {
@@ -95,7 +104,8 @@ SERVED_PATTERN_TOPICS: frozenset[str] = frozenset(
         "position_sizing",
         "regime_conditioning",
         "risk_management",
-        "screen_select_patterns",
+        "rank_select_patterns",
+        "screen_recipes",
         "session_and_structure_patterns",
     }
 )
@@ -104,6 +114,10 @@ SERVED_DOC_TOPICS: frozenset[str] = (
 )
 #: keel_help's own namespaces (listings, not documents).
 HELP_NAMESPACES: frozenset[str] = frozenset({"skills", "rules"})
+#: D-344 (1), CONFORM-MCP F2: the topics a listed caller is served only while Research is (07 §4.10, §5.3), and the
+#: ``step:<Name>`` namespace beside them; a research-on surface pins them, a research-off one must not serve them.
+RESEARCH_DOC_TOPICS: frozenset[str] = frozenset({"research", "research_steps"})
+RESEARCH_TOPIC_PREFIX = "step:"
 #: In-app only after the change (05 §3.1) — named so a failure reads plainly.
 NOT_SERVED_TOPICS: frozenset[str] = frozenset(
     {"collaboration", "strategy_phases", "editor_ui", "component_versioning", "costs_and_fees"}
@@ -248,7 +262,7 @@ def conduct_hits(text: str) -> list[tuple[str, str]]:
 
 _COMMERCE_SHARED = (
     r"\bhigher plans?\b|\bplan tiers?\b|\bbuilder fees?\b|\bsee plans\b|tab=billing|/pricing\b"
-    r"|\bstripe\b|\bplans? include more\b|\bbilling\b|\bpricing\b"
+    r"|\bstripe\b|\bbilling\b|\bpricing\b"
     # A price is a dollar figure with a billing period; a bare "$3,000" is
     # backtest capital (a simulation fact) and "$10M/24h" a liquidity floor.
     r"|\$\s?\d[\d,.]*\s*(?:/\s*|per |a )(?:mo|month|year|yr)\b|\$\s?\d[\d,.]*\s*(?:monthly|annually)\b"
@@ -265,13 +279,38 @@ COMMERCE_BODY_RE = re.compile(
     r"|\bcheckout (?:page|session|flow)\b|checkout\.stripe",
     re.IGNORECASE,
 )
-#: Keel's paid plan names in a comparison or a move ("Trader or Pro",
-#: "moving to Trader") — the account's OWN plan named alone ("· Trader plan")
-#: is a fact about the caller and stays legal. Case-sensitive: "a trader"
-#: and "pro-rata" are ordinary words.
-PLAN_NAME_RE = re.compile(
-    r"\b(?:Starter|Trader|Pro) or (?:Starter|Trader|Pro)\b|\b(?:to|into) (?:the )?(?:Starter|Trader|Pro)\b"
-)
+
+
+#: Every catalog plan display name (plans.yaml, D-14 §6.1), case-sensitive
+#: so "a trader" and "pro-rata" stay ordinary words. Static copy (tools/list,
+#: instructions, prompts, served bodies) names no plan at all; a runtime plan
+#: payload names one only inside the renderer's own-plan or more clause, and
+#: only for a served higher plan (`plan_name_violations`).
+def _plan_names_re() -> re.Pattern[str]:
+    from . import _plan_catalog as cat
+
+    names = sorted(cat.all_plan_names(), key=len, reverse=True)
+    return re.compile(r"\b(?:" + "|".join(re.escape(n) for n in names) + r")\b")
+
+
+PLAN_NAME_RE = _plan_names_re()
+
+
+def _static_plan_name_re() -> re.Pattern[str]:
+    """A paid plan named AS a plan in static copy: in a comparison or a move
+    ("Trader or Pro", "to Trader"), or with a plan word ("Pro includes",
+    "the Trader plan"). "Free" and a bare "Trader" are English words in
+    static copy ("a free-text note", "Trader phrase → Keel mapping")."""
+    from . import _plan_catalog as cat
+
+    n = "(?:" + "|".join(re.escape(x) for x in cat.all_plan_names() if x != "Free") + ")"
+    return re.compile(
+        rf"\b{n} (?:or|and) {n}\b|\b(?:to|into|on) (?:the )?{n}\b"
+        rf"|\b{n} (?:plans?|includes?|runs?)\b|\bthe {n} plan\b"
+    )
+
+
+PAID_PLAN_NAME_RE = _static_plan_name_re()
 LIVE_MONEY_RE = re.compile(
     r"\breal capital\b|\bfunded wallets?\b|\bconnect(?:ing)? (?:a|your) wallet\b"
     r"|\bgo(?:ing)? live\b|\bdeploy(?:ing)? (?:it )?live\b|\bcanary\b|\brun (?:it )?forward\b",
@@ -295,10 +334,49 @@ EXPIRY_URGENCY_RE = _expiry_urgency_re()
 #: Any Keel web URL inside a WALL payload (04 §4.1: "every URL" removed).
 KEEL_URL_RE = re.compile(r"https?://[^\s\"')]*usekeel\.io[^\s\"')]*", re.IGNORECASE)
 
-#: The ONE plan sentence a wall may carry (04 §4.1, D-12 Q1's recorded
-#: fallback, taken 2026-10-01 — Q-2268), and only on the FREE plan's wall.
-#: Matched sentence-exact.
-ALLOWED_FREE_WALL_SENTENCE_RE = re.compile(r"^Plans are changed in the Keel web app\.$")
+
+def plan_name_violations(
+    text: str, *, own: str | None, more: tuple[str, ...] | list[str]
+) -> list[str]:
+    """D-14 §7: plan names in a runtime plan payload ``text``, outside the
+    generated clauses, or naming a plan the server did not serve.
+
+    Allowed, and removed before the scan: the caller's own plan in the
+    renderer's own-plan positions (``on <Own>``, ``Plan: <Own>.``,
+    ``<Own> doesn't include``), and the more clause itself — but only when
+    its names are EXACTLY the served ``more``, in order. A clause naming any
+    other set, a clause on a payload whose server named none (the top plan),
+    or a plan name anywhere else is a violation.
+    """
+    from keel.errors import join_plan_names
+
+    violations: list[str] = []
+    text = text or ""
+    clause = re.compile(
+        r"(?:(?P<names>(?:[A-Z][\w-]*)(?:(?:, | and )[A-Z][\w-]*)*) "
+        r"(?:includes?|runs?) (?:more|faster|it)\b)"
+    )
+    for m in clause.finditer(text):
+        names = m.group("names")
+        if not PLAN_NAME_RE.search(names):
+            continue
+        if not more or names != join_plan_names(list(more)):
+            violations.append(f"more clause {m.group(0)!r} (served {list(more)!r})")
+    text = clause.sub(" ", text)
+    # A JSON text block carries the fields themselves: `"plan_name": "Free"`
+    # and `"more_plans": ["Trader", "Pro"]` — exact served values, not copy.
+    for name in (own, *more):
+        if name:
+            text = text.replace(f'"{name}"', " ")
+    if own:
+        for pattern in (
+            rf"\bon {re.escape(own)}\b",
+            rf"\bPlan: {re.escape(own)}\.",
+            rf"\b{re.escape(own)} doesn't include\b",
+        ):
+            text = re.sub(pattern, " ", text)
+    violations += [f"plan name {m.group(0)!r}" for m in PLAN_NAME_RE.finditer(text)]
+    return violations
 
 
 def family_hits(text: str, *, scope: str) -> list[tuple[str, str]]:
@@ -312,7 +390,7 @@ def family_hits(text: str, *, scope: str) -> list[tuple[str, str]]:
         raise ValueError(f"unknown scope {scope!r}")
     commerce = COMMERCE_STRICT_RE if scope == "strict" else COMMERCE_BODY_RE
     out = [("commerce", m.group(0)) for m in commerce.finditer(text or "")]
-    out += [("commerce", m.group(0)) for m in PLAN_NAME_RE.finditer(text or "")]
+    out += [("plan-name", m.group(0)) for m in PAID_PLAN_NAME_RE.finditer(text or "")]
     out += [("live-money", m.group(0)) for m in LIVE_MONEY_RE.finditer(text or "")]
     if scope == "strict":
         out += [("urgency", m.group(0)) for m in EXPIRY_URGENCY_RE.finditer(text or "")]
@@ -399,7 +477,9 @@ def extract_pointers(text: str) -> list[Pointer]:
     return pointers
 
 
-def pointer_violation(p: Pointer, *, corpus_stems: frozenset[str]) -> str | None:
+def pointer_violation(
+    p: Pointer, *, corpus_stems: frozenset[str], research: bool = False
+) -> str | None:
     """Why `p` is not allowed, or None.
 
     * ``skill:`` pointers are the caller's business (the guard decides where
@@ -420,6 +500,8 @@ def pointer_violation(p: Pointer, *, corpus_stems: frozenset[str]) -> str | None
     low = target.lower()
     if low.startswith("rule:") or low.startswith("skill:"):
         return None
+    if research and (low.startswith(RESEARCH_TOPIC_PREFIX) or normalize_topic(target) in RESEARCH_DOC_TOPICS):
+        return None  # served while Research is (``research`` surfaces only)
     topic = normalize_topic(target)
     if topic in SERVED_DOC_TOPICS or topic in HELP_NAMESPACES:
         return None
@@ -518,15 +600,28 @@ def tool_name_hits(text: str, listed_tools: frozenset[str]) -> list[str]:
 
 # ─── The served surface ─────────────────────────────────────────────────
 
-_PROFILE_ENV = ("KEEL_SERVER_PROFILE", "KEEL_EXECUTION_MODE", "KEEL_TOOLSETS", "KEEL_LISTED_CLIENT")
+_PROFILE_ENV = (
+    "KEEL_SERVER_PROFILE",
+    "KEEL_EXECUTION_MODE",
+    "KEEL_TOOLSETS",
+    "KEEL_LISTED_CLIENT",
+    "KEEL_LISTED_SCREENS_HOSTS",
+)
 
 
 @contextmanager
 def listed_env() -> Iterator[None]:
-    """The directory registration's environment, restored on exit."""
+    """The directory registration's environment, restored on exit.
+
+    With the listed screens flag ON for every host (screeners L13): the layer
+    guards read the widest listed surface, so the screen tools, prompt and
+    topics are held to the same rules as the rest. The flag-off surface is
+    the base's, pinned by the freeze fixtures (test_listed_outputs_head,
+    test_listed_screens)."""
     saved = {k: os.environ.get(k) for k in _PROFILE_ENV}
     os.environ["KEEL_SERVER_PROFILE"] = "listed"
     os.environ["KEEL_EXECUTION_MODE"] = "hosted"
+    os.environ["KEEL_LISTED_SCREENS_HOSTS"] = "all"
     os.environ.pop("KEEL_TOOLSETS", None)
     os.environ.pop("KEEL_LISTED_CLIENT", None)
     try:
@@ -560,6 +655,7 @@ class ServedSurface:
     help_skills: dict[str, Any]  # keel_help(topic="skills") — the skills catalogue
     resources: dict[str, str]  # uri → served text (reads that resolved)
     probed: tuple[str, ...] = field(default=())
+    research: bool = False  # built as a caller with Research served
 
     def listed_tool_names(self) -> frozenset[str]:
         return frozenset(t["name"] for t in self.tools)
@@ -628,13 +724,19 @@ def _read_or_refused(server: Any, uri: str) -> Any | None:
 
 
 @cache
-def listed_surface() -> ServedSurface:
-    """Build the listed server once per process and read everything it serves."""
+def listed_surface(research: bool = False) -> ServedSurface:
+    """Build the listed server once per process and read everything it serves.
+
+    ``research`` builds it as a caller with Research served reads it (doc 07
+    §7: research is in the listed scans)."""
+    from contextlib import nullcontext
+
     from keel.mcp.server import create_server
     from keel.tools.outcomes import OUTCOMES, _bootstrap
     from keel.tools.outcomes._base import ToolContext
+    from keel.tools.outcomes._toolsets import research_served_context
 
-    with listed_env():
+    with listed_env(), research_served_context(True) if research else nullcontext():
         _bootstrap()
         server = create_server()
         tools = asyncio.run(server.list_tools())
@@ -690,6 +792,7 @@ def listed_surface() -> ServedSurface:
             help_skills=skills_listing,
             resources=resources,
             probed=tuple(probed),
+            research=research,
         )
 
 
@@ -697,18 +800,55 @@ def listed_surface() -> ServedSurface:
 
 API = "https://api.surface-guards.test"
 
-#: One weekly reset every fixture shares, so a copy rule never keys on a date.
+#: One reset every fixture shares, so a copy rule never keys on a date.
 RESET_EPOCH = 1790553600  # Mon 2026-09-28 00:00 UTC
 
-_FREE_HIGHER = [
-    {"plan": "starter", "limit": 500, "period": "weekly"},
-    {"plan": "trader", "unlimited": True},
-]
-_PAID_HIGHER = [{"plan": "trader", "unlimited": True}]
+
+def served_higher(plan: str, unit: str) -> list[dict]:
+    """keel-api's `higher_plans` for a v2 `plan` on `unit`: the catalog's
+    names AND their limits (D-10), so "names, never numbers" is non-vacuous."""
+    from . import _plan_catalog as cat
+
+    out = cat.higher_plans(plan, unit)
+    for entry in out:
+        value = cat._value(entry["plan"], entry["version"], unit)
+        entry["limit"] = int(value) if value != float("inf") else "unlimited"
+    return out
 
 
-def wall_403_body(plan: str, limit: int, higher: list[dict]) -> dict:
+def served_faster(plan: str) -> list[dict]:
+    """keel-api's `higher_plans` on the paper/live floor (with their floors)."""
+    from . import _plan_catalog as cat
+
+    out = cat.faster_plans(plan)
+    for entry in out:
+        entry["floor"] = cat.floor_of(entry["plan"])
+    return out
+
+
+def more_names(plan: str, unit: str) -> tuple[str, ...]:
+    from . import _plan_catalog as cat
+
+    if unit == "paper_live_clock_floor":
+        return tuple(cat.names(cat.faster_plans(plan)))
+    return tuple(cat.names(cat.higher_plans(plan, unit)))
+
+
+def own_name(plan: str) -> str:
+    from . import _plan_catalog as cat
+
+    return cat.display_name(plan)
+
+
+def _limit(plan: str, unit: str) -> int:
+    from . import _plan_catalog as cat
+
+    return int(cat._value(plan, "v2", unit))
+
+
+def wall_403_body(plan: str, unit: str = "backtest_runs") -> dict:
     """A plan-limit 403 exactly as keel-api serves it (numbers included — D-10)."""
+    limit = _limit(plan, unit)
     return {
         "title": "Forbidden",
         "status": 403,
@@ -716,16 +856,17 @@ def wall_403_body(plan: str, limit: int, higher: list[dict]) -> dict:
         "code": "quota_exhausted",
         "quota": {
             "kind": "insufficient",
-            "unit": "backtest_runs",
+            "unit": unit,
             "label": "backtests",
             "code": "quota_exhausted",
             "limit": limit,
             "used": limit,
             "remaining": 0,
-            "period": "weekly",
+            "period": "30d",
             "reset_epoch": RESET_EPOCH,
             "plan": plan,
-            "higher_plans": higher,
+            "plan_name": own_name(plan),
+            "higher_plans": served_higher(plan, unit),
         },
     }
 
@@ -769,22 +910,49 @@ FIRST_WEEK = {
     },
 }
 
-#: The approved sentence for `FIRST_WEEK["backtest_runs"]`, exactly.
-FIRST_WEEK_SENTENCE = "154 of 200 first-week backtests left; they end Tue 13 Oct 15:02 UTC."
+#: The clause `FIRST_WEEK["backtest_runs"]` folds into a backtests line
+#: (Q-7601 fix round), exactly.
+FIRST_WEEK_CLAUSE = "(154 first-week extras until Tue 13 Oct)"
+#: An approved backtests line carrying it: the control every urgency seed in
+#: test_policy_scan.py is built from.
+FIRST_WEEK_SENTENCE = f"Backtests: 246 of 250 left {FIRST_WEEK_CLAUSE}; resets Tue 22 Sep."
 
 
 def _me(plan: str, *, first_week: bool = False) -> dict:
     body = _me_body(plan)
     if first_week:
         for balance in body["entitlements"]:
-            balance["first_week"] = dict(FIRST_WEEK[balance["unit"]])
-            balance["granted"] += FIRST_WEEK[balance["unit"]]["granted"]
+            if balance["unit"] in FIRST_WEEK:
+                balance["first_week"] = dict(FIRST_WEEK[balance["unit"]])
+                # The served totals include the grant (entitlements.py
+                # `get_consumable_balance`), so what is left includes it too:
+                # a first-week part never exceeds `available`.
+                balance["granted"] += FIRST_WEEK[balance["unit"]]["granted"]
+                balance["available"] += FIRST_WEEK[balance["unit"]]["granted"]
     return body
 
 
 def _me_body(plan: str) -> dict:
     limit = 50 if plan == "free" else 500
+    caps = [
+        {
+            "unit": unit,
+            "type": "cap",
+            "granted": _limit(plan, unit),
+            "cap_current": 0,
+            "available": _limit(plan, unit),
+            "higher_plans": served_higher(plan, unit),
+        }
+        for unit in (
+            "paper_strategies_max",
+            "screeners_live_max",
+            "screeners_published_max",
+            "screeners_private_max",
+        )
+    ]
     return {
+        "plan_name": own_name(plan),
+        "serving_floor": {"floor": _floor(plan), "higher_plans": served_faster(plan)},
         "principal": {"id": "prn_guard", "type": "user"},
         "org": {"id": "org_guard", "name": "Surface Guard", "plan": plan, "status": "active"},
         "credential_scopes": ["strategy.*"],
@@ -796,6 +964,7 @@ def _me_body(plan: str) -> dict:
                 "spent": limit - 46,
                 "reserved": 0,
                 "available": 46,
+                "higher_plans": served_higher(plan, "backtest_runs"),
             },
             {
                 "unit": "backtest_compute_seconds",
@@ -804,10 +973,18 @@ def _me_body(plan: str) -> dict:
                 "spent": 120,
                 "reserved": 0,
                 "available": 1380,
+                "higher_plans": served_higher(plan, "backtest_compute_seconds"),
             },
+            *caps,
         ],
         "plan_status": _plan_status_block(plan),
     }
+
+
+def _floor(plan: str) -> str:
+    from . import _plan_catalog as cat
+
+    return cat.floor_of(plan)
 
 
 _ENTITLEMENTS = {
@@ -850,7 +1027,8 @@ def _critical_block() -> dict:
         "seconds_to_reset": 24300,
         "tier": "critical",
         "plan": "free",
-        "higher_plans": _FREE_HIGHER,
+        "plan_name": "Free",
+        "higher_plans": served_higher("free", "backtest_runs"),
     }
 
 
@@ -863,6 +1041,10 @@ class Payload:
     text: str  # every text content block, joined
     structured: Any  # structuredContent (parsed when it is a JSON string)
     is_error: bool
+    #: The caller's own plan name and the names of the plans the server said
+    #: include more (D-14): what `plan_name_violations` allows, per payload.
+    own_plan: str | None = None
+    more_plans: tuple[str, ...] = ()
 
     def strings(self) -> list[str]:
         """The text block plus every string VALUE in the structured content."""
@@ -979,12 +1161,18 @@ def runtime_payloads() -> dict[str, Payload]:
             "free_wall": _call(
                 "keel_backtest_run",
                 {"strategy_id": "str_guard"},
-                {("POST", "/v1/backtests"): (403, wall_403_body("free", 50, _FREE_HIGHER))},
+                {("POST", "/v1/backtests"): (403, wall_403_body("free"))},
             ),
             "paid_wall": _call(
                 "keel_backtest_run",
                 {"strategy_id": "str_guard"},
-                {("POST", "/v1/backtests"): (403, wall_403_body("starter", 500, _PAID_HIGHER))},
+                {("POST", "/v1/backtests"): (403, wall_403_body("trader"))},
+            ),
+            # The top plan: no plan includes more, so no clause (founder Q2).
+            "top_wall": _call(
+                "keel_backtest_run",
+                {"strategy_id": "str_guard"},
+                {("POST", "/v1/backtests"): (403, wall_403_body("pro"))},
             ),
             "plan_status_free": _call("keel_plan_usage", {}, {("GET", "/v1/me"): _me("free")}),
             "plan_status_paid": _call("keel_plan_usage", {}, {("GET", "/v1/me"): _me("trader")}),
@@ -1015,8 +1203,32 @@ def runtime_payloads() -> dict[str, Payload]:
                         "status": "queued",
                         "strategy_id": "str_guard",
                         "quota": [
-                            {**_critical_block(), "first_week": dict(FIRST_WEEK["backtest_runs"])}
+                            {
+                                **_critical_block(),
+                                # Capped by what is left at all, as keel-api serves it.
+                                "first_week": {**FIRST_WEEK["backtest_runs"], "remaining": 4},
+                            }
                         ],
+                    },
+                    ("GET", "/v1/backtests/*"): {**_DETAIL, "status": "RUNNING"},
+                },
+            ),
+            # The paper/live timeframe heads-up on a run (doc 07 §5, Q4).
+            "floor_run": _call(
+                "keel_backtest_run",
+                {"strategy_id": "str_guard", "wait": False},
+                {
+                    ("POST", "/v1/backtests"): {
+                        "id": "btr_guard",
+                        "status": "queued",
+                        "strategy_id": "str_guard",
+                        "serving_floor": {
+                            "floor": "1h",
+                            "requested": "15min",
+                            "plan": "free",
+                            "plan_name": "Free",
+                            "higher_plans": served_faster("free"),
+                        },
                     },
                     ("GET", "/v1/backtests/*"): {**_DETAIL, "status": "RUNNING"},
                 },
@@ -1050,19 +1262,234 @@ def runtime_payloads() -> dict[str, Payload]:
         }
     finally:
         br._POLL_INTERVAL_S, br._POLL_MAX_S = saved
+    out.update(period_30d_payloads())
     for name, payload in out.items():
         payload.name = name
+    _attach_plans(out)
     return out
 
 
-#: The paper quota wall as keel-api denies a create (S01 IC-01-10).
-PAPER_CAP_403_BODY = {
-    "type": "about:blank",
-    "title": "Forbidden",
-    "status": 403,
-    "detail": "Insufficient entitlements",
-    "reasons": ["entitlement:cap_exceeded:paper_strategies_max:limit=1:current=1"],
+#: Each plan payload's own plan and the unit whose served names it may say.
+_PAYLOAD_PLANS: dict[str, tuple[str, str]] = {
+    "free_wall": ("free", "backtest_runs"),
+    "paid_wall": ("trader", "backtest_runs"),
+    "top_wall": ("pro", "backtest_runs"),
+    "critical_run": ("free", "backtest_runs"),
+    "critical_run_first_week": ("free", "backtest_runs"),
+    "critical_run_30d": ("free", "backtest_runs"),
+    "plan_status_free": ("free", "backtest_runs"),
+    "plan_status_paid": ("trader", "backtest_runs"),
+    "plan_status_first_week": ("free", "backtest_runs"),
+    "plan_status_30d": ("free", "backtest_runs"),
+    "paid_wall_30d": ("trader", "backtest_runs"),
+    "floor_run": ("free", "paper_live_clock_floor"),
+    "paper_wall": ("free", "paper_strategies_max"),
+    "paper_last_slot": ("free", "paper_strategies_max"),
+    "paper_floor_free": ("free", "paper_live_clock_floor"),
+    "paper_floor_paid": ("trader", "paper_live_clock_floor"),
+    "screen_private_wall": ("free", "screeners_private_max"),
+    "plan_status_full": ("free", "backtest_runs"),
 }
+
+
+def _attach_plans(payloads: dict[str, Payload]) -> None:
+    for name, payload in payloads.items():
+        if name in _PAYLOAD_PLANS:
+            plan, unit = _PAYLOAD_PLANS[name]
+            payload.own_plan = own_name(plan)
+            payload.more_plans = more_names(plan, unit)
+
+
+# ─── The 30-day cycle (plan change spec 01 §C5/§C11) ────────────────────
+#
+# The current plans meter backtests per account on a 30-day cycle
+# (`period: "30d"`). The agent surfaces gain exactly one wording for it —
+# "this 30-day period" — and it must pass every D-12 family like "this week"
+# does. These fixtures render that wording through the real SDK paths: the
+# plan-usage sentence, a critical-tier run's quota notice, and a paid wall
+# (whose headline carries no period adjective).
+
+#: The 30-day cycle's next reset, an arbitrary instant (not a Monday).
+RESET_30D_AT = "2026-11-29T14:00:00Z"  # Sun 29 Nov 2026
+RESET_30D_EPOCH = 1795960800
+
+
+def _me_30d() -> dict:
+    """A current-plans Free org mid-cycle: both backtest units on `30d`."""
+    body = _me_body("free")
+    body["entitlements"] = [
+        {
+            "unit": "backtest_runs",
+            "type": "consumable",
+            "granted": 25,
+            "spent": 4,
+            "reserved": 0,
+            "available": 21,
+            "period": "30d",
+            "resets_at": RESET_30D_AT,
+        },
+        {
+            "unit": "backtest_compute_seconds",
+            "type": "consumable",
+            "granted": 750,
+            "spent": 120,
+            "reserved": 0,
+            "available": 630,
+            "period": "30d",
+            "resets_at": RESET_30D_AT,
+        },
+    ]
+    return body
+
+
+def _critical_block_30d() -> dict:
+    return {
+        **_critical_block(),
+        "limit": 25,
+        "used": 21,
+        "remaining": 4,
+        "period": "30d",
+        "resets_at": RESET_30D_AT,
+    }
+
+
+def _paid_wall_30d_body() -> dict:
+    body = wall_403_body("trader")
+    body["quota"].update(period="30d", reset_epoch=RESET_30D_EPOCH)
+    return body
+
+
+def period_30d_payloads() -> dict[str, Payload]:
+    """The three 30-day payloads, built fresh on every call (uncached), so a
+    seeded-failure arm can rebuild them under a patched phrase table."""
+    import keel.tools.outcomes.backtest_run as br
+
+    saved = (br._POLL_INTERVAL_S, br._POLL_MAX_S)
+    br._POLL_INTERVAL_S, br._POLL_MAX_S = 0.0, 0.05
+    try:
+        out = {
+            "plan_status_30d": _call("keel_plan_usage", {}, {("GET", "/v1/me"): _me_30d()}),
+            "critical_run_30d": _call(
+                "keel_backtest_run",
+                {"strategy_id": "str_guard", "wait": False},
+                {
+                    ("POST", "/v1/backtests"): {
+                        "id": "btr_guard",
+                        "status": "queued",
+                        "strategy_id": "str_guard",
+                        "quota": [_critical_block_30d()],
+                    },
+                    ("GET", "/v1/backtests/*"): {**_DETAIL, "status": "RUNNING"},
+                },
+            ),
+            "paid_wall_30d": _call(
+                "keel_backtest_run",
+                {"strategy_id": "str_guard"},
+                {("POST", "/v1/backtests"): (403, _paid_wall_30d_body())},
+            ),
+        }
+    finally:
+        br._POLL_INTERVAL_S, br._POLL_MAX_S = saved
+    for name, payload in out.items():
+        payload.name = name
+    _attach_plans(out)
+    return out
+
+
+def _cap_403_body(plan: str, unit: str, *, kind: str, code: str, used: int) -> dict:
+    """A cap or no-grant refusal exactly as keel-api serves it (D-14)."""
+    limit = _limit(plan, unit)
+    return {
+        "type": "about:blank",
+        "title": "Forbidden",
+        "status": 403,
+        "detail": "Insufficient entitlements",
+        "code": code,
+        "reasons": [f"entitlement:{kind}:{unit}:limit={limit}:current={used}"],
+        "quota": {
+            "kind": kind,
+            "unit": unit,
+            "code": code,
+            "limit": limit,
+            "used": used,
+            "remaining": max(0, limit - used),
+            "plan": plan,
+            "plan_name": own_name(plan),
+            "higher_plans": served_higher(plan, unit),
+        },
+    }
+
+
+#: The paper quota wall as keel-api denies a create (S01 IC-01-10).
+PAPER_CAP_403_BODY = _cap_403_body(
+    "free", "paper_strategies_max", kind="cap_exceeded", code="quota_cap_reached", used=1
+)
+#: Free has no private auto-refreshing screens (plans.yaml: undeclared = 0).
+SCREEN_PRIVATE_403_BODY = _cap_403_body(
+    "free",
+    "screeners_private_max",
+    kind="no_cap_grants",
+    code="plan_feature_unavailable",
+    used=0,
+)
+
+
+#: The paper/live timeframe-floor refusal's words, by floor, exactly as the
+#: plan change contract fixes them (spec 01 §L7): the server's message IS the
+#: neutral sentence, with `floor`/`requested` beside it.
+FLOOR_WORDS = {"1h": "1-hour", "15min": "15-minute", "5min": "5-minute"}
+
+
+def floor_refusal_message(floor: str) -> str:
+    return (
+        f"This plan runs paper and live strategies at a {FLOOR_WORDS[floor]} timeframe "
+        "or longer; this limit does not reset on a clock."
+    )
+
+
+#: The plan whose floor each fixture floor is (v2).
+FLOOR_PLAN = {"1h": "free", "15min": "trader", "5min": "pro"}
+
+
+def floor_refusal_422_body(floor: str, requested: str, *, message: str | None = None) -> dict:
+    """keel-api's §L7 refusal as FastAPI renders a dict HTTPException detail,
+    with the D-14 fields: ``{"detail": {code, message, floor, requested,
+    plan, plan_name, higher_plans}}``. ``message`` overrides the server's
+    sentence (the seeded-failure arm)."""
+    plan = FLOOR_PLAN[floor]
+    return {
+        "detail": {
+            "code": "SERVING_CLOCK_BELOW_PLAN_FLOOR",
+            "message": message if message is not None else floor_refusal_message(floor),
+            "floor": floor,
+            "requested": requested,
+            "plan": plan,
+            "plan_name": own_name(plan),
+            "higher_plans": served_faster(plan),
+        }
+    }
+
+
+def paper_floor_payload(floor: str, requested: str, *, message: str | None = None) -> Payload:
+    """``keel_paper_deploy`` refused by the timeframe floor, through the real
+    MCP adapter (keel-api stubbed with the §L7 422). Built where the tool
+    runs, exactly like the paper wall."""
+    from tests._paper_sdk import paper_sdk_release
+
+    with paper_sdk_release():
+        payload = _call(
+            "keel_paper_deploy",
+            {"strategy_id": "str_guard"},
+            {
+                ("POST", "/v1/paper"): (
+                    422,
+                    floor_refusal_422_body(floor, requested, message=message),
+                )
+            },
+            env=full_hosted_env,
+        )
+    payload.name = f"paper_floor_{floor}"
+    return payload
 
 
 @cache
@@ -1073,6 +1500,10 @@ def paper_runtime_payloads() -> dict[str, Payload]:
 
     The listed connector cannot serve keel_paper_deploy while the SDK is held
     (the listed flag is refused), so the wall is built where the tool runs.
+
+    The two timeframe-floor refusals (plan change spec 01 §C10/§C11): the
+    current Free plan's 1h floor refusing a 15min strategy, and a paid plan's
+    15min floor refusing a 5min one — both the server's neutral sentence.
     """
     from tests._paper_sdk import paper_sdk_release
 
@@ -1084,14 +1515,82 @@ def paper_runtime_payloads() -> dict[str, Payload]:
                 {("POST", "/v1/paper"): (403, PAPER_CAP_403_BODY)},
                 env=full_hosted_env,
             ),
+            # Taking the last slot (doc 07 §5): keel-api's exhausted-tier block.
+            "paper_last_slot": _call(
+                "keel_paper_deploy",
+                {"strategy_id": "str_guard"},
+                {
+                    ("POST", "/v1/paper"): {
+                        "deployment_id": "dep_guard",
+                        "status": "DEPLOYING",
+                        "strategy_id": "str_guard",
+                        # One object, as keel-api serves the last slot taken.
+                        "quota": {
+                            "unit": "paper_strategies_max",
+                            "label": "paper strategies",
+                            "limit": 1,
+                            "used": 1,
+                            "remaining": 0,
+                            "tier": "exhausted",
+                            "plan": "free",
+                            "plan_name": "Free",
+                            "higher_plans": served_higher("free", "paper_strategies_max"),
+                        },
+                    }
+                },
+                env=full_hosted_env,
+            ),
         }
+    out["plan_status_full"] = _call(
+        "keel_plan_usage", {}, {("GET", "/v1/me"): _me("free")}, env=full_hosted_env
+    )
+    out["screen_private_wall"] = _call(
+        "keel_screener_refresh",
+        {"strategy_id": "str_guard"},
+        {
+            ("GET", "/v1/screener-shares"): {"items": []},
+            ("GET", "/v1/strategies/str_guard"): {"head_commit_id": "c_1"},
+            ("POST", "/v1/screeners/str_guard/refresh"): (403, SCREEN_PRIVATE_403_BODY),
+        },
+        env=full_hosted_env,
+    )
+    out["paper_floor_free"] = paper_floor_payload("1h", "15min")
+    out["paper_floor_paid"] = paper_floor_payload("15min", "5min")
     for name, payload in out.items():
         payload.name = name
+    _attach_plans(out)
     return out
 
 
-#: The fixtures a plan-limit wall produces, and the free one among them.
-WALL_FIXTURES = ("free_wall", "paid_wall")
+#: The fixtures a plan-limit wall produces.
+WALL_FIXTURES = ("free_wall", "paid_wall", "top_wall")
+
+#: Every v2 limit kind's fixtures at the wall, near it, and in plan usage
+#: (doc 07 §7: "every limit kind ... has a wall, notice and plan-usage
+#: fixture"), each with the sentence that proves it is that kind's. A
+#: feature has no near-limit notice (doc 07 §5: "—").
+KIND_FIXTURES: dict[str, dict[str, tuple[str, str] | None]] = {
+    "consumable": {
+        "wall": ("free_wall", "Backtests: 25 of 25 used on Free"),
+        "notice": ("critical_run", "4 of 50 backtests left"),
+        "plan_usage": ("plan_status_free", "Backtests: 46 of 50 left"),
+    },
+    "cap": {
+        "wall": ("paper_wall", "Paper strategies: 1 of 1 running on Free"),
+        "notice": ("paper_last_slot", "Last paper slot in use (1 of 1)."),
+        "plan_usage": ("plan_status_full", "Paper strategies: 0 of 1 running."),
+    },
+    "floor": {
+        "wall": ("paper_floor_free", "Paper and live on Free need 1h or slower"),
+        "notice": ("floor_run", "Note: paper and live on Free need 1h or slower"),
+        "plan_usage": ("plan_status_free", "Paper and live timeframe: 1h or slower."),
+    },
+    "feature": {
+        "wall": ("screen_private_wall", "Private screen auto-refresh isn't on Free"),
+        "notice": None,
+        "plan_usage": ("plan_status_full", "Private auto-refreshing screens: not on Free."),
+    },
+}
 
 
 # ─── The plan-limit card (widgets/assets/host-adapter.js renderPlanLimit) ──

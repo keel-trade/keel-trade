@@ -125,21 +125,25 @@ STRATEGY_SEARCH = register(
         # (iterate on an existing strategy, don't rewrite); system/chat/tool_usage.md:8
         # (state analysis — inspect the current pipeline before changing it).
         description=(
-            "Search and list the org's strategies — the entry point for an EXISTING "
-            "strategy, before `keel_strategy_get`. It matches `query` (name substring) "
-            "and pages with `limit` and `cursor`; each result carries the strategy id, "
-            "name and last-updated time. On CLI (TTY) calls with no query, locally "
-            "checked-out workspaces are included. The Keel Library's published entries "
-            "are `keel_library_list`; components are `keel_components_search`."
+            "Lists the org's strategies, the entry point for an existing one before "
+            "`keel_strategy_get`. It matches `query` (name substring) and pages with "
+            "`limit` and `cursor` (the prior result's `next_cursor`; none on the "
+            "last page). Each result carries id, name and last-updated time. On "
+            "CLI (TTY) calls with no query, locally checked-out workspaces are "
+            "included. Library entries are `keel_library_list`; components are "
+            "`keel_components_search`."
         ),
         # Listed-profile copy (agent-surface-cleanup spec 01 §2.5, R-4): the same
         # text minus one surface fact — the hosted server has no local workspaces to include.
+        # The `next_cursor` clause (a user request, R-010) fits the 2026-09-23 listed
+        # ceiling only because this description was tightened by as much as it added.
         listed_description=(
-            "Search and list the org's strategies — the entry point for an EXISTING "
-            "strategy, before `keel_strategy_get`. It matches `query` (name substring) "
-            "and pages with `limit` and `cursor`; each result carries the strategy id, "
-            "name and last-updated time. The Keel Library's published entries are "
-            "`keel_library_list`; components are `keel_components_search`."
+            "Lists the org's strategies, the entry point for an existing one before "
+            "`keel_strategy_get`. It matches `query` (name substring) and pages with "
+            "`limit` and `cursor` (the prior result's `next_cursor`; none on the "
+            "last page). Each result carries id, name and last-updated time. "
+            "Library entries are `keel_library_list`; components are "
+            "`keel_components_search`."
         ),
         input_schema={
             "type": "object",

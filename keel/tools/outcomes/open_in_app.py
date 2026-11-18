@@ -38,12 +38,15 @@ from ._base import OutcomeResult, OutcomeTool, ToolContext
 _ID_PREFIX_KINDS: dict[str, str] = {
     "str_": "strategy",
     "btr_": "backtest",
+    "res_": "result",
     # A running strategy's page (Q-2273 L6): `keel_live_monitor`'s and the
     # listed connection check's hints send a deployment here, and
     # `app_url_for("live", …)` always built its link — only the prefix was
     # missing, so every such hint ended in "unknown prefix".
     "dep_": "live",
     "shr_": "share",
+    # A study's page (07 §5.1, 06 P1: r={n}[.{rev}], v, sel).
+    "stu_": "study",
 }
 
 #: A real share id — `libs/strategy_registry/share_links.py`
@@ -53,13 +56,24 @@ _ID_PREFIX_KINDS: dict[str, str] = {
 #: returned was refused here as an unknown prefix. Platform ids are
 #: `<kind>_<ulid>` and ≥ 30 characters, so the exact length discriminates.
 _SHARE_TOKEN_RE = re.compile(r"[A-Za-z0-9_-]{21}")
+#: A shared STUDY's id (08 §3.2): 23 URL-safe characters with no prefix. D-341 (1): its link is the public share
+#: page ``/share/{id}`` (keel-api's share read serves that as ``links.app``; proven signed out on staging), the same
+#: page a strategy share opens; ``/research/{id}`` is the signed-in app route and sends a signed-out reader to sign-in.
+#: A3 #4: the share read's "Make it yours" call is ``keel_app_link(id=<share id>)``, and until WL-AG-06 a
+#: 23-character id answered "unknown prefix".
+_STUDY_SHARE_RE = re.compile(r"[A-Za-z0-9_-]{23}")
 
 # Envelope `target_kind` labels (existing wire contract, unchanged).
 TARGET_KINDS: dict[str, str] = {
     "strategy": "strategy_overview",
+    "result": "screener_result",
     "backtest": "backtest_results",
     "share": "share_page",
     "live": "live_view",
+    # RI-238 (07 §2.2 "open_in_app gains kind study"): `_ID_PREFIX_KINDS` routed
+    # `stu_` here while this map had no label, so every study id answered
+    # internal_error ("Unexpected error in keel_app_link: 'study'").
+    "study": "study_page",
 }
 
 
@@ -69,6 +83,8 @@ def kind_for_id(target_id: str) -> str | None:
         if target_id.startswith(prefix):
             return kind
     if _SHARE_TOKEN_RE.fullmatch(target_id):
+        return "share"
+    if _STUDY_SHARE_RE.fullmatch(target_id):
         return "share"
     return None
 
@@ -89,6 +105,87 @@ def _with_query(base: str, query: dict[str, object] | None) -> str:
     return base + "?" + urlencode([(k, str(v)) for k, v in items])
 
 
+_PROD_APP_URL = "https://app.usekeel.io"
+
+
+def app_base(ctx: ToolContext) -> str:
+    """The web app's origin for ``ctx``: ``KEEL_APP_URL`` or a context that
+    names one wins; otherwise it follows the configured API's host, so a CLI
+    pointed at staging links staging (``staging-api.…`` → ``staging-app.…``,
+    ``api.…`` → ``app.…``). An API host with no app twin keeps the default."""
+    import os
+    from urllib.parse import urlsplit
+
+    explicit = os.environ.get("KEEL_APP_URL")
+    if explicit or ctx.app_url.rstrip("/") != _PROD_APP_URL:
+        return (explicit or ctx.app_url).rstrip("/")
+    # The client the call already used: its config is the API this answer came
+    # from. A tool that makes no API call (keel_app_link) builds the client
+    # from the same config (no request is sent).
+    client = ctx.api_client
+    if client is None and callable(getattr(ctx, "get_client", None)):
+        try:
+            client = ctx.get_client()
+        except Exception:  # noqa: BLE001 — no configured client: the default origin
+            client = None
+    config = getattr(client, "_config", None)
+    api_url = getattr(config, "api_url", None)
+    if not isinstance(api_url, str):
+        return _PROD_APP_URL
+    api = urlsplit(api_url)
+    host = api.hostname or ""
+    first, _, rest = host.partition(".")
+    if not rest or api.scheme != "https":
+        return _PROD_APP_URL
+    if first == "api":
+        twin = "app"
+    elif first.endswith("-api"):
+        twin = first[: -len("-api")] + "-app"
+    else:
+        return _PROD_APP_URL
+    return f"https://{twin}.{rest}"
+
+
+def research_link(
+    kind: str,
+    target_id: str | None = None,
+    *,
+    origin: str,
+    query: dict[str, object] | None = None,
+) -> str:
+    """A research link (07 §5.1, RI-251): ``origin`` plus route ``kind`` of ``research_link_routes.json``, the
+    wheel's byte copy of ``libs/research/link_routes.json`` (``home``, ``study``, ``new``, ``go``, ``curated``).
+    ``{id}`` is ``target_id``; the route's fixed query, then ``query``, ride through :func:`_with_query`."""
+    import json
+    from importlib.resources import files
+
+    route = json.loads(files("keel.data").joinpath("research_link_routes.json").read_text())[kind]
+    path = str(route["path"])
+    if "{id}" in path:
+        if not target_id:
+            raise ValueError(f"the research {kind} link needs an id")
+        path = path.format(id=target_id)
+    return _with_query(origin.rstrip("/") + path, {**route["query"], **(query or {})})
+
+
+def research_link_id(kind: str, url: str | None) -> str | None:
+    """The ``{id}`` a served research link of route ``kind`` carries (``research_link_routes.json``, the one owner of
+    the route), or ``None`` when ``url`` is not that route's link. A reader of served links, never a writer."""
+    import json
+    import re
+    from importlib.resources import files
+    from urllib.parse import urlsplit
+
+    if not isinstance(url, str) or not url:
+        return None
+    route = json.loads(files("keel.data").joinpath("research_link_routes.json").read_text())[kind]
+    head, _, tail = str(route["path"]).partition("{id}")
+    found = re.fullmatch(
+        re.escape(head) + r"([A-Za-z0-9_-]+)" + re.escape(tail), urlsplit(url).path
+    )
+    return found.group(1) if found else None
+
+
 def app_url_for(
     kind: str,
     target_id: str,
@@ -101,15 +198,30 @@ def app_url_for(
     ``kind`` is one of ``strategy`` (the EDITOR — V-6, ratified
     2026-09-19: every strategy link lands where the work happens, and
     ``/strategies/{id}`` redirects there), ``backtest`` (tearsheet tab),
-    ``live`` (deployment view), ``paper`` (a paper run's page), or
-    ``share`` (public share page, rooted at ``ctx.share_url_root``).
+    ``live`` (deployment view), ``paper`` (a paper run's page),
+    ``share`` (public share page, rooted at ``ctx.share_url_root``), or
+    ``study`` (a study's page, ``/research/{id}``; 06 P1's ``r``/``v``/``sel``
+    ride in ``query``).
     """
-    if kind == "strategy":
-        return _with_query(f"{ctx.app_url}/strategies/{target_id}/edit", query)
-    if kind == "backtest":
+    # Screen, strategy and backtest links follow the configured API (J5: a
+    # staging CLI linked prod; L13: so did compose's strategy link).
+    # `KEEL_APP_URL`, which the hosted server always sets, still wins. Live and
+    # paper links keep ctx.app_url: the frozen listed outputs pin them.
+    base = app_base(ctx)
+    if kind in {"result", "screener", "actions"}:
+        import json
+        from importlib.resources import files
+
+        routes = json.loads(files("keel.data").joinpath("screener_link_routes.json").read_text())
+        route = routes[kind]
         return _with_query(
-            f"{ctx.app_url}/backtests/{target_id}", {"tab": "tearsheet", **(query or {})}
+            base + route["path"].format(id=target_id),
+            {**route["query"], **(query or {})},
         )
+    if kind == "strategy":
+        return _with_query(f"{base}/strategies/{target_id}/edit", query)
+    if kind == "backtest":
+        return _with_query(f"{base}/backtests/{target_id}", {"tab": "tearsheet", **(query or {})})
     if kind == "live":
         return _with_query(f"{ctx.app_url}/live/{target_id}", query)
     if kind == "paper":
@@ -120,6 +232,8 @@ def app_url_for(
         return _with_query(f"{ctx.app_url}/paper/{target_id}", query)
     if kind == "share":
         return _with_query(f"{ctx.share_url_root}/{target_id}", query)
+    if kind == "study":
+        return research_link("study", target_id, origin=base, query=query)
     raise KeelError(
         f"Cannot build an app link for kind {kind!r}.",
         error_code="unknown_link_kind",
@@ -137,8 +251,8 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
             exit_code=2,
             suggestion=(
                 "Pass a strategy id (str_...), a backtest run id (btr_...), a "
-                "running strategy's id (dep_...), or a share id (the token in a "
-                "usekeel.io/share/<id> URL)."
+                "running strategy's id (dep_...), a study id (stu_...), or a share id "
+                "(the token in a usekeel.io/share/<id> URL, or a shared study's 23 characters)."
             ),
         )
 
@@ -149,8 +263,8 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
             error_code="unknown_id_prefix",
             exit_code=2,
             suggestion=(
-                "Use a strategy id (str_...), a backtest run id (btr_...), a "
-                "running strategy's id (dep_..., from `keel_live_monitor`), or a share "
+                "Use a strategy id (str_...), a backtest run id (btr_...), a study id "
+                "(stu_...), a running strategy's id (dep_..., from `keel_live_monitor`), or a share "
                 "id (the token in a usekeel.io/share/<id> URL, as "
                 "`keel_share_create` returns). `keel_strategy_search` and "
                 "`keel_backtest_run` return the first two."
@@ -188,6 +302,28 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
     )
 
 
+# Lead sentence is R4's policy-vetted language (research/08) and is asserted verbatim by
+# tests/test_outcomes_open_in_app.py — keep it exactly; level up in the sentences that follow.
+_LEAD = (
+    "Returns a link to view and manage this strategy in the Keel web app. A "
+    "strategy id (`str_...`) links to the strategy editor, a backtest run id (`btr_...`) "
+    "to the tearsheet and charts, a running strategy's id (`dep_...`) to its "
+    "page, and a share id (the token in a `usekeel.io/share/<id>` URL) "
+)
+LISTED_HEAD_DESCRIPTION = (
+    _LEAD + "to the public share page. It returns the link as `url`; nothing is opened."
+)
+#: D-358 (gate E's core-flow arm): the full profile's description is the pre-Research text byte for byte; the
+#: Research wording (WL-AG-06: a study id and a shared study's 23-character id) is served only while a request has
+#: bound Research as served (``_base.FULL_RESEARCH_COPY``, ``_mcp_adapter.effective_description``). The handler takes
+#: a ``stu_`` or a 23-character shared-study id either way (every research answer writes the call for it).
+DESCRIPTION = LISTED_HEAD_DESCRIPTION
+RESEARCH_DESCRIPTION = (
+    _LEAD + "to the public share page. A study id (`stu_...`) links to the study, and a "
+    "shared study's 23-character id to its snapshot. It returns the link as `url`; nothing is opened."
+)
+
+
 OPEN_IN_APP = register(
     OutcomeTool(
         name="keel_app_link",
@@ -201,16 +337,10 @@ OPEN_IN_APP = register(
         # profile this is the ONLY bridge from the agent surface into the web
         # app; navigation not action, readOnlyHint:true) + app_url_for kinds
         # (strategy overview / backtest tearsheet / share page).
-        description=(
-            # Lead sentence is R4's policy-vetted language (research/08) and
-            # is asserted verbatim by tests/test_outcomes_open_in_app.py —
-            # keep it exactly; level up in the sentences that follow.
-            "Returns a link to view and manage this strategy in the Keel web app. A "
-            "strategy id (`str_...`) links to the strategy editor, a backtest run id (`btr_...`) "
-            "to the tearsheet and charts, a running strategy's id (`dep_...`) to its "
-            "page, and a share id (the token in a `usekeel.io/share/<id>` URL) "
-            "to the public share page. It returns the link as `url`; nothing is opened."
-        ),
+        description=DESCRIPTION,
+        # The listed surface is frozen with the listed flag (test_listed_screens: the flag-off head): it keeps the
+        # strategy-era copy, and the research copy rides Research only (`_base.LISTED_RESEARCH_COPY`, H14).
+        listed_description=LISTED_HEAD_DESCRIPTION,
         input_schema={
             "type": "object",
             "required": ["id"],

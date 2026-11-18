@@ -191,10 +191,29 @@ def _run_corpus(engine: str) -> dict:
                 strategy = parse_strategy(fixture["source"])
             except DSLParseError as exc:
                 return {"parse": exc.code}
-            return {"parse": None, **_codes(validate_strategy(strategy))}
+            return {
+                "parse": None,
+                **_codes(
+                    validate_strategy(
+                        strategy,
+                        expansions=fixture.get("uses"),
+                        consumer_id=fixture.get("consumer_id"),
+                    )
+                ),
+            }
         graph = GraphModel.from_dict(fixture["graph"])
         lock = (fixture.get("graph") or {}).get("componentLock")
-        return {"parse": None, **_codes(validate_strategy(graph_to_spec(graph), lock=lock))}
+        return {
+            "parse": None,
+            **_codes(
+                validate_strategy(
+                    graph_to_spec(graph),
+                    lock=lock,
+                    expansions=fixture.get("uses"),
+                    consumer_id=fixture.get("consumer_id"),
+                )
+            ),
+        }
 
     fixtures = {
         f"{p.parent.name}/{p.stem}": json.loads(p.read_text())

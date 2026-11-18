@@ -32,7 +32,7 @@ references:
 evidence and hand off (`backtest-and-analyze`, `overfit-check` when the
 baseline looked too good). Check the `Execution(...)` matches the path:
 continuous strategies go live `buffered` (every-bar rebalancing bleeds to
-fees); entry/exit and screen-select strategies are `on_change`.
+fees); entry/exit and rank-and-select strategies are `on_change`.
 
 ## Step 2 — Accounts
 

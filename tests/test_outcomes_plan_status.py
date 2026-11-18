@@ -1,19 +1,21 @@
-"""`keel_plan_usage` (spec 04 R2, minimized by D-12) — the caller's own plan.
+"""`keel_plan_usage` (spec 04 R2; D-12 minimized it, D-14 / doc 07 §5 names more).
 
-The contract under test (mcp-conversion 04 §4.3, D-12, 2026-09-28):
+The contract under test (mcp-conversion D-14, 2026-11-16):
 
 * full MCP round-trip (create_server → call_tool → keel-api mock): the
-  result is EXACTLY ``{plan, period, quota, talking_points}`` (+ the
-  envelope's ``share_url``) on EVERY surface — full and listed, with or
-  without a declared client. ``quota`` is one block per metered backtest
-  unit, projected to ``{unit, limit, used, remaining, resets_at}``;
+  result is EXACTLY ``{plan, plan_name, period, quota, talking_points}`` (+
+  the envelope's ``share_url``) on EVERY surface, plus ``paper`` / ``live`` /
+  ``screens`` / ``serving_floor`` only where the caller can meet them.
+  ``quota`` is one block per metered unit, projected to ``{unit, limit, used,
+  remaining, resets_at, more_plans}``;
 * the numbers are the server's, verbatim — the SDK invents none;
-* ONE neutral talking point, exact shape;
+* an opening line naming the plans that include more (served names, computed
+  here from plans.yaml), then one short line per limit;
 * NOT served, though keel-api still sends every one of them (D-10):
   ``upgrade_options`` (other plans, their limits and prices),
-  ``builder_fee_bps``, ``manage_url`` / ``hero_url`` (the billing tab),
-  ``live_slots``, and the "plan changes are an account action …" and
-  "doing nothing is also fine" points;
+  ``builder_fee_bps``, ``manage_url`` / ``hero_url`` (the billing tab), the
+  other plans' limits inside ``higher_plans``, and the "plan changes are an
+  account action …" and "doing nothing is also fine" points;
 * older keel-api (no ``quotas`` block, or no ``plan_status`` at all) →
   the same shape from the ``/v1/me`` balances — never client-side
   reconstructions.
@@ -29,6 +31,7 @@ import re
 import pytest
 import respx
 from httpx import Response
+from keel.errors import join_plan_names
 from keel.tools.outcomes import OUTCOMES, _bootstrap
 from keel.tools.outcomes._toolsets import (
     LISTED_PROFILE_TOOLS,
@@ -36,10 +39,35 @@ from keel.tools.outcomes._toolsets import (
     manage_links_allowed,
 )
 
+from . import _plan_catalog as cat
+
 
 _bootstrap()
 
 TOOL = OUTCOMES["keel_plan_usage"]
+
+
+def _served_higher(plan: str, unit: str) -> list[dict]:
+    """keel-api's `higher_plans` for `plan` on `unit`: the catalog's names AND
+    their limits (D-10), so "no other plan's number" is non-vacuous."""
+    out = cat.higher_plans(plan, unit)
+    for entry in out:
+        entry["limit"] = int(cat._value(entry["plan"], entry["version"], unit))
+        entry["period"] = "30d"
+    return out
+
+
+def _opening(plan: str) -> str:
+    """The opening line for `plan`, computed from the catalog (doc 07 §5)."""
+    names = cat.names(cat.higher_plans(plan, "backtest_runs"))
+    head = f"Plan: {cat.display_name(plan)}."
+    if not names:
+        return head
+    verb = "includes" if len(names) == 1 else "include"
+    return f"{head} {join_plan_names(names)} {verb} more; plans are changed in the Keel web app."
+
+
+FREE_MORE = cat.names(cat.higher_plans("free", "backtest_runs"))
 
 API = "https://api.test.keel"
 
@@ -53,6 +81,7 @@ RESETS_AT = "2026-09-29T00:00:00Z"  # Tue 29 Sep 2026
 # served" assertion below is non-vacuous by construction.
 PLAN_STATUS_BLOCK = {
     "plan": "free",
+    "plan_name": "Free",
     "builder_fee_bps": 5,
     "limits": {
         "backtest_runs": 50,
@@ -72,6 +101,7 @@ PLAN_STATUS_BLOCK = {
             "period": "weekly",
             "resets_at": RESETS_AT,
             "seconds_to_reset": 12345,
+            "higher_plans": _served_higher("free", "backtest_runs"),
         },
         {
             "unit": "backtest_compute_seconds",
@@ -83,6 +113,7 @@ PLAN_STATUS_BLOCK = {
             "period": "weekly",
             "resets_at": RESETS_AT,
             "seconds_to_reset": 12345,
+            "higher_plans": _served_higher("free", "backtest_compute_seconds"),
         },
         {
             "unit": "live_strategies_max",
@@ -121,11 +152,13 @@ PLAN_STATUS_BLOCK = {
     "manage_url": "https://app.usekeel.io/settings?tab=billing",
 }
 
-#: The one talking point for the block above (04 §4.3, exact shape).
-FREE_POINT = (
-    "Current plan: Free. This week: 46 of 50 backtest runs and 1,380 of 1,500 "
-    "compute seconds remaining; resets Tue 29 Sep 00:00 UTC."
-)
+#: The talking points for the block above (doc 07 §5): the opening line,
+#: then one line per limit.
+FREE_POINTS = [
+    _opening("free"),
+    "Backtests: 46 of 50 left; resets Tue 29 Sep.",
+    "Backtest compute time: 1,380 s of 1,500 s left; resets Tue 29 Sep.",
+]
 
 #: The projected per-unit blocks for the block above.
 FREE_QUOTA = [
@@ -135,6 +168,7 @@ FREE_QUOTA = [
         "used": 4,
         "remaining": 46,
         "resets_at": RESETS_AT,
+        "more_plans": FREE_MORE,
     },
     {
         "unit": "backtest_compute_seconds",
@@ -142,11 +176,12 @@ FREE_QUOTA = [
         "used": 120,
         "remaining": 1380,
         "resets_at": RESETS_AT,
+        "more_plans": FREE_MORE,
     },
 ]
 
 #: The whole served key set, exactly (the envelope adds `share_url`).
-RESULT_KEYS = {"plan", "period", "quota", "talking_points", "share_url"}
+RESULT_KEYS = {"plan", "plan_name", "period", "quota", "talking_points", "share_url"}
 
 
 def _me_response(plan_status: dict | None = PLAN_STATUS_BLOCK) -> dict:
@@ -288,17 +323,18 @@ def test_the_result_is_exactly_the_callers_own_state_on_every_surface(_api_env, 
         env = _call_mcp()
         where = (profile, client_env)
         assert set(env) == RESULT_KEYS, (where, sorted(env))
-        assert env["plan"] == "free", where
+        assert env["plan"] == "free" and env["plan_name"] == "Free", where
         assert env["period"] == "weekly", where
         assert env["quota"] == FREE_QUOTA, where
-        assert env["talking_points"] == [FREE_POINT], where
+        assert env["talking_points"] == FREE_POINTS, where
         assert env["share_url"] is None, where
 
 
 @respx.mock
 def test_nothing_d12_removed_is_served_anywhere(_api_env, monkeypatch):
-    """Whole-output scan, keys AND text: no other plan, no price, no fee,
-    no destination, no live slots, no marketing, no do-nothing line."""
+    """Whole-output scan, keys AND text: no other plan's NUMBERS, no price, no
+    fee, no destination, no marketing, no do-nothing line. Plan names appear
+    only as the served plans that include more."""
     respx.get(f"{API}/v1/me").mock(return_value=Response(200, json=_me_response()))
     for profile, client_env in SURFACES:
         _set_surface(monkeypatch, profile, client_env)
@@ -316,8 +352,14 @@ def test_nothing_d12_removed_is_served_anywhere(_api_env, monkeypatch):
             "remaining_quota",
             "price",
             "what_changes",
+            "higher_plans",
         ):
             assert key not in keys, (profile, client_env, key)
+        for number in ("1000", "1,000", "4000", "4,000"):
+            assert number not in blob, (profile, client_env, number)
+        for name in cat.all_plan_names():
+            if name not in ("Free", *FREE_MORE):
+                assert name not in blob, (profile, client_env, name)
         for token in (
             "http",
             "settings",
@@ -325,9 +367,6 @@ def test_nothing_d12_removed_is_served_anywhere(_api_env, monkeypatch):
             "checkout",
             "stripe",
             "starter",
-            "trader",
-            "Starter",
-            "live",
             "fee",
             "Doing nothing",
             "account action",
@@ -337,35 +376,42 @@ def test_nothing_d12_removed_is_served_anywhere(_api_env, monkeypatch):
         assert not BANNED_PHRASES_RE.search(blob), (profile, client_env)
 
 
-def test_the_talking_point_passes_the_d12_wall_scan():
-    """The ONE point passes the SAME validator and D-12 scan the walls use,
-    with no do-nothing line required (a neutral fact proposes no action)."""
-    from keel.errors import assert_neutral_wall_text
+def test_the_talking_points_pass_the_plan_copy_scan():
+    """The points pass the SAME validator and plan-copy scan the walls use,
+    with no do-nothing line required (a fact proposes no action)."""
+    from keel.errors import assert_plan_copy
     from keel.tools.outcomes._handoff import validate_talking_points
 
-    assert assert_neutral_wall_text(FREE_POINT, free_plan=False) == FREE_POINT
-    assert validate_talking_points([FREE_POINT], require_do_nothing=False) == [FREE_POINT]
+    for point in FREE_POINTS:
+        assert assert_plan_copy(point) == point
+    assert validate_talking_points(FREE_POINTS, require_do_nothing=False) == FREE_POINTS
     # Control: the default (action walls) still requires the do-nothing line.
     with pytest.raises(ValueError, match="do-nothing"):
-        validate_talking_points([FREE_POINT])
+        validate_talking_points(FREE_POINTS)
 
 
 @respx.mock
 def test_a_paid_plan_reads_the_same_way(_api_env):
-    """The plan name is the caller's OWN plan, whatever it is; nothing about
-    any other plan appears."""
-    block = copy.deepcopy(PLAN_STATUS_BLOCK)
-    block["plan"] = "starter"
-    for q in block["quotas"]:
-        if q["unit"] == "backtest_runs":
-            q.update(limit=500, used=4, remaining=496)
-    respx.get(f"{API}/v1/me").mock(return_value=Response(200, json=_me_response(block)))
-    env = _call_mcp()
-    assert env["plan"] == "starter"
-    assert env["talking_points"] == [
-        "Current plan: Starter. This week: 496 of 500 backtest runs and 1,380 of 1,500 "
-        "compute seconds remaining; resets Tue 29 Sep 00:00 UTC."
-    ]
+    """The plan name is the caller's OWN plan, and the opening names only the
+    plans the server says include more (Trader: Pro, from the catalog); the
+    top plan's opening names none (Pro gets nothing)."""
+    for plan in ("trader", "pro"):
+        block = copy.deepcopy(PLAN_STATUS_BLOCK)
+        block["plan"] = plan
+        block.pop("plan_name")  # an older server: the id, capitalised
+        for q in block["quotas"]:
+            if q["unit"] in ("backtest_runs", "backtest_compute_seconds"):
+                q["higher_plans"] = _served_higher(plan, q["unit"])
+            if q["unit"] == "backtest_runs":
+                q.update(limit=1000, used=4, remaining=996)
+        respx.get(f"{API}/v1/me").mock(return_value=Response(200, json=_me_response(block)))
+        env = _call_mcp()
+        assert env["plan"] == plan and env["plan_name"] == cat.display_name(plan)
+        assert env["talking_points"][:2] == [
+            _opening(plan),
+            "Backtests: 996 of 1,000 left; resets Tue 29 Sep.",
+        ], plan
+    assert _opening("pro") == "Plan: Pro.", "non-vacuity: the top plan has no clause"
 
 
 @respx.mock
@@ -381,9 +427,7 @@ def test_an_unlimited_unit_is_named_not_counted(_api_env):
         "remaining": "unlimited",
     }
     assert "2147483647" not in json.dumps(env)
-    assert env["talking_points"][0].startswith(
-        "Current plan: Trader. This week: unlimited backtest runs and 1,380 of 1,500"
-    )
+    assert env["talking_points"][1] == "Backtests: unlimited."
 
 
 @respx.mock
@@ -398,15 +442,19 @@ def test_no_reset_is_reported_when_the_server_sends_none(_api_env):
     respx.get(f"{API}/v1/me").mock(return_value=Response(200, json=_me_response(block)))
     env = _call_mcp()
     assert all("resets_at" not in q for q in env["quota"])
-    assert "reset" not in env["talking_points"][0].lower()
+    assert all("reset" not in p.lower() for p in env["talking_points"][1:])
 
 
 # ─── The first-week allowance (connect-onboarding spec 01 §1.8/§1.9) ─────
 
 ENDS_AT = "2026-10-13T15:02:11Z"  # Tue 13 Oct 2026
 
-#: The one first-week sentence for the blocks below, exactly (§1.9).
-FIRST_WEEK_POINT = "154 of 200 first-week backtests left; they end Tue 13 Oct 15:02 UTC."
+#: The first-week clause for the blocks below (Q-7601 fix round): their
+#: `remaining` (154) and end date; the exact rendering is pinned once in
+#: test_plan_limits_first_week_golden.py.
+FIRST_WEEK_CLAUSE = "(154 first-week extras until Tue 13 Oct)"
+#: The backtests line with the clause folded in.
+FIRST_WEEK_POINT = f"Backtests: 200 of 250 left {FIRST_WEEK_CLAUSE}; resets Tue 29 Sep."
 
 
 def _first_week_block() -> dict:
@@ -428,9 +476,10 @@ def _first_week_block() -> dict:
 
 @respx.mock
 def test_first_week_sentence_is_always_served_when_present(_api_env, monkeypatch):
-    """§1.9: always in this tool when the server reports the allowance — as
-    its own talking point after the plan sentence, on every surface — and
-    `first_week` rides each unit's block, projected to its allow-list."""
+    """§1.9 / Q-7601: always in this tool when the server reports the
+    allowance with some left — folded into the backtests line, on every
+    surface — and `first_week` rides each unit's block, projected to its
+    allow-list."""
     respx.get(f"{API}/v1/me").mock(
         return_value=Response(200, json=_me_response(_first_week_block()))
     )
@@ -440,9 +489,9 @@ def test_first_week_sentence_is_always_served_when_present(_api_env, monkeypatch
         where = (profile, client_env)
         assert set(env) == RESULT_KEYS, where
         assert env["talking_points"] == [
-            "Current plan: Free. This week: 200 of 250 backtest runs and 6,000 of 7,500 "
-            "compute seconds remaining; resets Tue 29 Sep 00:00 UTC.",
+            FREE_POINTS[0],
             FIRST_WEEK_POINT,
+            "Backtest compute time: 6,000 s of 7,500 s left; resets Tue 29 Sep.",
         ], where
         assert env["quota"][0]["first_week"] == {
             "granted": 200,
@@ -463,7 +512,7 @@ def test_first_week_absent_serves_the_one_point_unchanged(_api_env):
     not active) gets exactly the pre-existing single point and block keys."""
     respx.get(f"{API}/v1/me").mock(return_value=Response(200, json=_me_response()))
     env = _call_mcp()
-    assert env["talking_points"] == [FREE_POINT]
+    assert env["talking_points"] == FREE_POINTS
     assert all("first_week" not in q for q in env["quota"])
     assert "first-week" not in json.dumps(env)
 
@@ -476,7 +525,7 @@ def test_first_week_on_the_compute_unit_alone_renders_no_sentence(_api_env):
     del block["quotas"][0]["first_week"]
     respx.get(f"{API}/v1/me").mock(return_value=Response(200, json=_me_response(block)))
     env = _call_mcp()
-    assert len(env["talking_points"]) == 1
+    assert len(env["talking_points"]) == len(FREE_POINTS)
     assert "first_week" in env["quota"][1]
     assert "first-week" not in json.dumps(env)
 
@@ -490,7 +539,7 @@ def test_first_week_with_a_missing_fact_renders_no_sentence(_api_env):
         block["quotas"][0]["first_week"].update(broken)
         respx.get(f"{API}/v1/me").mock(return_value=Response(200, json=_me_response(block)))
         env = _call_mcp()
-        assert len(env["talking_points"]) == 1, broken
+        assert len(env["talking_points"]) == len(FREE_POINTS), broken
 
 
 @respx.mock
@@ -508,7 +557,7 @@ def test_first_week_from_the_older_api_balances(_api_env):
     )
     respx.get(f"{API}/v1/me").mock(return_value=Response(200, json=me))
     env = _call_mcp()
-    assert env["talking_points"][-1] == FIRST_WEEK_POINT
+    assert any(FIRST_WEEK_CLAUSE in p for p in env["talking_points"]), env["talking_points"]
     assert env["quota"][0]["first_week"]["remaining"] == 154
 
 
@@ -521,8 +570,8 @@ def test_an_urgent_first_week_sentence_fails_the_call(monkeypatch):
 
     monkeypatch.setattr(
         ps,
-        "render_first_week_sentence",
-        lambda _block: FIRST_WEEK_POINT[:-1] + "; use them before they expire.",
+        "render_first_week_clause",
+        lambda _block: FIRST_WEEK_CLAUSE[:-1] + "; use them before they expire)",
     )
 
     class _Client:
@@ -553,8 +602,10 @@ def test_older_api_without_quotas_reads_the_balances(_api_env):
     env = _call_mcp()
     assert set(env) == RESULT_KEYS
     assert env["plan"] == "free"
-    assert env["quota"] == FREE_QUOTA  # compute used = 100 spent + 20 reserved
-    assert env["talking_points"] == [FREE_POINT]
+    # compute used = 100 spent + 20 reserved; the balances carry no higher
+    # plans, so no name is guessed (the opening is the bare plan line).
+    assert env["quota"] == [{k: v for k, v in q.items() if k != "more_plans"} for q in FREE_QUOTA]
+    assert env["talking_points"] == ["Plan: Free.", *FREE_POINTS[1:]]
 
 
 @respx.mock
@@ -566,8 +617,9 @@ def test_older_api_without_plan_status_degrades_honestly(_api_env):
     assert env["period"] is None, "the balances named no period — none is invented"
     assert [q["remaining"] for q in env["quota"]] == [46, 1380]
     assert env["talking_points"] == [
-        "Current plan: Free. This period: 46 of 50 backtest runs and 1,380 of 1,500 "
-        "compute seconds remaining."
+        "Plan: Free.",
+        "Backtests: 46 of 50 left.",
+        "Backtest compute time: 1,380 s of 1,500 s left.",
     ]
 
 
@@ -612,22 +664,56 @@ def test_manage_links_policy_is_no_link_on_every_surface(monkeypatch):
         assert manage_links_allowed() is False, (profile, client_env)
 
 
-def test_description_names_the_callers_own_state_only():
-    """The description is the Lovable `get_workspace` shape — and there is
-    one description (no listed variant to drift)."""
-    text = TOOL.description
-    assert TOOL.listed_description is None
-    for token in (
-        "upgrade",
-        "price",
-        "builder fee",
-        "manage_url",
-        "other plans",
-        "live strategy slots",
-        "where plans are listed",
-    ):
-        assert token not in text.lower(), token
-    assert "plan name" in text and "reset instant" in text
+def test_descriptions_name_the_limits_without_numbers_or_plan_names():
+    """doc 07 §3.8/§6.1: each profile's description names the limit kinds
+    its caller can meet, and never a number, a price or a plan name. The
+    listed forms leave out live slots (no live tool is listed)."""
+    texts = {
+        "full": TOOL.description,
+        "listed": TOOL.listed_description,
+        "listed+paper": TOOL.listed_paper_description,
+    }
+    for where, text in texts.items():
+        for token in ("upgrade", "price", "builder fee", "manage_url", "$"):
+            assert token not in text.lower(), (where, token)
+        assert not re.search(r"\d", text), (where, text)
+        for name in cat.all_plan_names():
+            assert name not in text, (where, name)
+        assert "reset instant" in text and "which plans include more" in text, where
+        assert "timeframe" in text and "spends no quota" in text, where
+    assert "live slots" in texts["full"]
+    assert "live slots" not in texts["listed"] and "live slots" not in texts["listed+paper"]
+    assert "paper slots" in texts["listed+paper"] and "paper slots" not in texts["listed"]
+
+
+#: The tools whose call spends one backtest (a screen run is counted as one,
+#: keel-api `backtest.screener.run`).
+_BACKTEST_SPENDERS = ("keel_backtest_run", "keel_screener_run")
+
+
+def test_every_tool_that_spends_a_backtest_says_so_once():
+    """doc 07 §5 "Descriptions" (Q-7601 fix round): each spender's full and
+    listed description carries the ONE allowance clause exactly once, with no
+    number and no plan name (§3.8); a read tool beside them carries none.
+
+    The clause REPLACES screener_run's "Each call queues one run, counted as
+    a backtest run.": with both, the listed flag-on description total is
+    15,026 against F4's 15,000 ceiling (test_listed_screens); with the clause
+    alone it is 15,000.
+
+    SEED (run 2026-11-16, reversed by reversing the edit): screener_run's
+    description back to "Each call queues one run, counted as a backtest run."
+    reds this test alone; the read-tool control stays green."""
+    from keel.errors import BACKTEST_ALLOWANCE_CLAUSE
+
+    assert not re.search(r"\d", BACKTEST_ALLOWANCE_CLAUSE)
+    assert not any(n in BACKTEST_ALLOWANCE_CLAUSE for n in cat.all_plan_names())
+    for name in _BACKTEST_SPENDERS:
+        tool = OUTCOMES[name]
+        for where, text in (("full", tool.description), ("listed", tool.listed_description)):
+            assert text.count(BACKTEST_ALLOWANCE_CLAUSE) == 1, (name, where, text)
+    for control in ("keel_backtest_summarize", "keel_screener_view"):
+        assert BACKTEST_ALLOWANCE_CLAUSE not in OUTCOMES[control].description, control
 
 
 # ─── Registration / gating ──────────────────────────────────────────────
@@ -668,3 +754,288 @@ def test_cli_command_registers():
 def test_schema_takes_no_arguments():
     assert TOOL.input_schema["required"] == []
     assert TOOL.input_schema["properties"] == {}
+
+
+# ─── The plan change (spec 01 §C6/§C11/§L6): the current plans ──────────
+
+RESETS_30D_AT = "2026-11-29T14:00:00Z"  # Sun 29 Nov 2026, an account's cycle end
+BONUS_ENDS_AT = "2026-11-06T14:00:00Z"  # Fri 6 Nov 2026
+
+
+def _v2_block(*, first_week: bool) -> dict:
+    """keel-api's /v1/me `plan_status` for a current-plans Free org, with
+    EVERY field §L6 adds (plan_version, clock_floor, the catalog `offers` with
+    their names, prices and limits) — so each "not served" assertion below is
+    non-vacuous by construction."""
+    block = copy.deepcopy(PLAN_STATUS_BLOCK)
+    block["plan_version"] = "v2"
+    block["clock_floor"] = "1h"
+    block["offers"] = [
+        {
+            "plan": "trader",
+            "version": "v2",
+            "name": "Trader",
+            "monthly_price_usd": 49,
+            "annual_monthly_price_usd": 39,
+            "bps": 3,
+            "clock_floor": "15min",
+            "limits": {"backtest_runs": {"limit": 1000, "period": "30d"}},
+        },
+        {
+            "plan": "pro",
+            "version": "v2",
+            "name": "Pro",
+            "monthly_price_usd": 199,
+            "annual_monthly_price_usd": 159,
+            "bps": 1,
+            "clock_floor": "5min",
+            "limits": {"backtest_runs": {"limit": 4000, "period": "30d"}},
+        },
+    ]
+    runs, compute = block["quotas"][0], block["quotas"][1]
+    runs.update(limit=25, used=4, remaining=21, period="30d", resets_at=RESETS_30D_AT)
+    compute.update(limit=750, used=120, remaining=630, period="30d", resets_at=RESETS_30D_AT)
+    if first_week:
+        # What keel-api serves 10 runs / 300 s into the bonus (spend goes to
+        # the bonus first): the combined allowance, and in `first_week` the
+        # bonus part and the plan's own pot (test_plan_both_pots.py pins the
+        # server side of these numbers).
+        runs.update(limit=75, used=10, remaining=65)
+        runs["first_week"] = {
+            "granted": 50,
+            "remaining": 40,
+            "ends_at": BONUS_ENDS_AT,
+            "then_remaining": 25,
+            "then_limit": 25,
+        }
+        compute.update(limit=2250, used=300, remaining=1950)
+        compute["first_week"] = {
+            "granted": 1500,
+            "remaining": 1200,
+            "ends_at": BONUS_ENDS_AT,
+            "then_remaining": 750,
+            "then_limit": 750,
+        }
+    return block
+
+
+@respx.mock
+def test_the_30_day_cycle_reads_this_30_day_period(_api_env, monkeypatch):
+    """§C11: the one new period wording; the result keeps exactly its keys —
+    none of §L6's additions (offers, prices, the floor, the version) reach an
+    agent surface."""
+    respx.get(f"{API}/v1/me").mock(
+        return_value=Response(200, json=_me_response(_v2_block(first_week=False)))
+    )
+    for profile, client_env in SURFACES:
+        _set_surface(monkeypatch, profile, client_env)
+        env = _call_mcp()
+        where = (profile, client_env)
+        assert set(env) == RESULT_KEYS, where
+        assert env["period"] == "30d", where
+        assert env["talking_points"] == [
+            FREE_POINTS[0],
+            "Backtests: 21 of 25 left; resets Sun 29 Nov.",
+            "Backtest compute time: 630 s of 750 s left; resets Sun 29 Nov.",
+        ], where
+        blob = json.dumps(env)
+        for leaked in ("offers", "clock_floor", "plan_version", "49", "199", "1h", "15min"):
+            assert leaked not in blob, (where, leaked)
+        assert not re.search(r"\bmonth", blob, re.I), where
+
+
+@respx.mock
+def test_both_pots_on_the_30_day_cycle(_api_env, monkeypatch):
+    """§C6 / Q-7601: during the signup allowance the backtests line folds
+    in what the first-week part leaves and the date it ends; both pots stay
+    in the structured `first_week` (the plan's own pot is `then_remaining`,
+    read, never subtracted here) and no window phrase is rendered."""
+    respx.get(f"{API}/v1/me").mock(
+        return_value=Response(200, json=_me_response(_v2_block(first_week=True)))
+    )
+    for profile, client_env in SURFACES:
+        _set_surface(monkeypatch, profile, client_env)
+        env = _call_mcp()
+        where = (profile, client_env)
+        fw = env["quota"][0]["first_week"]
+        assert env["talking_points"][1:3] == [
+            f"Backtests: 65 of 75 left ({fw['remaining']} first-week extras until Fri 6 Nov); "
+            "resets Sun 29 Nov.",
+            "Backtest compute time: 1,950 s of 2,250 s left; resets Sun 29 Nov.",
+        ], where
+        assert env["quota"][0]["first_week"] == {
+            "granted": 50,
+            "remaining": 40,
+            "ends_at": BONUS_ENDS_AT,
+            "then_remaining": 25,
+            "then_limit": 25,
+        }, where
+
+
+@respx.mock
+def test_an_older_server_without_the_plan_pot_keeps_the_first_week_sentence(_api_env):
+    """Control: a 30-day first week served WITHOUT `then_*` (a keel-api from
+    before both pots) folds the same clause: it reads only the first-week
+    part's own `remaining` and end, never the plan pot."""
+    block = _v2_block(first_week=True)
+    stripped = 0
+    for quota in block["quotas"]:
+        if "first_week" in quota:
+            quota["first_week"].pop("then_remaining")
+            quota["first_week"].pop("then_limit")
+            stripped += 1
+    assert stripped == 2  # non-vacuity: both backtest units carried the pair
+    respx.get(f"{API}/v1/me").mock(return_value=Response(200, json=_me_response(block)))
+    env = _call_mcp()
+    assert env["talking_points"][1] == (
+        "Backtests: 65 of 75 left (40 first-week extras until Fri 6 Nov); resets Sun 29 Nov."
+    )
+    assert set(env["quota"][0]["first_week"]) == {"granted", "remaining", "ends_at"}
+
+
+@respx.mock
+def test_the_current_plans_render_no_unlimited(_api_env):
+    """D-6: no current-plans backtest limit reads "unlimited". CONTROL (the
+    older-plan arm, test_an_unlimited_unit_is_named_not_counted above): an
+    unlimited unit still reads "unlimited backtest runs"."""
+    respx.get(f"{API}/v1/me").mock(
+        return_value=Response(200, json=_me_response(_v2_block(first_week=True)))
+    )
+    env = _call_mcp()
+    assert "nlimited" not in json.dumps(env)
+    assert all(isinstance(q["limit"], int) for q in env["quota"])
+
+
+# ─── Every limit kind the caller can meet (doc 07 §5, D-14) ──────────────
+
+
+def _me_every_kind(plan: str = "free") -> dict:
+    """/v1/me as Lane A's keel-api serves it for a v2 org: the serving floor
+    and the paper and screens cap balances, each with the catalog's
+    `higher_plans` (names AND numbers, so the names-only rule is tested)."""
+    me = _me_response()
+    floor_higher = cat.faster_plans(plan)
+    for entry in floor_higher:
+        entry["floor"] = cat.floor_of(entry["plan"])
+    me["serving_floor"] = {"floor": cat.floor_of(plan), "higher_plans": floor_higher}
+    for unit, used in (
+        ("paper_strategies_max", 1),
+        ("screeners_live_max", 1),
+        ("screeners_published_max", 2),
+        ("screeners_private_max", 0),
+    ):
+        granted = int(cat._value(plan, "v2", unit))
+        me["entitlements"].append(
+            {
+                "unit": unit,
+                "type": "cap",
+                "granted": granted,
+                "cap_current": used,
+                "available": granted,
+                "higher_plans": _served_higher(plan, unit),
+            }
+        )
+    return me
+
+
+@respx.mock
+def test_every_limit_kind_has_its_line_and_block(_api_env, monkeypatch):
+    """The timeframe floor (no longer hidden — D-14 supersedes the clock_floor
+    ban), the paper slots and the screens caps each get one line and one
+    allow-listed block, on the full profile where all are served.
+
+    SEED (run 2026-11-16): drop `_floor_line` from the handler — this reds
+    on the floor line; the backtest lines (control) stay as asserted."""
+    monkeypatch.setenv("KEEL_LISTED_SCREENS_HOSTS", "all")
+    respx.get(f"{API}/v1/me").mock(return_value=Response(200, json=_me_every_kind()))
+    env = _call_mcp()
+    assert set(env) == RESULT_KEYS | {"paper", "screens", "serving_floor"}, sorted(env)
+    points = env["talking_points"]
+    assert points[:3] == FREE_POINTS
+    assert points[3:] == [
+        "Paper strategies: 1 of 1 running.",
+        "Auto-refreshing screens: 1 of 4 in use.",
+        "Public screens: 2 of 4 in use.",
+        "Private auto-refreshing screens: not on Free.",
+        "Paper and live timeframe: 1h or slower.",
+    ]
+    assert env["serving_floor"] == {
+        "floor": "1h",
+        "more_plans": cat.names(cat.faster_plans("free")),
+    }
+    assert env["paper"] == {
+        "unit": "paper_strategies_max",
+        "used": 1,
+        "limit": 1,
+        "remaining": 0,
+        "more_plans": cat.names(cat.higher_plans("free", "paper_strategies_max")),
+    }
+    assert [b["unit"] for b in env["screens"]] == [
+        "screeners_live_max",
+        "screeners_published_max",
+        "screeners_private_max",
+    ]
+    blob = json.dumps(env)
+    assert "higher_plans" not in blob and "15min" not in blob and "5min" not in blob
+
+
+@respx.mock
+def test_the_listed_profile_shows_only_what_it_serves(_api_env, monkeypatch):
+    """Control arm: listed, paper and screens off for this host, live never —
+    the floor still shows (a backtest can meet it before any deploy), and the
+    caps do not."""
+    monkeypatch.setenv("KEEL_SERVER_PROFILE", "listed")
+    monkeypatch.setenv("KEEL_LISTED_PAPER_HOSTS", "")
+    monkeypatch.setenv("KEEL_LISTED_SCREENS_HOSTS", "")
+    respx.get(f"{API}/v1/me").mock(return_value=Response(200, json=_me_every_kind()))
+    env = _call_mcp()
+    assert set(env) == RESULT_KEYS | {"serving_floor"}, sorted(env)
+    assert env["talking_points"][-1] == "Paper and live timeframe: 1h or slower."
+    assert not any("Paper strategies" in p or "screens" in p for p in env["talking_points"])
+
+
+@respx.mock
+def test_live_slots_show_where_the_live_tools_are_loaded(_api_env, monkeypatch):
+    """`live` rides only a server that registers keel_live_deploy."""
+    monkeypatch.setenv("KEEL_TOOLSETS", "read-only,backtest,live-read,live-write")
+    respx.get(f"{API}/v1/me").mock(return_value=Response(200, json=_me_response()))
+    env = _call_mcp()
+    assert env["live"] == {"unit": "live_strategies_max", "used": 1, "limit": 1, "remaining": 0}
+    assert "Live strategies: 1 of 1 running." in env["talking_points"]
+    monkeypatch.setenv("KEEL_TOOLSETS", "read-only,backtest")
+    assert "live" not in _call_mcp()
+
+
+@respx.mock
+def test_ri589_the_studies_block_has_its_line_and_names_the_plans_that_include_more(_api_env):
+    """RI-589 (Research 07 §4.1, 08 §5.2): while research is served, keel-api's plan_status.quotas carries the
+    ``research_studies`` block (platform_auth.pricing RESEARCH_QUOTA_UNITS), and keel_plan_usage reports it as every
+    metered unit: its projected block with ``more_plans`` (the served names, never their numbers) and the line
+    "Studies: 2 of 3 left; resets …". Control: without the block (research off) the output is the Free baseline,
+    unchanged. Seeded red (reversed): ``research_studies`` dropped from plan_status._UNITS -> this arm reds; the
+    control stays green."""
+    block = copy.deepcopy(PLAN_STATUS_BLOCK)
+    higher = _served_higher("free", "research_studies")
+    assert higher  # non-vacuous: another plan includes more studies
+    block["quotas"].append(
+        {
+            "unit": "research_studies",
+            "label": "studies",
+            "limit": 3,
+            "used": 1,
+            "remaining": 2,
+            "unlimited": False,
+            "period": "30d",
+            "resets_at": RESETS_AT,
+            "plan": "free",
+            "higher_plans": higher,
+        }
+    )
+    respx.get(f"{API}/v1/me").mock(return_value=Response(200, json=_me_response(block)))
+    env = _call_mcp()
+    (studies,) = [q for q in env["quota"] if q["unit"] == "research_studies"]
+    assert (studies["limit"], studies["used"], studies["remaining"]) == (3, 1, 2)
+    assert studies["more_plans"] == cat.names(cat.higher_plans("free", "research_studies"))
+    assert "Studies: 2 of 3 left; resets Tue 29 Sep." in env["talking_points"]
+    respx.get(f"{API}/v1/me").mock(return_value=Response(200, json=_me_response()))
+    assert _call_mcp()["talking_points"] == FREE_POINTS  # control: no studies block, no line

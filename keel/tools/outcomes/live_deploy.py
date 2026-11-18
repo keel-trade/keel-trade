@@ -725,13 +725,28 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
         deployment_id = result.get("deployment_id") or result.get("id")
 
     hero_url = app_url_for("live", deployment_id, ctx) if deployment_id else f"{ctx.app_url}/live"
-    extra: dict[str, Any] = {"deployment": result}
+    # The deploy's `quota` (the last live slot taken, doc 07 §5) is projected
+    # like every quota block — keel-api's `higher_plans` carries the other
+    # plans' limits, which no agent surface relays (founder Q1).
+    deployment = (
+        {k: v for k, v in result.items() if k != "quota"} if isinstance(result, dict) else result
+    )
+    extra: dict[str, Any] = {"deployment": deployment}
+    if isinstance(result, dict):
+        from .backtest_run import served_quota_fields
+
+        extra.update(served_quota_fields(result.get("quota")))
     # Quota visibility (spec 04 R5): the deploy response carries `remaining`
     # counters (e.g. {"live_slots": 0}) ONLY when remaining capacity is
     # strictly below 20% of the plan cap. Surface it top-level so agents can
     # plan ahead of the wall — numbers only, no upsell language.
     if isinstance(result, dict) and result.get("remaining"):
         extra["remaining"] = result["remaining"]
+    from .live_control import carries_run_block, run_block
+
+    if carries_run_block(result):
+        # RF-80.4: a new deployment trades at once; the run it requested.
+        extra["run"] = run_block(result)
     return OutcomeResult(
         run_id=deployment_id,
         hero_url=hero_url,
@@ -744,6 +759,7 @@ LIVE_DEPLOY = register(
     OutcomeTool(
         name="keel_live_deploy",
         required_action="runner.create",
+        rate_tier="live",
         cli_path=("live", "deploy"),
         toolset="live-write",
         # grounded-in: specs/03-golive-handoff-mobile.md (deploy = web-app

@@ -10,6 +10,8 @@ Quick Start:
 from __future__ import annotations
 
 import json
+import re
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -20,9 +22,14 @@ from pipeline_engine.constants import MISSING  # noqa: F401 — re-export
 class SourceLocation:
     """Source position for error messages.
 
-    The context field uses a grammar:
-    "step[N]", "branch[name].step[N]", "var[name]", "store[name]",
-    "load[name]", "factory[name]", "factory_call[name]", "pipeline"
+    The context of a step is its path in the edit layer's grammar
+    (``dsl/edits.py``, Q-7156): "step[N]", "step[N].branch[name].step[M]"
+    (a single-step branch is its ``.step[0]``), "step[N].step[M]" (a nested
+    pipeline), headed by "var[name]" or "factory[name]" inside a definition;
+    a factory call and a slot step are located by their step path like any
+    other. Declarations are "globals", "universe", "execution", "outputs",
+    "pipeline"; a definition is "var[name]" / "factory[name]"; a variable used
+    inside a parameter value is "param_ref[name]".
 
     ``end_line``/``end_col`` complete the position into a SPAN (Q-1697).
     Both DEFAULT to ``None`` so every existing constructor keeps working and
@@ -112,6 +119,12 @@ class ParallelSpec:
 
     branches: dict[str, list[StepSpec]]
     location: SourceLocation
+    #: Branch keys written more than once in this dict literal (Q-7153). A
+    #: dict keeps the LAST value for a repeated key (``branches`` does too, so
+    #: nothing compiles differently); the parser records the repeat here so
+    #: the validator can report NAME_DEFINED_TWICE instead of dropping the
+    #: first branch silently. Empty for every graph-built or rebuilt spec.
+    duplicate_keys: tuple[str, ...] = ()
 
 
 @dataclass
@@ -131,6 +144,8 @@ class PipelineSpec:
     #: ``$scope`` with no governing TradeManager): the issue is on the call,
     #: and the walk treats the call's output as unknown.
     factory_refused: bool = False
+    #: Pinned source reference retained by the Use link step.
+    use_ref: str | None = None
 
 
 @dataclass
@@ -695,6 +710,81 @@ EXECUTION_VALID_REBALANCE_METHOD: set[str] = set(
 )
 
 
+OUTPUT_ROLES: tuple[str, ...] = ("signal", "filter", "universe", "event", "regime")
+OUTPUTS_MAX: int = 3
+OUTPUT_NAME_PATTERN: str = r"^[A-Za-z_][A-Za-z0-9_]{0,63}$"
+OUTPUT_NAME_RESERVED: frozenset[str] = frozenset(
+    {
+        "constructor",
+        "prototype",
+        "toString",
+        "hasOwnProperty",
+        "valueOf",
+        "CON",
+        "PRN",
+        "AUX",
+        "NUL",
+        *(f"COM{i}" for i in range(1, 10)),
+        *(f"LPT{i}" for i in range(1, 10)),
+    }
+)
+
+
+def output_name_problems(slots: Sequence[str]) -> list[tuple[str, str]]:
+    """Name violations in slot order: pattern, prefix, reserved, duplicate."""
+    problems: list[tuple[str, str]] = []
+    seen: dict[str, str] = {}
+    reserved = {name.casefold() for name in OUTPUT_NAME_RESERVED}
+    for name in slots:
+        if re.fullmatch(OUTPUT_NAME_PATTERN, name) is None:
+            problems.append(
+                (
+                    name,
+                    f"Output name '{name}' must match [A-Za-z_][A-Za-z0-9_]* (at most 64 chars): it becomes a file name. Rename the Store and the output together.",
+                )
+            )
+        if name.startswith("__"):
+            problems.append(
+                (
+                    name,
+                    f"Output name '{name}' may not start with '__': it becomes a key in the published manifest. Rename the Store and the output together.",
+                )
+            )
+        folded = name.casefold()
+        if folded in reserved:
+            problems.append(
+                (
+                    name,
+                    f"Output name '{name}' is reserved (a browser object key or a Windows device name). Rename the Store and the output together.",
+                )
+            )
+        if folded in seen:
+            first = seen[folded]
+            message = (
+                f"Outputs(slots=[...]) names '{name}' twice"
+                if first == name
+                else f"Outputs(slots=[...]) names '{first}' and '{name}', which are the same name ignoring case"
+            )
+            problems.append((name, message))
+        seen.setdefault(folded, name)
+    return problems
+
+
+@dataclass
+class OutputsSpec:
+    """Top-level stored slots a screener persists, in declaration order."""
+
+    slots: list[str]
+    roles: dict[str, str] | None = None
+    location: SourceLocation | None = None
+
+
+class DeclarationConflictError(ValueError):
+    """A programmatically constructed file declares Execution and Outputs."""
+
+    code = "DECLARATION_CONFLICT"
+
+
 @dataclass
 class StrategyFile:
     """Top-level parsed strategy file."""
@@ -706,11 +796,24 @@ class StrategyFile:
     globals_: GlobalsSpec | None = None
     universe: UniverseSpec | None = None
     execution: ExecutionSpec | None = None
+    outputs: OutputsSpec | None = None
+    uses: list[dict[str, Any]] = field(default_factory=list)
+
+
+def file_kind(strategy: StrategyFile) -> str:
+    """Outputs alone marks a screener; neither declaration is a strategy draft."""
+    if strategy.outputs is not None and strategy.execution is not None:
+        raise DeclarationConflictError("a file declares Execution(...) or Outputs(...), never both")
+    return "screener" if strategy.outputs is not None else "strategy"
+
+
+from pipeline_engine.dsl.use import UseSpec  # noqa: E402 — source locations defined above
 
 
 # Union type for steps in a pipeline
 StepSpec = (
-    ComponentRef
+    UseSpec
+    | ComponentRef
     | ParallelSpec
     | PipelineSpec
     | VariableRef
@@ -723,6 +826,14 @@ StepSpec = (
 
 
 __all__ = [
+    "OutputsSpec",
+    "OUTPUTS_MAX",
+    "OUTPUT_ROLES",
+    "OUTPUT_NAME_PATTERN",
+    "OUTPUT_NAME_RESERVED",
+    "output_name_problems",
+    "DeclarationConflictError",
+    "file_kind",
     "DOLLAR_VOLUME_FLOOR_FIELD",
     "LOADER_MARKET_FIELDS",
     "MISSING",

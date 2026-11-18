@@ -278,6 +278,14 @@
     ".sv-srcnote{font:var(--t-tiny)/var(--t-tiny-lh) var(--font);color:var(--muted);margin-top:6px}",
 
     ".sv-fac-steps{margin-left:22px}",
+    // A screen's outputs (Q-3637): what it produces, name then unit, read
+    // before the pipeline that computes them. Neutral ink: a unit is a
+    // label, not data to separate.
+    ".sv-outs{display:flex;flex-direction:column;gap:4px;padding:0 10px;min-width:0}",
+    ".sv-narrow .sv-outs{padding:0}",
+    ".sv-out{display:flex;align-items:baseline;gap:10px;min-width:0}",
+    ".sv-oname{font:500 var(--t-sm)/var(--t-sm-lh) var(--font-mono);color:var(--fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:0 1 auto}",
+    ".sv-ounit{font:var(--t-xs)/var(--t-xs-lh) var(--font);color:var(--muted);white-space:nowrap;flex:none}",
     ".sv-narrow .sv-chip.sv-btn{min-height:34px;padding:6px 10px}",
     ".sv-narrow .sv-sect .sv-r{min-height:30px;display:inline-flex;align-items:center}",
     ".sv-narrow .sv-link{min-height:44px}",
@@ -1278,6 +1286,8 @@
           ? header.execution
           : executionFromGraph(graph.execution),
       factories: factories,
+      // What a screen produces (Q-3637); empty for a strategy.
+      outputs: outputsOf(v, graph),
       structure: graph,
       // The DSL the Code tab renders. Validated rather than passed through:
       // an envelope is untrusted input, and `text` is the only field the
@@ -1331,6 +1341,66 @@
       parseError: !!(v && v.parse_error === true),
       url: linkUrl(env),
     };
+  }
+
+  // ── Screen outputs (Q-3637) ───────────────────────────────────────
+  // A screen (its structure carries `outputs`) is read by what it
+  // produces: each output by its saved view's column label when it has one
+  // (`view.outputs[].label`, Q-3639), else its name, and, when the view
+  // carries it, its unit in the screen pages' own words
+  // (`view.outputs[].words`, owned in Python — this card formats nothing).
+  // A strategy has no outputs and draws exactly as before.
+  function outputsOf(v, graph) {
+    var rows = [];
+    if (v && Array.isArray(v.outputs)) {
+      v.outputs.forEach(function (o) {
+        if (o && typeof o.name === "string" && o.name)
+          rows.push({
+            name: typeof o.label === "string" && o.label ? o.label : o.name,
+            slot: o.name,
+            words: typeof o.words === "string" && o.words ? o.words : null,
+          });
+      });
+      return rows;
+    }
+    (Array.isArray(graph.outputs) ? graph.outputs : []).forEach(function (n) {
+      if (typeof n === "string" && n)
+        rows.push({ name: n, slot: n, words: null });
+    });
+    return rows;
+  }
+
+  // One line, as the text's `outputs` line reads: a label with a comma in
+  // it joins the rows with semicolons, so the list still reads as its rows.
+  function outputsText(outputs) {
+    var comma = outputs.some(function (o) {
+      return o.name !== o.slot && o.name.indexOf(",") >= 0;
+    });
+    return outputs
+      .map(function (o) {
+        return o.words ? o.name + " (" + o.words + ")" : o.name;
+      })
+      .join(comma ? "; " : ", ");
+  }
+
+  function outputsSection(view, card) {
+    var n = view.outputs.length;
+    card.appendChild(el("div", "sv-sect", "Outputs · " + n));
+    var list = el("div", "sv-outs");
+    view.outputs.forEach(function (o) {
+      var row = el("div", "sv-out");
+      var nm = el("span", "sv-oname", o.name);
+      nm.title = o.slot || o.name;
+      row.appendChild(nm);
+      if (o.words) row.appendChild(el("span", "sv-ounit", o.words));
+      list.appendChild(row);
+    });
+    card.appendChild(list);
+  }
+
+  /** The evidence line, for a strategy only: a screen is run, not backtested. */
+  function appendEvidence(card, view) {
+    if (!view.outputs.length) card.appendChild(evidenceLine(view));
   }
 
   function linkUrl(env) {
@@ -1840,6 +1910,7 @@
       return true;
     });
     if (chipless.length) card.appendChild(declFlow(chipless));
+    if (view.outputs.length) outputsSection(view, card);
     var opts = {
       full: false,
       marks: marks,
@@ -1853,7 +1924,7 @@
       opts,
       narrow ? INLINE_BUDGET_NARROW : INLINE_BUDGET,
     );
-    card.appendChild(evidenceLine(view));
+    appendEvidence(card, view);
     appendFooter(card, view, null);
     return card;
   }
@@ -1901,7 +1972,8 @@
       // what moved, and the pipeline it moved under is shown as it is.
       card.appendChild(full);
     }
-    card.appendChild(evidenceLine(view));
+    if (view.outputs.length) outputsSection(view, card);
+    appendEvidence(card, view);
     appendFooter(card, view, sw);
     return card;
   }
@@ -1995,6 +2067,11 @@
     if (hunk && hunk.key != null) spec.hunk = hunk;
     else if (hunk && hunk.note) spec.note = hunk.note;
     else if (view.chg && view.chg.summary) spec.note = view.chg.summary;
+    // A screen with no change to show says what it produces (Q-3637), where
+    // a strategy says its provenance. Outputs only: the one row drops a long
+    // note whole (`fitRow`), and the universe is one tap away in the
+    // disclosure's chip row.
+    else if (view.outputs.length) spec.note = outputsText(view.outputs);
     // No change to show: the provenance line, which is true of a read
     // AND a save ("Draft · updated Sep 20"). "Saved." was printed on
     // keel_strategy_get receipts, which save nothing (Q-1775). It is
@@ -2161,6 +2238,22 @@
       );
       cf.appendChild(ub);
     }
+    if (view.outputs.length) {
+      var ob = el("div", "sv-blk");
+      var orow = el("div", "sv-row");
+      orow.appendChild(el("span", "sv-c", "Outputs"));
+      orow.appendChild(el("span", "sv-badge sv-plain", "screen"));
+      ob.appendChild(orow);
+      var ochips = el("div", "sv-chips");
+      view.outputs.forEach(function (o) {
+        var c = el("span", "sv-sc");
+        c.appendChild(el("span", "sv-k", o.name));
+        if (o.words) c.appendChild(el("span", "sv-v", o.words));
+        ochips.appendChild(c);
+      });
+      ob.appendChild(ochips);
+      cf.appendChild(ob);
+    }
     if (view.execution) {
       var eb = el("div", "sv-blk");
       var er = el("div", "sv-row");
@@ -2194,7 +2287,7 @@
     pipelineSection(view, visual, opts, 0);
     card.appendChild(visual);
     card.appendChild(code);
-    card.appendChild(evidenceLine(view));
+    appendEvidence(card, view);
     appendFooter(card, view, null);
     return card;
   }

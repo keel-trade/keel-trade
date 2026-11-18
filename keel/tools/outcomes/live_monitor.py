@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from keel.api_path import seg
 from keel.errors import KeelError, ValidationError
 
 from . import register
@@ -131,7 +132,24 @@ _RECORDED_STATE_NOTE = (
 )
 
 
-def _freshness_for(view: str) -> dict[str, Any]:
+#: A paper run's positions (Q-7603): keel-api reads them from Keel's own
+#: ledger through the paper venue and makes no Hyperliquid call
+#: (``services/positions_reads.py`` ``fetch_positions_snapshot``), so the
+#: exchange note above would tell the agent something false about them.
+_PAPER_POSITIONS_FRESHNESS: dict[str, Any] = {
+    "source": "keel_paper_ledger",
+    "mode": "recorded_state",
+    "realtime": False,
+    "note": (
+        "Read from Keel's paper ledger at request time: simulated holdings, marked at "
+        "live prices; no exchange account is read."
+    ),
+}
+
+
+def _freshness_for(view: str, *, paper: bool = False) -> dict[str, Any]:
+    if paper and view == "positions":
+        return dict(_PAPER_POSITIONS_FRESHNESS)
     if view in _FRESHNESS:
         return dict(_FRESHNESS[view])
     return {
@@ -156,6 +174,11 @@ def _compact_curve(equity: Any) -> dict[str, Any] | None:
     """
     if not isinstance(equity, dict):
         return None
+    from keel.account_performance import is_performance
+
+    if is_performance(equity):
+        # The card consumes this typed history directly, never legacy baselines.
+        return equity
     raw = equity.get("points")
     if not isinstance(raw, list):
         return None
@@ -198,7 +221,12 @@ def _bounded_equity(data: Any) -> Any:
     count served, so nothing reads as the full series. The CLI keeps the
     whole curve: its reader is a terminal or a script, not a context window.
     """
+    from keel.account_performance import is_performance
     from keel.surface import current_surface
+
+    if is_performance(data):
+        # Downsampling across unknown intervals would erase gaps in authority.
+        return data
 
     if current_surface() == "cli" or not isinstance(data, dict):
         return data
@@ -242,9 +270,12 @@ def _read_run_class(client: Any, deployment_id: str) -> str | None:
     detail row. A 404 here is the 404 the view read would have raised (both
     resolve the id through ``_get_deployment_or_404``).
     """
-    return _venue_class(
-        client.get(f"/v1/deployments/{deployment_id}", headers=AGENT_TELEMETRY_HEADERS)
-    )
+    return _venue_class(_read_detail_row(client, deployment_id))
+
+
+def _read_detail_row(client: Any, deployment_id: str) -> Any:
+    """The deployment's detail row, read as a guard (agent-telemetry marker)."""
+    return client.get(f"/v1/deployments/{seg(deployment_id)}", headers=AGENT_TELEMETRY_HEADERS)
 
 
 def _refuse_unlisted_paper(run_class: str | None) -> None:
@@ -415,6 +446,10 @@ def _paper_portfolio(client: Any, path: str) -> dict[str, Any]:
     agent-telemetry marker like the live summary read.
     """
     summary = client.get(path, headers=AGENT_TELEMETRY_HEADERS, capital_class="practice")
+    from keel.account_performance import is_performance
+
+    if is_performance(summary):
+        return {"paper_label": PORTFOLIO_PAPER_SECTION_LABEL.for_profile(), "paper": summary}
     if not isinstance(summary, dict) or not summary.get("deployments"):
         return {}
     return {"paper_label": PORTFOLIO_PAPER_SECTION_LABEL.for_profile(), "paper": summary}
@@ -426,23 +461,157 @@ def _overview_enrichment(client: Any, deployment_id: str) -> dict[str, Any]:
     Both reads carry the agent-telemetry marker: they are not owner visits
     (S06 §3.5.1, R-61); only the overview's detail read is."""
     out: dict[str, Any] = {}
+    from keel.account_performance import is_performance, selected
+
+    def contract_selected():
+        config = getattr(client, "_config", None)
+        return config is not None and selected(config.api_url)
+
     try:
         stats = client.get(
-            f"/v1/deployments/{deployment_id}/stats", headers=AGENT_TELEMETRY_HEADERS
+            f"/v1/deployments/{seg(deployment_id)}/stats", headers=AGENT_TELEMETRY_HEADERS
         )
         if isinstance(stats, dict):
             out["stats"] = stats
     except KeelError:
+        if contract_selected():
+            raise
         pass
     try:
         curve = _compact_curve(
-            client.get(f"/v1/deployments/{deployment_id}/equity", headers=AGENT_TELEMETRY_HEADERS)
+            client.get(
+                f"/v1/deployments/{seg(deployment_id)}/equity", headers=AGENT_TELEMETRY_HEADERS
+            )
         )
         if curve:
             out["curve"] = curve
+            if is_performance(curve):
+                # One immutable response owns summary and history; never mix revisions.
+                out["stats"] = curve
     except KeelError:
+        if contract_selected():
+            raise
         pass
     return out
+
+
+_MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+
+#: keel-api's deployment status, in words for "no run is scheduled while …".
+_NOT_RUNNING_WORDS = {
+    "DEPLOYING": "it is still starting",
+    "PAUSED": "it is paused",
+    "STOPPED": "it is stopped",
+}
+
+
+def _utc_words(value: Any) -> str | None:
+    """``2026-11-04T12:00:00Z`` → ``"4 Nov 2026 at 12:00 UTC"``; ``None`` when unreadable."""
+    from datetime import datetime, timezone
+
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        at = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if at.tzinfo is not None:
+        at = at.astimezone(timezone.utc)
+    return f"{at.day} {_MONTHS[at.month - 1]} {at.year} at {at:%H:%M} UTC"
+
+
+def _next_run_block(row: Any) -> dict[str, Any] | None:
+    """When the deployment runs next, from keel-api's ``next_run_at`` (doc 14 §11).
+
+    The server computes it from the evaluation grid (the bar close the next
+    run evaluates), so Claude and the live page cannot disagree and nothing
+    here parses a schedule. ``None`` (no block) when keel-api predates the
+    field, so an older server reads as "not reported", never as "not
+    scheduled".
+    """
+    if not isinstance(row, dict) or "next_run_at" not in row:
+        return None
+    at = row.get("next_run_at")
+    words = _utc_words(at)
+    if words is not None:
+        return {"at": at, "text": f"Next run: {words}."}
+    reason = _NOT_RUNNING_WORDS.get(str(row.get("status") or "").upper())
+    if reason is not None:
+        return {"at": None, "text": f"No run is scheduled while {reason}."}
+    return {"at": None, "text": "The next run time is not available for this schedule."}
+
+
+def _plural(n: int, word: str) -> str:
+    return f"{n} {word}" if n == 1 else f"{n} {word}s"
+
+
+def _last_run_text(row: dict[str, Any]) -> str:
+    """One plain sentence for the newest run, from its executions-view row.
+
+    The same reading order as the live page's run row (keel-app
+    ``ExecutionRow.tsx``): the signal's own state first, then the trade's.
+    Error text is keel-api's recorded sentence, relayed as written.
+    """
+    signal = str(row.get("signal_status") or "").lower()
+    status = str(row.get("execution_status") or "").lower()
+    orders = row.get("order_count") or 0
+    filled = row.get("filled_count") or 0
+    rejected = row.get("rejected_count") or 0
+    skipped = row.get("skipped_count") or 0
+    error = row.get("error_summary") or row.get("signal_error_summary")
+    because = f": {error}" if isinstance(error, str) and error.strip() else "."
+    if signal in ("failed", "timeout"):
+        return f"The last run could not work out its signal{because}"
+    if signal in ("queued", "running") or status in (
+        "queued",
+        "running",
+        "preparing",
+        "handoff_pending",
+        "executing",
+    ):
+        return "A run is in progress now."
+    if status in ("failed", "not_executed"):
+        return f"The last run's trades did not go through{because}"
+    if status in ("completed", "skipped"):
+        if orders == 0:
+            return "The last run placed no orders: the positions already matched its signal."
+        parts = [f"{filled} filled"]
+        if rejected:
+            parts.append(f"{rejected} rejected")
+        if skipped:
+            parts.append(f"{skipped} skipped")
+        return f"The last run placed {_plural(orders, 'order')}: {', '.join(parts)}."
+    return "The last run finished; its details are on the live page."
+
+
+def _last_run_block(client: Any, deployment_id: str) -> dict[str, Any] | None:
+    """The newest run's outcome, in words: the executions view, limit 1.
+
+    Best-effort like the rest of the overview's enrichment: a failed read
+    omits the block. A deployment with no run yet answers that plainly
+    rather than leaving Claude to infer it from an absent key.
+    """
+    try:
+        rows = client.get(
+            f"/v1/deployments/{seg(deployment_id)}/executions",
+            headers=AGENT_TELEMETRY_HEADERS,
+            limit=1,
+        )
+    except KeelError:
+        return None
+    if not isinstance(rows, list):
+        return None
+    if not rows or not isinstance(rows[0], dict):
+        return {"at": None, "outcome": None, "text": "It has not run yet."}
+    row = rows[0]
+    at = row.get("signal_as_of_time") or row.get("activity_at")
+    words = _utc_words(at)
+    text = _last_run_text(row)
+    return {
+        "at": at,
+        "outcome": str(row.get("execution_status") or "").lower() or None,
+        "text": f"{text} That run used the {words} close." if words else text,
+    }
 
 
 def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
@@ -485,7 +654,7 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
                 ),
             )
         method, path_template = _VIEWS[view]
-        path = path_template.replace("{id}", deployment_id)
+        path = path_template.replace("{id}", seg(deployment_id))
         effective_view = view
         effective_id = deployment_id
 
@@ -544,15 +713,18 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
     # The run's class is learned once per call (QA B1): off the overview's own
     # detail row, or by one guard read of it before any other view's read.
     run_class: str | None = None
+    detail_row: Any = None
     if effective_view == "overview":
         data = client.get(path, **params) if params else client.get(path)
+        detail_row = data
         run_class = _venue_class(data)
         # A refused overview read has already counted as the owner's visit.
         _refuse_unlisted_paper(run_class)
     elif effective_view == "portfolio":
         data = client.get(path, headers=AGENT_TELEMETRY_HEADERS, **params)
     else:
-        run_class = _read_run_class(client, effective_id)
+        detail_row = _read_detail_row(client, effective_id)
+        run_class = _venue_class(detail_row)
         _refuse_unlisted_paper(run_class)
         data = client.get(path, headers=AGENT_TELEMETRY_HEADERS, **params)
 
@@ -570,6 +742,16 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
     overview_extra: dict[str, Any] = {}
     if effective_view == "overview":
         overview_extra = _overview_enrichment(client, effective_id)
+        # Doc 14 §5 R5: "when does it trade next?" and "what happened last
+        # time?", answered in plain words beside the row. Read off the row
+        # BEFORE any listed projection (which keeps an allow-list of row
+        # fields); the blocks themselves carry no internal ids.
+        next_run = _next_run_block(data)
+        if next_run is not None:
+            overview_extra["next_run"] = next_run
+        last_run = _last_run_block(client, effective_id)
+        if last_run is not None:
+            overview_extra["last_run"] = last_run
     if effective_view == "equity":
         data = _bounded_equity(data)
     # The portfolio's paper section (§3.5.5): a second read, on the full
@@ -614,6 +796,8 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
         if "stats" in overview_extra:
             stats = scrub(overview_extra["stats"])
             overview_extra["stats"] = stats if listed_paper else strip_paper_added(stats)
+        if "curve" in overview_extra:
+            overview_extra["curve"] = scrub(overview_extra["curve"])
 
     # A practice row's status in keel-app's words (QA W2, V2): the overview's
     # row (and so the graduation render) and each row of the paper section.
@@ -639,6 +823,27 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
     # Card + per-surface render hints (spec 06 R2/R3) — render-only.
     from ._render import card_render_block
 
+    render = card_render_block(
+        "live",
+        fallback_url=hero_url,
+        ctx=ctx,
+        embed_id=effective_id if effective_id != "all" else None,
+    )
+    if is_paper:
+        # A paper run's name, version, clock and next run for the card on
+        # every view (Q-7603): a per-view payload (positions, equity …)
+        # carries none of them, and the listed row carries no clock. From the
+        # detail row read above, before any listed projection; card-only, so
+        # under the card-meta arm the text block is unchanged.
+        from ._paper_card import paper_card_block
+        from ._paper_status import paper_status_word
+
+        row = detail_row if isinstance(detail_row, dict) else {}
+        state = paper_status_word(
+            row.get("status"), health=row.get("health"), pause_reason=row.get("pause_reason")
+        )
+        render.update(paper_card_block(row, state=state if row.get("status") else None))
+
     return OutcomeResult(
         run_id=effective_id if effective_id != "all" else None,
         hero_url=hero_url,
@@ -646,18 +851,13 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
         extra={
             "view": effective_view,
             **({"label": label} if label else {}),
-            "freshness": _freshness_for(effective_view),
+            "freshness": _freshness_for(effective_view, paper=is_paper),
             "data": data,
             **paper_section,
             **graduation_blocks,
             **health_blocks,
             **overview_extra,
-            "render": card_render_block(
-                "live",
-                fallback_url=hero_url,
-                ctx=ctx,
-                embed_id=effective_id if effective_id != "all" else None,
-            ),
+            "render": render,
         },
     )
 

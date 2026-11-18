@@ -1,0 +1,610 @@
+{
+  "_meta": {
+    "keel/card": {
+      "card_data": {
+        "charts": [],
+        "checks": null,
+        "chips": [],
+        "copy": {
+          "charts": "Charts",
+          "failed_cell": "Didn't finish",
+          "full_chart_in_keel": "Open in Keel for the full chart",
+          "highest": "Highest",
+          "hint_pointer": "Hover or tap the chart for values",
+          "hint_touch": "Tap the chart for values",
+          "locked": "not included in this account's plan",
+          "lowest": "Lowest",
+          "met": "met",
+          "not_measured": "not measured",
+          "not_met": "not met",
+          "not_run": "Not run yet",
+          "not_valid": "Not a valid setting",
+          "numbers": "The numbers",
+          "open_bar": "Open this bar in Keel",
+          "open_chart": "Open this chart in Keel",
+          "open_setting": "Open this setting in Keel",
+          "points_in_keel": "Open in Keel to read each point",
+          "steps": "Steps",
+          "yours": "Yours"
+        },
+        "focus": null,
+        "head_words": "Your studies · 12 studies · 2 running",
+        "key": null,
+        "key_v": null,
+        "links": null,
+        "method_line": null,
+        "more_charts_total": 0,
+        "more_words": null,
+        "notes": null,
+        "rows": [
+          {
+            "lead_number_words": "Sharpe (daily) over the window −0.44",
+            "link": "https://app.usekeel.io/research/stu_000012",
+            "thumb": {
+              "facts": {
+                "enc": "b64",
+                "series": [
+                  {
+                    "c": 0,
+                    "y": "666_36ts74u0puy1rt12jedXQSRGOXcTRSSLOQRFABDHKITVQQLLLKLOQZVY"
+                  }
+                ],
+                "zero": 58
+              },
+              "family": "Lines",
+              "view_index": 1
+            }
+          },
+          {
+            "lead_number_words": "Sharpe (daily) over the window −0.44",
+            "link": "https://app.usekeel.io/research/stu_000011",
+            "thumb": {
+              "facts": {
+                "enc": "b64",
+                "series": [
+                  {
+                    "c": 0,
+                    "y": "666_36ts74u0puy1rt12jedXQSRGOXcTRSSLOQRFABDHKITVQQLLLKLOQZVY"
+                  }
+                ],
+                "zero": 58
+              },
+              "family": "Lines",
+              "view_index": 1
+            }
+          },
+          {
+            "lead_number_words": null,
+            "link": "https://app.usekeel.io/research/stu_000010",
+            "thumb": null
+          },
+          {
+            "lead_number_words": null,
+            "link": "https://app.usekeel.io/research/stu_000009",
+            "thumb": null
+          },
+          {
+            "lead_number_words": null,
+            "link": "https://app.usekeel.io/research/stu_000008",
+            "thumb": null
+          },
+          {
+            "lead_number_words": "After the event against random dates, 5 days −0.9%",
+            "link": "https://app.usekeel.io/research/stu_000007",
+            "thumb": {
+              "facts": {
+                "enc": "b64",
+                "series": [
+                  {
+                    "c": 1,
+                    "y": "zhTOMVTZk2z54phnaiegonobXbQSOMPHPKNMRJAOC"
+                  },
+                  {
+                    "c": 2,
+                    "y": "622z0yxuwyz121346786653569-_85768_6457775"
+                  }
+                ],
+                "zero": 51
+              },
+              "family": "Curve",
+              "view_index": 0
+            }
+          },
+          {
+            "lead_number_words": "Rank among nearby settings 1",
+            "link": "https://app.usekeel.io/research/stu_000006",
+            "thumb": {
+              "facts": {
+                "enc": "b64",
+                "series": [
+                  {
+                    "c": 0,
+                    "y": "__A"
+                  }
+                ]
+              },
+              "family": "Curve",
+              "view_index": 0
+            }
+          },
+          {
+            "lead_number_words": "Nearby settings as a share of yours −0.78",
+            "link": "https://app.usekeel.io/research/stu_000005",
+            "thumb": {
+              "facts": {
+                "c": 16,
+                "d": "gqqakfpglfhicnbk3plikbhejl4jlhagdiurol6cikdcdgec4lbdiefijbgcf3ejqflldhg0leglf4kp51dijppbqlg34ievpgfhkapefkvelblcihq1h3lekllcjfk44ca4jmvjic2ql4qjgcckfiirqifnfcggoaknil63dkqic7ckbhp44vkhbapjk7kqb4hlleji7ilggkhkldildde342hkcjpgejg7hncf44fhpf4le3bl3j5hjglf9iovhegobhhcgbojf4jk55eggeaeh6paged4lfe4lhegflqvojjjdikjdllb44aidalkccklbhnmgijbdgqeoimc5lufdqqib5lgikracgkb4cq5qfee4gclvlejie3kp93b",
+                "r": 24,
+                "ramp": "div"
+              },
+              "family": "Heatmap",
+              "view_index": 0
+            }
+          },
+          {
+            "lead_number_words": "Sharpe (daily) over the window, Momentum rotation v4 −0.44",
+            "link": "https://app.usekeel.io/research/stu_000004",
+            "thumb": {
+              "facts": {
+                "enc": "b64",
+                "series": [
+                  {
+                    "c": 0,
+                    "y": "666_36ts74u0puy1rt12jedXQSRGOXcTRSSLOQRFABDHKITVQQLLLKLOQZVY"
+                  }
+                ],
+                "zero": 58
+              },
+              "family": "Lines",
+              "view_index": 0
+            }
+          },
+          {
+            "lead_number_words": "Effective number of different results, all 1.00",
+            "link": "https://app.usekeel.io/research/stu_000003",
+            "thumb": {
+              "facts": {
+                "c": 6,
+                "d": "-----ff----fff---ffff--fffff-fffffff",
+                "r": 6,
+                "ramp": "div"
+              },
+              "family": "Heatmap",
+              "view_index": 0
+            }
+          },
+          {
+            "lead_number_words": "How well it ranks, next day −0.006",
+            "link": "https://app.usekeel.io/research/stu_000002",
+            "thumb": {
+              "facts": {
+                "enc": "b64",
+                "series": [
+                  {
+                    "c": 0,
+                    "hi": "_9971vrss",
+                    "lo": "picWQHACC",
+                    "y": "0vsoibWXh"
+                  }
+                ],
+                "zero": 58
+              },
+              "family": "Curve",
+              "view_index": 0
+            }
+          },
+          {
+            "lead_number_words": "Sharpe (daily) over the window −0.44",
+            "link": "https://app.usekeel.io/research/stu_000001",
+            "thumb": {
+              "facts": {
+                "enc": "b64",
+                "series": [
+                  {
+                    "c": 0,
+                    "y": "666_36ts74u0puy1rt12jedXQSRGOXcTRSSLOQRFABDHKITVQQLLLKLOQZVY"
+                  }
+                ],
+                "zero": 58
+              },
+              "family": "Lines",
+              "view_index": 1
+            }
+          }
+        ],
+        "schema": "keel.research.card-data/2",
+        "steps": [],
+        "top": null
+      },
+      "studies": [
+        {
+          "archived": false,
+          "card_version": 1,
+          "finished_at": "2026-10-29T12:00:00+00:00",
+          "headline": "1 of 9 bars met",
+          "maker": "you",
+          "notes_total": 0,
+          "plan_id": null,
+          "project_ids": [],
+          "set_aside": false,
+          "stale": [
+            {
+              "kind": "newer_subject",
+              "offer": null,
+              "short": "v4 is out",
+              "words": "Momentum rotation v3 has a newer version, v4."
+            }
+          ],
+          "state": "completed_partial",
+          "version": 1
+        },
+        {
+          "archived": false,
+          "card_version": 1,
+          "finished_at": "2026-10-29T12:00:00+00:00",
+          "headline": "1 of 9 bars met",
+          "maker": "you",
+          "notes_total": 0,
+          "plan_id": null,
+          "project_ids": [],
+          "set_aside": false,
+          "stale": [
+            {
+              "kind": "newer_subject",
+              "offer": null,
+              "short": "v4 is out",
+              "words": "Momentum rotation v3 has a newer version, v4."
+            }
+          ],
+          "state": "cancelled",
+          "version": 1
+        },
+        {
+          "archived": false,
+          "card_version": 1,
+          "finished_at": "2026-10-29T12:00:00+00:00",
+          "headline": null,
+          "maker": "you",
+          "notes_total": 0,
+          "plan_id": null,
+          "project_ids": [],
+          "set_aside": false,
+          "stale": [
+            {
+              "kind": "newer_subject",
+              "offer": null,
+              "short": "v4 is out",
+              "words": "Momentum rotation v3 has a newer version, v4."
+            }
+          ],
+          "state": "failed",
+          "version": 1
+        },
+        {
+          "archived": false,
+          "card_version": 1,
+          "finished_at": null,
+          "headline": null,
+          "maker": "you",
+          "notes_total": 0,
+          "plan_id": null,
+          "project_ids": [],
+          "set_aside": false,
+          "stale": [
+            {
+              "kind": "newer_subject",
+              "offer": null,
+              "short": "v4 is out",
+              "words": "Momentum rotation v3 has a newer version, v4."
+            }
+          ],
+          "state": "running",
+          "version": 1
+        },
+        {
+          "archived": false,
+          "card_version": 1,
+          "finished_at": null,
+          "headline": null,
+          "maker": "you",
+          "notes_total": 0,
+          "plan_id": null,
+          "project_ids": [],
+          "set_aside": false,
+          "stale": [
+            {
+              "kind": "newer_subject",
+              "offer": null,
+              "short": "v4 is out",
+              "words": "Momentum rotation v3 has a newer version, v4."
+            }
+          ],
+          "state": "running",
+          "version": 1
+        },
+        {
+          "archived": false,
+          "card_version": 1,
+          "finished_at": "2026-10-29T12:00:00+00:00",
+          "headline": "After the event against random dates, 5 days: −0.9%",
+          "maker": "you",
+          "notes_total": 0,
+          "plan_id": null,
+          "project_ids": [],
+          "set_aside": false,
+          "stale": [],
+          "state": "completed",
+          "version": 1
+        },
+        {
+          "archived": false,
+          "card_version": 1,
+          "finished_at": "2026-10-29T12:00:00+00:00",
+          "headline": null,
+          "maker": "you",
+          "notes_total": 0,
+          "plan_id": null,
+          "project_ids": [],
+          "set_aside": false,
+          "stale": [
+            {
+              "kind": "newer_subject",
+              "offer": null,
+              "short": "v4 is out",
+              "words": "Momentum rotation v3 has a newer version, v4."
+            }
+          ],
+          "state": "completed",
+          "version": 1
+        },
+        {
+          "archived": false,
+          "card_version": 1,
+          "finished_at": "2026-10-29T12:00:00+00:00",
+          "headline": "Nearby settings as a share of yours: −0.78",
+          "maker": "you",
+          "notes_total": 0,
+          "plan_id": null,
+          "project_ids": [],
+          "set_aside": false,
+          "stale": [
+            {
+              "kind": "newer_subject",
+              "offer": null,
+              "short": "v4 is out",
+              "words": "Momentum rotation v3 has a newer version, v4."
+            }
+          ],
+          "state": "completed",
+          "version": 1
+        },
+        {
+          "archived": false,
+          "card_version": 1,
+          "finished_at": "2026-10-29T12:00:00+00:00",
+          "headline": "Sharpe (daily) over the window, Momentum rotation v4: −0.44",
+          "maker": "you",
+          "notes_total": 0,
+          "plan_id": null,
+          "project_ids": [],
+          "set_aside": false,
+          "stale": [
+            {
+              "kind": "newer_subject",
+              "offer": null,
+              "short": "v4 is out",
+              "words": "Momentum rotation v3 has a newer version, v4."
+            }
+          ],
+          "state": "completed",
+          "version": 1
+        },
+        {
+          "archived": false,
+          "card_version": 1,
+          "finished_at": "2026-10-29T12:00:00+00:00",
+          "headline": "Effective number of different results, all: 1.00",
+          "maker": "you",
+          "notes_total": 0,
+          "plan_id": null,
+          "project_ids": [],
+          "set_aside": false,
+          "stale": [],
+          "state": "completed",
+          "version": 1
+        },
+        {
+          "archived": false,
+          "card_version": 1,
+          "finished_at": "2026-10-29T12:00:00+00:00",
+          "headline": "How well it ranks, next day: −0.006 (t -1.2)",
+          "maker": "you",
+          "notes_total": 0,
+          "plan_id": null,
+          "project_ids": [],
+          "set_aside": false,
+          "stale": [],
+          "state": "completed",
+          "version": 1
+        },
+        {
+          "archived": false,
+          "card_version": 1,
+          "finished_at": "2026-10-29T12:00:00+00:00",
+          "headline": "1 of 9 bars met",
+          "maker": "you",
+          "notes_total": 0,
+          "plan_id": null,
+          "project_ids": [],
+          "set_aside": false,
+          "stale": [
+            {
+              "kind": "newer_subject",
+              "offer": null,
+              "short": "v4 is out",
+              "words": "Momentum rotation v3 has a newer version, v4."
+            }
+          ],
+          "state": "completed",
+          "version": 1
+        }
+      ]
+    },
+    "ui": {
+      "resourceUri": "ui://keel/cards/study.html"
+    }
+  },
+  "content": [
+    {
+      "text": "card: where the host draws Keel cards, the user sees what follows as a card carrying its name, links and ids, so a reply can call it by name; the ids and links here serve tool calls and hosts without cards.\n\nStudies: 12 shown of 12 (1 cancelled, 7 completed, 1 completed partial, 1 failed, 2 running)\n- stu_000012 · Check · Momentum rotation v3 · Done · Oct 29 · 2 didn't finish — 1 of 9 bars met\n- stu_000011 · Check · Momentum rotation v3 · Stopped — 1 of 9 bars met\n- stu_000010 · Check · Momentum rotation v3 · Didn't finish\n- stu_000009 · Check · Momentum rotation v3 · Queued\n- stu_000008 · Check · Momentum rotation v3 · Running\n- stu_000007 · Entries and exits · Near-high breakout v2, entries and exits · Done · Oct 29 — After the event against random dates, 5 days: −0.9%\n- stu_000006 · Settings map · T · Done · Oct 29\n- stu_000005 · Settings map · Lookback × hold · Done · Oct 29 — Nearby settings as a share of yours: −0.78\n- stu_000004 · Compare · Momentum rotation v3 vs v4 · Done · Oct 29 — Sharpe (daily) over the window, Momentum rotation v4: −0.44\n- stu_000003 · Compare · Signals, side by side · Done · Oct 29 — Effective number of different results, all: 1.00\n- stu_000002 · Signal study · Low volatility · Done · Oct 29 — How well it ranks, next day: −0.006 (t -1.2)\n- stu_000001 · Check · Momentum rotation v3 · Done · Oct 29 — 1 of 9 bars met\nView in Keel: https://app.usekeel.io/research",
+      "type": "text"
+    }
+  ],
+  "structuredContent": {
+    "by_state": {
+      "cancelled": 1,
+      "completed": 7,
+      "completed_partial": 1,
+      "failed": 1,
+      "running": 2
+    },
+    "hero_url": "https://app.usekeel.io/research",
+    "links": {
+      "app": "https://app.usekeel.io/research"
+    },
+    "pagination": {
+      "has_more": false
+    },
+    "studies": [
+      {
+        "kind_label": {
+          "key": "check",
+          "name": "Check a strategy",
+          "short": "Check"
+        },
+        "state_words": "Done · Oct 29 · 2 didn't finish",
+        "study_id": "stu_000012",
+        "title": "Momentum rotation v3"
+      },
+      {
+        "kind_label": {
+          "key": "check",
+          "name": "Check a strategy",
+          "short": "Check"
+        },
+        "state_words": "Stopped",
+        "study_id": "stu_000011",
+        "title": "Momentum rotation v3"
+      },
+      {
+        "kind_label": {
+          "key": "check",
+          "name": "Check a strategy",
+          "short": "Check"
+        },
+        "state_words": "Didn't finish",
+        "study_id": "stu_000010",
+        "title": "Momentum rotation v3"
+      },
+      {
+        "kind_label": {
+          "key": "check",
+          "name": "Check a strategy",
+          "short": "Check"
+        },
+        "state_words": "Queued",
+        "study_id": "stu_000009",
+        "title": "Momentum rotation v3"
+      },
+      {
+        "kind_label": {
+          "key": "check",
+          "name": "Check a strategy",
+          "short": "Check"
+        },
+        "state_words": "Running",
+        "study_id": "stu_000008",
+        "title": "Momentum rotation v3"
+      },
+      {
+        "kind_label": {
+          "key": "entries",
+          "name": "Entries and exits",
+          "short": "Entries and exits"
+        },
+        "state_words": "Done · Oct 29",
+        "study_id": "stu_000007",
+        "title": "Near-high breakout v2, entries and exits"
+      },
+      {
+        "kind_label": {
+          "key": "map",
+          "name": "Map a strategy's settings",
+          "short": "Settings map"
+        },
+        "state_words": "Done · Oct 29",
+        "study_id": "stu_000006",
+        "title": "T"
+      },
+      {
+        "kind_label": {
+          "key": "map",
+          "name": "Map a strategy's settings",
+          "short": "Settings map"
+        },
+        "state_words": "Done · Oct 29",
+        "study_id": "stu_000005",
+        "title": "Lookback × hold"
+      },
+      {
+        "kind_label": {
+          "key": "compare",
+          "name": "Compare",
+          "short": "Compare"
+        },
+        "state_words": "Done · Oct 29",
+        "study_id": "stu_000004",
+        "title": "Momentum rotation v3 vs v4"
+      },
+      {
+        "kind_label": {
+          "key": "compare",
+          "name": "Compare",
+          "short": "Compare"
+        },
+        "state_words": "Done · Oct 29",
+        "study_id": "stu_000003",
+        "title": "Signals, side by side"
+      },
+      {
+        "kind_label": {
+          "key": "signal",
+          "name": "Study a signal",
+          "short": "Signal study"
+        },
+        "state_words": "Done · Oct 29",
+        "study_id": "stu_000002",
+        "title": "Low volatility"
+      },
+      {
+        "kind_label": {
+          "key": "check",
+          "name": "Check a strategy",
+          "short": "Check"
+        },
+        "state_words": "Done · Oct 29",
+        "study_id": "stu_000001",
+        "title": "Momentum rotation v3"
+      }
+    ],
+    "studies_total": 12,
+    "url_line": "View in Keel: https://app.usekeel.io/research",
+    "view": {
+      "at": "2026-11-17T00:00:16.000Z",
+      "kind": "study",
+      "mode": "list",
+      "seq": 17,
+      "size": "view"
+    }
+  }
+}

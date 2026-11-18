@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from keel.api_path import seg
 from keel.errors import KeelError, NotFoundError
 
 from . import register
@@ -322,7 +323,7 @@ def _detail_via_api(ctx: ToolContext, name: str) -> dict | None:
         return None
 
     try:
-        resp = client.get(f"/v1/components/{name}")
+        resp = client.get(f"/v1/components/{seg(name)}")
     except KeelError as exc:
         if exc.error_code == "rate_limited":
             raise  # Q-2494: a 429 is the caller's to see, never a silent fallback

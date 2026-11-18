@@ -17,6 +17,9 @@ import json
 import pytest
 from keel.tools.outcomes._toolsets import LISTED_PROFILE_TOOLS
 
+from tests._research_delta import RESEARCH_CARD_TOOLS, RESEARCH_VIEW_TOOLS
+from tests._screeners_delta import SCREENER_CARD_TOOLS
+
 
 # ── O.3 — `keel_backtest_compare` on the listed profile ───────────────
 #
@@ -128,7 +131,9 @@ def test_every_backtest_shaped_tool_can_carry_a_view():
     # Agent-surface-cleanup spec 02 §2.2/§2.5: restore (strategy kind, R-15)
     # and keel_account_status (the status kind, no card) — twelve in all.
     assert {"keel_strategy_restore", "keel_account_status"} <= VIEW_TOOLS
-    assert len(VIEW_TOOLS) == 12, sorted(VIEW_TOOLS)
+    assert SCREENER_CARD_TOOLS <= VIEW_TOOLS
+    assert RESEARCH_VIEW_TOOLS <= VIEW_TOOLS
+    assert len(VIEW_TOOLS - SCREENER_CARD_TOOLS - RESEARCH_VIEW_TOOLS) == 12, sorted(VIEW_TOOLS)
 
 
 def test_no_view_tool_infers_a_string_output_schema():
@@ -140,11 +145,11 @@ def test_no_view_tool_infers_a_string_output_schema():
     from fastmcp.tools.function_tool import FunctionTool
     from keel.tools.outcomes import OUTCOMES, _bootstrap
     from keel.tools.outcomes._mcp_adapter import _make_param_synthesized_handler
-    from keel.tools.outcomes._output_schemas import OUTPUT_SCHEMAS
+    from keel.tools.outcomes._output_schemas import OUTPUT_SCHEMAS, RESEARCH_RECEIPT_TOOLS
     from keel.tools.outcomes._strategy_view import VIEW_TOOLS
 
     _bootstrap()
-    checked = 0
+    checked = receipts = 0
     for name, tool in sorted(OUTCOMES.items()):
         fn = _make_param_synthesized_handler(tool, frozenset({tool.toolset}))
         schema = FunctionTool.from_function(fn, name=name).output_schema
@@ -153,6 +158,19 @@ def test_no_view_tool_infers_a_string_output_schema():
             # `{"result": string}` wrapper old connectors hold (R-25).
             assert schema is not None and schema.get("x-fastmcp-wrap-result")
             checked += 1
+        elif name == "keel_screener_passing":
+            from keel.tools.outcomes._mcp_adapter import registration_mode
+
+            assert registration_mode(name) == "text"
+            assert schema is None and name not in OUTPUT_SCHEMAS
+        elif name in RESEARCH_RECEIPT_TOOLS:
+            # 07 §2.2's research text tools (RI-220): the served object as
+            # structuredContent, no declared or inferred schema (07 §3.3).
+            from keel.tools.outcomes._mcp_adapter import registration_mode
+
+            assert registration_mode(name) == "receipt"
+            assert schema is None and name not in OUTPUT_SCHEMAS
+            receipts += 1
         elif name in VIEW_TOOLS:
             assert schema is None, f"{name} must not infer an output schema"
             assert name in OUTPUT_SCHEMAS, f"{name} declares no envelope schema"
@@ -162,6 +180,7 @@ def test_no_view_tool_infers_a_string_output_schema():
     # Non-vacuity: every VIEW_TOOLS member that is registered was
     # actually reached (a typo'd name would silently check nothing).
     assert checked == len(VIEW_TOOLS & set(OUTCOMES)) >= 8
+    assert receipts == len(RESEARCH_RECEIPT_TOOLS & set(OUTCOMES)) == 3
 
 
 def _adx_fixture() -> dict:
@@ -234,7 +253,13 @@ def test_every_backtest_shaped_tool_carries_the_backtest_card():
     assert not set(CARD_TOOLS) - set(OUTCOMES)
     assert set(CARD_TOOLS.values()) == set(CARD_KINDS)
     assert card_kind_for_tool("keel_backtest_compare") == "compare"
-    assert len(CARD_TOOLS) == 11, sorted(CARD_TOOLS)
+    assert {name: CARD_TOOLS[name] for name in SCREENER_CARD_TOOLS} == {
+        name: "screener" for name in SCREENER_CARD_TOOLS
+    }
+    # 11 before Q-7603, plus the two paper writes on the live card.
+    assert len(set(CARD_TOOLS) - SCREENER_CARD_TOOLS - RESEARCH_CARD_TOOLS) == 13, sorted(
+        CARD_TOOLS
+    )
 
 
 def test_the_invoking_strings_are_outcome_neutral_and_fit_the_row():
@@ -265,7 +290,11 @@ def test_the_invoking_strings_are_outcome_neutral_and_fit_the_row():
             assert word not in invoked.lower(), f"{name}: {invoked!r} claims an outcome"
     # Non-vacuity the seed cannot move: the table covers the tools the
     # contract names, all ten of them.
-    assert len(TOOL_INVOCATION_STRINGS) == 10, sorted(TOOL_INVOCATION_STRINGS)
+    assert SCREENER_CARD_TOOLS <= set(TOOL_INVOCATION_STRINGS)
+    # 10 before Q-7603, plus the two paper writes.
+    assert len(set(TOOL_INVOCATION_STRINGS) - SCREENER_CARD_TOOLS - RESEARCH_CARD_TOOLS) == 12, (
+        sorted(TOOL_INVOCATION_STRINGS)
+    )
     assert "keel_backtest_run" in TOOL_INVOCATION_STRINGS
 
 
@@ -1235,7 +1264,11 @@ def test_present_copy_describes_its_own_tool_and_classifies_no_other_call():
         assert own_default, f"{name}: `present` copy states no default of its own"
         assert not other_calls.search(shared), f"{name}: `present` copy classifies other calls"
         checked += 1
-    assert checked == 4  # non-vacuous: the four takers were read
+    assert "present" in OUTCOMES["keel_screener_run"].input_schema["properties"]
+    assert "present" in OUTCOMES["keel_screener_view"].input_schema["properties"]
+    # Four original takers plus the two screen tools (run; view since Q-3634),
+    # plus Research's three card tools (07 §3.3).
+    assert checked - 2 - 3 == 4
 
 
 def test_the_user_phrasings_that_pick_a_size_are_in_the_copy_the_host_reads():
@@ -1252,7 +1285,10 @@ def test_the_user_phrasings_that_pick_a_size_are_in_the_copy_the_host_reads():
     _bootstrap()
     takers = [n for n, t in OUTCOMES.items() if "present" in t.input_schema.get("properties", {})]
     # Non-vacuity: the four tools BUILD §2.4 names, read from the registry.
-    assert sorted(takers) == [
+    assert "keel_screener_run" in takers and "keel_screener_view" in takers  # Q-3634
+    research = {"keel_research_run", "keel_research_get", "keel_research_view_set"}
+    assert research <= set(takers)  # 07 §3.3's card tools
+    assert sorted(set(takers) - {"keel_screener_run", "keel_screener_view"} - research) == [
         "keel_backtest_run",
         "keel_backtest_watch",
         "keel_strategy_compose",
@@ -1532,7 +1568,11 @@ def test_dry_run_view_is_a_receipt_with_preview_line(monkeypatch):
     view = env["view"]
     assert view["size"] == "receipt"
     assert view["status"] == "PREVIEW"
-    assert view["markdown"].strip() == "Preview · 8 blocks · valid"
+    # The preview line, then what the draft would hold (Q-3637): the
+    # universe the card's chip names.
+    assert view["markdown"].strip() == (
+        "Preview · 8 blocks · valid\nuniverse  Top 15 by volume · HL perps"
+    )
     # Non-vacuity the seed cannot move: the view carries the whole
     # structure regardless of size, so the card can open in place
     # without a second call.
@@ -1628,7 +1668,112 @@ def test_the_preview_receipt_says_exactly_one_validity_word(validation, expected
         .handler({"source": "Globals()", "dry_run": True}, ctx)
         .to_envelope()
     )
-    assert env["view"]["markdown"].strip() == expected
+    # The validity word is the first line's; the universe line follows it
+    # (Q-3637) and is the same in every row.
+    assert env["view"]["markdown"].strip().splitlines()[0] == expected
+
+
+#: The error the D-14 staging probe's save carried (capture 02e_compose_15m):
+#: `Globals(target_timeframe="15m")`.
+_INVALID_GLOBAL = {
+    "severity": "error",
+    "code": "INVALID_GLOBAL",
+    "message": "Globals target_timeframe '15m' is not a valid timeframe.",
+    "location": "line 1, globals",
+}
+
+
+@pytest.mark.parametrize(
+    ("validation", "word"),
+    [
+        ({"ok": False, "warnings": [], "errors": [_INVALID_GLOBAL]}, "1 error"),
+        ({"ok": True, "warnings": [], "errors": []}, "valid"),
+    ],
+)
+def test_a_saved_view_reads_the_saves_own_verdict(validation, word, monkeypatch):
+    """Q-7602: a SAVED compose built its view from keel-api's read-back,
+    which serves no verdict, so `validation_block`'s "compiled ⇒ valid"
+    fallback answered: `**Probe cheap 15m** · v1 · valid · 15m` above
+    `validation: 1 error — INVALID_GLOBAL`. The view now reads the verdict
+    the response itself carries. The clean row is the control.
+
+    SEED (run 2026-11-16, reversed by reversing the edit): drop
+    `validation=body["validation"]` at strategy_compose's view_for_strategy
+    call — the error row reds (`valid`), the clean row stays green."""
+    from keel.tools.outcomes import OUTCOMES, _bootstrap
+    from keel.tools.outcomes._base import ToolContext
+
+    monkeypatch.setattr(
+        "keel.tools.outcomes.strategy_compose._try_local_validate",
+        lambda source, **_kw: {**validation, "lock": None},
+    )
+    monkeypatch.setattr("keel.hosting.is_hosted", lambda: True, raising=False)
+    _bootstrap()
+    client = _ComposeClient(graph=_graph(), head_source=None)
+    ctx = ToolContext(api_client=client, is_tty=False, app_url="https://app.usekeel.io")
+    env = (
+        OUTCOMES["keel_strategy_compose"]
+        .handler({"source": "Globals()", "strategy_id": "str_abc"}, ctx)
+        .to_envelope()
+    )
+    assert env["validation"]["ok"] is validation["ok"]  # non-vacuity: a save, not a dry run
+    assert "dry_run" not in env
+    errors = len(validation["errors"])
+    assert env["view"]["validation"] == {"ok": validation["ok"], "errors": errors, "warnings": 0}
+    header = env["view"]["markdown"].strip().splitlines()[0]
+    assert header.split(" · ")[2] == word, header
+
+
+class _VerdictClient(_ComposeClient):
+    """keel-api's `GET ?include=graph` row, carrying the stored source's
+    verdict in the server's shape (`_validation_detail`) when given."""
+
+    def __init__(self, *, validation, **kwargs):
+        super().__init__(**kwargs)
+        self.validation = validation
+
+    def get(self, path, **kwargs):
+        row = super().get(path, **kwargs)
+        if path == "/v1/strategies/str_abc" and self.validation is not None:
+            assert kwargs.get("include") == "graph"
+            row = {**row, "validation": self.validation}
+        return row
+
+
+@pytest.mark.parametrize(
+    ("validation", "word"),
+    [
+        ({"valid": False, "warnings": [], "errors": [_INVALID_GLOBAL]}, "1 error"),
+        ({"valid": True, "warnings": [], "errors": []}, "valid"),
+        # An older keel-api serves no verdict: the documented fallback holds.
+        (None, "valid"),
+    ],
+)
+def test_a_get_view_reads_the_servers_stored_verdict(validation, word, monkeypatch):
+    """Q-7605: `keel_strategy_get` of a stored strategy whose source has a
+    validation error said `valid` in its header (the GET served no verdict,
+    and `validation_block` reads absence as "compiled, so valid"). keel-api
+    now serves the stored source's verdict beside the graph, and the view
+    renders it; the clean row is the control.
+
+    SEED (run 2026-11-16, reversed by reversing the edit): strip
+    `validation` from the HEAD row in `strategy_get._version_view_inputs` —
+    the error row reds (`valid`), the clean and absent rows stay green."""
+    from keel.tools.outcomes import OUTCOMES, _bootstrap
+    from keel.tools.outcomes._base import ToolContext
+
+    _bootstrap()
+    client = _VerdictClient(validation=validation, graph=_graph(), head_source="Globals()")
+    ctx = ToolContext(api_client=client, is_tty=False, app_url="https://app.usekeel.io")
+    env = (
+        OUTCOMES["keel_strategy_get"]
+        .handler({"strategy_id": "str_abc", "skip_readiness": True}, ctx)
+        .to_envelope()
+    )
+    errors = len(validation["errors"]) if validation else 0
+    assert env["view"]["validation"] == {"ok": errors == 0, "errors": errors, "warnings": 0}
+    header = env["view"]["markdown"].strip().splitlines()[0]
+    assert header.split(" · ")[2] == word, header
 
 
 def test_save_size_is_unchanged_by_present_absent(monkeypatch):

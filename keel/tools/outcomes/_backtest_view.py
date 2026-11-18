@@ -35,6 +35,8 @@ import logging
 from datetime import date, timedelta
 from typing import Any
 
+from keel.api_path import seg
+
 from ._base import election_key
 
 
@@ -55,6 +57,7 @@ __all__ = [
     "net_of_for",
     "config_from_source",
     "exposure_block",
+    "sides_block",
     "normalized_status",
     "notes_block",
     "PERIOD_GRAINS",
@@ -128,6 +131,8 @@ _TRADE_FAMILY: frozenset[str] = frozenset(
         "total_trades",
         "num_trades",
         "trades",
+        "closed_trades",
+        "open_trades",
         "win_rate",
         "win_rate_pct",
         "profit_factor",
@@ -139,6 +144,11 @@ _TRADE_FAMILY: frozenset[str] = frozenset(
         "rebalance_legs",
         "turnover",
         "avg_holding_duration",
+        "positions_long",
+        "positions_short",
+        "flips",
+        "pnl_long",
+        "pnl_short",
     }
 )
 
@@ -169,6 +179,9 @@ _ERA_KEYS: dict[str, dict[str, tuple[str, ...]]] = {
         "total_trades": ("total_trades",),
         "num_trades": ("num_trades",),
         "trades": ("trades",),
+        # The two halves of `total_trades` (R-009); absent on runs before them.
+        "closed_trades": ("closed_trades",),
+        "open_trades": ("open_trades",),
         "win_rate": ("win_rate",),
         "win_rate_pct": ("win_rate_pct",),
         "profit_factor": ("profit_factor",),
@@ -179,6 +192,12 @@ _ERA_KEYS: dict[str, dict[str, tuple[str, ...]]] = {
         "resizes": ("resizes",),
         "turnover": ("turnover",),
         "avg_holding_duration": ("avg_holding_duration",),
+        # The positions split by side (R-003); absent on runs before them.
+        "positions_long": ("positions_long",),
+        "positions_short": ("positions_short",),
+        "flips": ("flips",),
+        "pnl_long": ("pnl_long",),
+        "pnl_short": ("pnl_short",),
     },
     ERA_UNKNOWN: {},
 }
@@ -230,6 +249,32 @@ COUNT_BASIS: dict[str, str] = {
     ERA_POSITIONS: "This run counted positions, not trades; its trade count is not recorded.",
 }
 
+#: One line under a run's counts when its win rate is not measured, and why
+#: (R-009). Only then: a run whose win rate is a number carries neither.
+NO_TRADES_LINE = "No trades in this window."
+NO_CLOSED_TRADE_LINE = "No trade closed in this window, so win rate is not measured."
+
+
+def win_rate_note(metrics: Any) -> str | None:
+    """Why `view.metrics` has no win rate, or None when it has one.
+
+    `metrics` is `view.metrics`. A run with no trades says so; a run with
+    trades and no win rate held them all to the window's end (current runs
+    say so with `closed_trades == 0`; older runs, which do not record it,
+    have no other reason for a null win rate over closed trades).
+    """
+    metrics = metrics if isinstance(metrics, dict) else {}
+    trades = _number(metrics.get("trades"))
+    if trades is None:
+        return None
+    if trades == 0:
+        return NO_TRADES_LINE
+    if _number(metrics.get("win_rate_pct")) is not None:
+        return None
+    closed = _number(metrics.get("closed_trades"))
+    return NO_CLOSED_TRADE_LINE if closed is None or closed == 0 else None
+
+
 #: Added once to a comparison whose runs come from different eras (§6.2).
 MIXED_ERA_LINE = "Runs from different measurement eras: '—' marks a count that run did not record."
 
@@ -254,10 +299,19 @@ _METRIC_SOURCES: tuple[tuple[str, tuple[str, ...]], ...] = (
     # count word at all. The runtime key is `trades` (2026-09-25): it is
     # result data, not listed copy.
     ("trades", ("total_trades", "num_trades", "trades")),
+    # trades == closed_trades + open_trades; the win rate reads the closed.
+    ("closed_trades", ("closed_trades",)),
+    ("open_trades", ("open_trades",)),
     ("win_rate_pct", ("win_rate_pct", "win_rate")),
     ("positions", ("positions",)),
     ("position_win_rate_pct", ("position_win_rate_pct", "position_win_rate")),
     ("resizes", ("resizes",)),
+    # The positions split by side (R-003): long + short == positions.
+    ("positions_long", ("positions_long",)),
+    ("positions_short", ("positions_short",)),
+    ("flips", ("flips",)),
+    ("pnl_long", ("pnl_long",)),
+    ("pnl_short", ("pnl_short",)),
     ("turnover", ("turnover",)),
     ("avg_holding", ("avg_holding_duration",)),
     ("sortino", ("sortino", "sortino_ratio")),
@@ -843,6 +897,52 @@ def exposure_block(metrics: Any) -> dict | None:
     return out
 
 
+def _signed_money(value: float) -> str:
+    """`+$1,234.50` / `−$50.00` / `$0.00` — the app's `formatCurrency`: the
+    sign follows the DISPLAYED value, so an amount that rounds to zero is
+    unsigned."""
+    text = f"{abs(value):,.2f}"
+    if float(text.replace(",", "")) == 0:
+        return f"${text}"
+    return f"{'+' if value > 0 else MINUS}${text}"
+
+
+def _plural(n: int, word: str) -> str:
+    return f"{n:,} {word}" + ("" if n == 1 else "s")
+
+
+def sides_block(metrics: Any) -> dict | None:
+    """Which way the run's positions went, from the run's own metrics.
+
+    The worker stores ``positions_long`` / ``positions_short`` (they sum to
+    ``positions``; a position open at the end counts on its side),
+    ``flips`` (positions that ended by switching direction on the same bar,
+    each adding one to both sides) and ``pnl_long`` / ``pnl_short`` (each
+    side's profit after fees, before funding, open positions marked at the
+    last price) on every run since R-003. This copies them and adds
+    ``line``, the SAME sentence the app's run page shows (``keel-app
+    SideLine.tsx``): ``12 positions: 0 long, 12 short · 0 flips · long P&L
+    $0.00, short P&L +$412.10``. ``None`` when the run does not carry the
+    counts (older runs are not backfilled) — absent, never 0. A run read
+    under an unknown measurement era carries none (``era_metrics``).
+    """
+    read = era_metrics(metrics)
+    longs, shorts, flips = (read.get(k) for k in ("positions_long", "positions_short", "flips"))
+    if not all(isinstance(v, int) and not isinstance(v, bool) for v in (longs, shorts, flips)):
+        return None
+    line = (
+        f"{_plural(longs + shorts, 'position')}: {longs:,} long, {shorts:,} short"
+        f" · {_plural(flips, 'flip')}"
+    )
+    out: dict[str, Any] = {"positions_long": longs, "positions_short": shorts, "flips": flips}
+    pnl_long, pnl_short = _number(read.get("pnl_long")), _number(read.get("pnl_short"))
+    if pnl_long is not None and pnl_short is not None:
+        line += f" · long P&L {_signed_money(pnl_long)}, short P&L {_signed_money(pnl_short)}"
+        out["pnl_long"], out["pnl_short"] = pnl_long, pnl_short
+    out["line"] = line
+    return out
+
+
 def slice_line(block: Any) -> str | None:
     """The `slice:` line: keel-api's summary sentence plus what a slice is.
 
@@ -885,7 +985,7 @@ def fetch_periods(client: Any, backtest_id: str, grain: Any) -> dict | None:
     """The run's `periods` block from ONE `/periods` read, or None when the
     server answered no block. Asked for explicitly, so a refusal (a run still
     running, more periods than a table carries) propagates as the result."""
-    answer = client.get(f"/v1/backtests/{backtest_id}/periods", periods=str(grain))
+    answer = client.get(f"/v1/backtests/{seg(backtest_id)}/periods", periods=str(grain))
     block = answer.get("periods") if isinstance(answer, dict) else None
     return block if isinstance(block, dict) and isinstance(block.get("rows"), list) else None
 
@@ -1334,12 +1434,19 @@ def build_backtest_view(
     if status in _SUCCESS:
         era = trade_era(detail.get("metrics"))
         view["tiles"], view["more_tiles"] = view_tiles(view["metrics"], era)
-        if era in COUNT_BASIS:
-            view["count_basis"] = COUNT_BASIS[era]
+        basis = " ".join(
+            line for line in (COUNT_BASIS.get(era), win_rate_note(view["metrics"])) if line
+        )
+        if basis:
+            view["count_basis"] = basis
         exposure = exposure_block(detail.get("metrics"))
         if exposure is not None:
             # The card's one line (spec 07 §5); the text block's is `exposure:`.
             view["exposure_line"] = exposure["line"]
+        sides = sides_block(detail.get("metrics"))
+        if sides is not None:
+            # Which way the positions went (R-003); the text block's is `sides:`.
+            view["sides_line"] = sides["line"]
         if isinstance(reference, dict) and _number(reference.get("ret_pct")) is not None:
             # Spec 03 §2.2: one tile, `BTC hold`, beside the run's own
             # metrics — never a metric of the run (`summary_metrics` gains
@@ -1578,7 +1685,7 @@ def run_config(client: Any, detail: Any) -> dict | None:
     if not strategy_id or not commit_id:
         return None
     try:
-        payload = client.get(f"/v1/strategies/{strategy_id}/versions/{commit_id}/source")
+        payload = client.get(f"/v1/strategies/{seg(strategy_id)}/versions/{seg(commit_id)}/source")
     except Exception:  # noqa: BLE001 — a render nicety never fails a tool call
         return None
     source = payload.get("source") if isinstance(payload, dict) else None
@@ -2005,7 +2112,7 @@ def fetch_curve_and_holds(
         if reference_span is not None:
             params["reference_start"], params["reference_end"] = reference_span
     try:
-        payload = client.get(f"/v1/backtests/{backtest_id}/curve", **params)
+        payload = client.get(f"/v1/backtests/{seg(backtest_id)}/curve", **params)
     except KeelError:
         return None, []
     lines: list[dict] = []
@@ -2511,7 +2618,48 @@ def min_capital_clause(realism: Any) -> str | None:
     )
 
 
-def realism_line(realism: Any) -> str | None:
+def capital_guide_block(metrics: Any) -> dict | None:
+    """The money the strategy needs to trade as backtested, copied from the
+    run's ``metrics.capital_guide`` (design doc 14 §11; computed only by
+    ``backtest_framework.capital_guide``, never here) plus ``line``, the
+    plain sentence an agent repeats: ``Suggested $200 to trade it as
+    backtested; $400 tracks it most closely; it runs from $100``.
+
+    ``basis`` ``backtest`` sizes it from the positions the run held at once
+    and their typical weight; ``assets`` (a run that held nothing) from the
+    asset count. ``None`` when the run carries no guide (runs before the
+    stamp; keel-api's ``/v1/backtests/{id}/capital-guide`` computes those) —
+    absent, never a guess. The amounts are what this strategy needs to place
+    its trades and track its backtest, never a suggestion to invest.
+    """
+    raw = metrics.get("capital_guide") if isinstance(metrics, dict) else None
+    if not isinstance(raw, dict) or raw.get("basis") not in ("backtest", "assets"):
+        return None
+    amounts = [raw.get(k) for k in ("suggested_usd", "closest_usd", "minimum_usd")]
+    if not all(isinstance(v, int) and not isinstance(v, bool) and v > 0 for v in amounts):
+        return None
+    suggested, closest, minimum = amounts
+    line = (
+        f"Suggested ${suggested:,} to trade it as backtested; ${closest:,} tracks it most "
+        f"closely; it runs from ${minimum:,}"
+    )
+    universe = raw.get("universe_size")
+    if raw["basis"] == "assets" and isinstance(universe, int):
+        line += f" (sized by its {_plural(universe, 'asset')}: this backtest held no positions)"
+    weight = _number(raw.get("typical_weight"))
+    return {
+        "basis": raw["basis"],
+        "suggested_usd": suggested,
+        "closest_usd": closest,
+        "minimum_usd": minimum,
+        "n_held": raw.get("n_held") if isinstance(raw.get("n_held"), int) else None,
+        "typical_weight": weight if raw["basis"] == "backtest" else None,
+        "universe_size": universe if isinstance(universe, int) else None,
+        "line": line,
+    }
+
+
+def realism_line(realism: Any, capital_guide: Any = None) -> str | None:
     """Spec 02 §2.4 #6 — only when `n_below > 0`; the share renders as a
     percentage and the minimum is read from the data, never a literal.
 
@@ -2539,8 +2687,12 @@ def realism_line(realism: Any) -> str | None:
     if realism.get("truncated"):
         line += " (the order log was capped; the counts are floors)"
     # Q-2542: what capital fixes it, from the run's own order notionals —
-    # the worker's answer, never a re-run at another capital.
-    capital = min_capital_clause(realism)
+    # the worker's answer, never a re-run at another capital. Retired in
+    # favour of the capital guide (design doc 14, founder 2026-11-03: the
+    # measure is position drift, not order count) whenever the run carries
+    # one; its own `capital:` line says the amounts.
+    has_guide = isinstance(capital_guide, dict) and bool(capital_guide.get("line"))
+    capital = None if has_guide else min_capital_clause(realism)
     if capital:
         line += f" — {capital}"
     return line
@@ -2779,6 +2931,14 @@ def attach_run_facts(
     realism = realism_from_metrics(metrics)
     if realism is not None:
         extra["realism"] = realism
+    # The money it needs to trade as backtested (design doc 14 §11). Full
+    # profile only: the listed connector is for research and backtests, so
+    # its realism line keeps the order-count rungs.
+    from ._toolsets import is_listed_profile
+
+    guide = None if is_listed_profile() else capital_guide_block(metrics)
+    if guide is not None:
+        extra["capital_guide"] = guide
     few = few_fills_next(view_metrics(metrics))
     if few:
         extra["few_fills_note"] = few
@@ -2787,6 +2947,11 @@ def attach_run_facts(
     exposure = exposure_block(metrics)
     if exposure is not None:
         extra["exposure"] = exposure
+    # Which way the positions went (R-003): long / short counts, flips and
+    # each side's P&L, first-class beside the metrics.
+    sides = sides_block(metrics)
+    if sides is not None:
+        extra["sides"] = sides
     if isinstance(metrics, dict) and metrics.get("good_result"):
         library_window, library_fork = _library_provenance(client, detail.get("strategy_id"))
         good = good_result_block(
@@ -2802,7 +2967,7 @@ def _library_provenance(client: Any, strategy_id: Any) -> tuple[dict | None, boo
     if client is None or not strategy_id:
         return None, False
     try:
-        meta = client.get(f"/v1/strategies/{strategy_id}")
+        meta = client.get(f"/v1/strategies/{seg(strategy_id)}")
     except Exception:  # noqa: BLE001 — a clause, never the result
         return None, False
     slug = None
@@ -2812,7 +2977,7 @@ def _library_provenance(client: Any, strategy_id: Any) -> tuple[dict | None, boo
     if not isinstance(slug, str) or not slug:
         return None, False
     try:
-        entry = client.get(f"/v1/library/{slug}")
+        entry = client.get(f"/v1/library/{seg(slug)}")
     except Exception:  # noqa: BLE001 — the fork is known; its window is not
         return None, True
     window = entry.get("backtest_window") if isinstance(entry, dict) else None

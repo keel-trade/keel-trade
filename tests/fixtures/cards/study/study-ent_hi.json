@@ -1,0 +1,737 @@
+{
+  "_meta": {
+    "keel/card": {
+      "card_data": {
+        "charts": [
+          {
+            "chart": null,
+            "family": "Scatter",
+            "form": "title",
+            "index": 1,
+            "lead": null,
+            "state_words": null,
+            "thumb": null,
+            "title": "Inside each trade",
+            "v": "Inside%20each%20trade"
+          },
+          {
+            "chart": {
+              "cols": 5,
+              "d": "-------------------------",
+              "enc": "b64x2",
+              "family": "Heatmap",
+              "kind": "heat",
+              "legend": {
+                "hi": "not measured",
+                "lo": "not measured",
+                "ramp": "div"
+              },
+              "marks": [],
+              "more_words": null,
+              "note_words": null,
+              "outline": null,
+              "read": {
+                "band": null,
+                "bins": null,
+                "cells": "not measured|not measured|not measured|not measured|not measured|not measured|not measured|not measured|not measured|not measured|not measured|not measured|not measured|not measured|not measured|not measured|not measured|not measured|not measured|not measured|not measured|not measured|not measured|not measured|not measured",
+                "ring_words": null,
+                "sel": "target:0.05|target:0.075|target:0.1|target:0.15|target:0.2",
+                "sel_rows": "stop:0.025|stop:0.0375|stop:0.05|stop:0.075|stop:0.1",
+                "withheld": null,
+                "x": "0.05|0.075|0.1|0.15|0.2",
+                "y": ["0.025|0.0375|0.05|0.075|0.1"]
+              },
+              "ring": null,
+              "rows": 5,
+              "series": [],
+              "title": "Stop × target",
+              "values_in_cells": true,
+              "x": {
+                "label": "Target",
+                "n": 5,
+                "pos": null,
+                "ticks": [
+                  {
+                    "at": 410,
+                    "w": "0.05"
+                  },
+                  {
+                    "at": 1228,
+                    "w": "0.075"
+                  },
+                  {
+                    "at": 2048,
+                    "w": "0.1"
+                  },
+                  {
+                    "at": 2866,
+                    "w": "0.15"
+                  },
+                  {
+                    "at": 3686,
+                    "w": "0.2"
+                  }
+                ]
+              },
+              "y": {
+                "label": "Stop",
+                "n": 5,
+                "pos": null,
+                "ticks": [
+                  {
+                    "at": 410,
+                    "w": "0.025"
+                  },
+                  {
+                    "at": 1228,
+                    "w": "0.0375"
+                  },
+                  {
+                    "at": 2048,
+                    "w": "0.05"
+                  },
+                  {
+                    "at": 2866,
+                    "w": "0.075"
+                  },
+                  {
+                    "at": 3686,
+                    "w": "0.1"
+                  }
+                ]
+              }
+            },
+            "family": "Heatmap",
+            "form": "chart",
+            "index": 2,
+            "lead": null,
+            "state_words": null,
+            "thumb": null,
+            "title": "Stop × target",
+            "v": "Stop%20%C3%97%20target"
+          },
+          {
+            "chart": null,
+            "family": "Bars",
+            "form": "title",
+            "index": 3,
+            "lead": null,
+            "state_words": null,
+            "thumb": null,
+            "title": "Exits by reason",
+            "v": "Exits%20by%20reason"
+          },
+          {
+            "chart": null,
+            "family": "Distribution",
+            "form": "title",
+            "index": 4,
+            "lead": null,
+            "state_words": null,
+            "thumb": null,
+            "title": "Each trade's result",
+            "v": "Each%20trade%27s%20result"
+          },
+          {
+            "chart": {
+              "enc": "b64x2",
+              "family": "Bars",
+              "kind": "bars",
+              "legend": null,
+              "marks": [],
+              "more_words": null,
+              "note_words": null,
+              "read": {
+                "band": null,
+                "bins": null,
+                "cells": null,
+                "ring_words": null,
+                "sel": "horizon:1|horizon:5|horizon:10",
+                "sel_rows": null,
+                "withheld": null,
+                "x": "1|5|10",
+                "y": ["−0.091|0.012|−0.008"]
+              },
+              "series": [
+                {
+                  "c": 0,
+                  "hi": "......",
+                  "lo": "......",
+                  "name": null,
+                  "ref": false,
+                  "y": "AA__zY"
+                }
+              ],
+              "title": "Skill among entries",
+              "x": {
+                "label": "Days ahead",
+                "n": 3,
+                "pos": null,
+                "ticks": [
+                  {
+                    "at": 682,
+                    "w": "1"
+                  },
+                  {
+                    "at": 2048,
+                    "w": "5"
+                  },
+                  {
+                    "at": 3412,
+                    "w": "10"
+                  }
+                ]
+              },
+              "y": {
+                "label": "Rank IC",
+                "n": null,
+                "pos": null,
+                "ticks": [
+                  {
+                    "at": 1621,
+                    "w": "−0.050"
+                  },
+                  {
+                    "at": 3605,
+                    "w": "0.000"
+                  }
+                ]
+              },
+              "zero": 3605
+            },
+            "family": "Bars",
+            "form": "chart",
+            "index": 5,
+            "lead": null,
+            "state_words": null,
+            "thumb": null,
+            "title": "Skill among entries",
+            "v": "Skill%20among%20entries"
+          },
+          {
+            "chart": {
+              "columns": [
+                {
+                  "w": "Result"
+                },
+                {
+                  "w": "Trades"
+                },
+                {
+                  "w": "Trades a month"
+                },
+                {
+                  "w": "Average days held"
+                },
+                {
+                  "w": "Time in the market"
+                },
+                {
+                  "w": "Win rate before fees and funding"
+                }
+              ],
+              "enc": "b64x2",
+              "family": "Table",
+              "kind": "table",
+              "legend": null,
+              "marks": [],
+              "more_words": null,
+              "note_words": null,
+              "read": null,
+              "rows": [
+                [
+                  "(no longer available)",
+                  "36",
+                  "6.12",
+                  "2 days",
+                  "60.3%",
+                  "52.8%"
+                ]
+              ],
+              "series": [],
+              "title": "Trade stats",
+              "x": null,
+              "y": null
+            },
+            "family": "Table",
+            "form": "chart",
+            "index": 6,
+            "lead": null,
+            "state_words": null,
+            "thumb": null,
+            "title": "Trade stats",
+            "v": "Trade%20stats"
+          },
+          {
+            "chart": {
+              "bins": "BaBaBDBaDJHsIZLiJzM8XyWvinfIsErA5s7G__5W_SvjiRXyT7JzEj",
+              "enc": "b64x2",
+              "family": "Distribution",
+              "kind": "dist",
+              "legend": null,
+              "marker": {
+                "at": 2570,
+                "w": "(no longer available) −7.7%"
+              },
+              "marks": [],
+              "more_words": null,
+              "note_words": null,
+              "overlays": [],
+              "read": {
+                "band": null,
+                "bins": "−14.7% to −14.3%: 4|−14.3% to −13.9%: 4|−13.9% to −13.4%: 3|−13.4% to −13.0%: 4|−13.0% to −12.6%: 9|−12.6% to −12.2%: 22|−12.2% to −11.8%: 24|−11.8% to −11.4%: 33|−11.4% to −11.0%: 28|−11.0% to −10.6%: 37|−10.6% to −10.2%: 68|−10.2% to −9.7%: 65|−9.7% to −9.3%: 99|−9.3% to −8.9%: 89|−8.9% to −8.5%: 126|−8.5% to −8.1%: 123|−8.1% to −7.7%: 165|−7.7% to −7.3%: 169|−7.3% to −6.9%: 183|−6.9% to −6.5%: 164|−6.5% to −6.0%: 181|−6.0% to −5.6%: 136|−5.6% to −5.2%: 98|−5.2% to −4.8%: 68|−4.8% to −4.4%: 57|−4.4% to −4.0%: 28|−4.0% to −3.6%: 13",
+                "cells": null,
+                "ring_words": null,
+                "sel": null,
+                "sel_rows": null,
+                "withheld": null,
+                "x": null,
+                "y": []
+              },
+              "series": [],
+              "title": "Your drawdown against shuffled trades",
+              "x": {
+                "label": "Max drawdown",
+                "n": 27,
+                "pos": null,
+                "ticks": [
+                  {
+                    "at": 1725,
+                    "w": "−10.0%"
+                  },
+                  {
+                    "at": 3570,
+                    "w": "−5.0%"
+                  }
+                ]
+              },
+              "y": null
+            },
+            "family": "Distribution",
+            "form": "chart",
+            "index": 7,
+            "lead": null,
+            "state_words": null,
+            "thumb": null,
+            "title": "Your drawdown against shuffled trades",
+            "v": "Your%20drawdown%20against%20shuffled%20trades"
+          }
+        ],
+        "checks": null,
+        "chips": [],
+        "copy": {
+          "charts": "Charts",
+          "failed_cell": "Didn't finish",
+          "full_chart_in_keel": "Open in Keel for the full chart",
+          "highest": "Highest",
+          "hint_pointer": "Hover or tap the chart for values",
+          "hint_touch": "Tap the chart for values",
+          "locked": "not included in this account's plan",
+          "lowest": "Lowest",
+          "met": "met",
+          "more_charts": "+3 more charts",
+          "not_measured": "not measured",
+          "not_met": "not met",
+          "not_run": "Not run yet",
+          "not_valid": "Not a valid setting",
+          "numbers": "The numbers",
+          "open_bar": "Open this bar in Keel",
+          "open_chart": "Open this chart in Keel",
+          "open_setting": "Open this setting in Keel",
+          "points_in_keel": "Open in Keel to read each point",
+          "steps": "Steps",
+          "yours": "Yours"
+        },
+        "focus": null,
+        "head_words": null,
+        "key": {
+          "enc": "b64x2",
+          "family": "Curve",
+          "kind": "line",
+          "legend": null,
+          "marks": [
+            {
+              "at": 1024,
+              "kind": "vline",
+              "w": "Entry · 0"
+            }
+          ],
+          "more_words": null,
+          "note_words": null,
+          "read": {
+            "band": null,
+            "bins": null,
+            "cells": null,
+            "ring_words": null,
+            "sel": null,
+            "sel_rows": null,
+            "withheld": {
+              "11": "16 calendar periods hold events; a band needs at least 20.",
+              "12": "16 calendar periods hold events; a band needs at least 20.",
+              "13": "16 calendar periods hold events; a band needs at least 20.",
+              "14": "16 calendar periods hold events; a band needs at least 20.",
+              "15": "16 calendar periods hold events; a band needs at least 20.",
+              "16": "16 calendar periods hold events; a band needs at least 20.",
+              "17": "16 calendar periods hold events; a band needs at least 20.",
+              "18": "14 calendar periods hold events; a band needs at least 20.",
+              "19": "13 calendar periods hold events; a band needs at least 20.",
+              "20": "11 calendar periods hold events; a band needs at least 20.",
+              "21": "11 calendar periods hold events; a band needs at least 20.",
+              "22": "10 calendar periods hold events; a band needs at least 20.",
+              "23": "9 calendar periods hold events; a band needs at least 20.",
+              "24": "9 calendar periods hold events; a band needs at least 20.",
+              "25": "8 calendar periods hold events; a band needs at least 20.",
+              "26": "8 calendar periods hold events; a band needs at least 20.",
+              "27": "7 calendar periods hold events; a band needs at least 20.",
+              "28": "7 calendar periods hold events; a band needs at least 20.",
+              "29": "6 calendar periods hold events; a band needs at least 20.",
+              "30": "6 calendar periods hold events; a band needs at least 20.",
+              "31": "6 calendar periods hold events; a band needs at least 20.",
+              "32": "6 calendar periods hold events; a band needs at least 20.",
+              "33": "6 calendar periods hold events; a band needs at least 20.",
+              "34": "6 calendar periods hold events; a band needs at least 20.",
+              "35": "5 calendar periods hold events; a band needs at least 20.",
+              "36": "5 calendar periods hold events; a band needs at least 20.",
+              "37": "5 calendar periods hold events; a band needs at least 20.",
+              "38": "5 calendar periods hold events; a band needs at least 20.",
+              "39": "5 calendar periods hold events; a band needs at least 20.",
+              "40": "4 calendar periods hold events; a band needs at least 20."
+            },
+            "x": "-10|-9|-8|-7|-6|-5|-4|-3|-2|-1|0|1|2|3|4|5|6|7|8|9|10|11|12|13|14|15|16|17|18|19|20|21|22|23|24|25|26|27|28|29|30",
+            "y": [
+              "< 0.1%|−0.9%|−1.7%|−2.0%|−2.1%|−1.6%|−1.7%|−1.4%|−0.8%|0.2%|0.0%|0.3%|0.3%|−0.5%|−0.9%|−0.6%|−1.3%|−0.9%|−1.1%|−1.0%|−0.6%|−0.6%|−0.6%|−1.3%|−1.5%|−1.3%|−1.9%|−1.8%|−2.0%|−2.1%|−2.0%|−2.3%|−1.9%|−2.2%|−2.0%|−2.1%|−1.8%|−2.3%|−2.7%|−2.0%|−2.6%",
+              "0.4%|0.2%|0.2%|< 0.1%|0.1%|> −0.1%|−0.1%|−0.3%|−0.1%|> −0.1%|0.0%|0.1%|0.2%|0.1%|0.2%|0.3%|0.4%|0.5%|0.5%|0.4%|0.4%|0.3%|0.2%|0.3%|0.4%|0.5%|0.6%|0.7%|0.5%|0.3%|0.4%|0.4%|0.5%|0.7%|0.4%|0.3%|0.3%|0.5%|0.4%|0.5%|0.4%"
+            ]
+          },
+          "series": [
+            {
+              "c": 1,
+              "hi": "..................................................................................",
+              "lo": "..................................................................................",
+              "name": "yours",
+              "ref": false,
+              "y": "zmh0TYN7MXVuToZ4ke2dzi5t4aqGhun5ayi2ecgDoknooibbXbbEP1R8OpMHOzHXPJJyNEL9RrIsAAOACW"
+            },
+            {
+              "c": 2,
+              "hi": "..................................................................................",
+              "lo": "..................................................................................",
+              "name": "random",
+              "ref": false,
+              "y": "6j3G2az_0ty6xhupxFyozi162l1m3j457E8E8o616m5y375Z7D9s-j_x9V587z6q88__625H518N7x8Z6X"
+            }
+          ],
+          "title": "Returns after entry",
+          "x": {
+            "label": "Days from the event",
+            "n": 41,
+            "pos": null,
+            "ticks": [
+              {
+                "at": 0,
+                "w": "-10"
+              },
+              {
+                "at": 819,
+                "w": "-2"
+              },
+              {
+                "at": 1638,
+                "w": "6"
+              },
+              {
+                "at": 2457,
+                "w": "14"
+              },
+              {
+                "at": 3276,
+                "w": "22"
+              },
+              {
+                "at": 4095,
+                "w": "30"
+              }
+            ]
+          },
+          "y": {
+            "label": "Mean return",
+            "n": null,
+            "pos": null,
+            "ticks": [
+              {
+                "at": 892,
+                "w": "−2.0%"
+              },
+              {
+                "at": 2095,
+                "w": "−1.0%"
+              },
+              {
+                "at": 3298,
+                "w": "0.0%"
+              }
+            ]
+          }
+        },
+        "key_v": "Returns%20after%20entry",
+        "links": {
+          "chart": "https://app.usekeel.io/research/stu_000007?v={v}",
+          "select": "https://app.usekeel.io/research/stu_000007?v={v}&sel={sel}",
+          "study": "https://app.usekeel.io/research/stu_000007"
+        },
+        "method_line": "Measured with EventReturns v2, TradeStats v1",
+        "more_charts_total": 3,
+        "more_words": null,
+        "notes": {
+          "draft": null,
+          "linked": null,
+          "not_measured": [
+            "Best and worst move inside each trade, in R: stop not recognised"
+          ],
+          "saved": null,
+          "stale": []
+        },
+        "rows": null,
+        "schema": "keel.research.card-data/2",
+        "steps": [],
+        "top": null
+      },
+      "card_summary": {
+        "thumb": {
+          "facts": {
+            "enc": "b64",
+            "series": [
+              {
+                "c": 1,
+                "y": "zhTOMVTZk2z54phnaiegonobXbQSOMPHPKNMRJAOC"
+              },
+              {
+                "c": 2,
+                "y": "622z0yxuwyz121346786653569-_85768_6457775"
+              }
+            ],
+            "zero": 51
+          },
+          "family": "Curve",
+          "view_index": 0
+        }
+      }
+    },
+    "ui": {
+      "resourceUri": "ui://keel/cards/study.html"
+    }
+  },
+  "content": [
+    {
+      "text": "card: where the host draws Keel cards, the user sees what follows as a card carrying its name, links and ids, so a reply can call it by name; the ids and links here serve tool calls and hosts without cards.\n\nEntries and exits · Near-high breakout v2, entries and exits · version 1 · Done · Oct 29\nUsed 0 of 400 studies; resets Dec 1. Planning, reading, saving, and runs that reuse everything or run nothing, do not count.\nAfter the event against random dates, 5 days: −0.9%\nDays May 4, 2026 to Oct 30, 2026 · 60 coins: top 60 by 30-day volume, picked Oct 31, kept fixed · costs 9 bp a fill · data as of Oct 30, 2026\nMeasured with Backtest v1, EventReturns v2, EntryIC v1, TradeExcursions v1, ExitsByReason v1, StopTargetMap v1, TradeStats v1, TradeShuffle v1.\nIn short:\n- After the event against random dates, 5 days: −0.9%, interval withheld: 16 calendar periods hold events; a band needs at least 20.; sample not stated\n- Events: 36, no interval; sample not stated\n- Win rate before fees and funding: 52.8%, no interval; 36 trades\n- Expectancy a trade before fees and funding: 0.2%, no interval; 36 trades\nNot measured: Best and worst move inside each trade, in R: stop not recognised.\nRuns: 0 runs, 0 reused, none failed · versions tried: unknown\nCharts (8): Returns after entry · Inside each trade · Stop × target · Exits by reason · Each trade's result · Skill among entries · Trade stats · Your drawdown against shuffled trades — keel_research_get(study_id=\"stu_000007\", view=0) reads the numbers behind any of them.\nView in Keel: https://app.usekeel.io/research/stu_000007",
+      "type": "text"
+    }
+  ],
+  "structuredContent": {
+    "base": {
+      "evidence_hash": "51a13045909af6be2ae16c047356992992ab98b3f5297469ccca98008100d3ad",
+      "revision": 1,
+      "version": 1
+    },
+    "can_retry": false,
+    "can_run": true,
+    "card_summary": {
+      "footer": {
+        "runs_words": "no new runs",
+        "subject": "(no longer available)"
+      },
+      "footing_line": "179 days · 60 coins · 9 bp a fill",
+      "headline": {
+        "chips": [],
+        "text": "After the event against random dates, 5 days: −0.9%"
+      },
+      "kind_label": {
+        "key": "entries",
+        "name": "Entries and exits",
+        "short": "Entries and exits"
+      },
+      "lead": "After the event against random dates, 5 days −0.9%",
+      "maker": "you",
+      "maker_words": "by you",
+      "numbers": [
+        {
+          "label": "After the event against random dates, 5 days",
+          "measure": "difference",
+          "ref": "after.difference",
+          "sample": {
+            "coins_max": 60.0,
+            "coins_median": 60.0,
+            "coins_min": 60.0,
+            "coverage": 1.0,
+            "first_day": "2026-05-04",
+            "last_day": "2026-10-29"
+          },
+          "unit": "fraction",
+          "value": -0.009046970826097567,
+          "value_words": "−0.9%"
+        },
+        {
+          "label": "Events",
+          "measure": "events",
+          "ref": "after.summary",
+          "sample": {
+            "coins_max": 60.0,
+            "coins_median": 60.0,
+            "coins_min": 60.0,
+            "coverage": 1.0,
+            "first_day": "2026-05-04",
+            "last_day": "2026-10-29"
+          },
+          "unit": "count",
+          "value": 36.0,
+          "value_words": "36"
+        },
+        {
+          "label": "Win rate before fees and funding",
+          "measure": "win_rate",
+          "ref": "stats",
+          "sample": {
+            "first_day": "2026-05-04",
+            "last_day": "2026-10-30",
+            "trades": 36
+          },
+          "sample_words": "36 trades",
+          "unit": "fraction",
+          "value": 0.5277777777777778,
+          "value_words": "52.8%"
+        },
+        {
+          "label": "Expectancy a trade before fees and funding",
+          "measure": "expectancy",
+          "ref": "stats",
+          "sample": {
+            "first_day": "2026-05-04",
+            "last_day": "2026-10-30",
+            "trades": 36
+          },
+          "sample_words": "36 trades",
+          "unit": "fraction",
+          "value": 0.0016666666666666466,
+          "value_words": "0.2%"
+        }
+      ],
+      "schema": "keel.research.card/2",
+      "state": "completed",
+      "state_words": "Done · Oct 29",
+      "title": "Near-high breakout v2, entries and exits",
+      "top5": {
+        "kind": "checks",
+        "rows": [],
+        "total": 0
+      },
+      "version": 1
+    },
+    "counts": {
+      "allowance": {
+        "study": "free",
+        "units": [
+          {
+            "limit": 400,
+            "resets_at": "2026-12-18",
+            "unit": "research_studies",
+            "used": 0
+          }
+        ]
+      },
+      "runs": {
+        "executed": 0,
+        "failed_content": 0,
+        "failed_platform": 0,
+        "planned": 0,
+        "reused": 0,
+        "words": "0 runs, 0 reused, none failed"
+      },
+      "versions_tried": {
+        "added": 0,
+        "family": "",
+        "why": ""
+      }
+    },
+    "footing": {
+      "coins": {
+        "chosen": "Top 60 by 30-day volume, picked Oct 31, kept fixed",
+        "count": 60,
+        "names_sha256": "038394ed76754d6837a48cc1438cbc6a3b24c9f21f0b7227896ec43e7b0e960c"
+      },
+      "costs": {
+        "fee": 0.00045,
+        "slippage": 0.00045
+      },
+      "data": "snap_6c1f0e8a2b9d4f37",
+      "days": {
+        "end": "2026-10-30",
+        "start": "2026-05-04"
+      },
+      "delay": 0,
+      "engine": "eng_000000000000000000000000000000000000000000000000000000000000",
+      "engine_words": "This version of the engine",
+      "leverage": 1.0
+    },
+    "hero_url": "https://app.usekeel.io/research/stu_000007",
+    "links": {
+      "app": "https://app.usekeel.io/research/stu_000007"
+    },
+    "locked": [],
+    "not_measured": [
+      "Best and worst move inside each trade, in R: stop not recognised"
+    ],
+    "notes": {
+      "notes_total": 0
+    },
+    "page": {
+      "default": 0,
+      "switch": [0, 5, 1, 2]
+    },
+    "stale": [],
+    "steps": {
+      "by_status": {
+        "completed": 8
+      },
+      "total": 8
+    },
+    "study": {
+      "archived": false,
+      "can_delete": true,
+      "evidence_hash": "51a13045909af6be2ae16c047356992992ab98b3f5297469ccca98008100d3ad",
+      "kind_label": {
+        "key": "entries",
+        "name": "Entries and exits",
+        "short": "Entries and exits"
+      },
+      "linked_to": [],
+      "linked_to_total": 0,
+      "presentation_hash": "27100dfbda7da5885c79e37d5c794de477cf299226c387d690055397fa71e9f9",
+      "revision": 1,
+      "run_set_id": "rus_000007",
+      "set_aside": false,
+      "state": "completed",
+      "study_id": "stu_000007",
+      "title": "Near-high breakout v2, entries and exits",
+      "version": 1
+    },
+    "subjects": {
+      "total": 1
+    },
+    "url_line": "View in Keel: https://app.usekeel.io/research/stu_000007",
+    "view": {
+      "at": "2026-11-17T00:00:10.000Z",
+      "kind": "study",
+      "mode": "study",
+      "object": "stu_000007",
+      "seq": 11,
+      "size": "view",
+      "version": 1
+    },
+    "views": {
+      "total": 8
+    },
+    "words": {
+      "allowance": "Used 0 of 400 studies; resets Dec 1. Planning, reading, saving, and runs that reuse everything or run nothing, do not count."
+    }
+  }
+}

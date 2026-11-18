@@ -20,6 +20,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from keel.api_path import seg
 from keel.errors import KeelError
 
 from . import register
@@ -107,7 +108,7 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
             # (ForkStrategyRequest); passing `None` causes the API to
             # 422 with `Field required` since the body is missing
             # entirely. {} is accepted (all fields optional).
-            result = client.post(f"/v1/strategies/{source}/fork", json=body)
+            result = client.post(f"/v1/strategies/{seg(source)}/fork", json=body)
         except KeelError:
             raise
         except Exception as e:  # noqa: BLE001
@@ -164,7 +165,7 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
     description: str | None = args.get("description")
     if description is not None and new_sid:
         try:
-            client.patch(f"/v1/strategies/{new_sid}", json={"description": description})
+            client.patch(f"/v1/strategies/{seg(new_sid)}", json={"description": description})
         except KeelError as e:
             extra["description_error"] = str(e)
 
@@ -248,6 +249,7 @@ STRATEGY_FORK = register(
     OutcomeTool(
         name="keel_strategy_fork",
         required_action="strategy.create",
+        rate_tier="mutation",
         cli_path=("strategy", "fork"),
         toolset="backtest",
         # grounded-in: system/chat/collaboration.md §4 (iterate, don't rewrite —

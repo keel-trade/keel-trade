@@ -41,7 +41,9 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from typing import Any
+from urllib.parse import urlencode
 
+from keel.api_path import seg
 from keel.errors import KeelError
 
 from . import register
@@ -120,6 +122,8 @@ def preview_note(result: dict) -> str | None:
 
 
 def _infer_target_type(target_id: str) -> str:
+    if target_id.startswith("stu_"):
+        return "study"
     if target_id.startswith("str_"):
         return "strategy"
     if target_id.startswith("btr_"):
@@ -149,7 +153,7 @@ def _share_run(target_id: str, target_type: str, include_source: bool, ctx: Tool
 
     client = ctx.get_client()
     # The share inference read is never an owner visit (S06 §3.5.1, R-61).
-    row = client.get(f"/v1/deployments/{target_id}", headers=AGENT_TELEMETRY_HEADERS)
+    row = client.get(f"/v1/deployments/{seg(target_id)}", headers=AGENT_TELEMETRY_HEADERS)
     venue = row.get("venue") if isinstance(row, dict) else None
     capital_class = venue.get("capital_class") if isinstance(venue, dict) else None
     if capital_class != "practice":
@@ -166,7 +170,93 @@ def _share_run(target_id: str, target_type: str, include_source: bool, ctx: Tool
     # (S05 §3.12.1): every disclosure defaults off; the source switch is the
     # one control this tool carries.
     return client.post(
-        f"/v1/paper/{target_id}/share-links", json={"include_strategy_source": include_source}
+        f"/v1/paper/{seg(target_id)}/share-links", json={"include_strategy_source": include_source}
+    )
+
+
+#: What each kind-specific argument reads as when the caller leaves it off. The
+#: CLI sends a boolean flag the caller did not pass as its default
+#: (`_cli_adapter`: `--flag/--no-flag` defaults to False), so a value equal to
+#: the argument's default asks for nothing and is never a reason to refuse
+#: (RI-281; research_plan's J14.6 rule for `resume`/`retry`). A value that asks
+#: for something this kind of share cannot do is still refused.
+_UNSET: dict[str, tuple[Any, ...]] = {
+    "include_source": (None, False),
+    "permission": (None, "", "view"),
+    "expires_at": (None, ""),
+    "show_author": (None, False),
+    "views": (None,),
+}
+
+
+def _given(args: dict, keys: tuple[str, ...]) -> list[str]:
+    """The `keys` the caller set to something other than their default."""
+    return [k for k in keys if args.get(k) not in _UNSET[k]]
+
+
+def _share_study(target_id: str, args: dict, ctx: ToolContext) -> OutcomeResult:
+    """A study's snapshot share (Research 07 §2.2, 08 §3.6): the views it shows
+    and whether the author's name is on it. A study share never serves the
+    source, so `include_source`, `permission` and `expires_at` are refused when
+    they ask for anything but the default (source hidden, view only, no expiry).
+
+    The listed profile does not share a study here (07 §2.2): its schema omits
+    `views` and `show_author`, so the adapter drops them and a share made here
+    would publish every view whatever the agent asked. It is refused, and the
+    agent opens the study with `keel_app_link`, where the owner picks the views."""
+    from . import _toolsets
+
+    if _toolsets.is_listed_profile():
+        raise KeelError(
+            "On this connector a study is shared from its page in the Keel web app, where you "
+            "pick the views it shows. Nothing was published.",
+            error_code="unsupported_target",
+            exit_code=2,
+            suggestion=f"Open the study with `keel_app_link` (target_id='{target_id}') and share it there.",
+            input={"target_id": target_id},
+        )
+    given = _given(args, ("include_source", "permission", "expires_at"))
+    if given:
+        raise KeelError(
+            f"A study share never shows the study's source: {', '.join(given)} "
+            "cannot be set. Nothing was published.",
+            error_code="invalid_arguments",
+            exit_code=2,
+            suggestion="Send `views` and `show_author` only.",
+        )
+    body: dict[str, Any] = {"show_author": bool(args.get("show_author", False))}
+    if args.get("views") is not None:
+        # The CLI hands `--views 0 --views 3` over as text; the route takes the
+        # indexes as integers, the shape the MCP schema already sends.
+        try:
+            body["views"] = [int(v) for v in args["views"]]
+        except (TypeError, ValueError):
+            raise KeelError(
+                f"`views` takes view indexes (0, 1, ...); got {list(args['views'])!r}. "
+                "Nothing was published.",
+                error_code="invalid_arguments",
+                exit_code=2,
+                suggestion="Pass the indexes of the views to show, e.g. `--views 0 --views 3`.",
+            ) from None
+    result = ctx.get_client().post(f"/v1/research/studies/{seg(target_id)}/shares", json=body)
+    share_id = result.get("share_id") or ""
+    if not share_id:
+        raise KeelError(
+            "Share creation succeeded but no share_id was returned.",
+            error_code="malformed_response",
+            suggestion="Run `keel_connection_check`; check API version compatibility.",
+        )
+    share_url = result.get("url") or app_url_for("share", share_id, ctx)
+    return OutcomeResult(
+        share_url=share_url,
+        extra={
+            "share_id": share_id,
+            "share_type": "study",
+            "study_id": result.get("study_id", target_id),
+            "version": result.get("version"),
+            "views": result.get("views"),
+            "show_author": result.get("show_author"),
+        },
     )
 
 
@@ -191,6 +281,15 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
             # A `dep_` id is a live deployment or a paper run; the prefix
             # cannot say which, so the venue block decides (§3.7).
             target_type = "paper"
+    if target_type == "study":
+        return _share_study(target_id, args, ctx)
+    if _given(args, ("views", "show_author")):
+        raise KeelError(
+            "`views` and `show_author` are for a study share (stu_*); nothing was published.",
+            error_code="invalid_arguments",
+            exit_code=2,
+            suggestion="Omit them for a strategy, backtest or paper run share.",
+        )
     allowed = {"strategy", "backtest"} | ({"paper"} if paper_targets else set())
     if target_type not in allowed:
         raise KeelError(
@@ -268,7 +367,7 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
         body["pin_latest_backtest"] = True
         try:
             result = client.post(
-                f"/v1/strategies/{target_id}/share-links", json=body, **_WAIT_FOR_CARD
+                f"/v1/strategies/{seg(target_id)}/share-links", json=body, **_WAIT_FOR_CARD
             )
         except KeelError:
             raise
@@ -286,7 +385,7 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
             body["expires_at"] = expires_at
         try:
             result = client.post(
-                f"/v1/backtests/{target_id}/share-link", json=body, **_WAIT_FOR_CARD
+                f"/v1/backtests/{seg(target_id)}/share-link", json=body, **_WAIT_FOR_CARD
             )
         except KeelError:
             raise
@@ -307,19 +406,16 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
             suggestion="Run `keel_connection_check`; check API version compatibility.",
         )
 
-    # Look up referral code (best effort) so the share URL drives credit
-    # back to the creator. Failures here MUST NOT block the response.
-    ref_code = ""
-    try:
-        identity = client.get("/v1/me")
-        ref_code = (identity or {}).get("referral_code") or (identity or {}).get("ref") or ""
-    except Exception:  # noqa: BLE001
-        # Identity probe is purely cosmetic for the share URL.
-        ref_code = ""
+    # The creator's referral code comes back on the create response (Q-2076),
+    # so the share URL drives credit back to the creator. It used to be read
+    # from GET /v1/me, which never carried one, and GET /v1/referrals/code
+    # needs referral.read, which a hosted-connector token does not hold. An
+    # older keel-api omits the field: the URL then carries no ref, as before.
+    ref_code = result.get("referral_code") or ""
 
     share_url = app_url_for("share", share_id, ctx)
     if ref_code:
-        share_url = f"{share_url}?ref={ref_code}"
+        share_url = f"{share_url}?{urlencode({'ref': ref_code})}"
 
     extra: dict[str, Any] = {
         "share_id": share_id,
@@ -383,6 +479,16 @@ SHARE_INPUT_SCHEMA: dict[str, Any] = {
                 "link stops working. Default: no expiry."
             ),
         },
+        # A study (`stu_*`): its snapshot, never its source (Research 08 §3.1).
+        "views": {
+            "type": "array",
+            "items": {"type": "integer", "minimum": 0},
+            "description": "For a study (stu_*): the view indexes the snapshot shows. Default: every view.",
+        },
+        "show_author": {
+            "type": "boolean",
+            "description": "For a study (stu_*): show your name on the snapshot. Default: false.",
+        },
     },
 }
 
@@ -434,6 +540,7 @@ SHARE_CREATE = register(
     OutcomeTool(
         name="keel_share_create",
         required_action="sharing.create",
+        rate_tier="mutation",
         cli_path=("share", "create"),
         toolset="share",
         # grounded-in: share_create.py module docstring (spec §4 + §8 sharing

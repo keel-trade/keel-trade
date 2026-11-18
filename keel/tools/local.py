@@ -224,6 +224,8 @@ def strategy_validate(
     component_lock: dict[str, int] | None = None,
     *,
     pre_save: bool = False,
+    expansions=None,
+    consumer_id: str | None = None,
     **kwargs,
 ) -> dict[str, Any]:
     """Validate a strategy source — full 9-pass validation.
@@ -250,7 +252,14 @@ def strategy_validate(
             "type_flow": [],
         }
 
-    result = validate_strategy(parsed, lock=component_lock, pre_save=pre_save, source=source)
+    result = validate_strategy(
+        parsed,
+        lock=component_lock,
+        pre_save=pre_save,
+        source=source,
+        expansions=expansions,
+        consumer_id=consumer_id,
+    )
 
     errors = [i.to_dict() for i in result.errors]
     warnings = [i.to_dict() for i in result.warnings]
@@ -279,6 +288,10 @@ def strategy_validate(
         "component_lock": component_lock,
         "globals": globals_dict,
         "universe": universe_dict,
+        # A screen's per-output unit sentences (`ValidationResult.units`):
+        # the words an agent quotes for a threshold, never invents. Empty
+        # for a strategy.
+        "units": list(getattr(result, "units", None) or []),
     }
 
 
@@ -1062,7 +1075,13 @@ def _universe_to_dict(uni) -> dict[str, Any]:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
-def strategy_lock_generate(source: str) -> dict[str, Any]:
+def strategy_lock_generate(
+    source: str,
+    *,
+    expansions=None,
+    consumer_id: str | None = None,
+    component_lock: dict[str, int] | None = None,
+) -> dict[str, Any]:
     """Generate a component lock from a strategy source: keel-api's ``POST /v1/strategies/lock/generate``, offline.
 
     ``evolve_lock({}, parsed)`` — the ONE owner of lock derivation
@@ -1084,7 +1103,14 @@ def strategy_lock_generate(source: str) -> dict[str, Any]:
     from pipeline_engine.base.lock import evolve_lock
     from pipeline_engine.dsl import parse_strategy
 
-    return {"component_lock": evolve_lock({}, parse_strategy(source))}
+    parsed = parse_strategy(source)
+    if expansions is not None:
+        from pipeline_engine.pipeline.link import link_uses
+
+        parsed = link_uses(
+            parsed, expansions, consumer_id=consumer_id, consumer_lock=component_lock
+        )
+    return {"component_lock": evolve_lock(dict(component_lock or {}), parsed)}
 
 
 def strategy_lock_status(

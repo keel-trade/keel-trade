@@ -13,3 +13,5 @@ Three separate layers:
 - **Simulation framing** — capital model, withdrawal cadence, multi-account aggregation, daily reset, "what if I added $X each week". **NOT in backtest scope today.**
 
 A "simulation framing" question (fresh capital per day, daily P&L decomposition, profit withdrawal model, per-week comparisons) is answered from **one** backtest over the full window: the decomposition comes from its trades list and equity curve. N short backtests answer a different question and give wrong numbers — each short window gets its own warmup and capital base.
+
+- Reuse sequence: search reusable blocks, successfully preview the chosen output, then propose the COMPLETE source with the exact previewed reference. Read evidence first. `USE_SOURCE_NOT_SHOWN` means choose a shown-source block; `USE_AS_MISMATCH` means choose a compatible output or add a conversion. Never detach to evade a refusal, invent a reference, or silently upgrade a version pin.

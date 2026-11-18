@@ -311,3 +311,80 @@ def test_append_only_reasons_describe_adding_not_replacing():
         low = why.lower()
         assert any(w in low for w in ("new", "append", "adds", "creates")), (name, why)
         assert "undo" not in low and "revers" not in low, (name, why)
+
+
+# ── Every served family carries its justification rows (Q-7641) ──────────
+# The ChatGPT submission (`projects/fable/agent-first-build/submission/
+# build_chatgpt_submission.py`) is built on the WIDEST listed surface a host
+# is served: paper, screens and research all on. Each family's hints and rows
+# are held in step here, on a real server, so a new listed family without its
+# rows reds in the SDK lane rather than at submission time.
+#
+# SEED (run 2026-11-16): delete the keel_research_get row from
+#   LISTED_RESEARCH_ANNOTATION_JUSTIFICATIONS — the all-on arm reds naming
+#   keel_research_get; the research-off arms stay green.
+
+
+def _served_listed_surface(*, paper: bool, screens: bool, research: bool) -> dict:
+    import asyncio
+
+    from keel.mcp.server import create_server
+    from keel.tools.outcomes._annotation_justifications import (
+        served_append_only,
+        served_destructive_tools,
+        served_justifications,
+        served_open_world_tools,
+    )
+    from keel.tools.outcomes._toolsets import (
+        listed_host_context,
+        listed_profile_tools,
+        research_served_context,
+    )
+
+    env = {
+        SERVER_PROFILE_ENV: "listed",
+        "KEEL_EXECUTION_MODE": "hosted",
+        "KEEL_LISTED_PAPER_HOSTS": "chatgpt" if paper else "",
+        "KEEL_LISTED_SCREENS_HOSTS": "chatgpt" if screens else "",
+        "KEEL_LISTED_PAPER": "",
+    }
+    with (
+        mock.patch.dict(os.environ, env),
+        listed_host_context("chatgpt"),
+        research_served_context(research),
+    ):
+        tools = {t.name: t for t in asyncio.run(create_server().list_tools())}
+        return {
+            "served": listed_profile_tools(),
+            "tools": tools,
+            "ann": {n: effective_annotations(OUTCOMES[n]) for n in tools},
+            "rows": served_justifications(),
+            "append_only": served_append_only(),
+            "destructive": served_destructive_tools(),
+            "open_world": served_open_world_tools(),
+        }
+
+
+@pytest.mark.parametrize(
+    ("paper", "screens", "research", "count"),
+    [(True, True, True, 38), (True, True, False, 35), (False, False, False, 29)],
+)
+def test_each_served_listed_surface_follows_the_annotation_policy(paper, screens, research, count):
+    s = _served_listed_surface(paper=paper, screens=screens, research=research)
+    served, ann = s["served"], s["ann"]
+    # Non-vacuity: the server serves exactly the listed set, of the pinned size.
+    assert set(s["tools"]) == served and len(served) == count, sorted(served)
+    assert set(s["rows"]) == served, sorted(set(served) ^ set(s["rows"]))
+    assert all(all(f.strip() for f in row) for row in s["rows"].values())
+    assert {n for n, a in ann.items() if a["openWorldHint"]} == s["open_world"]
+    assert {n for n, a in ann.items() if a["destructiveHint"]} == s["destructive"]
+    writes = {n for n, a in ann.items() if not a["readOnlyHint"]}
+    assert set(s["append_only"]) == writes - s["destructive"]
+    for why in s["append_only"].values():
+        low = why.lower()
+        assert any(w in low for w in ("new", "append", "adds", "creates")), why
+        assert "undo" not in low and "revers" not in low, why
+    # Control arm: research off serves none of the research tools or rows.
+    research_tools = {"keel_research_plan", "keel_research_run", "keel_research_get"}
+    assert (research_tools <= set(s["rows"])) is research
+    assert not (research_tools & set(s["rows"])) or research

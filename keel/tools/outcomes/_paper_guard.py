@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from keel.api_path import seg
 from keel.errors import KeelError, NotFoundError
 
 
@@ -34,7 +35,7 @@ def other_class_refusal(client: Any, deployment_id: str, *, this_class: str) -> 
     if this_class not in _CONTROL_TOOL:
         raise ValueError(f"unknown capital class {this_class!r}")
     try:
-        row = client.get(f"/v1/deployments/{deployment_id}", headers=AGENT_TELEMETRY_HEADERS)
+        row = client.get(f"/v1/deployments/{seg(deployment_id)}", headers=AGENT_TELEMETRY_HEADERS)
     except NotFoundError:
         return None
     venue = row.get("venue") if isinstance(row, dict) else None

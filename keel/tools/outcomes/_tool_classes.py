@@ -37,6 +37,67 @@ TOOL_CLASS_NAMES: tuple[str, ...] = get_args(ToolClass)
 #: Class per CANONICAL tool name. Add a row when a tool is registered; the
 #: test names any tool without one.
 _CANONICAL_CLASSES: dict[str, ToolClass] = {
+    # Screeners spec 06: full-profile additions; existing classes stay fixed.
+    "keel_blocks_get": "discovery",
+    "keel_blocks_search": "discovery",
+    "keel_view_describe": "discovery",
+    "keel_screener_action": "build",
+    "keel_screener_copy": "build",
+    "keel_screener_view_set": "build",
+    "keel_use_detach": "build",
+    "keel_use_upgrade": "build",
+    "keel_use_preview": "inspect",
+    "keel_screener_list": "inspect",
+    "keel_screener_passing": "inspect",
+    "keel_screener_view": "inspect",
+    "keel_screener_run": "run",
+    "keel_screener_refresh": "run",
+    "keel_screener_publish": "share",
+    "keel_screener_unpublish": "share",
+    "keel_screener_describe": "share",
+    "keel_screener_follow": "share",
+    "keel_screener_follow_view_set": "share",
+    # Research spec 07 §5.1 (10 R10-07-1): every research OutcomeTool, the
+    # cli_only verbs too.
+    **dict.fromkeys(
+        (
+            "keel_research_plan",
+            "keel_research_view_set",
+            "keel_research_note",
+            "keel_research_make_signal",
+            "keel_research_add",
+            "keel_research_save",
+            "keel_research_copy",
+            "keel_research_project",
+            "keel_research_set_aside",
+            "keel_research_restore",
+            "keel_research_archive",
+            "keel_research_delete",
+        ),
+        "build",
+    ),
+    **dict.fromkeys(
+        (
+            "keel_research_run",
+            "keel_research_run_draft",
+            "keel_research_resume",
+            "keel_research_retry",
+            "keel_research_cancel",
+        ),
+        "run",
+    ),
+    **dict.fromkeys(
+        (
+            "keel_research_get",
+            "keel_research_watch",
+            "keel_research_list",
+            "keel_research_data",
+            "keel_research_shares",
+        ),
+        "inspect",
+    ),
+    "keel_research_brief": "orientation",
+    "keel_research_steps": "discovery",
     # orientation: what is Keel, what does my account have, am I connected
     "keel_help": "orientation",
     "keel_account_status": "orientation",

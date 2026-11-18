@@ -13,6 +13,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from keel.api_path import seg
 from keel.errors import KeelError, NotFoundError
 
 from . import register
@@ -40,6 +41,17 @@ _CANONICAL_METRIC_KEYS = (
     "positions",
     "position_win_rate",
     "position_profit_factor",
+    # The two halves of total_trades (R-009): closed_trades == 0 is why a
+    # run with trades has no win rate.
+    "closed_trades",
+    "open_trades",
+    # The positions split by side (R-003): positions_long + positions_short
+    # == positions; flips; each side's P&L after fees, before funding.
+    "positions_long",
+    "positions_short",
+    "flips",
+    "pnl_long",
+    "pnl_short",
     "resizes",
     "avg_holding_duration",
     "turnover",
@@ -173,7 +185,7 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
     # round trip, then attach the presigned `results.json` URL when
     # available.
     try:
-        detail = client.get(f"/v1/backtests/{backtest_id}")
+        detail = client.get(f"/v1/backtests/{seg(backtest_id)}")
     except NotFoundError:
         raise NotFoundError(
             f"Backtest {backtest_id} not found.",
@@ -233,7 +245,7 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
 
     if status in {"completed", "succeeded"} and not is_listed_profile():
         try:
-            results = client.get(f"/v1/backtests/{backtest_id}/results")
+            results = client.get(f"/v1/backtests/{seg(backtest_id)}/results")
             if isinstance(results, dict):
                 if results.get("presigned_url"):
                     extra["results_url"] = results["presigned_url"]
@@ -262,7 +274,7 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
         # the numbers. Asked for explicitly, so a refusal (a bound outside the
         # run names its window; a run still running) is the result, not a
         # silently dropped clause.
-        answer = client.get(f"/v1/backtests/{backtest_id}/slice", **slice_params)
+        answer = client.get(f"/v1/backtests/{seg(backtest_id)}/slice", **slice_params)
         if isinstance(answer, dict) and isinstance(answer.get("slice"), dict):
             extra["slice"] = answer["slice"]
     if args.get("periods"):

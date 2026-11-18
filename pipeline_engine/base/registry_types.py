@@ -261,6 +261,10 @@ class ComponentSignature:
     preserves_size: bool = False
     causal: bool = True
     factory_expansion: list[dict[str, Any]] | None = None
+    # Fixed output unit, or "preserve" for a dimension-preserving transform.
+    unit: str | None = None
+    # {"param": name, "values": {parameter_value: unit}}.
+    unit_by_param: dict[str, Any] | None = None
 
     def accepts(self, output_type: type) -> bool:
         """Can this component accept the given output type?"""
@@ -872,6 +876,11 @@ def load_registry_from_json(data: dict | str) -> None:
             record_tolerant=comp.get("record_tolerant"),
             clock_transfer=comp.get("clock_transfer"),
             population_scope=comp.get("population_scope"),
+            # A screen output's unit (screeners Table 1.2), keep-by-omission:
+            # without it the SDK's walk read every output as `unknown` while
+            # the server's read percent / rate_per_year (Q-3637).
+            unit=comp.get("unit"),
+            unit_by_param=comp.get("unit_by_param"),
             # Position layer (spec 03-R62): keep-by-omission, hydrated
             # verbatim (the generated metadata already validated them).
             **_position_fields_from_json(comp),
@@ -957,6 +966,9 @@ def load_registry_from_json(data: dict | str) -> None:
                 # Version-scoped, exactly like the typing contracts above.
                 clock_transfer=ver_data.get("clock_transfer"),
                 population_scope=ver_data.get("population_scope"),
+                # Version-scoped: a later version may declare another unit.
+                unit=ver_data.get("unit"),
+                unit_by_param=ver_data.get("unit_by_param"),
                 **_position_fields_from_json(ver_data),
             )
             COMPONENT_REGISTRY[name][ver_num] = ver_sig

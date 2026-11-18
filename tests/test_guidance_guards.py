@@ -323,9 +323,10 @@ def test_every_skill_names_every_section_it_declares(capsys):
             f"{'over' if tokens > assemble.AIM_SKILL_TOKENS else 'under'})"
         )
     assert not violations, "\n".join(violations)
-    # Non-vacuity, on quantities the seed cannot move: eight skills, each
-    # composing to a real body, each declaring at least one section.
-    assert len(BUNDLED_SKILLS) == 8
+    # Non-vacuity, on quantities the seed cannot move: nine skills (eight,
+    # plus screen-creation since screeners L13), each composing to a real
+    # body, each declaring at least one section.
+    assert len(BUNDLED_SKILLS) == 9
     for name in BUNDLED_SKILLS:
         assert len(compose_skill(name, profile="full")) > 500, f"{name} did not compose"
         assert load_skill(name).knowledge, f"{name} declares no sections — nothing to conserve"

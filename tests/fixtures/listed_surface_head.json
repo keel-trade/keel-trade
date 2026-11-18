@@ -4,7 +4,7 @@
     {
       "contents": [
         {
-          "length": 171605,
+          "length": 172859,
           "meta": {
             "ui": {
               "csp": {
@@ -15,7 +15,7 @@
             }
           },
           "mime_type": "text/html;profile=mcp-app",
-          "sha256": "27d678e737171b60045f98c71340620462fde90083db2c46dd77117c04897394"
+          "sha256": "651d67c33525c2f75743932efbdcd845733f144b36612aa5a2eaa3e82f56ca67"
         }
       ],
       "resource": {
@@ -42,7 +42,7 @@
     {
       "contents": [
         {
-          "length": 171605,
+          "length": 172859,
           "meta": {
             "openai/widgetCSP": {
               "connect_domains": [],
@@ -56,7 +56,7 @@
             "openai/widgetPrefersBorder": false
           },
           "mime_type": "text/html+skybridge",
-          "sha256": "27d678e737171b60045f98c71340620462fde90083db2c46dd77117c04897394"
+          "sha256": "651d67c33525c2f75743932efbdcd845733f144b36612aa5a2eaa3e82f56ca67"
         }
       ],
       "resource": {
@@ -86,7 +86,7 @@
     {
       "contents": [
         {
-          "length": 167787,
+          "length": 168708,
           "meta": {
             "ui": {
               "csp": {
@@ -97,7 +97,7 @@
             }
           },
           "mime_type": "text/html;profile=mcp-app",
-          "sha256": "65e41d4351ef78559a68b3a9c709fbfe264a95baf933349eec6f250d7d56b47a"
+          "sha256": "45272b9c5a17e578655fd78d88e4d8d5c6fea8ff850a561329498e3d1cc5290e"
         }
       ],
       "resource": {
@@ -124,7 +124,7 @@
     {
       "contents": [
         {
-          "length": 167787,
+          "length": 168708,
           "meta": {
             "openai/widgetCSP": {
               "connect_domains": [],
@@ -138,7 +138,7 @@
             "openai/widgetPrefersBorder": false
           },
           "mime_type": "text/html+skybridge",
-          "sha256": "65e41d4351ef78559a68b3a9c709fbfe264a95baf933349eec6f250d7d56b47a"
+          "sha256": "45272b9c5a17e578655fd78d88e4d8d5c6fea8ff850a561329498e3d1cc5290e"
         }
       ],
       "resource": {
@@ -168,7 +168,7 @@
     {
       "contents": [
         {
-          "length": 158625,
+          "length": 163268,
           "meta": {
             "ui": {
               "csp": {
@@ -179,7 +179,7 @@
             }
           },
           "mime_type": "text/html;profile=mcp-app",
-          "sha256": "2bc9121537e31336eecdb4900ac7729dcec9ff0fa1c4637dbe0b0b54a024d4ce"
+          "sha256": "781bad8f80d44fda8c51491b7833ce70a1384f1f93b76fb64aa6d9a89a3ed9b4"
         }
       ],
       "resource": {
@@ -206,7 +206,7 @@
     {
       "contents": [
         {
-          "length": 158625,
+          "length": 163268,
           "meta": {
             "openai/widgetCSP": {
               "connect_domains": [],
@@ -220,7 +220,7 @@
             "openai/widgetPrefersBorder": false
           },
           "mime_type": "text/html+skybridge",
-          "sha256": "2bc9121537e31336eecdb4900ac7729dcec9ff0fa1c4637dbe0b0b54a024d4ce"
+          "sha256": "781bad8f80d44fda8c51491b7833ce70a1384f1f93b76fb64aa6d9a89a3ed9b4"
         }
       ],
       "resource": {
@@ -250,7 +250,7 @@
     {
       "contents": [
         {
-          "length": 223170,
+          "length": 228210,
           "meta": {
             "ui": {
               "csp": {
@@ -261,7 +261,7 @@
             }
           },
           "mime_type": "text/html;profile=mcp-app",
-          "sha256": "e26831180cf6ee363c62c64d9b06f5fd6e9bfad08ff6253db19b9f34d3a00ffe"
+          "sha256": "19e88a978d41423475cd9c6d5b3fd4fb52b975b576c0478825501fd295b52344"
         }
       ],
       "resource": {
@@ -288,7 +288,7 @@
     {
       "contents": [
         {
-          "length": 223170,
+          "length": 228210,
           "meta": {
             "openai/widgetCSP": {
               "connect_domains": [],
@@ -302,7 +302,7 @@
             "openai/widgetPrefersBorder": false
           },
           "mime_type": "text/html+skybridge",
-          "sha256": "e26831180cf6ee363c62c64d9b06f5fd6e9bfad08ff6253db19b9f34d3a00ffe"
+          "sha256": "19e88a978d41423475cd9c6d5b3fd4fb52b975b576c0478825501fd295b52344"
         }
       ],
       "resource": {
@@ -330,7 +330,7 @@
       "uri": "ui://keel/cards/strategy.openai.html"
     }
   ],
-  "instructions": "Keel builds crypto strategies on Hyperliquid; use it for crypto strategy, backtest or portfolio tasks. keel_account_status reports identity, quota and capabilities when a task needs them. Omitted arguments take platform defaults; a run's result names its window and declarations. When a result carries `view`, the card the host draws already shows names, ids and links — explain it rather than repeat it. One run: keel_backtest_summarize; several: keel_backtest_compare once.\n\nNew strategy: keel_components_search → keel_components_get_many → keel_strategy_compose(dry_run=true) until clean → save → keel_backtest_run; an edit to it saves its next version, not a fork.\n\nRuns and compute are metered per period; keel_plan_usage reports what is left and spends nothing; a plan-limit refusal is not retryable.\n\nThis connector is for research and backtests. It cannot place orders, move funds or connect wallets; strategies that are running are managed in the Keel web app (keel_app_link).",
+  "instructions": "Keel builds crypto strategies on Hyperliquid; use it for crypto strategy, backtest or portfolio tasks. keel_account_status reports identity, quota and capabilities when a task needs them. Omitted arguments take platform defaults; a run's result names its window and declarations. When a result carries `view`, the card the host draws already shows names, ids and links — explain it rather than repeat it. One run: keel_backtest_summarize; several: keel_backtest_compare once.\n\nNew strategy: keel_components_search → keel_components_get_many → keel_strategy_compose(dry_run=true) until clean → save → keel_backtest_run; an edit to it saves its next version, not a fork.\n\nPlan limits name the user's numbers, the reset, and which plans include more; a plan-limit refusal is not retryable, and prices are not part of it. keel_plan_usage answers at any time.\n\nThis connector is for research and backtests. It cannot place orders, move funds or connect wallets; strategies that are running are managed in the Keel web app (keel_app_link).",
   "tool_count": 29,
   "tools": [
     {
@@ -860,7 +860,7 @@
         "readOnlyHint": false,
         "title": "Run Backtest"
       },
-      "description": "Submit a NEW backtest run of a strategy — a finished run's result is `keel_backtest_summarize`, a running one's wait `keel_backtest_watch`. Runs server HEAD unless `version` pins one. Defaults: the window is the platform's default for the strategy's timeframe, to today UTC (`end_date` exclusive) — and a realistic cost model (starting capital, ~4.5 bps fees + ~4.5 bps slippage); the result names the window, any start move, and the declarations and pipeline that ran. Returns `run_id`; with `wait=true` (the default) also `summary_metrics` and the tearsheet link, or `status_url` on a polling timeout. Each call spends one run of quota; `keel_plan_usage` reports what is left.",
+      "description": "Submit a NEW backtest run of a strategy — a finished run's result is `keel_backtest_summarize`, a running one's wait `keel_backtest_watch`. Runs server HEAD unless `version` pins one. Defaults: the window is the platform's default for the strategy's timeframe, to today UTC (`end_date` exclusive) — and a realistic cost model (starting capital, ~4.5 bps fees + ~4.5 bps slippage); the result names the window, any start move, and the declarations and pipeline that ran. Returns `run_id`; with `wait=true` (the default) also `summary_metrics` and the tearsheet link, or `status_url` on a polling timeout. Uses one backtest from the plan's allowance; see `keel_plan_usage`.",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -1036,6 +1036,9 @@
             "type": "object"
           },
           "few_fills_note": {
+            "type": "string"
+          },
+          "floor_notice": {
             "type": "string"
           },
           "good_result": {
@@ -1263,6 +1266,30 @@
           "share_url": {
             "type": ["string", "null"]
           },
+          "sides": {
+            "description": "Positions by side: long and short counts (they sum to the position count; one still open at the end counts on its side), flips (positions that ended by switching direction on the same bar; each adds one to both sides), and each side's P&L after fees and before carry, in account currency, with open positions marked at the last price. Absent on runs recorded before these were stored.",
+            "properties": {
+              "flips": {
+                "type": "integer"
+              },
+              "line": {
+                "type": "string"
+              },
+              "pnl_long": {
+                "type": "number"
+              },
+              "pnl_short": {
+                "type": "number"
+              },
+              "positions_long": {
+                "type": "integer"
+              },
+              "positions_short": {
+                "type": "integer"
+              }
+            },
+            "type": "object"
+          },
           "slice": {
             "description": "Part of this run as it ran, at the run's bar clock: return, P&L on `capital`, max drawdown (≤ 0) and bars over the slice; positions held at its start carry over.",
             "properties": {
@@ -1439,6 +1466,9 @@
               },
               "seq": {
                 "type": "integer"
+              },
+              "sides_line": {
+                "type": "string"
               },
               "size": {
                 "enum": ["receipt", "evidence"]
@@ -1729,6 +1759,9 @@
           "few_fills_note": {
             "type": "string"
           },
+          "floor_notice": {
+            "type": "string"
+          },
           "good_result": {
             "type": "object"
           },
@@ -1954,6 +1987,30 @@
           "share_url": {
             "type": ["string", "null"]
           },
+          "sides": {
+            "description": "Positions by side: long and short counts (they sum to the position count; one still open at the end counts on its side), flips (positions that ended by switching direction on the same bar; each adds one to both sides), and each side's P&L after fees and before carry, in account currency, with open positions marked at the last price. Absent on runs recorded before these were stored.",
+            "properties": {
+              "flips": {
+                "type": "integer"
+              },
+              "line": {
+                "type": "string"
+              },
+              "pnl_long": {
+                "type": "number"
+              },
+              "pnl_short": {
+                "type": "number"
+              },
+              "positions_long": {
+                "type": "integer"
+              },
+              "positions_short": {
+                "type": "integer"
+              }
+            },
+            "type": "object"
+          },
           "slice": {
             "description": "Part of this run as it ran, at the run's bar clock: return, P&L on `capital`, max drawdown (≤ 0) and bars over the slice; positions held at its start carry over.",
             "properties": {
@@ -2130,6 +2187,9 @@
               },
               "seq": {
                 "type": "integer"
+              },
+              "sides_line": {
+                "type": "string"
               },
               "size": {
                 "enum": ["receipt", "evidence"]
@@ -2424,6 +2484,9 @@
           "few_fills_note": {
             "type": "string"
           },
+          "floor_notice": {
+            "type": "string"
+          },
           "good_result": {
             "type": "object"
           },
@@ -2649,6 +2712,30 @@
           "share_url": {
             "type": ["string", "null"]
           },
+          "sides": {
+            "description": "Positions by side: long and short counts (they sum to the position count; one still open at the end counts on its side), flips (positions that ended by switching direction on the same bar; each adds one to both sides), and each side's P&L after fees and before carry, in account currency, with open positions marked at the last price. Absent on runs recorded before these were stored.",
+            "properties": {
+              "flips": {
+                "type": "integer"
+              },
+              "line": {
+                "type": "string"
+              },
+              "pnl_long": {
+                "type": "number"
+              },
+              "pnl_short": {
+                "type": "number"
+              },
+              "positions_long": {
+                "type": "integer"
+              },
+              "positions_short": {
+                "type": "integer"
+              }
+            },
+            "type": "object"
+          },
           "slice": {
             "description": "Part of this run as it ran, at the run's bar clock: return, P&L on `capital`, max drawdown (≤ 0) and bars over the slice; positions held at its start carry over.",
             "properties": {
@@ -2825,6 +2912,9 @@
               },
               "seq": {
                 "type": "integer"
+              },
+              "sides_line": {
+                "type": "string"
               },
               "size": {
                 "enum": ["receipt", "evidence"]
@@ -4152,7 +4242,7 @@
         "readOnlyHint": true,
         "title": "Get Plan Usage"
       },
-      "description": "Report the org's own Keel plan and its backtest usage this period — auth, identity and visible tools are `keel_account_status`. It returns the plan name, the period, and for backtest runs and backtest compute seconds the limit, the used and remaining counts, and the reset instant. It changes nothing and spends no quota.",
+      "description": "Report the org's own Keel plan, its limits and which plans include more — auth, identity and visible tools are `keel_account_status`. It covers backtests and compute, the paper and live timeframe, and screens and studies where served — each with its numbers and reset instant. It changes nothing and spends no quota.",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {},
@@ -6342,7 +6432,7 @@
         "readOnlyHint": true,
         "title": "Search Strategies"
       },
-      "description": "Search and list the org's strategies — the entry point for an EXISTING strategy, before `keel_strategy_get`. It matches `query` (name substring) and pages with `limit` and `cursor`; each result carries the strategy id, name and last-updated time. The Keel Library's published entries are `keel_library_list`; components are `keel_components_search`.",
+      "description": "Lists the org's strategies, the entry point for an existing one before `keel_strategy_get`. It matches `query` (name substring) and pages with `limit` and `cursor` (the prior result's `next_cursor`; none on the last page). Each result carries id, name and last-updated time. Library entries are `keel_library_list`; components are `keel_components_search`.",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {

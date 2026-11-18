@@ -19,6 +19,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from keel.api_path import seg
 from keel.errors import KeelError
 
 from . import register
@@ -32,7 +33,7 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
     # Detail mode — one account.
     if account_id:
         try:
-            account = client.get(f"/v1/accounts/{account_id}")
+            account = client.get(f"/v1/accounts/{seg(account_id)}")
         except KeelError:
             raise
         except Exception as e:  # noqa: BLE001
@@ -106,6 +107,9 @@ ACCOUNTS_LIST = register(
             "strategy/deployment) — read-only enumeration to find the account "
             "you need. Pass an `account_id` to fetch detail for a single "
             "account; omit it to list them all. "
+            "When present, pm reports independent reporting NAV, eligible capital, "
+            "and order-specific capacity availability. Preserve null as unknown "
+            "and decimal strings exactly; these values do not authorize trading. "
             "Do NOT use to authorize a new account — that's a web-only "
             "flow where the user signs an EIP-712 challenge with their "
             "wallet. "

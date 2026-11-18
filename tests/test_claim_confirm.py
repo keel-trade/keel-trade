@@ -53,6 +53,9 @@ def _mock_lists(*, anon_strategies=1, anon_backtests=2, account_strategies=0):
             return httpx.Response(
                 200, json={"data": [{"id": f"s{i}"} for i in range(anon_strategies)]}
             )
+        # The has-work read counts screens too: the list defaults to
+        # strategies, so it asks for every kind (founder 2026-11-03).
+        assert request.url.params.get("kind") == "all"
         return httpx.Response(
             200, json={"data": [{"id": f"a{i}"} for i in range(account_strategies)]}
         )

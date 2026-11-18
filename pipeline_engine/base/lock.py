@@ -201,6 +201,46 @@ def evolve_lock(
     return dict(sorted(lock.items()))
 
 
+def source_resolve_lock(
+    lock: dict[str, int] | None,
+    strategy: StrategyFile,
+) -> dict[str, int] | None:
+    """The lock a STORED strategy's source resolves under, given its blob lock.
+
+    A blob's ``component_versions`` (the canonical lock since the 2026-06-29
+    consolidation) records one pin per COMPILED step class. A registered
+    factory compiles as a nested Pipeline of its expansion (spec 03-R48), so
+    its own pin never reaches the blob. Only the expansion's components do
+    (03-R50). Every save therefore evolves from a factory-less base and pins
+    the factory at latest. Resolving the source under the bare blob lock
+    instead leaves the factory out of the effective registry, and the resolver
+    reports it as an unknown component (Q-3134).
+
+    This adds exactly that missing pin: each registered factory the source
+    calls that ``lock`` lacks is pinned at latest, as the save path did. Every
+    other pin is returned unchanged; nothing is dropped or upgraded. If a
+    factory's latest expansion has drifted from the blob, the source side then
+    compiles differently and the F1 gate refuses it as stale, which is the
+    honest verdict. ``None`` (a defined-latest legacy blob) stays ``None``.
+    """
+    if lock is None:
+        return None
+    from pipeline_engine.base.registry import get_latest
+    from pipeline_engine.base.registry_types import is_factory
+    from pipeline_engine.registry_loader import ensure_registry_loaded
+
+    ensure_registry_loaded()
+
+    resolved = dict(lock)
+    for ref in walk_component_refs(strategy):
+        if ref.name in resolved:
+            continue
+        sig = get_latest(ref.name)
+        if sig is not None and is_factory(sig):
+            resolved[ref.name] = sig.version
+    return resolved
+
+
 def upgrade_lock_entries(
     lock: dict[str, int],
     upgrades: dict[str, int],
@@ -347,6 +387,7 @@ __all__ = [
     "LockError",
     "check_lock_drift",
     "evolve_lock",
+    "source_resolve_lock",
     "upgrade_lock_entries",
     "walk_component_refs",
 ]

@@ -52,6 +52,7 @@ from pipeline_engine.dsl.parser import DSLParseError, parse_strategy
 from pipeline_engine.dsl.spec import (
     ExecutionSpec,
     GlobalsSpec,
+    OutputsSpec,
     ParallelSpec,
     PipelineSpec,
     SourceLocation,
@@ -66,6 +67,15 @@ class EditError(Exception):
 
 class SpanNotFoundError(EditError):
     """The requested declaration / step / argument has no span in the source."""
+
+
+class AmbiguousPathError(EditError):
+    """The path names a variable, factory or branch key the source defines twice (Q-7153).
+
+    The engine uses the last definition and the source shows both, so an edit
+    by this path cannot name one place; the edit is refused instead of
+    guessing. Rename or delete one definition first (NAME_DEFINED_TWICE).
+    """
 
 
 class EditEquivalenceError(EditError):
@@ -214,7 +224,7 @@ def build_span_index(source: str) -> SpanIndex:
                     _walk_pipeline_call(node.value, path, idx, off, source)
         elif isinstance(node, ast.Expr) and isinstance(node.value, ast.Call):
             cname = _call_name(node.value)
-            if cname in ("Globals", "Universe", "Execution"):
+            if cname in ("Globals", "Universe", "Execution", "Outputs"):
                 key = cname.lower()
                 idx.decls[key] = off.span(node.value)
                 idx.decl_calls[key] = _call_spans(node.value, off, source)
@@ -299,6 +309,13 @@ def _resolve_steps_list(file: StrategyFile, container_path: str) -> list:
     cur: Any = None
     i = 0
     kind, arg = tokens[0]
+    if kind in ("factory", "var"):
+        pool = file.factories if kind == "factory" else file.variables
+        if sum(1 for d in pool if d.name == arg) > 1:
+            raise AmbiguousPathError(
+                f"path {container_path!r}: {'factory' if kind == 'factory' else 'variable'} "
+                f"{arg!r} is defined more than once, so the path names two places"
+            )
     if kind == "factory":
         match = next((f for f in file.factories if f.name == arg), None)
         if match is None:
@@ -326,6 +343,11 @@ def _resolve_steps_list(file: StrategyFile, container_path: str) -> list:
         elif kind == "branch":
             if not isinstance(cur, ParallelSpec) or arg not in cur.branches:
                 raise SpanNotFoundError(f"path {container_path!r}: no branch {arg!r}")
+            if arg in cur.duplicate_keys:
+                raise AmbiguousPathError(
+                    f"path {container_path!r}: branch key {arg!r} is written more than once "
+                    "in its block, so the path names two places"
+                )
             cur = cur.branches[arg]
         else:
             raise SpanNotFoundError(f"path {container_path!r}: {kind} only allowed first")
@@ -357,8 +379,18 @@ def _resolve_step_node(file: StrategyFile, step_path: str) -> tuple[list, int, A
     return steps, i, steps[i]
 
 
-_DECL_ATTRS = {"globals": "globals_", "universe": "universe", "execution": "execution"}
-_DECL_TYPES = {"globals": GlobalsSpec, "universe": UniverseSpec, "execution": ExecutionSpec}
+_DECL_ATTRS = {
+    "globals": "globals_",
+    "universe": "universe",
+    "execution": "execution",
+    "outputs": "outputs",
+}
+_DECL_TYPES = {
+    "globals": GlobalsSpec,
+    "universe": UniverseSpec,
+    "execution": ExecutionSpec,
+    "outputs": OutputsSpec,
+}
 
 
 # ---------------------------------------------------------------------------
@@ -527,9 +559,15 @@ def _emit_declaration(decl: str, spec_obj: Any) -> str:
         globals_=spec_obj if decl == "globals" else None,
         universe=spec_obj if decl == "universe" else None,
         execution=spec_obj if decl == "execution" else None,
+        outputs=spec_obj if decl == "outputs" else None,
     )
     text = spec_to_dsl(dummy)
-    prefix = {"globals": "Globals(", "universe": "Universe(", "execution": "Execution("}[decl]
+    prefix = {
+        "globals": "Globals(",
+        "universe": "Universe(",
+        "execution": "Execution(",
+        "outputs": "Outputs(",
+    }[decl]
     for line in text.splitlines():
         if line.startswith(prefix):
             return line
@@ -734,7 +772,7 @@ def replace_declaration(source: str, decl: str, new_spec: Any) -> str:
 
 def _declaration_insert_point(idx: SpanIndex, decl: str) -> tuple[int, str, str]:
     """Choose a grammar-valid insertion point for a missing declaration."""
-    order = {"globals": 0, "universe": 1, "execution": 2}
+    order = {"globals": 0, "universe": 1, "execution": 2, "outputs": 2}
     # Prefer inserting after the closest earlier declaration.
     for earlier in sorted(
         (d for d in ("globals", "universe") if order.get(d, 9) < order[decl]),
@@ -1390,6 +1428,7 @@ def move_step(source: str, step_path: str, to_container: str, index: int) -> str
 
 
 __all__ = [
+    "AmbiguousPathError",
     "EditEquivalenceError",
     "EditError",
     "Span",

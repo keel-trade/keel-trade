@@ -422,7 +422,36 @@ RECIPES: dict[str, Recipe] = {
             known_issue=True,
             uses=("RiskSizer", "Load", "ATR", "Scale", "Store"),
         ),
+        # OB-levels P4 (founder decision 2026-10-28): LevelTarget was always an
+        # R-multiple of the distance to the STOP level, never a target AT a level,
+        # so it is renamed. The upgrade is a pure rename of the call and of one
+        # keyword (level= -> stop_level=); every other argument, comment and byte
+        # is kept, and the expansion is byte-identical (factories_test proves it).
+        Recipe(
+            id="rename.level_target",
+            component="LevelTarget",
+            head="RiskRewardTarget",
+            text=(
+                "RiskRewardTarget(stop_level=..., r=...): the same R-multiple target "
+                "under its new name (level= becomes stop_level=; identical numbers)"
+            ),
+            rule="[RiskRewardTarget(stop_level={level:str}, r={r:float})]",
+            prelude=None,
+            mode="mechanical",
+            question=None,
+            rule_name=None,
+            known_issue=False,
+            uses=("RiskRewardTarget",),
+        ),
     )
+}
+
+#: Deprecated components whose upgrade is a RENAME of the call in place
+#: (component -> (new name, {old keyword: new keyword})). They are not
+#: position-group members: each instance is its own mechanical group, and the
+#: slot-flow walk treats them as ordinary steps (they originate nothing).
+RENAMES: dict[str, tuple[str, dict[str, str]]] = {
+    "LevelTarget": ("RiskRewardTarget", {"level": "stop_level"}),
 }
 
 #: ``StopDistanceRiskSizer``'s ``level``-mode distance prelude (|close − L|,
@@ -441,7 +470,10 @@ MECHANICAL_EXITS = frozenset(
 EXITS = MECHANICAL_EXITS | {"ValueStopExitFilter"}
 MANAGERS = frozenset({"PositionStateMachine", "TradeLevelRiskExit", "ScalingPositionManager"})
 SIZERS = frozenset({"StopDistanceRiskSizer"})
-DEPRECATED = EXITS | MANAGERS | SIZERS
+#: The position-group members (04-R1): the walk's origins.
+POSITION_DEPRECATED = EXITS | MANAGERS | SIZERS
+#: Every deprecated component the planner upgrades (groups + renames).
+DEPRECATED = POSITION_DEPRECATED | frozenset(RENAMES)
 #: The trade ops of a directional market rule (``_directional_wrap``):
 #: market value x ``TradeDirection()``, then the sign test.
 _DIRECTIONAL_TRADE_OPS = ("SignalProduct", "BelowThresholdFilter")
@@ -868,7 +900,7 @@ class _Walk:
                             self.consumers.append(
                                 (path, pname, slot, self.slots.get(slot, frozenset()))
                             )
-            if step.name in DEPRECATED:
+            if step.name in POSITION_DEPRECATED:
                 return frozenset({path})
             if sig is not None and sig.category.value == "data_loader":
                 return frozenset()
@@ -1344,6 +1376,9 @@ class _Planner:
             groups.append(self._manager_group(m, members[m], shared.get(m, [])))
         for p, why in lone:
             groups.append(self._lone_group(p, why))
+        for p in instances:
+            if w.occ[p].node.name in RENAMES:
+                groups.append(self._rename_group(p))
         groups.sort(key=lambda g: _path_key(g.path))
         return UpgradePlan(groups=groups, instances=instances)
 
@@ -1438,6 +1473,24 @@ class _Planner:
                 path, None, [path], q, "StopDistanceRiskSizer reads a raw signal, not a position"
             )
         return self._manual(path, None, [path], f"{comp}'s pulse reaches no position manager")
+
+    def _rename_group(self, path: str) -> UpgradeGroup:
+        """A deprecated component upgraded by renaming its call in place.
+
+        Mechanical in every scope: the rename is byte-identical in what it
+        computes, so a rename inside a reusable block (a ``def`` factory or a
+        pipeline variable) changes every use identically and asks nothing.
+        """
+        name = self.walk.occ[path].node.name
+        to, keywords = RENAMES[name]
+        return self._group(
+            "mechanical",
+            path,
+            None,
+            [path],
+            reason=f"{name} is now {to}",
+            recipe={"kind": "rename", "path": path, "from": name, "to": to, "keywords": keywords},
+        )
 
     # ── manager groups ──
     def _manager_group(self, mpath: str, paths: list[str], shared: list[str]) -> UpgradeGroup:
@@ -2212,7 +2265,52 @@ def _render_tlre(source: str, group: UpgradeGroup, answers: Mapping[str, str]) -
     return _add_comments_above(source, _join(mcont, midx + 1), carried)
 
 
-_RENDERERS = {"psm": _render_psm, "tlre": _render_tlre}
+def _render_rename(source: str, group: UpgradeGroup, answers: Mapping[str, str]) -> str:
+    """Rename one call in place: its name and the renamed keywords, nothing else.
+
+    Byte-preserving: every other character of the call (other arguments, their
+    spelling, comments inside the call) is kept, and the result passes
+    ``dsl/edits.py``'s spec-equivalence net against the intended mutation.
+    """
+    import ast
+    import copy
+
+    r = group.recipe
+    idx = edits.build_span_index(source)
+    info = idx.steps.get(r["path"])
+    if info is None or info.name != r["from"]:
+        raise _verification_failed("locate", f"no {r['from']} call at {r['path']}")
+    text = source[info.span.start : info.span.end]
+    call = ast.parse(text, mode="eval").body
+    if not isinstance(call, ast.Call) or not isinstance(call.func, ast.Name):
+        raise _verification_failed("locate", f"{r['path']} is not a call")
+    lines = text.splitlines(keepends=True)
+    starts = [0]
+    for line in lines:
+        starts.append(starts[-1] + len(line))
+
+    def offset(lineno: int, col: int) -> int:
+        # ast columns are UTF-8 byte offsets; the text is sliced by character.
+        return starts[lineno - 1] + len(lines[lineno - 1].encode()[:col].decode())
+
+    cuts = [(offset(call.func.lineno, call.func.col_offset), len(r["from"]), r["to"])]
+    for kw in call.keywords:
+        if kw.arg in r["keywords"]:
+            cuts.append((offset(kw.lineno, kw.col_offset), len(kw.arg), r["keywords"][kw.arg]))
+    for start, length, new in sorted(cuts, reverse=True):
+        text = text[:start] + new + text[start + length :]
+    expected = copy.deepcopy(idx.file)
+    steps, i, node = edits._resolve_step_node(expected, r["path"])
+    steps[i] = ComponentRef(
+        name=r["to"],
+        params={r["keywords"].get(k, k): v for k, v in node.params.items()},
+        location=node.location,
+    )
+    new_source = source[: info.span.start] + text + source[info.span.end :]
+    return edits._verify(new_source, expected, f"rename({r['path']})")
+
+
+_RENDERERS = {"psm": _render_psm, "tlre": _render_tlre, "rename": _render_rename}
 
 
 def render_upgrade(
@@ -2226,7 +2324,10 @@ def render_upgrade(
     (:func:`apply_upgrade` adds it).
     """
     answers = parse_answers(answers)
-    for group in plan.groups:
+    # Renames first: a rename never moves a step, while a position-group
+    # rewrite may, which would leave a rename's path pointing elsewhere.
+    ordered = sorted(plan.groups, key=lambda g: g.recipe.get("kind") != "rename")
+    for group in ordered:
         if group.mode == "manual":
             continue
         kind = group.recipe.get("kind")
@@ -2445,7 +2546,8 @@ class UpgradeIssueSpec:
              applicability_override=spec.applicability, **spec.params)
 
     ``params`` are exactly the catalog template's placeholders (``manager``,
-    ``components``, ``known_issue_note``, ``mode``).
+    ``components``, ``known_issue_note``, ``mode``, ``target``: ``TradeManager``,
+    or a rename's successor).
     """
 
     location: str
@@ -2547,6 +2649,9 @@ def upgrade_issue_specs(
                     "components": ", ".join(names),
                     "known_issue_note": note,
                     "mode": g.mode,
+                    "target": g.recipe.get("to", "TradeManager")
+                    if g.recipe.get("kind") == "rename"
+                    else "TradeManager",
                 },
                 suggested_edit=SuggestedEdit(kind="upgrade", path=(g.path,), payload=payload),
                 applicability=APPLICABILITY[g.mode],
@@ -2561,8 +2666,10 @@ __all__ = [
     "Q2448",
     "Q2448_ISSUE",
     "Q2448_SUMMARY",
+    "POSITION_DEPRECATED",
     "RECIPES",
     "RECIPE_FAMILY",
+    "RENAMES",
     "Answer",
     "Choice",
     "LockChange",

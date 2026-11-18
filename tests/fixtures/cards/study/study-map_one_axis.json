@@ -1,0 +1,550 @@
+{
+  "_meta": {
+    "keel/card": {
+      "card_data": {
+        "charts": [
+          {
+            "chart": {
+              "cat": null,
+              "cats": [],
+              "enc": "b64x2",
+              "family": "Scatter",
+              "kind": "scatter",
+              "legend": null,
+              "marks": [],
+              "more_words": null,
+              "note_words": "Showing 2 of 3 points",
+              "pts": "__AA__AA",
+              "read": null,
+              "series": [],
+              "title": "Before vs after the split",
+              "x": {
+                "label": "Sharpe before the split",
+                "n": null,
+                "pos": null,
+                "ticks": [
+                  {
+                    "at": 1480,
+                    "w": "−1.00"
+                  },
+                  {
+                    "at": 3359,
+                    "w": "−0.90"
+                  }
+                ]
+              },
+              "y": {
+                "label": "Sharpe after the split",
+                "n": null,
+                "pos": null,
+                "ticks": [
+                  {
+                    "at": 872,
+                    "w": "0.80"
+                  },
+                  {
+                    "at": 2261,
+                    "w": "1.00"
+                  },
+                  {
+                    "at": 3650,
+                    "w": "1.20"
+                  }
+                ]
+              }
+            },
+            "family": "Scatter",
+            "form": "chart",
+            "index": 1,
+            "lead": null,
+            "state_words": null,
+            "thumb": null,
+            "title": "Before vs after the split",
+            "v": "Before%20vs%20after%20the%20split"
+          },
+          {
+            "chart": {
+              "bins": "__AAAAAAAAAAAAAAAAAAAA__",
+              "enc": "b64x2",
+              "family": "Distribution",
+              "kind": "dist",
+              "legend": null,
+              "marker": null,
+              "marks": [],
+              "more_words": null,
+              "note_words": null,
+              "overlays": [],
+              "read": {
+                "band": null,
+                "bins": "−0.51 to −0.48: 1|−0.48 to −0.45: 0|−0.45 to −0.42: 0|−0.42 to −0.39: 0|−0.39 to −0.36: 0|−0.36 to −0.32: 0|−0.32 to −0.29: 0|−0.29 to −0.26: 0|−0.26 to −0.23: 0|−0.23 to −0.20: 0|−0.20 to −0.17: 0|−0.17 to −0.14: 1",
+                "cells": null,
+                "ring_words": null,
+                "sel": null,
+                "sel_rows": null,
+                "withheld": null,
+                "x": null,
+                "y": []
+              },
+              "series": [],
+              "title": "Every setting",
+              "x": {
+                "label": "Sharpe",
+                "n": 12,
+                "pos": null,
+                "ticks": [
+                  {
+                    "at": 121,
+                    "w": "−0.50"
+                  },
+                  {
+                    "at": 1221,
+                    "w": "−0.40"
+                  },
+                  {
+                    "at": 2321,
+                    "w": "−0.30"
+                  },
+                  {
+                    "at": 3420,
+                    "w": "−0.20"
+                  }
+                ]
+              },
+              "y": null
+            },
+            "family": "Distribution",
+            "form": "chart",
+            "index": 2,
+            "lead": null,
+            "state_words": null,
+            "thumb": null,
+            "title": "Every setting",
+            "v": "Every%20setting"
+          },
+          {
+            "chart": {
+              "enc": "b64x2",
+              "family": "Bars",
+              "kind": "bars",
+              "legend": null,
+              "marks": [],
+              "more_words": null,
+              "note_words": null,
+              "read": {
+                "band": null,
+                "bins": null,
+                "cells": null,
+                "ring_words": null,
+                "sel": "lookback:10|lookback:5|lookback:20",
+                "sel_rows": null,
+                "withheld": null,
+                "x": "10|5|20",
+                "y": ["not measured|−0.14|−0.51"]
+              },
+              "series": [
+                {
+                  "c": 0,
+                  "hi": null,
+                  "lo": null,
+                  "name": null,
+                  "ref": false,
+                  "y": "..uoAA"
+                }
+              ],
+              "title": "The selected setting and its neighbours",
+              "x": {
+                "label": "lookback",
+                "n": 3,
+                "pos": null,
+                "ticks": [
+                  {
+                    "at": 682,
+                    "w": "10"
+                  },
+                  {
+                    "at": 2048,
+                    "w": "5"
+                  },
+                  {
+                    "at": 3412,
+                    "w": "20"
+                  }
+                ]
+              },
+              "y": {
+                "label": "Sharpe",
+                "n": null,
+                "pos": null,
+                "ticks": [
+                  {
+                    "at": 890,
+                    "w": "−0.40"
+                  },
+                  {
+                    "at": 2492,
+                    "w": "−0.20"
+                  },
+                  {
+                    "at": 4095,
+                    "w": "0.00"
+                  }
+                ]
+              },
+              "zero": 4095
+            },
+            "family": "Bars",
+            "form": "chart",
+            "index": 3,
+            "lead": null,
+            "state_words": null,
+            "thumb": null,
+            "title": "The selected setting and its neighbours",
+            "v": "The%20selected%20setting%20and%20its%20neighbours"
+          }
+        ],
+        "checks": null,
+        "chips": [],
+        "copy": {
+          "charts": "Charts",
+          "failed_cell": "Didn't finish",
+          "full_chart_in_keel": "Open in Keel for the full chart",
+          "highest": "Highest",
+          "hint_pointer": "Hover or tap the chart for values",
+          "hint_touch": "Tap the chart for values",
+          "locked": "not included in this account's plan",
+          "lowest": "Lowest",
+          "met": "met",
+          "more_charts": "",
+          "not_measured": "not measured",
+          "not_met": "not met",
+          "not_run": "Not run yet",
+          "not_valid": "Not a valid setting",
+          "numbers": "The numbers",
+          "open_bar": "Open this bar in Keel",
+          "open_chart": "Open this chart in Keel",
+          "open_setting": "Open this setting in Keel",
+          "points_in_keel": "Open in Keel to read each point",
+          "steps": "Steps",
+          "yours": "Yours"
+        },
+        "focus": null,
+        "head_words": null,
+        "key": {
+          "enc": "b64x2",
+          "family": "Curve",
+          "kind": "line",
+          "legend": null,
+          "marks": [],
+          "more_words": null,
+          "note_words": null,
+          "read": {
+            "band": null,
+            "bins": null,
+            "cells": null,
+            "ring_words": null,
+            "sel": null,
+            "sel_rows": null,
+            "withheld": null,
+            "x": "5|10|20",
+            "y": ["−0.14|not measured|−0.51"]
+          },
+          "series": [
+            {
+              "c": 0,
+              "hi": null,
+              "lo": null,
+              "name": null,
+              "ref": false,
+              "y": "__..AA"
+            }
+          ],
+          "title": "Lookback",
+          "x": {
+            "label": "lookback",
+            "n": 3,
+            "pos": "AAVV__",
+            "ticks": [
+              {
+                "at": 0,
+                "w": "5"
+              },
+              {
+                "at": 1365,
+                "w": "10"
+              },
+              {
+                "at": 4095,
+                "w": "20"
+              }
+            ]
+          },
+          "y": {
+            "label": "Sharpe",
+            "n": null,
+            "pos": null,
+            "ticks": [
+              {
+                "at": 121,
+                "w": "−0.50"
+              },
+              {
+                "at": 1221,
+                "w": "−0.40"
+              },
+              {
+                "at": 2321,
+                "w": "−0.30"
+              },
+              {
+                "at": 3420,
+                "w": "−0.20"
+              }
+            ]
+          }
+        },
+        "key_v": "Lookback",
+        "links": {
+          "chart": "https://app.usekeel.io/research/stu_000006?v={v}",
+          "select": "https://app.usekeel.io/research/stu_000006?v={v}&sel={sel}",
+          "study": "https://app.usekeel.io/research/stu_000006"
+        },
+        "method_line": "Measured with Neighbours v1, SplitCompare v1",
+        "more_charts_total": 0,
+        "more_words": null,
+        "notes": {
+          "draft": null,
+          "linked": null,
+          "not_measured": [],
+          "saved": null,
+          "stale": ["Momentum rotation v3 has a newer version, v4."]
+        },
+        "rows": null,
+        "schema": "keel.research.card-data/2",
+        "steps": [],
+        "top": null
+      },
+      "card_summary": {
+        "thumb": {
+          "facts": {
+            "enc": "b64",
+            "series": [
+              {
+                "c": 0,
+                "y": "__A"
+              }
+            ]
+          },
+          "family": "Curve",
+          "view_index": 0
+        }
+      }
+    },
+    "ui": {
+      "resourceUri": "ui://keel/cards/study.html"
+    }
+  },
+  "content": [
+    {
+      "text": "card: where the host draws Keel cards, the user sees what follows as a card carrying its name, links and ids, so a reply can call it by name; the ids and links here serve tool calls and hosts without cards.\n\nMap a strategy's settings · T · version 1 · Done · Oct 29\nUsed 0 of 400 studies; resets Dec 1. Planning, reading, saving, and runs that reuse everything or run nothing, do not count.\nDays Mar 23, 2025 to Oct 29, 2026, split Apr 17, 2026 · 6 coins: chosen by hand · costs 9 bp a fill · data as of Oct 29, 2026\nMeasured with SettingsGrid v2, SplitCompare v1, Neighbours v1.\nIn short:\n- Nearby settings as a share of yours: not measured, interval withheld: Withheld: your setting's Sharpe is not positive, so a share of it has no meaning.; sample not stated\n- Rank among nearby settings: 1, no interval; sample not stated\n- Rank agreement before and after the split: not measured, interval withheld: No interval: the values share their data.; sample not stated\nRuns: 0 runs, 0 reused, none failed · versions tried: unknown\nCharts (4): Lookback · Before vs after the split · Every setting · The selected setting and its neighbours — keel_research_get(study_id=\"stu_000006\", view=0) reads the numbers behind any of them.\nMomentum rotation v3 has a newer version, v4. Plan it: keel_research_plan(study_id=\"stu_000006\", source=\"Study(\\n    title=\\\"T\\\",\\n)\\n\\nSubjects(\\n    v3=Strategy(\\\"str_momrotpro00000000000000000@4\\\"),\\n)\\n\\nRun(\\n    days=Days(\\\"2025-03-23\\\", \\\"2026-10-29\\\"),\\n    split=Split(\\\"2026-04-17\\\"),\\n    coins=Coins([\\\"BTC\\\", \\\"ETH\\\", \\\"SOL\\\", \\\"HYPE\\\", \\\"XRP\\\", \\\"DOGE\\\"], chosen=ByHand()),\\n    costs=Costs(fee=0.00045, slippage=0.00045),\\n    data=Data(\\\"snap_6c1f0e8a2b9d4f37\\\"),\\n)\\n\\nSteps(\\n    map=SettingsGrid(axes=[SettingAxis(\\\"step[2].period\\\", [5, 10, 20], name=\\\"lookback\\\")]),\\n    split=SplitCompare(grid=\\\"map\\\"),\\n    nearby=Neighbours(grid=\\\"map\\\"),\\n)\\n\\nViews(\\n    Page(default=\\\"Lookback\\\", switch=[\\\"Lookback\\\", \\\"Before vs after the split\\\", \\\"Every setting\\\"]),\\n    Curve(\\\"Lookback\\\", of=\\\"map\\\", x=Axis(\\\"lookback\\\"), y=Raw(Control(\\\"measure\\\", \\\"sharpe\\\", options=[\\\"sharpe\\\", \\\"cagr\\\", \\\"max_drawdown\\\"])), marks=[Ring(Yours())]),\\n    Scatter(\\\"Before vs after the split\\\", of=\\\"split\\\", x=Raw(\\\"sharpe_before\\\"), y=Raw(\\\"sharpe_after\\\")),\\n    Distribution(\\\"Every setting\\\", of=\\\"map\\\", x=Raw(\\\"sharpe\\\")),\\n    Bars(\\\"The selected setting and its neighbours\\\", of=\\\"nearby\\\", x=Axis(\\\"lookback\\\"), y=Raw(\\\"sharpe\\\")),\\n)\\n\", base={\"version\": 1, \"revision\": 1, \"evidence_hash\": \"08393f8546af57ecf0cfaca649ada9d481cffc26cfa210adeb1a35b7567b77c3\"})\nView in Keel: https://app.usekeel.io/research/stu_000006",
+      "type": "text"
+    }
+  ],
+  "structuredContent": {
+    "base": {
+      "evidence_hash": "08393f8546af57ecf0cfaca649ada9d481cffc26cfa210adeb1a35b7567b77c3",
+      "revision": 1,
+      "version": 1
+    },
+    "can_retry": false,
+    "can_run": true,
+    "card_summary": {
+      "footer": {
+        "runs_words": "no new runs",
+        "subject": "Momentum rotation"
+      },
+      "footing_line": "585 days · 6 coins · 9 bp a fill",
+      "headline": {
+        "chips": [],
+        "text": ""
+      },
+      "kind_label": {
+        "key": "map",
+        "name": "Map a strategy's settings",
+        "short": "Settings map"
+      },
+      "lead": "Rank among nearby settings 1",
+      "maker": "you",
+      "maker_words": "by you",
+      "numbers": [
+        {
+          "label": "Nearby settings as a share of yours",
+          "measure": "share_of_yours",
+          "ref": "nearby.summary",
+          "sample": {
+            "first_day": "2025-03-23",
+            "last_day": "2026-10-29"
+          },
+          "unit": "ratio",
+          "value_words": "not measured"
+        },
+        {
+          "label": "Rank among nearby settings",
+          "measure": "rank_among",
+          "ref": "nearby.summary",
+          "sample": {
+            "first_day": "2025-03-23",
+            "last_day": "2026-10-29"
+          },
+          "unit": "count",
+          "value": 1.0,
+          "value_words": "1"
+        },
+        {
+          "label": "Rank agreement before and after the split",
+          "measure": "rank_agreement",
+          "ref": "split.summary",
+          "sample": {
+            "first_day": "2025-03-23",
+            "last_day": "2026-10-29"
+          },
+          "unit": "score",
+          "value_words": "not measured"
+        }
+      ],
+      "schema": "keel.research.card/2",
+      "state": "completed",
+      "state_words": "Done · Oct 29",
+      "title": "T",
+      "top5": {
+        "kind": "checks",
+        "rows": [],
+        "total": 0
+      },
+      "version": 1
+    },
+    "counts": {
+      "allowance": {
+        "study": "free",
+        "units": [
+          {
+            "limit": 400,
+            "resets_at": "2026-12-18",
+            "unit": "research_studies",
+            "used": 0
+          }
+        ]
+      },
+      "runs": {
+        "executed": 0,
+        "failed_content": 0,
+        "failed_platform": 0,
+        "planned": 0,
+        "reused": 0,
+        "words": "0 runs, 0 reused, none failed"
+      },
+      "versions_tried": {
+        "added": 0,
+        "family": "",
+        "why": ""
+      }
+    },
+    "footing": {
+      "coins": {
+        "chosen": "Chosen by hand",
+        "count": 6,
+        "names_sha256": "f2c1dc3fe154c972a19401b6ff2378892856247941af07a6390eae3795702362"
+      },
+      "costs": {
+        "fee": 0.00045,
+        "slippage": 0.00045
+      },
+      "data": "snap_6c1f0e8a2b9d4f37",
+      "days": {
+        "end": "2026-10-29",
+        "start": "2025-03-23"
+      },
+      "delay": 0,
+      "engine": "eng_000000000000000000000000000000000000000000000000000000000000",
+      "engine_words": "This version of the engine",
+      "leverage": 1.0,
+      "split": "2026-04-17",
+      "split_words": "Split on Apr 17, 2026: 390 days before, 195 after"
+    },
+    "hero_url": "https://app.usekeel.io/research/stu_000006",
+    "links": {
+      "app": "https://app.usekeel.io/research/stu_000006"
+    },
+    "locked": [],
+    "not_measured": [],
+    "notes": {
+      "notes_total": 0
+    },
+    "page": {
+      "default": 0,
+      "switch": [0, 1, 2]
+    },
+    "stale": [
+      {
+        "kind": "newer_subject",
+        "offer": {
+          "plan": {
+            "base": {
+              "evidence_hash": "08393f8546af57ecf0cfaca649ada9d481cffc26cfa210adeb1a35b7567b77c3",
+              "revision": 1,
+              "version": 1
+            },
+            "study_id": "stu_000006"
+          },
+          "ref": "str_momrotpro00000000000000000@4"
+        },
+        "short": "v4 is out",
+        "words": "Momentum rotation v3 has a newer version, v4."
+      }
+    ],
+    "steps": {
+      "by_status": {
+        "completed": 3
+      },
+      "total": 3
+    },
+    "study": {
+      "archived": false,
+      "can_delete": true,
+      "evidence_hash": "08393f8546af57ecf0cfaca649ada9d481cffc26cfa210adeb1a35b7567b77c3",
+      "kind_label": {
+        "key": "map",
+        "name": "Map a strategy's settings",
+        "short": "Settings map"
+      },
+      "linked_to": [],
+      "linked_to_total": 0,
+      "presentation_hash": "06b53c6b14406c55f5cacd4aee52b516d94fb150bde4d34a007879059a1ba18c",
+      "revision": 1,
+      "run_set_id": "rus_000006",
+      "set_aside": false,
+      "state": "completed",
+      "study_id": "stu_000006",
+      "title": "T",
+      "version": 1
+    },
+    "subjects": {
+      "total": 1
+    },
+    "url_line": "View in Keel: https://app.usekeel.io/research/stu_000006",
+    "view": {
+      "at": "2026-11-17T00:00:09.000Z",
+      "kind": "study",
+      "mode": "study",
+      "object": "stu_000006",
+      "seq": 10,
+      "size": "view",
+      "version": 1
+    },
+    "views": {
+      "total": 4
+    },
+    "words": {
+      "allowance": "Used 0 of 400 studies; resets Dec 1. Planning, reading, saving, and runs that reuse everything or run nothing, do not count."
+    }
+  }
+}

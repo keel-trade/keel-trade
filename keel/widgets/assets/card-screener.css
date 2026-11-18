@@ -1,0 +1,522 @@
+/* ── The screen card (INV-53; spec 06 §D3.3, §D3.5) ──────────────────
+   `--sc-0…23` is S1's `CAT` (live-design S1 js/util.js), the screener's
+   one categorical palette, assigned by rank and frozen per coin. The DARK
+   sites equal keel-app's `screenMarks.categorical` (tokens.ts, read by
+   chartTheme `signalCategorical`) byte for byte; the LIGHT sites keep the
+   hue order, each colour darkened in HLS lightness only until it clears
+   3:1 (graphical objects) on claude.ai's and ChatGPT's light grounds.
+   tests/test_card_screener_palette.py pins both. The `--sc-field` … ink
+   is S1's chart ink (SS_FIELD, the zero line, the scatter median and
+   grey points, the passing-row wash). */
+:root {
+  --sc-0: #7c75ff;
+  --sc-1: #1da098;
+  --sc-2: #be840e;
+  --sc-3: #3d91f9;
+  --sc-4: #f151a5;
+  --sc-5: #699d13;
+  --sc-6: #0c98d9;
+  --sc-7: #e66a05;
+  --sc-8: #29a374;
+  --sc-9: #a775f5;
+  --sc-10: #db2777;
+  --sc-11: #9333ea;
+  --sc-12: #12a191;
+  --sc-13: #c08304;
+  --sc-14: #df4df9;
+  --sc-15: #16a349;
+  --sc-16: #629e0d;
+  --sc-17: #3b82f6;
+  --sc-18: #c2410c;
+  --sc-19: #0599e0;
+  --sc-20: #d946ef;
+  --sc-21: #669e11;
+  --sc-22: #0891b2;
+  --sc-23: #e04df7;
+  --sc-field: rgba(92, 106, 128, 0.16);
+  --sc-zero: rgba(15, 23, 36, 0.3);
+  --sc-median: rgba(15, 23, 36, 0.28);
+  --sc-out: rgba(92, 106, 128, 0.38);
+  --sc-row: rgba(79, 70, 229, 0.07);
+  --sc-bar: rgba(92, 106, 128, 0.55);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --sc-0: #7c75ff;
+    --sc-1: #25d0c5;
+    --sc-2: #f0b133;
+    --sc-3: #60a5fa;
+    --sc-4: #f472b6;
+    --sc-5: #a3e635;
+    --sc-6: #0da2e7;
+    --sc-7: #fb923c;
+    --sc-8: #3fcf98;
+    --sc-9: #b992f7;
+    --sc-10: #db2777;
+    --sc-11: #9333ea;
+    --sc-12: #14b8a6;
+    --sc-13: #ca8a04;
+    --sc-14: #f0abfc;
+    --sc-15: #86efac;
+    --sc-16: #65a30d;
+    --sc-17: #3b82f6;
+    --sc-18: #c2410c;
+    --sc-19: #7dd3fc;
+    --sc-20: #d946ef;
+    --sc-21: #84cc16;
+    --sc-22: #0891b2;
+    --sc-23: #e879f9;
+    --sc-field: rgba(151, 171, 195, 0.13);
+    --sc-zero: rgba(255, 255, 255, 0.25);
+    --sc-median: rgba(225, 231, 239, 0.28);
+    --sc-out: rgba(101, 117, 139, 0.38);
+    --sc-row: rgba(124, 117, 255, 0.08);
+    --sc-bar: rgba(151, 171, 195, 0.6);
+  }
+}
+:root[data-theme="dark"] {
+  --sc-0: #7c75ff;
+  --sc-1: #25d0c5;
+  --sc-2: #f0b133;
+  --sc-3: #60a5fa;
+  --sc-4: #f472b6;
+  --sc-5: #a3e635;
+  --sc-6: #0da2e7;
+  --sc-7: #fb923c;
+  --sc-8: #3fcf98;
+  --sc-9: #b992f7;
+  --sc-10: #db2777;
+  --sc-11: #9333ea;
+  --sc-12: #14b8a6;
+  --sc-13: #ca8a04;
+  --sc-14: #f0abfc;
+  --sc-15: #86efac;
+  --sc-16: #65a30d;
+  --sc-17: #3b82f6;
+  --sc-18: #c2410c;
+  --sc-19: #7dd3fc;
+  --sc-20: #d946ef;
+  --sc-21: #84cc16;
+  --sc-22: #0891b2;
+  --sc-23: #e879f9;
+  --sc-field: rgba(151, 171, 195, 0.13);
+  --sc-zero: rgba(255, 255, 255, 0.25);
+  --sc-median: rgba(225, 231, 239, 0.28);
+  --sc-out: rgba(101, 117, 139, 0.38);
+  --sc-row: rgba(124, 117, 255, 0.08);
+  --sc-bar: rgba(151, 171, 195, 0.6);
+}
+:root[data-theme="light"] {
+  --sc-0: #7c75ff;
+  --sc-1: #1da098;
+  --sc-2: #be840e;
+  --sc-3: #3d91f9;
+  --sc-4: #f151a5;
+  --sc-5: #699d13;
+  --sc-6: #0c98d9;
+  --sc-7: #e66a05;
+  --sc-8: #29a374;
+  --sc-9: #a775f5;
+  --sc-10: #db2777;
+  --sc-11: #9333ea;
+  --sc-12: #12a191;
+  --sc-13: #c08304;
+  --sc-14: #df4df9;
+  --sc-15: #16a349;
+  --sc-16: #629e0d;
+  --sc-17: #3b82f6;
+  --sc-18: #c2410c;
+  --sc-19: #0599e0;
+  --sc-20: #d946ef;
+  --sc-21: #669e11;
+  --sc-22: #0891b2;
+  --sc-23: #e04df7;
+  --sc-field: rgba(92, 106, 128, 0.16);
+  --sc-zero: rgba(15, 23, 36, 0.3);
+  --sc-median: rgba(15, 23, 36, 0.28);
+  --sc-out: rgba(92, 106, 128, 0.38);
+  --sc-row: rgba(79, 70, 229, 0.07);
+  --sc-bar: rgba(92, 106, 128, 0.55);
+}
+/* The screen's name reads in the UI face, like the app's screen page;
+   the mono face is for numbers. */
+body[data-card="screener"] .head-name {
+  font-family: var(--font);
+}
+/* cadence · as of · view rev · freshness, under the header */
+.sc-meta {
+  margin: 0 0 6px;
+  font-size: var(--t-xs);
+  line-height: var(--t-xs-lh);
+}
+.sc-pass {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+  margin: 0 0 6px;
+}
+.sc-pass .sc-passn {
+  font-size: var(--t-base);
+  line-height: var(--t-base-lh);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.sc-pass .sc-passd {
+  font-size: var(--t-xs);
+  line-height: var(--t-xs-lh);
+}
+.sc-tie {
+  margin-top: -4px;
+}
+.sc-nums {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+.sc-numlab {
+  margin: 0;
+  font-size: var(--t-micro);
+  line-height: var(--t-micro-lh);
+  color: var(--muted);
+}
+/* the legend: swatch · coin · value, one line each, wrapping */
+.sc-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+}
+.sc-legend .sc-more {
+  padding-left: 2px;
+}
+.sc-num {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 4px 9px 4px 8px;
+  text-align: left;
+  color: var(--fg);
+  background: var(--tile);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  font: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.sc-num .k {
+  font-size: var(--t-xs);
+  line-height: var(--t-xs-lh);
+  font-weight: 600;
+}
+.sc-num .v {
+  font-family: var(--font-mono);
+  font-size: var(--t-xs);
+  line-height: var(--t-xs-lh);
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.sc-num.on,
+.sc-it.on {
+  border-color: var(--accent);
+}
+.sc-num.on .v {
+  color: var(--fg);
+}
+.sc-sw {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+.sc-sw.out {
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.sc-more,
+.sc-cap {
+  margin: 0;
+  font-size: var(--t-xs);
+  line-height: var(--t-xs-lh);
+}
+/* the ranked output's range over every coin, under the rows (Q-3640) */
+.sc-range {
+  margin-top: 4px;
+  font-variant-numeric: tabular-nums;
+}
+.sc-chart {
+  position: relative;
+  padding: 0;
+  overflow: hidden;
+  cursor: pointer;
+}
+.sc-svg {
+  display: block;
+}
+.sc-svg .sc-field {
+  fill: none;
+  stroke: var(--sc-field);
+  stroke-width: 1;
+}
+.sc-svg .sc-line {
+  fill: none;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.sc-svg .dim {
+  opacity: 0.22;
+}
+.sc-svg .sc-hit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 10;
+  pointer-events: stroke;
+}
+.sc-svg .sc-grid {
+  stroke: var(--line);
+}
+.sc-svg .sc-zero {
+  stroke: var(--sc-zero);
+  stroke-dasharray: 3 3;
+}
+.sc-svg .sc-cursor {
+  stroke: var(--muted);
+  stroke-dasharray: 4 3;
+}
+.sc-svg .sc-median {
+  stroke: var(--sc-median);
+  stroke-dasharray: 4 4;
+}
+.sc-svg .sc-clip {
+  cursor: help;
+}
+.sc-svg .sc-end,
+.sc-svg .sc-tick,
+.sc-svg .sc-axis,
+.sc-svg .sc-dotlab {
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  dominant-baseline: middle;
+}
+.sc-svg .sc-end {
+  font-weight: 500;
+  cursor: pointer;
+}
+.sc-svg .sc-tick,
+.sc-svg .sc-axis {
+  fill: var(--muted);
+}
+.sc-svg .sc-xtick {
+  dominant-baseline: auto;
+}
+.sc-svg .sc-dotlab {
+  fill: var(--fg);
+}
+.sc-svg .sc-dot.out {
+  fill: var(--sc-out);
+}
+.sc-svg .sc-quad {
+  font-family: var(--font);
+  font-size: var(--t-micro);
+  fill: var(--muted);
+  dominant-baseline: middle;
+}
+.sc-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+}
+.sc-lab {
+  font-family: var(--font-mono);
+  font-size: var(--t-xs);
+  line-height: var(--t-xs-lh);
+  color: var(--muted);
+}
+.sc-seg {
+  display: inline-flex;
+  flex-wrap: wrap;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.sc-seg button {
+  min-height: 36px;
+  padding: 5px 10px;
+  font: inherit;
+  font-size: var(--t-xs);
+  line-height: var(--t-xs-lh);
+  color: var(--muted);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+.sc-seg button.on {
+  color: var(--fg);
+  background: var(--tile);
+}
+.sc-slider {
+  width: 100%;
+  accent-color: var(--accent);
+}
+.sc-read {
+  margin: 0;
+  min-height: 30px;
+  font-family: var(--font-mono);
+  font-size: var(--t-xs);
+  line-height: var(--t-xs-lh);
+  overflow-wrap: anywhere;
+}
+.sc-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+}
+.sc-it {
+  display: grid;
+  grid-template-columns: 24px 10px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  min-height: 36px;
+  padding: 5px 12px;
+  font-family: var(--font-mono);
+  font-size: var(--t-xs);
+  line-height: var(--t-xs-lh);
+  color: var(--fg);
+  text-align: left;
+  background: transparent;
+  border: 1px solid transparent;
+  border-bottom-color: var(--line);
+  cursor: pointer;
+}
+.sc-it .rk {
+  color: var(--muted);
+  text-align: right;
+}
+.sc-it .nm {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sc-it .v {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+/* ── the ranked table ── */
+.sc-tw {
+  overflow-x: auto;
+  margin-top: 2px;
+}
+.sc-dt {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+.sc-dt th {
+  padding: 6px 8px;
+  font-size: var(--t-micro);
+  line-height: var(--t-micro-lh);
+  font-weight: 500;
+  color: var(--muted);
+  text-align: left;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--line);
+  user-select: none;
+}
+.sc-dt th.s {
+  color: var(--fg);
+}
+.sc-dt th.n,
+.sc-dt td.n {
+  text-align: right;
+}
+.sc-dt th.rk,
+.sc-dt td.rk {
+  width: 1.6em;
+  padding-right: 2px;
+  padding-left: 4px;
+  color: var(--muted);
+  text-align: right;
+}
+.sc-dt td {
+  padding: 5px 8px;
+  font-family: var(--font-mono);
+  font-size: var(--t-xs);
+  line-height: var(--t-xs-lh);
+  white-space: nowrap;
+  border-bottom: 1px solid var(--line);
+}
+.sc-dt td.t {
+  width: 1%;
+  font-family: var(--font);
+  font-weight: 600;
+}
+.sc-dt td.s {
+  color: var(--fg);
+}
+.sc-dt td.n:not(.s) {
+  color: var(--muted);
+}
+.sc-dt tr.sel td {
+  background: var(--sc-row);
+}
+/* the data bar: S1's 56 × 4, neutral; diverging about a centre line when
+   the column is signed */
+.sc-cell {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 9px;
+}
+.sc-bar {
+  position: relative;
+  display: inline-block;
+  flex: 1 1 56px;
+  min-width: 40px;
+  max-width: 140px;
+  height: 4px;
+  vertical-align: middle;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--line);
+}
+.sc-cell .sc-val {
+  min-width: 3.5em;
+  text-align: right;
+}
+.sc-bar i {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  display: block;
+  background: var(--sc-bar);
+}
+.sc-bar.div::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  background: var(--muted);
+}
+:root[data-display-mode="fullscreen"] .sc-bar {
+  max-width: 200px;
+}
+
+/* The fullscreen table's sort control reads as the header it sits in. */
+.sc-dt th .sc-sort {
+  all: inherit;
+  display: inline;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+.sc-dt th .sc-sort:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}

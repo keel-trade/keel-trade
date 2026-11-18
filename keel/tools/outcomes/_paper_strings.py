@@ -247,15 +247,16 @@ GRADUATION_CRITERIA_LINE = PaperString(
         "{days}, {evals}, {residual_bps}, {band_bps}, {paper_max_dd_pct}, "
         "{backtest_max_dd_pct}. Never a return without its drawdown: it names none."
     ),
+    # PT2-93 (founder, 2026-10-15): the comparison with the backtest is shown,
+    # never judged; readiness no longer reads the parity band, and this line
+    # names no band. The difference itself is in the run's `parity` block.
     full=(
-        "its graduation criteria are met: {days} days running, {evals} evaluations, a "
-        "residual of {residual_bps} bps inside the {band_bps} bps band, and a max "
-        "drawdown of {paper_max_dd_pct}% against the backtest's {backtest_max_dd_pct}%"
+        "its graduation criteria are met: {days} days running, {evals} evaluations, and "
+        "a max drawdown of {paper_max_dd_pct}% against the backtest's {backtest_max_dd_pct}%"
     ),
     listed=(
-        "its graduation criteria are met: {days} days running, {evals} evaluations, a "
-        "residual of {residual_bps} bps inside the {band_bps} bps band, and a max "
-        "drawdown of {paper_max_dd_pct}% against the backtest's {backtest_max_dd_pct}%"
+        "its graduation criteria are met: {days} days running, {evals} evaluations, and "
+        "a max drawdown of {paper_max_dd_pct}% against the backtest's {backtest_max_dd_pct}%"
     ),
 )
 
@@ -444,12 +445,16 @@ PAPER_WALL_SLOT_LINE = PaperString(
     key="paper_wall_slot_line",
     listed_flag_on_only=True,
     context=(
-        "The paper quota wall's slot-freeing line (S10 §5, PT2-90): names Keel's own "
-        "tool, never a plan. Listed form only; the full profile's deploy description "
-        "carries the same fact (R-59)."
+        "The paper quota wall's slot line (S10 §5, PT2-90): names Keel's own tool, "
+        "never a plan. Both forms say to ask first: agents swapped a running paper run "
+        "for a new one without asking far more often than they hit this wall (prod, "
+        "2026-10-17..11-16). The full form names no tool (R-59)."
     ),
-    full=None,
-    listed="Stopping a paper run frees its slot (`keel_paper_control` `stop`).",
+    full="Ask the user which paper run to stop before stopping one; a stop ends its record.",
+    listed=(
+        "Stopping a paper run frees its slot (`keel_paper_control` `stop`); ask the user "
+        "which one first."
+    ),
 )
 
 #: keel-app's phrase keys → rows. ``"null"`` is the running phrase; keel-app's

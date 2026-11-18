@@ -187,9 +187,8 @@ _INVENTORY_TOOLSET_ORDER: tuple[str, ...] = (
     "backtest",
     "share",
     "live-read",
-    # paper-trading-v2 S06 §3.3: the paper toolset rides the default set once
-    # the paper SDK is released (PT2-28). Held, no tool carries it and the
-    # group renders nothing; placed now so the wheel's follow-up renders.
+    # paper-trading-v2 S06 §3.3: the paper toolset rides the default set
+    # (released by PT2-91).
     "paper",
     "live-write",
     "live",
@@ -205,7 +204,7 @@ _INVENTORY_TOOLSET_HEADINGS: dict[str, str] = {
     "paper": "Paper trading, simulated (`paper`, loaded by default)",
     "live-write": (
         "Live write (`live-write`, opt-in with "
-        "`KEEL_TOOLSETS=always,read-only,backtest,share,live-read,live-write`)"
+        "`KEEL_TOOLSETS=always,read-only,backtest,share,live-read,paper,live-write`)"
     ),
     "live": "Live (`live`)",
 }
@@ -229,11 +228,27 @@ TOOL_REFERENCE_TARGETS: list[tuple[str, bool]] = [
 ]
 # Site pages that state counts in prose; the numbers arm reads them so a
 # typed integer cannot survive there either (Q-1468).
+# /mcp-hyperliquid and /claude-hyperliquid were deleted and 301'd
+# (seo-growth-engine D-6, 2026-10-14).
 NUMBER_PAGE_CONSUMERS: list[str] = [
-    "services/keel-site/src/app/mcp-hyperliquid/page.tsx",
-    "services/keel-site/src/app/claude-hyperliquid/page.tsx",
     "services/keel-site/src/app/chatgpt-hyperliquid/page.tsx",
+    # /how-it-works renders COMPONENT_COUNT; its static twin states it (Q-3122).
+    "services/keel-site/src/app/how-it-works/page.tsx",
+    "services/keel-site/public/how-it-works.md",
 ]
+# Every keel-site page source and public text file, read for the COMPONENT
+# noun only (Q-3122). The list above names pages that adopted the generated
+# module; a page that TYPES a count is exactly the page no such list names
+# (/how-it-works said 218, two quant pages 199, the getting-started doc 182,
+# against 251), so the component count is checked by walking the site.
+SITE_COMPONENT_SCAN_ROOTS: tuple[str, ...] = (
+    "services/keel-site/src/app",
+    "services/keel-site/src/components",
+    "services/keel-site/src/content",
+    "services/keel-site/content",
+    "services/keel-site/public",
+)
+SITE_COMPONENT_SCAN_SUFFIXES: tuple[str, ...] = (".tsx", ".ts", ".md", ".mdx", ".txt")
 TS_MODULE_TARGETS = [
     "shared/agent-surface.generated.ts",
     # keel-app has no @shared alias (shared/README.md: different design
@@ -309,6 +324,12 @@ TOOL_GROUPS: dict[str, str] = {
     "keel_app_link": "share",
     "keel_help": "help",
     "keel_feedback": "help",
+    # The screen tools (LISTED_SCREEN_TOOLS): hosted only while prod's
+    # KEEL_LISTED_SCREENS_HOSTS serves screens to every host (screeners L13).
+    "keel_screener_list": "discover",
+    "keel_screener_view_set": "build",
+    "keel_screener_run": "test",
+    "keel_screener_view": "read",
 }
 
 # vendor_doc.checked older than this is a checker WARNING naming the URL —
@@ -429,19 +450,55 @@ _NUMBER_BEFORE_NOUN_RE = re.compile(
 )
 
 
-def number_errors(rel: str, text: str, numbers: dict) -> list[str]:
-    """Integers before tool/skill/component/topic that are not computed numbers."""
+def number_errors(
+    rel: str, text: str, numbers: dict, nouns: dict[str, tuple[str, ...]] = NUMBER_NOUNS
+) -> list[str]:
+    """Integers before tool/skill/component/topic that are not computed numbers.
+
+    ``nouns`` narrows the arm (the site-wide component arm passes only
+    ``component``); a noun outside it is not judged."""
     errors: list[str] = []
     normalized = _normalize_for_count_scan(text)
     for m in _NUMBER_BEFORE_NOUN_RE.finditer(normalized):
         noun = m.group("noun").lower().rstrip("s")
-        allowed = {numbers[k] for k in NUMBER_NOUNS[noun]}
+        if noun not in nouns:
+            continue
+        allowed = {numbers[k] for k in nouns[noun]}
         value = int(m.group("n"))
         if value not in allowed:
             errors.append(
                 f"{rel}: typed number {value!r} before {noun!r} ({m.group(0)!r}) is not a computed "
                 f"NUMBERS value ({sorted(allowed)}); read it from NUMBERS / the generated module"
             )
+    return errors
+
+
+def site_component_consumers() -> list[str]:
+    """Every keel-site page source and public text file (tests excluded) that
+    the component arm reads. A missing root raises: an arm that walked
+    nothing would pass vacuously."""
+    out: list[str] = []
+    for root in SITE_COMPONENT_SCAN_ROOTS:
+        base = REPO_ROOT / root
+        if not base.is_dir():
+            raise RuntimeError(f"site component scan root missing: {root}")
+        for path in sorted(base.rglob("*")):
+            if not path.is_file() or path.suffix not in SITE_COMPONENT_SCAN_SUFFIXES:
+                continue
+            rel = path.relative_to(REPO_ROOT).as_posix()
+            if "/__tests__/" in rel or "/node_modules/" in rel or ".test." in path.name:
+                continue
+            out.append(rel)
+    return out
+
+
+def site_component_errors(numbers: dict) -> list[str]:
+    """The component arm over the whole site (Q-3122)."""
+    only = {"component": NUMBER_NOUNS["component"]}
+    errors: list[str] = []
+    for rel in site_component_consumers():
+        text = (REPO_ROOT / rel).read_text(encoding="utf-8", errors="replace")
+        errors.extend(number_errors(rel, text, numbers, only))
     return errors
 
 
@@ -486,15 +543,46 @@ def prod_listed_paper_enabled() -> bool:
     raise ValueError(f"{MCP_PROD_VALUES}: invalid KEEL_LISTED_PAPER={raw!r}")
 
 
+def prod_listed_screens_all_hosts() -> bool:
+    """Whether prod's hosted connector serves screens to EVERY host (L13).
+
+    Read from the ``KEEL_LISTED_SCREENS_HOSTS`` entry of the mcp-server prod
+    values, never from the shell. Only ``all`` changes a published count: a
+    per-host value serves screens to some callers and not others, and the
+    public numbers describe what every caller is served. Unknown host keys
+    raise, the same rule as ``listed_screens_hosts()``.
+    """
+    import yaml
+    from keel.tools.outcomes._toolsets import LISTED_HOSTS
+
+    values = yaml.safe_load((REPO_ROOT / MCP_PROD_VALUES).read_text(encoding="utf-8")) or {}
+    env = values.get("env") or []
+    entries = [
+        e for e in env if isinstance(e, dict) and e.get("name") == "KEEL_LISTED_SCREENS_HOSTS"
+    ]
+    if not entries:
+        return False
+    if len(entries) > 1:
+        raise RuntimeError(f"{MCP_PROD_VALUES} sets KEEL_LISTED_SCREENS_HOSTS {len(entries)} times")
+    parts = {p.strip().lower() for p in str(entries[0].get("value", "")).split(",") if p.strip()}
+    if parts - {*LISTED_HOSTS, "all"}:
+        raise ValueError(f"{MCP_PROD_VALUES}: invalid KEEL_LISTED_SCREENS_HOSTS={parts!r}")
+    return "all" in parts
+
+
 def compute_numbers() -> dict:
     """Every number a consumer may print, computed from the live sources."""
     if str(SDK_ROOT) not in sys.path:
         sys.path.insert(0, str(SDK_ROOT))
-    from keel.mcp.server import LISTED_EXCLUDED_SKILLS
+    from keel.mcp.server import LISTED_EXCLUDED_SKILLS, LISTED_SCREEN_SKILLS
     from keel.skills import BUNDLED_SKILLS
     from keel.tools.outcomes import OUTCOMES, _bootstrap
     from keel.tools.outcomes import help as help_tool
-    from keel.tools.outcomes._toolsets import LISTED_PROFILE_TOOLS, is_tool_loaded
+    from keel.tools.outcomes._toolsets import (
+        LISTED_PROFILE_TOOLS,
+        LISTED_SCREEN_TOOLS,
+        is_tool_loaded,
+    )
 
     _bootstrap()
     # The local default set, read from its one owner (S06 §3.3): a hand copy
@@ -523,16 +611,25 @@ def compute_numbers() -> dict:
     knowledge = sorted(p.stem for p in (SDK_ROOT / "keel" / "data" / "knowledge").glob("*.md"))
     if not knowledge:
         raise RuntimeError("keel/data/knowledge is empty — run build_data.py")
+    screens_all = prod_listed_screens_all_hosts()
     return {
         # The hosted connector's served count: 29, plus keel_paper_deploy
         # once prod's values turn the listed flag on (S06 §3.4.2).
-        "tool_count": len(LISTED_PROFILE_TOOLS) + int(prod_listed_paper_enabled()),
+        "tool_count": len(LISTED_PROFILE_TOOLS)
+        + int(prod_listed_paper_enabled())
+        + (len(LISTED_SCREEN_TOOLS) if screens_all else 0),
         "tools_registry": len(OUTCOMES),
         "tools_local_default": sum(
-            1 for t in OUTCOMES.values() if is_tool_loaded(t.toolset, local_default)
+            1
+            for t in OUTCOMES.values()
+            if is_tool_loaded(t.toolset, local_default, cli_only=t.cli_only)
         ),
         "tools_live_write": sum(1 for t in OUTCOMES.values() if t.toolset == "live-write"),
-        "skills_hosted": len(set(BUNDLED_SKILLS) - set(LISTED_EXCLUDED_SKILLS)),
+        "skills_hosted": len(
+            set(BUNDLED_SKILLS)
+            - set(LISTED_EXCLUDED_SKILLS)
+            - (set() if screens_all else set(LISTED_SCREEN_SKILLS))
+        ),
         "skills_bundled": len(BUNDLED_SKILLS),
         "knowledge_topics": len(knowledge),
         "help_topics": len(help_tool._list_bundled_topics()),
@@ -576,7 +673,11 @@ def vendor_doc_warnings(data: dict, today: date | None = None) -> list[str]:
     today = today or date.today()
     warnings: list[str] = []
     for client in data["clients"]:
-        for doc in (client.get("vendor_doc"), (client.get("deep_link") or {}).get("vendor_doc")):
+        for doc in (
+            client.get("vendor_doc"),
+            (client.get("deep_link") or {}).get("vendor_doc"),
+            client.get("directory_doc"),
+        ):
             if not doc or not doc.get("checked"):
                 continue
             try:
@@ -901,6 +1002,7 @@ def check_agent_surface_gate() -> list[str]:
             errors.append(f"{rel}: missing numbers consumer")
             continue
         errors.extend(number_errors(rel, path.read_text(), numbers))
+    errors.extend(site_component_errors(numbers))
 
     errors.extend(vendor_doc_errors(data))
     for client in data["clients"]:
@@ -990,6 +1092,21 @@ def _one_line(text: str) -> str:
     return first.rstrip(".")
 
 
+def hosted_tool_names() -> frozenset[str]:
+    """What prod's hosted connector serves every caller: ``LISTED_PROFILE_TOOLS``,
+    plus ``LISTED_SCREEN_TOOLS`` while prod serves screens to every host. The
+    same set ``compute_numbers()['tool_count']`` counts, so TOOL_COUNT, the
+    rendered tool list and the count gate cannot disagree with NUMBERS.
+    """
+    if str(SDK_ROOT) not in sys.path:
+        sys.path.insert(0, str(SDK_ROOT))
+    from keel.tools.outcomes._toolsets import LISTED_PROFILE_TOOLS, LISTED_SCREEN_TOOLS
+
+    if prod_listed_screens_all_hosts():
+        return frozenset(LISTED_PROFILE_TOOLS | LISTED_SCREEN_TOOLS)
+    return frozenset(LISTED_PROFILE_TOOLS)
+
+
 def listed_tools() -> list[dict]:
     """The hosted surface, read from the registry — never typed.
 
@@ -1001,14 +1118,14 @@ def listed_tools() -> list[dict]:
     if str(SDK_ROOT) not in sys.path:
         sys.path.insert(0, str(SDK_ROOT))
     from keel.tools.outcomes import OUTCOMES, _bootstrap
-    from keel.tools.outcomes._toolsets import LISTED_PROFILE_TOOLS
 
     _bootstrap()
-    missing = sorted(LISTED_PROFILE_TOOLS - set(OUTCOMES))
+    hosted = hosted_tool_names()
+    missing = sorted(hosted - set(OUTCOMES))
     if missing:
-        raise RuntimeError(f"LISTED_PROFILE_TOOLS names tools absent from the registry: {missing}")
+        raise RuntimeError(f"the hosted surface names tools absent from the registry: {missing}")
     tools = []
-    for name in LISTED_PROFILE_TOOLS:
+    for name in hosted:
         tool = OUTCOMES[name]
         title = tool.listed_title or tool.annotations.get("title")
         if not title:
@@ -1027,6 +1144,40 @@ def listed_tools() -> list[dict]:
     return tools
 
 
+def research_tools() -> list[dict]:
+    """RI-168: the listed research tools (``LISTED_RESEARCH_TOOLS``) as the app's "Use with your agent" dialog shows
+    them, read from the registry with Research served (the app shows the dialog only while ``me.research`` is
+    served): ``[{name, title, description, cli, api: {method, path}}]`` in name order. ``cli`` is the tool's own CLI
+    path; ``api`` its route (``RESEARCH_TOOL_ROUTES``)."""
+    if str(SDK_ROOT) not in sys.path:
+        sys.path.insert(0, str(SDK_ROOT))
+    from keel.tools.outcomes import OUTCOMES, _bootstrap
+    from keel.tools.outcomes._toolsets import (
+        LISTED_RESEARCH_TOOLS,
+        RESEARCH_TOOL_ROUTES,
+        research_served_context,
+    )
+
+    _bootstrap()
+    if set(RESEARCH_TOOL_ROUTES) != set(LISTED_RESEARCH_TOOLS):
+        raise RuntimeError("RESEARCH_TOOL_ROUTES must name exactly the listed research tools")
+    rows = []
+    with research_served_context(True):
+        for name in sorted(LISTED_RESEARCH_TOOLS):
+            tool = OUTCOMES[name]
+            method, path = RESEARCH_TOOL_ROUTES[name]
+            rows.append(
+                {
+                    "name": name,
+                    "title": tool.listed_title or tool.annotations.get("title"),
+                    "description": _one_line(tool.listed_description or tool.description),
+                    "cli": "keel " + " ".join(tool.cli_path),
+                    "api": {"method": method, "path": path},
+                }
+            )
+    return rows
+
+
 def registry_tools() -> list[dict]:
     """EVERY registered outcome tool, read from the registry — never typed.
 
@@ -1039,9 +1190,9 @@ def registry_tools() -> list[dict]:
     if str(SDK_ROOT) not in sys.path:
         sys.path.insert(0, str(SDK_ROOT))
     from keel.tools.outcomes import OUTCOMES, _bootstrap
-    from keel.tools.outcomes._toolsets import LISTED_PROFILE_TOOLS
 
     _bootstrap()
+    hosted = hosted_tool_names()
     if not OUTCOMES:
         raise RuntimeError("the outcome registry is empty — _bootstrap() registered nothing")
     unknown = sorted({t.toolset for t in OUTCOMES.values()} - set(_INVENTORY_TOOLSET_ORDER))
@@ -1055,7 +1206,7 @@ def registry_tools() -> list[dict]:
             "name": name,
             "toolset": tool.toolset,
             "local_only": bool(tool.local_only),
-            "hosted": name in LISTED_PROFILE_TOOLS,
+            "hosted": name in hosted,
         }
         for name, tool in OUTCOMES.items()
     ]
@@ -1126,9 +1277,34 @@ def _client_one_liner(client: dict, endpoint: str) -> str:
     if kind == "config_file":
         return f"- **{client['name']}**: {steps[0]}: `{_compact_json(snippet)}`. {steps[1]}."
     if kind == "directory":
-        return f"- **{client['name']}**: Connect from the directory: {client['directory_url']}."
+        paste = [render_snippet(step, endpoint) for step in client["paste_steps"]]
+        return (
+            f"- **{client['name']}**: Add Keel from its {client['name']} listing: "
+            f"{client['directory_url']} ({client['directory_path']}), then {steps[1][0].lower()}{steps[1][1:]}. "
+            f"Or add it by URL: {paste[0]}. {paste[1]}."
+        )
     # paste_url
     return f"- **{client['name']}**: {steps[0]}. {steps[1]}."
+
+
+def _listed_clients(data: dict) -> list[dict]:
+    """Clients with an official directory listing, in AS-11 order (task 6.4)."""
+    return [c for c in data["clients"] if c["kind"] == "directory" and c.get("directory_url")]
+
+
+def _listing_phrase(data: dict, *, link) -> str:
+    """'add Keel from its listing in Claude (<url>) or ChatGPT (<url>)': the one
+    sentence every lead line opens with once a client is listed. ``link`` renders
+    one URL (bare for markdown, a host link for MDX)."""
+    listed = _listed_clients(data)
+    parts = [f"{c['name']} ({link(c['directory_url'])})" for c in listed]
+    return "add Keel from its official listing in " + " or ".join(parts)
+
+
+def _url_clients(data: dict) -> str:
+    """The clients that take the URL by hand: the paste_url rows, then the usual others."""
+    names = [c["name"] for c in data["clients"] if c["kind"] == "paste_url" and c["id"] != "other"]
+    return ", ".join([*names, "Cursor", "Windsurf"])
 
 
 def render_agent_surface_block(data: dict, kind: str, tools: list[dict] | None = None) -> str:
@@ -1140,9 +1316,6 @@ def render_agent_surface_block(data: dict, kind: str, tools: list[dict] | None =
     codex = next(c for c in data["clients"] if c["id"] == "codex")
     cc_cmd = render_snippet(claude_code["snippet"], endpoint)
     codex_cmd = render_snippet(codex["snippet"], endpoint).splitlines()[0]
-    paste_clients = [
-        c["name"] for c in data["clients"] if c["kind"] == "paste_url" and c["id"] != "other"
-    ]
     handoff = data["handoff"]
     head = f"{AS_BEGIN_MARKER}\n<!-- {GENERATED_NOTE} -->\n"
     if kind == "full":
@@ -1189,18 +1362,19 @@ def render_agent_surface_block(data: dict, kind: str, tools: list[dict] | None =
         ]
         body = "\n".join(lines)
     elif kind == "short":
+        listing = _listing_phrase(data, link=lambda u: u)
         body = (
             f"- **Hosted endpoint (default)** — `{endpoint}`: one endpoint, a {count}-tool "
-            "research/backtest/read surface, nothing to install. Paste the URL into "
-            f"{', '.join(paste_clients)} or any remote-MCP client and sign in or sign up when prompted; "
-            f"Claude Code: `{cc_cmd}`; Codex: `{codex_cmd}`. {handoff} "
+            f"research/backtest/read surface, nothing to install. {listing[0].upper()}{listing[1:]}; "
+            f"in {_url_clients(data)} or any remote-MCP client, paste the URL and sign in or sign up "
+            f"when prompted; Claude Code: `{cc_cmd}`; Codex: `{codex_cmd}`. {handoff} "
             f"Per-client steps: {data['agents_page_url']}"
         )
     elif kind == "llms":
         body = (
             f"- [Hosted MCP endpoint]({endpoint}): The one hosted Keel MCP endpoint and the "
-            "default way to connect an agent — paste the URL into "
-            f"{', '.join(paste_clients)}, Cursor, Windsurf or any remote-MCP client and sign in or "
+            f"default way to connect an agent — {_listing_phrase(data, link=lambda u: u)}; in "
+            f"{_url_clients(data)} or any remote-MCP client, paste the URL and sign in or "
             f"sign up when prompted (Claude Code: `{cc_cmd}`; Codex: `{codex_cmd}`). "
             f"{count} research/backtest/read tools, nothing to install. {handoff}"
         )
@@ -1233,6 +1407,7 @@ def render_agent_card(data: dict, tools: list[dict] | None = None) -> str:
                 "hosted_transport": "streamable-http",
                 "hosted_auth": "oauth2",
                 "hosted_setup": data["setup_page_url"],
+                "directories": {c["id"]: c["directory_url"] for c in _listed_clients(data)},
                 "hosted_tool_count": len(tools),
                 "hosted_tools": [t["name"] for t in tools],
                 "handoff": data["handoff"],
@@ -1313,8 +1488,15 @@ def render_ts_module(data: dict, tools: list[dict] | None = None) -> str:
         "  /** Short ordered steps; may also carry `{{endpoint}}`. */",
         "  readonly steps: readonly string[];",
         "  readonly deep_link: AgentClientDeepLink | null;",
-        "  /** Set once the client's directory listing is approved (task 6.4). */",
+        "  /** The client's official listing, opened by the primary Connect button (task 6.4). */",
         "  readonly directory_url: string | null;",
+        "  /** A public page about the listing that needs no sign-in (Claude's marketplace page). */",
+        "  readonly directory_page?: string | null;",
+        "  /** Where to find the listing inside the client, verbatim from its docs. */",
+        "  readonly directory_path?: string;",
+        "  readonly directory_doc?: AgentClientVendorDoc;",
+        "  /** `directory` clients: the paste-the-URL fallback, shown under the Connect button. */",
+        "  readonly paste_steps?: readonly string[];",
         "  readonly supports: AgentClientSupports;",
         "  readonly verified: AgentClientVerified | null;",
         "  readonly vendor_doc: AgentClientVendorDoc | null;",
@@ -1377,6 +1559,15 @@ def render_ts_module(data: dict, tools: list[dict] | None = None) -> str:
         "  readonly description: string;",
         "}",
         "",
+        '/** RI-168: a listed research tool as the app\'s "Use with your agent" dialog shows it. */',
+        "export interface AgentResearchTool {",
+        "  readonly name: string;",
+        "  readonly title: string;",
+        "  readonly description: string;",
+        "  readonly cli: string;",
+        "  readonly api: { readonly method: string; readonly path: string };",
+        "}",
+        "",
         "export interface AgentClientDeepLink {",
         "  /** Vendor-documented install link; `{{config_b64}}` / `{{config_urlencoded}}` are filled by deepLink(). */",
         "  readonly template: string;",
@@ -1415,6 +1606,10 @@ def render_ts_module(data: dict, tools: list[dict] | None = None) -> str:
         "",
         f"export const TOOLS: readonly AgentSurfaceTool[] = {_ts(tools)};",
         "",
+        "/** RI-168: the listed research tools, rendered as if Research were served (the app shows them only while",
+        " * me.research is served). Not counted in TOOL_COUNT: the hosted listing binds them per caller. */",
+        f"export const RESEARCH_TOOLS: readonly AgentResearchTool[] = {_ts(research_tools())};",
+        "",
         "/** Fixed client order (AS-11): Claude, ChatGPT, Claude Code, Cursor, Codex, Windsurf, Other. */",
         f"export const CLIENTS: readonly AgentClient[] = {_ts(_published(data['clients']))};",
         "",
@@ -1422,7 +1617,17 @@ def render_ts_module(data: dict, tools: list[dict] | None = None) -> str:
         "",
         f"export const ASK_PROMPT = {_ts(ask['prompt'])};",
         "",
-        "/** The prompt /agents leads with (AS-24): connect here, then a first backtest — no summary, the reader is on the page. */",
+        "/**",
+        " * The prompt the paste-anywhere boxes carry (AS-24): connect here, then a first",
+        " * backtest. It names no directory, so it is true in every assistant.",
+        " */",
+        f"export const SETUP_PROMPT = {_ts(ask['setup_prompt'])};",
+        "",
+        "/**",
+        " * The prompt the Claude / ChatGPT ask circles open with on connect surfaces",
+        " * (task 6.4): both list Keel in their own directory, so it says so.",
+        " * Use SETUP_PROMPT anywhere the reader may be in another assistant.",
+        " */",
         f"export const CONNECT_PROMPT = {_ts(ask['connect_prompt'])};",
         "",
         # Every `<target>_url` key of ask_prompts becomes a template, in the
@@ -1461,6 +1666,9 @@ def render_ts_module(data: dict, tools: list[dict] | None = None) -> str:
         "",
         "/** Clients shown in the hero strip: every non-optional client in AS-11 order. */",
         "export const PRIMARY_CLIENTS: readonly AgentClient[] = CLIENTS.filter((c) => !c.optional);",
+        "",
+        "/** Clients with an official listing, in AS-11 order: the Add to <client> buttons. */",
+        "export const DIRECTORY_CLIENTS: readonly AgentClient[] = CLIENTS.filter((c) => c.directory_url !== null);",
         "",
         "export function clientById(id: string): AgentClient {",
         "  const client = CLIENTS.find((c) => c.id === id);",
@@ -1542,8 +1750,10 @@ def _verify_lines(client: dict) -> list[str]:
       subcommand is checked with that CLI's ``mcp list``; any other shape
       yields no command, because inventing one sends a connected user to
       debug something that was never going to work;
-    * a client that lists connectors in a menu is pointed at the menu the
-      source already names (``ui_path``), never a guessed path;
+    * a listed client is pointed at where its listing is found
+      (``directory_path``), and any other client that lists connectors in a
+      menu at the menu the source already names (``ui_path``), never a
+      guessed path;
     * a client with neither says so rather than being handed a command;
     * every client gets the agent check, which is the one that proves the
       connection end to end.
@@ -1564,6 +1774,13 @@ def _verify_lines(client: dict) -> list[str]:
         out.append(
             "  Keel should be listed there with its sign-in recorded. If it is, you are "
             "connected — signing in again changes nothing."
+        )
+    elif client.get("directory_url") and client.get("directory_path"):
+        # A listed client is added from its listing, so the check points at
+        # where the listing is found, not at the paste dialog (task 6.4).
+        out.append(
+            f"- In {name}: Keel shows as connected once the sign-in has finished "
+            f"({_mdx_text(client['directory_path'])})."
         )
     elif client.get("ui_path"):
         out.append(
@@ -1617,13 +1834,12 @@ def render_docs_setup_page(data: dict, tools: list[dict] | None = None) -> str:
     endpoint = data["endpoint"]["hosted"]
     count = len(tools)
     other = data["other_ways"]
-    paste_clients = [
-        c["name"] for c in data["clients"] if c["kind"] == "paste_url" and c["id"] != "other"
-    ]
+    listing = _listing_phrase(data, link=_host_link)
     lines = [
         "---",
         "title: Agent Setup",
-        "description: Connect an AI agent to Keel. The hosted MCP endpoint is the default — paste one URL and sign in; the keel-trade package is the other way in.",
+        "description: Connect an AI agent to Keel. Add it from the Claude or ChatGPT listing, or give any other MCP client the hosted endpoint URL.",
+        f'updated: "{_load_sibling("release_date").keel_trade_release_date()}"',
         "---",
         "",
         f"{{/* {GENERATED_NOTE.replace(chr(10) + '     ', ' ')} */}}",
@@ -1632,9 +1848,10 @@ def render_docs_setup_page(data: dict, tools: list[dict] | None = None) -> str:
         "",
         _fence("text", endpoint),
         "",
-        f"Paste it into {', '.join(paste_clients)}, Cursor, Windsurf or any client that takes a "
-        "remote MCP server, sign in or sign up on the Keel page that opens (no account "
-        "needed beforehand), and "
+        f"{listing[0].upper()}{listing[1:]}: one click, then sign in. "
+        f"In {_url_clients(data)} or any client that takes a "
+        "remote MCP server, paste the URL. Sign in or sign up on the Keel page that opens (no "
+        "account needed beforehand), and "
         f"the agent has Keel: a {count}-tool research/backtest/read surface, nothing to install, "
         "no API key to create. Authentication is your MCP client's OAuth flow, never a tool call.",
         "",
@@ -1650,8 +1867,17 @@ def render_docs_setup_page(data: dict, tools: list[dict] | None = None) -> str:
         if client["kind"] in ("command", "config_file"):
             lines.append(_fence(client["snippet_language"], snippet))
             lines.append("")
+        if client.get("directory_url"):
+            lines.append(f"Keel's {client['name']} listing: {_host_link(client['directory_url'])}")
+            lines.append("")
         for i, step in enumerate(client["steps"], 1):
             lines.append(f"{i}. {_mdx_text(render_snippet(step, endpoint))}")
+        if client.get("paste_steps"):
+            lines.append("")
+            lines.append("Or add it by URL:")
+            lines.append("")
+            for i, step in enumerate(client["paste_steps"], 1):
+                lines.append(f"{i}. {_mdx_text(render_snippet(step, endpoint))}")
         link = render_deep_link(client, endpoint)
         if link:
             # fenced, not inline: a base64 / URL-encoded link is one unbreakable
@@ -1700,6 +1926,11 @@ def render_docs_setup_page(data: dict, tools: list[dict] | None = None) -> str:
         "`tools/list` is authoritative; use the live schemas for exact argument names. "
         "The file-based workspace tools and `keel_auth_login` / `keel_auth_logout` are not "
         "registered on the hosted endpoint — they belong to the package below.",
+        "",
+        # 07 §8.3 (WL-AG-19, the connector half of agent-setup.md's "New tools in your host"): a host keeps the
+        # tool list it read when the connector was added.
+        "New tools in your host: to see new Keel tools in ChatGPT, remove the Keel connector and add it again. "
+        "Claude picks them up in a new chat.",
         "",
         _approvals_line(data, tools),
         "",

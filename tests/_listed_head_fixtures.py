@@ -78,6 +78,7 @@ _CLEARED_ENV = (
     "KEEL_LISTED_CLIENT",
     "KEEL_LISTED_PAPER",
     "KEEL_LISTED_PAPER_HOSTS",
+    "KEEL_LISTED_SCREENS_HOSTS",
     "KEEL_APP_URL",
     "KEEL_API_URL",
     "KEEL_API_KEY",
@@ -154,14 +155,21 @@ def _wire(model: Any) -> Any:
 # ─── The served listed surface ──────────────────────────────────────────
 
 
-def listed_surface_snapshot(env: dict[str, str] | None = None) -> dict[str, Any]:
+def listed_surface_snapshot(
+    env: dict[str, str] | None = None, *, research: bool = False
+) -> dict[str, Any]:
     """The listed surface a hosted client is served, built in-process exactly
     as the directory registration runs it (``create_server()`` under
-    ``KEEL_SERVER_PROFILE=listed`` + ``KEEL_EXECUTION_MODE=hosted``)."""
+    ``KEEL_SERVER_PROFILE=listed`` + ``KEEL_EXECUTION_MODE=hosted``).
+
+    ``research`` binds the SDK's ``research_served`` for the build (07 §8.5:
+    every snapshot sets it, off for the head rows, on for the research rows,
+    so no snapshot inherits it)."""
     from keel.mcp.server import create_server
     from keel.tools.outcomes import _bootstrap
+    from keel.tools.outcomes._toolsets import research_served_context
 
-    with listed_hosted_env(env):
+    with listed_hosted_env(env), research_served_context(research):
         _bootstrap()
         server = create_server()
         tools = sorted(

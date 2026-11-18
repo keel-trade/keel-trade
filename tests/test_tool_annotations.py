@@ -22,6 +22,50 @@ _bootstrap()
 # show up in this file's diff, and a new tool fails the sweep until it
 # is deliberately classified.
 EXPECTED_HINTS: dict[str, tuple[bool, bool]] = {
+    # Research (07 §2.2): reads, writes and the one destructive delete.
+    "keel_research_plan": (True, False),
+    "keel_research_get": (True, False),
+    "keel_research_brief": (True, False),
+    "keel_research_add": (True, False),
+    "keel_research_watch": (True, False),
+    "keel_research_data": (True, False),
+    "keel_research_list": (True, False),
+    "keel_research_steps": (True, False),
+    "keel_research_shares": (True, False),
+    "keel_research_run": (False, False),
+    "keel_research_view_set": (False, False),
+    "keel_research_note": (False, False),
+    "keel_research_cancel": (False, True),  # D-344 (3): a stop, as keel_paper_control
+    "keel_research_make_signal": (False, False),
+    "keel_research_save": (False, False),
+    "keel_research_run_draft": (False, False),
+    "keel_research_resume": (False, False),
+    "keel_research_retry": (False, False),
+    "keel_research_copy": (False, False),
+    "keel_research_project": (False, False),
+    "keel_research_set_aside": (False, False),
+    "keel_research_restore": (False, False),
+    "keel_research_archive": (False, False),
+    "keel_research_delete": (False, True),
+    "keel_screener_view": (True, False),
+    "keel_screener_passing": (True, False),
+    "keel_screener_list": (True, False),
+    "keel_blocks_search": (True, False),
+    "keel_blocks_get": (True, False),
+    "keel_use_preview": (True, False),
+    "keel_view_describe": (True, False),
+    "keel_screener_run": (False, False),
+    "keel_screener_view_set": (False, False),
+    "keel_screener_refresh": (False, False),
+    "keel_screener_follow": (False, False),
+    "keel_screener_follow_view_set": (False, False),
+    "keel_screener_copy": (False, False),
+    "keel_screener_action": (False, False),
+    "keel_use_upgrade": (False, False),
+    "keel_use_detach": (False, False),
+    "keel_screener_publish": (False, True),
+    "keel_screener_unpublish": (False, True),
+    "keel_screener_describe": (False, False),
     # Read-only surfaces
     "keel_accounts_list": (True, False),
     # Operator-gated READ of the execution HALT rail (Q-0913). Read-only
@@ -94,7 +138,7 @@ EXPECTED_HINTS: dict[str, tuple[bool, bool]] = {
 
 
 def test_catalog_size_matches_expectations():
-    """50 tools today (Q-1893 added keel_backtest_positions, Q-2448
+    """68 tools today (Q-1893 added keel_backtest_positions, Q-2448
     keel_strategy_upgrade, PT2-91 released keel_paper_deploy and
     keel_paper_control). A new tool
     must be added to EXPECTED_HINTS (and a removed one taken out) — that
@@ -103,7 +147,8 @@ def test_catalog_size_matches_expectations():
         f"catalog drift — unclassified: {sorted(set(OUTCOMES) - set(EXPECTED_HINTS))}, "
         f"stale entries: {sorted(set(EXPECTED_HINTS) - set(OUTCOMES))}"
     )
-    assert len(OUTCOMES) == 50
+    # + keel_screener_describe (screeners fix batch); + Research's 24 (07 §2.2)
+    assert len(OUTCOMES) == 69 + 24
 
 
 @pytest.mark.parametrize("name", sorted(EXPECTED_HINTS))
@@ -153,16 +198,23 @@ def test_titles_are_unique():
     assert not dupes, f"duplicate titles confuse host tool pickers: {dupes}"
 
 
+def _published(ta) -> dict:
+    """The annotations as tools/list writes them: the wire's camelCase keys. mcp 2.x renamed the model's attributes
+    (``read_only_hint``) and keeps camelCase only as the serialisation alias, so the test reads what is published
+    rather than an attribute name that differs across mcp majors (D-350 (2): red on origin/main under mcp 2.2.0)."""
+    return ta.model_dump(by_alias=True, exclude_none=True)
+
+
 def test_annotations_are_valid_mcp_tool_annotations():
     """Every annotations dict must construct mcp.types.ToolAnnotations —
     the exact object the MCP adapter publishes to tools/list."""
     from mcp.types import ToolAnnotations
 
     for name, tool in OUTCOMES.items():
-        ta = ToolAnnotations(**tool.annotations)
-        assert ta.title == tool.annotations["title"], name
-        assert ta.readOnlyHint == tool.annotations["readOnlyHint"], name
-        assert ta.destructiveHint == tool.annotations["destructiveHint"], name
+        ta = _published(ToolAnnotations(**tool.annotations))
+        assert ta["title"] == tool.annotations["title"], name
+        assert ta["readOnlyHint"] == tool.annotations["readOnlyHint"], name
+        assert ta["destructiveHint"] == tool.annotations["destructiveHint"], name
 
 
 def test_registered_fastmcp_tools_carry_annotations(monkeypatch):
@@ -179,7 +231,8 @@ def test_registered_fastmcp_tools_carry_annotations(monkeypatch):
     import asyncio
 
     tools = {t.name: t for t in asyncio.run(mcp.list_tools())}
-    assert set(tools) == set(OUTCOMES)
+    # Every tool but the CLI-only commands (screeners L13 §2b).
+    assert set(tools) == {n for n, t in OUTCOMES.items() if not t.cli_only}
     for name, tool_obj in tools.items():
         ann = tool_obj.annotations
         assert ann is not None, f"{name}: registered tool lost annotations"
@@ -204,6 +257,110 @@ def test_registered_fastmcp_tools_carry_annotations(monkeypatch):
 # written grounds live in test_listed_surface_annotations.py +
 # keel/tools/outcomes/_annotation_justifications.py.
 EXPECTED_BEHAVIOUR_HINTS: dict[str, tuple[bool, bool, str]] = {
+    # Research (07 §2.2): every call reads or sets the caller's own research.
+    "keel_research_plan": (True, False, "Reads or sets server state; never opens external systems."),
+    "keel_research_get": (True, False, "Reads or sets server state; never opens external systems."),
+    "keel_research_brief": (True, False, "Reads or sets server state; never opens external systems."),
+    "keel_research_add": (True, False, "Reads or sets server state; never opens external systems."),
+    "keel_research_watch": (True, False, "Reads or sets server state; never opens external systems."),
+    "keel_research_data": (True, False, "Reads or sets server state; never opens external systems."),
+    "keel_research_list": (True, False, "Reads or sets server state; never opens external systems."),
+    "keel_research_steps": (True, False, "Reads or sets server state; never opens external systems."),
+    "keel_research_shares": (True, False, "Reads or sets server state; never opens external systems."),
+    "keel_research_run": (False, False, "Reads or sets server state; never opens external systems."),
+    "keel_research_view_set": (False, False, "Reads or sets server state; never opens external systems."),
+    "keel_research_note": (False, False, "Reads or sets server state; never opens external systems."),
+    "keel_research_cancel": (False, False, "Reads or sets server state; never opens external systems."),
+    "keel_research_make_signal": (False, False, "Reads or sets server state; never opens external systems."),
+    "keel_research_save": (False, False, "Reads or sets server state; never opens external systems."),
+    "keel_research_run_draft": (False, False, "Reads or sets server state; never opens external systems."),
+    "keel_research_resume": (False, False, "Reads or sets server state; never opens external systems."),
+    "keel_research_retry": (False, False, "Reads or sets server state; never opens external systems."),
+    "keel_research_copy": (False, False, "Reads or sets server state; never opens external systems."),
+    "keel_research_project": (False, False, "Reads or sets server state; never opens external systems."),
+    "keel_research_set_aside": (False, False, "Reads or sets server state; never opens external systems."),
+    "keel_research_restore": (False, False, "Reads or sets server state; never opens external systems."),
+    "keel_research_archive": (False, False, "Reads or sets server state; never opens external systems."),
+    "keel_research_delete": (False, False, "Reads or sets server state; never opens external systems."),
+    "keel_screener_view": (
+        True,
+        False,
+        "Reads or sets server state; never opens external systems.",
+    ),
+    "keel_screener_passing": (
+        True,
+        False,
+        "Reads or sets server state; never opens external systems.",
+    ),
+    "keel_screener_list": (
+        True,
+        False,
+        "Reads or sets server state; never opens external systems.",
+    ),
+    "keel_blocks_search": (
+        True,
+        False,
+        "Reads or sets server state; never opens external systems.",
+    ),
+    "keel_blocks_get": (True, False, "Reads or sets server state; never opens external systems."),
+    "keel_use_preview": (True, False, "Reads or sets server state; never opens external systems."),
+    "keel_view_describe": (
+        True,
+        False,
+        "Reads or sets server state; never opens external systems.",
+    ),
+    "keel_screener_run": (
+        False,
+        False,
+        "Reads or sets server state; never opens external systems.",
+    ),
+    "keel_screener_view_set": (
+        False,
+        False,
+        "Reads or sets server state; never opens external systems.",
+    ),
+    "keel_screener_refresh": (
+        True,
+        False,
+        "Reads or sets server state; never opens external systems.",
+    ),
+    "keel_screener_follow": (
+        True,
+        False,
+        "Reads or sets server state; never opens external systems.",
+    ),
+    "keel_screener_follow_view_set": (
+        True,
+        False,
+        "Reads or sets server state; never opens external systems.",
+    ),
+    "keel_screener_copy": (
+        False,
+        False,
+        "Reads or sets server state; never opens external systems.",
+    ),
+    "keel_screener_action": (
+        False,
+        False,
+        "Reads or sets server state; never opens external systems.",
+    ),
+    "keel_use_upgrade": (False, False, "Reads or sets server state; never opens external systems."),
+    "keel_use_detach": (False, False, "Reads or sets server state; never opens external systems."),
+    "keel_screener_publish": (
+        False,
+        False,
+        "Reads or sets server state; never opens external systems.",
+    ),
+    "keel_screener_unpublish": (
+        False,
+        False,
+        "Reads or sets server state; never opens external systems.",
+    ),
+    "keel_screener_describe": (
+        True,
+        False,
+        "Setting the same sentence twice leaves the same note; never opens external systems.",
+    ),
     # name: (idempotentHint, openWorldHint, the written reason for both).
     # The reason is the review surface (Q-1748): a hint with no stated
     # ground is how `keel_strategy_fork` shipped idempotentHint=True while
@@ -321,7 +478,7 @@ EXPECTED_BEHAVIOUR_HINTS: dict[str, tuple[bool, bool, str]] = {
 
 
 def test_behaviour_hint_table_covers_the_catalog():
-    """Not vacuous: the second table classifies exactly the same 50 tools
+    """Not vacuous: the second table classifies exactly the same 68 tools
     as the first, so a new tool cannot slip past it either."""
     assert set(EXPECTED_BEHAVIOUR_HINTS) == set(EXPECTED_HINTS) == set(OUTCOMES)
 
@@ -377,8 +534,8 @@ def test_all_four_hints_survive_the_mcp_annotation_object():
 
     checked = 0
     for name, tool in OUTCOMES.items():
-        ta = ToolAnnotations(**tool.annotations)
-        assert ta.idempotentHint == tool.annotations["idempotentHint"], name
-        assert ta.openWorldHint == tool.annotations["openWorldHint"], name
+        ta = _published(ToolAnnotations(**tool.annotations))
+        assert ta["idempotentHint"] == tool.annotations["idempotentHint"], name
+        assert ta["openWorldHint"] == tool.annotations["openWorldHint"], name
         checked += 1
-    assert checked == len(OUTCOMES) == 50
+    assert checked == len(OUTCOMES) == 69 + 24  # Research's 24 (07 §2.2)

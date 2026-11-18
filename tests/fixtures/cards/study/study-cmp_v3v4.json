@@ -1,0 +1,671 @@
+{
+  "_meta": {
+    "keel/card": {
+      "card_data": {
+        "charts": [
+          {
+            "chart": {
+              "cols": 1,
+              "d": "g",
+              "enc": "b64x2",
+              "family": "Heatmap",
+              "kind": "heat",
+              "legend": {
+                "hi": "1.00",
+                "lo": "1.00",
+                "ramp": "div"
+              },
+              "marks": [],
+              "more_words": null,
+              "note_words": null,
+              "outline": null,
+              "read": {
+                "band": null,
+                "bins": null,
+                "cells": "1.00",
+                "ring_words": null,
+                "sel": "result:Momentum%20rotation%20v4",
+                "sel_rows": "result_b:Momentum%20rotation%20v3",
+                "withheld": null,
+                "x": "Momentum rotation v4",
+                "y": ["Momentum rotation v3"]
+              },
+              "ring": null,
+              "rows": 1,
+              "series": [],
+              "title": "How much they move together",
+              "values_in_cells": true,
+              "x": {
+                "label": "Result",
+                "n": 1,
+                "pos": null,
+                "ticks": [
+                  {
+                    "at": 2048,
+                    "w": "Momentum rotation v4"
+                  }
+                ]
+              },
+              "y": {
+                "label": "Compared with",
+                "n": 1,
+                "pos": null,
+                "ticks": [
+                  {
+                    "at": 2048,
+                    "w": "Momentum rotation v3"
+                  }
+                ]
+              }
+            },
+            "family": "Heatmap",
+            "form": "chart",
+            "index": 1,
+            "lead": null,
+            "state_words": null,
+            "thumb": null,
+            "title": "How much they move together",
+            "v": "How%20much%20they%20move%20together"
+          },
+          {
+            "chart": {
+              "enc": "b64x2",
+              "family": "Lines",
+              "kind": "line",
+              "legend": null,
+              "marks": [],
+              "more_words": null,
+              "note_words": "Mar 23, 2025 to Oct 28, 2026 · showing 60 of 585 days",
+              "read": {
+                "band": null,
+                "bins": null,
+                "cells": null,
+                "ring_words": null,
+                "sel": null,
+                "sel_rows": null,
+                "withheld": null,
+                "x": "Mar 23, 2025|Apr 2, 2025|Apr 12, 2025|Apr 23, 2025|May 3, 2025|May 13, 2025|May 23, 2025|Jun 3, 2025|Jun 13, 2025|Jun 14, 2025|Jun 23, 2025|Jul 3, 2025|Jul 14, 2025|Jul 24, 2025|Aug 3, 2025|Aug 13, 2025|Aug 24, 2025|Sep 3, 2025|Sep 13, 2025|Sep 23, 2025|Oct 4, 2025|Oct 14, 2025|Oct 24, 2025|Nov 3, 2025|Nov 14, 2025|Nov 24, 2025|Dec 4, 2025|Dec 14, 2025|Dec 25, 2025|Jan 4, 2026|Jan 14, 2026|Jan 24, 2026|Feb 4, 2026|Feb 14, 2026|Feb 24, 2026|Mar 6, 2026|Mar 17, 2026|Mar 27, 2026|Apr 6, 2026|Apr 16, 2026|Apr 25, 2026|Apr 27, 2026|May 7, 2026|May 17, 2026|May 27, 2026|Jun 7, 2026|Jun 17, 2026|Jun 27, 2026|Jul 7, 2026|Jul 18, 2026|Jul 28, 2026|Aug 7, 2026|Aug 17, 2026|Aug 28, 2026|Sep 7, 2026|Sep 17, 2026|Sep 27, 2026|Oct 8, 2026|Oct 18, 2026|Oct 28, 2026",
+                "y": [
+                  "0.0%|0.0%|−0.1%|−2.0%|−2.6%|−4.5%|−8.2%|−6.5%|−1.5%|0.0%|−4.7%|−5.5%|−6.1%|−7.9%|−7.5%|−6.8%|−7.1%|−7.7%|−5.3%|−3.9%|−10.3%|−15.7%|−14.9%|−16.2%|−19.6%|−18.0%|−19.7%|−24.5%|−21.3%|−17.8%|−15.6%|−19.2%|−19.2%|−19.6%|−19.0%|−21.8%|−21.1%|−19.4%|−22.0%|−26.7%|−28.6%|−26.2%|−27.4%|−27.1%|−22.7%|−22.5%|−21.7%|−17.6%|−20.7%|−22.4%|−22.3%|−19.2%|−21.1%|−22.3%|−20.9%|−21.6%|−20.4%|−16.6%|−18.2%|−17.0%"
+                ]
+              },
+              "series": [
+                {
+                  "c": 0,
+                  "hi": null,
+                  "lo": null,
+                  "name": null,
+                  "ref": false,
+                  "y": "_____y7n6P15ttxf8u__1ezsySuYvPw1wLuw0M3No_c5enbtULXsT5JMQNYMdEVCU6UBVaPQQsUiO0EMAAFTCvDNNJNiPUYmRwNvODU6QtOERMPsSSauXMZ8"
+                }
+              ],
+              "title": "Drawdown",
+              "x": {
+                "label": "Day",
+                "n": 60,
+                "pos": "AABGCMDZEfFmGsH5I_JGKFLLMYNeOlPrQ4R-TEUKVXWdXkYqZ3a9cDdJeWfcgjhpi2j8lCmInVobpiqornr1s7uBvHwUxayhzn00163A4G5T6Z7g8m9z-5__",
+                "ticks": [
+                  {
+                    "at": 0,
+                    "w": "Mar 2025"
+                  },
+                  {
+                    "at": 792,
+                    "w": "Jul 2025"
+                  },
+                  {
+                    "at": 1655,
+                    "w": "Nov 2025"
+                  },
+                  {
+                    "at": 2440,
+                    "w": "Mar 2026"
+                  },
+                  {
+                    "at": 3233,
+                    "w": "Jun 2026"
+                  },
+                  {
+                    "at": 4095,
+                    "w": "Oct 2026"
+                  }
+                ]
+              },
+              "y": {
+                "label": "Drawdown",
+                "n": null,
+                "pos": null,
+                "ticks": [
+                  {
+                    "at": 1229,
+                    "w": "−20.0%"
+                  },
+                  {
+                    "at": 2662,
+                    "w": "−10.0%"
+                  },
+                  {
+                    "at": 4095,
+                    "w": "0.0%"
+                  }
+                ]
+              }
+            },
+            "family": "Lines",
+            "form": "chart",
+            "index": 2,
+            "lead": null,
+            "state_words": null,
+            "thumb": null,
+            "title": "Drawdown",
+            "v": "Drawdown"
+          },
+          {
+            "chart": null,
+            "family": "River",
+            "form": "title",
+            "index": 3,
+            "lead": null,
+            "state_words": null,
+            "thumb": null,
+            "title": "Rank over time",
+            "v": "Rank%20over%20time"
+          },
+          {
+            "chart": {
+              "columns": [
+                {
+                  "w": "Result"
+                },
+                {
+                  "w": "Measure"
+                },
+                {
+                  "w": "Value"
+                }
+              ],
+              "enc": "b64x2",
+              "family": "Table",
+              "kind": "table",
+              "legend": null,
+              "marks": [],
+              "more_words": "24 more rows",
+              "note_words": null,
+              "read": null,
+              "rows": [
+                ["Momentum rotation v4", "first_day", "not measured"],
+                ["Momentum rotation v3", "first_day", "not measured"],
+                ["Momentum rotation v4", "last_day", "not measured"],
+                ["Momentum rotation v3", "last_day", "not measured"],
+                ["Momentum rotation v4", "coins", "not measured"],
+                ["Momentum rotation v3", "coins", "not measured"],
+                ["Momentum rotation v4", "coin_rule", "not measured"],
+                ["Momentum rotation v3", "coin_rule", "not measured"],
+                ["Momentum rotation v4", "fee", "0.000450"],
+                ["Momentum rotation v3", "fee", "0.000450"]
+              ],
+              "series": [],
+              "title": "Side by side",
+              "x": null,
+              "y": null
+            },
+            "family": "Table",
+            "form": "chart",
+            "index": 4,
+            "lead": null,
+            "state_words": null,
+            "thumb": null,
+            "title": "Side by side",
+            "v": "Side%20by%20side"
+          },
+          {
+            "chart": {
+              "enc": "b64x2",
+              "family": "Bars",
+              "kind": "bars",
+              "legend": null,
+              "marks": [],
+              "more_words": null,
+              "note_words": null,
+              "read": {
+                "band": null,
+                "bins": null,
+                "cells": null,
+                "ring_words": null,
+                "sel": "metric:sharpe|metric:cagr|metric:max_drawdown|metric:vol",
+                "sel_rows": null,
+                "withheld": null,
+                "x": "sharpe|cagr|max_drawdown|vol",
+                "y": [
+                  "0.00 (0.00 to 0.00)|0.00 (0.00 to 0.00)|0.00 (0.00 to 0.00)|0.00 (0.00 to 0.00)"
+                ]
+              },
+              "series": [
+                {
+                  "c": 0,
+                  "hi": "f_f_f_f_",
+                  "lo": "f_f_f_f_",
+                  "name": null,
+                  "ref": false,
+                  "y": "f_f_f_f_"
+                }
+              ],
+              "title": "Against v3",
+              "x": {
+                "label": "Measure",
+                "n": 4,
+                "pos": null,
+                "ticks": [
+                  {
+                    "at": 512,
+                    "w": "sharpe"
+                  },
+                  {
+                    "at": 1536,
+                    "w": "cagr"
+                  },
+                  {
+                    "at": 2559,
+                    "w": "max_drawdown"
+                  },
+                  {
+                    "at": 3583,
+                    "w": "vol"
+                  }
+                ]
+              },
+              "y": {
+                "label": "Difference",
+                "n": null,
+                "pos": null,
+                "ticks": [
+                  {
+                    "at": 2047,
+                    "w": "0.00"
+                  }
+                ]
+              },
+              "zero": 2047
+            },
+            "family": "Bars",
+            "form": "chart",
+            "index": 5,
+            "lead": null,
+            "state_words": null,
+            "thumb": null,
+            "title": "Against v3",
+            "v": "Against%20v3"
+          }
+        ],
+        "checks": null,
+        "chips": [],
+        "copy": {
+          "charts": "Charts",
+          "failed_cell": "Didn't finish",
+          "full_chart_in_keel": "Open in Keel for the full chart",
+          "highest": "Highest",
+          "hint_pointer": "Hover or tap the chart for values",
+          "hint_touch": "Tap the chart for values",
+          "locked": "not included in this account's plan",
+          "lowest": "Lowest",
+          "met": "met",
+          "more_charts": "+1 more chart",
+          "not_measured": "not measured",
+          "not_met": "not met",
+          "not_run": "Not run yet",
+          "not_valid": "Not a valid setting",
+          "numbers": "The numbers",
+          "open_bar": "Open this bar in Keel",
+          "open_chart": "Open this chart in Keel",
+          "open_setting": "Open this setting in Keel",
+          "points_in_keel": "Open in Keel to read each point",
+          "steps": "Steps",
+          "yours": "Yours"
+        },
+        "focus": null,
+        "head_words": null,
+        "key": {
+          "enc": "b64x2",
+          "family": "Lines",
+          "kind": "line",
+          "legend": null,
+          "marks": [],
+          "more_words": null,
+          "note_words": "Mar 23, 2025 to Oct 28, 2026 · showing 120 of 585 days",
+          "read": {
+            "band": null,
+            "bins": null,
+            "cells": null,
+            "ring_words": null,
+            "sel": null,
+            "sel_rows": null,
+            "withheld": null,
+            "x": "Mar 23, 2025|Mar 28, 2025|Apr 2, 2025|Apr 7, 2025|Apr 12, 2025|Apr 17, 2025|Apr 22, 2025|Apr 27, 2025|May 2, 2025|May 7, 2025|May 12, 2025|May 17, 2025|May 22, 2025|May 27, 2025|Jun 1, 2025|Jun 6, 2025|Jun 11, 2025|Jun 14, 2025|Jun 16, 2025|Jun 21, 2025|Jun 26, 2025|Jul 1, 2025|Jul 6, 2025|Jul 11, 2025|Jul 16, 2025|Jul 21, 2025|Jul 26, 2025|Jul 31, 2025|Aug 5, 2025|Aug 10, 2025|Aug 15, 2025|Aug 20, 2025|Aug 25, 2025|Aug 30, 2025|Sep 4, 2025|Sep 9, 2025|Sep 14, 2025|Sep 19, 2025|Sep 24, 2025|Sep 29, 2025|Oct 4, 2025|Oct 9, 2025|Oct 14, 2025|Oct 19, 2025|Oct 24, 2025|Oct 29, 2025|Nov 3, 2025|Nov 8, 2025|Nov 13, 2025|Nov 18, 2025|Nov 23, 2025|Nov 28, 2025|Dec 3, 2025|Dec 8, 2025|Dec 13, 2025|Dec 18, 2025|Dec 23, 2025|Dec 28, 2025|Jan 2, 2026|Jan 7, 2026|Jan 11, 2026|Jan 16, 2026|Jan 21, 2026|Jan 26, 2026|Jan 31, 2026|Feb 5, 2026|Feb 10, 2026|Feb 15, 2026|Feb 20, 2026|Feb 25, 2026|Mar 2, 2026|Mar 7, 2026|Mar 12, 2026|Mar 17, 2026|Mar 22, 2026|Mar 27, 2026|Apr 1, 2026|Apr 6, 2026|Apr 11, 2026|Apr 16, 2026|Apr 21, 2026|Apr 25, 2026|Apr 26, 2026|May 1, 2026|May 6, 2026|May 11, 2026|May 16, 2026|May 21, 2026|May 26, 2026|May 31, 2026|Jun 5, 2026|Jun 10, 2026|Jun 15, 2026|Jun 20, 2026|Jun 25, 2026|Jun 30, 2026|Jul 5, 2026|Jul 10, 2026|Jul 15, 2026|Jul 20, 2026|Jul 25, 2026|Jul 30, 2026|Aug 4, 2026|Aug 9, 2026|Aug 14, 2026|Aug 19, 2026|Aug 24, 2026|Aug 29, 2026|Sep 3, 2026|Sep 8, 2026|Sep 13, 2026|Sep 18, 2026|Sep 23, 2026|Sep 28, 2026|Oct 3, 2026|Oct 8, 2026|Oct 13, 2026|Oct 18, 2026|Oct 23, 2026|Oct 28, 2026",
+            "y": [
+              "1.00×|1.00×|1.00×|1.00×|1.00×|1.01×|1.02×|0.99×|0.99×|0.99×|1.00×|0.96×|0.94×|0.92×|0.95×|1.00×|1.02×|1.03×|1.01×|0.97×|0.97×|0.95×|0.99×|0.98×|0.95×|0.93×|0.95×|0.96×|0.95×|0.95×|0.97×|0.95×|0.96×|0.96×|0.95×|0.96×|0.98×|1.00×|0.98×|0.97×|0.93×|0.89×|0.87×|0.88×|0.88×|0.88×|0.87×|0.85×|0.81×|0.83×|0.85×|0.83×|0.83×|0.80×|0.77×|0.79×|0.81×|0.82×|0.84×|0.84×|0.85×|0.88×|0.87×|0.83×|0.81×|0.83×|0.83×|0.84×|0.82×|0.83×|0.81×|0.82×|0.81×|0.82×|0.81×|0.83×|0.82×|0.81×|0.79×|0.76×|0.77×|0.74×|0.76×|0.75×|0.75×|0.76×|0.76×|0.78×|0.80×|0.81×|0.81×|0.79×|0.80×|0.83×|0.86×|0.84×|0.82×|0.83×|0.80×|0.82×|0.82×|0.80×|0.82×|0.82×|0.81×|0.81×|0.81×|0.80×|0.80×|0.82×|0.79×|0.81×|0.82×|0.82×|0.84×|0.86×|0.85×|0.85×|0.87×|0.86×"
+            ]
+          },
+          "series": [
+            {
+              "c": 0,
+              "hi": null,
+              "lo": null,
+              "name": null,
+              "ref": false,
+              "y": "4w4w4w4w4k6z9V2G2N1-3sv3sknwt1328r__6PzCxfuu2lzuudo6tVvEs8u7ytuivFvytzvu0i3x0ozDo_gBc5fienfubtYaQhS8X1UwUgNvH_KOP-Q6W0VTYFd4cCU9OiUhUyVeRMUEO3RuP5QsPdUiSfO0MMEMF4AAEhCYCaD1D0JfOeQAPaLYNtTWZ2WNR7TbOZRKQvOCR6QsQKQiQSNSN8SEKsQWS0SEXJauYMXMcSZ8"
+            }
+          ],
+          "title": "Growth",
+          "x": {
+            "label": "Day",
+            "n": 120,
+            "pos": "AAAjBGBpCMCvDSD1EYE8FfGCGlHIHrIOIxJGJUJ3KaK9LgMDMmNJNsOQOzPWP5QcQ_RiSFSoTLTuURU0VXV6WdXBXkYHYqZNZwaTa2bZb8cfdCdleIerfOfxgOgxhUh3iai9jgkDkmlJlsmPmynVn4obo-piqFqorLrnrusRs0tXt6udvAvjwGwpxMxvyTy2zZz80f1C1l2I2r3O3x4U435a596g7D7n8K8t9Q9z-W-5_c__",
+            "ticks": [
+              {
+                "at": 0,
+                "w": "Mar 2025"
+              },
+              {
+                "at": 806,
+                "w": "Jul 2025"
+              },
+              {
+                "at": 1648,
+                "w": "Nov 2025"
+              },
+              {
+                "at": 2447,
+                "w": "Mar 2026"
+              },
+              {
+                "at": 3254,
+                "w": "Jun 2026"
+              },
+              {
+                "at": 4095,
+                "w": "Oct 2026"
+              }
+            ]
+          },
+          "y": {
+            "label": "Growth of 1",
+            "n": null,
+            "pos": null,
+            "ticks": [
+              {
+                "at": 859,
+                "w": "0.80×"
+              },
+              {
+                "at": 2246,
+                "w": "0.90×"
+              },
+              {
+                "at": 3632,
+                "w": "1.00×"
+              }
+            ]
+          }
+        },
+        "key_v": "Growth",
+        "links": {
+          "chart": "https://app.usekeel.io/research/stu_000004?v={v}",
+          "select": "https://app.usekeel.io/research/stu_000004?v={v}&sel={sel}",
+          "study": "https://app.usekeel.io/research/stu_000004"
+        },
+        "method_line": "Measured with Backtest v1, PairedDifference v1, Correlations v1",
+        "more_charts_total": 1,
+        "more_words": null,
+        "notes": {
+          "draft": null,
+          "linked": null,
+          "not_measured": [],
+          "saved": null,
+          "stale": ["Momentum rotation v3 has a newer version, v4."]
+        },
+        "rows": null,
+        "schema": "keel.research.card-data/2",
+        "steps": [],
+        "top": null
+      },
+      "card_summary": {
+        "thumb": {
+          "facts": {
+            "enc": "b64",
+            "series": [
+              {
+                "c": 0,
+                "y": "666_36ts74u0puy1rt12jedXQSRGOXcTRSSLOQRFABDHKITVQQLLLKLOQZVY"
+              }
+            ],
+            "zero": 58
+          },
+          "family": "Lines",
+          "view_index": 0
+        }
+      }
+    },
+    "ui": {
+      "resourceUri": "ui://keel/cards/study.html"
+    }
+  },
+  "content": [
+    {
+      "text": "card: where the host draws Keel cards, the user sees what follows as a card carrying its name, links and ids, so a reply can call it by name; the ids and links here serve tool calls and hosts without cards.\n\nCompare · Momentum rotation v3 vs v4 · version 1 · Done · Oct 29\nUsed 0 of 400 studies; resets Dec 1. Planning, reading, saving, and runs that reuse everything or run nothing, do not count.\nSharpe (daily) over the window, Momentum rotation v4: −0.44\nDays Mar 23, 2025 to Oct 29, 2026, split Apr 17, 2026 · 100 coins: the coins Momentum rotation v3 trades · costs 9 bp a fill · data as of Oct 29, 2026\nMeasured with Backtest v1, SameFooting v1, PairedDifference v1, Correlations v1, Blend v1.\nIn short:\n- Sharpe (daily) over the window, Momentum rotation v4: −0.44, no interval; 585 days\n- Sharpe, Momentum rotation v4 against Momentum rotation v3: 0.00, 0.00 to 0.00; 585 shared days\n- Effective number of different results, all: 1.00, no interval; sample not stated\nRunning them together: A what-if on the stored results: nothing is traded.\nRuns: 0 runs, 0 reused, none failed · versions tried: unknown\nCharts (6): Growth · How much they move together · Drawdown · Rank over time · Side by side · Against v3 — keel_research_get(study_id=\"stu_000004\", view=0) reads the numbers behind any of them.\nMomentum rotation v3 has a newer version, v4. Plan it: keel_research_plan(study_id=\"stu_000004\", source=\"Study(\\n    title=\\\"Momentum rotation v3 vs v4\\\",\\n)\\n\\nSubjects(\\n    v4=Strategy(\\\"str_momrotpro00000000000000000@4\\\"),\\n    v3=Strategy(\\\"str_momrotpro00000000000000000@4\\\"),\\n)\\n\\nRun(\\n    days=Days(\\\"2025-03-23\\\", \\\"2026-10-29\\\"),\\n    split=Split(\\\"2026-04-17\\\"),\\n    coins=Coins([\\\"BTC\\\", \\\"ETH\\\", \\\"SOL\\\", \\\"HYPE\\\", \\\"XRP\\\", \\\"DOGE\\\", \\\"SUI\\\", \\\"BNB\\\", \\\"ADA\\\", \\\"LINK\\\", \\\"AVAX\\\", \\\"TRX\\\", \\\"LTC\\\", \\\"BCH\\\", \\\"DOT\\\", \\\"NEAR\\\", \\\"APT\\\", \\\"ARB\\\", \\\"OP\\\", \\\"INJ\\\", \\\"TIA\\\", \\\"SEI\\\", \\\"WLD\\\", \\\"JUP\\\", \\\"kPEPE\\\", \\\"WIF\\\", \\\"kBONK\\\", \\\"TON\\\", \\\"ATOM\\\", \\\"FIL\\\", \\\"ETC\\\", \\\"UNI\\\", \\\"AAVE\\\", \\\"MKR\\\", \\\"LDO\\\", \\\"CRV\\\", \\\"ENA\\\", \\\"ONDO\\\", \\\"PENDLE\\\", \\\"RENDER\\\", \\\"FET\\\", \\\"TAO\\\", \\\"STX\\\", \\\"IMX\\\", \\\"GALA\\\", \\\"SAND\\\", \\\"ILV\\\", \\\"AXS\\\", \\\"APE\\\", \\\"DYDX\\\", \\\"GMX\\\", \\\"SNX\\\", \\\"COMP\\\", \\\"SUSHI\\\", \\\"UMA\\\", \\\"BLUR\\\", \\\"JTO\\\", \\\"PYTH\\\", \\\"W\\\", \\\"STRK\\\", \\\"ZK\\\", \\\"ZRO\\\", \\\"EIGEN\\\", \\\"ETHFI\\\", \\\"REZ\\\", \\\"BOME\\\", \\\"MEW\\\", \\\"POPCAT\\\", \\\"TRUMP\\\", \\\"FARTCOIN\\\", \\\"AI16Z\\\", \\\"VIRTUAL\\\", \\\"KAITO\\\", \\\"BERA\\\", \\\"IP\\\", \\\"MOVE\\\", \\\"ME\\\", \\\"PNUT\\\", \\\"GOAT\\\", \\\"HBAR\\\", \\\"XLM\\\", \\\"ALGO\\\", \\\"KAS\\\", \\\"ORDI\\\", \\\"MINA\\\", \\\"ZEC\\\", \\\"DASH\\\", \\\"NEO\\\", \\\"ICP\\\", \\\"RUNE\\\", \\\"ENS\\\", \\\"ZEN\\\", \\\"CFX\\\", \\\"BLAST\\\", \\\"SAGA\\\", \\\"NOT\\\", \\\"MEME\\\", \\\"ALT\\\", \\\"DYM\\\", \\\"MANTA\\\"], chosen=SubjectUniverse(\\\"v3\\\")),\\n    costs=Costs(fee=0.00045, slippage=0.00045),\\n    data=Data(\\\"snap_6c1f0e8a2b9d4f37\\\"),\\n)\\n\\nSteps(\\n    base=Backtest(),\\n    footing=SameFooting(),\\n    diff=PairedDifference(baseline=\\\"v3\\\", on=[\\\"v4\\\", \\\"v3\\\"], seed=20261103),\\n    alike=Correlations(on=[\\\"v4\\\", \\\"v3\\\"], seed=20261103),\\n    blend=Blend(members=[\\\"v4\\\", \\\"v3\\\"], weights=[\\\"equal\\\", \\\"equal_risk\\\"]),\\n)\\n\\nViews(\\n    Page(default=\\\"Growth\\\", switch=[\\\"Growth\\\", \\\"How much they move together\\\", \\\"Drawdown\\\", \\\"Rank over time\\\", \\\"Side by side\\\"]),\\n    Lines(\\\"Growth\\\", of=\\\"base\\\", plot=Raw(\\\"growth\\\")),\\n    Heatmap(\\\"How much they move together\\\", of=\\\"alike\\\", x=Axis(\\\"result\\\"), y=Axis(\\\"result_b\\\"), colour=Raw(\\\"return_correlation\\\")),\\n    Lines(\\\"Drawdown\\\", of=\\\"base\\\", plot=Raw(\\\"drawdown\\\")),\\n    River(\\\"Rank over time\\\", of=\\\"base\\\", plot=Rank(Raw(\\\"growth\\\"))),\\n    Table(\\\"Side by side\\\", of=\\\"footing\\\", rows=Axis(\\\"result\\\"), columns=Axis(\\\"metric\\\")),\\n    Bars(\\\"Against v3\\\", of=\\\"diff\\\", x=Axis(\\\"metric\\\"), y=Raw(\\\"difference\\\"), error=[Raw(\\\"difference_lo\\\"), Raw(\\\"difference_hi\\\")]),\\n)\\n\", base={\"version\": 1, \"revision\": 1, \"evidence_hash\": \"048c0c87e6055b6b16c3c5a11db99a1cd29623c28d18bdbaa138007d482dcf10\"})\nView in Keel: https://app.usekeel.io/research/stu_000004",
+      "type": "text"
+    }
+  ],
+  "structuredContent": {
+    "base": {
+      "evidence_hash": "048c0c87e6055b6b16c3c5a11db99a1cd29623c28d18bdbaa138007d482dcf10",
+      "revision": 1,
+      "version": 1
+    },
+    "can_retry": false,
+    "can_run": true,
+    "card_summary": {
+      "footer": {
+        "runs_words": "no new runs",
+        "subject": "Momentum rotation v4 vs Momentum rotation v3"
+      },
+      "footing_line": "585 days · 100 coins · 9 bp a fill",
+      "headline": {
+        "chips": [],
+        "text": "Sharpe (daily) over the window, Momentum rotation v4: −0.44"
+      },
+      "kind_label": {
+        "key": "compare",
+        "name": "Compare",
+        "short": "Compare"
+      },
+      "lead": "Sharpe (daily) over the window, Momentum rotation v4 −0.44",
+      "maker": "you",
+      "maker_words": "by you",
+      "numbers": [
+        {
+          "label": "Sharpe (daily) over the window, Momentum rotation v4",
+          "measure": "sharpe",
+          "ref": "base.summary",
+          "sample": {
+            "days": 585,
+            "first_day": "2025-03-23",
+            "last_day": "2026-10-29"
+          },
+          "sample_words": "585 days",
+          "unit": "ratio",
+          "value": -0.43734292881405434,
+          "value_words": "−0.44"
+        },
+        {
+          "interval_words": "0.00 to 0.00",
+          "label": "Sharpe, Momentum rotation v4 against Momentum rotation v3",
+          "measure": "difference",
+          "ref": "diff",
+          "sample": {
+            "first_day": "2025-03-23",
+            "last_day": "2026-10-29",
+            "shared_days": 585
+          },
+          "sample_words": "585 shared days",
+          "unit": "ratio",
+          "value": 0.0,
+          "value_words": "0.00"
+        },
+        {
+          "label": "Effective number of different results, all",
+          "measure": "effective_number",
+          "ref": "alike.summary",
+          "sample": {
+            "first_day": "2025-03-23",
+            "last_day": "2026-10-29"
+          },
+          "unit": "ratio",
+          "value": 1.0,
+          "value_words": "1.00"
+        }
+      ],
+      "schema": "keel.research.card/2",
+      "state": "completed",
+      "state_words": "Done · Oct 29",
+      "title": "Momentum rotation v3 vs v4",
+      "top5": {
+        "kind": "results",
+        "rows": [
+          {
+            "label": "Momentum rotation v4",
+            "slot": 1,
+            "unit": "ratio",
+            "value": -0.43734292881405434,
+            "value_words": "−0.44"
+          }
+        ],
+        "total": 1
+      },
+      "version": 1
+    },
+    "counts": {
+      "allowance": {
+        "study": "free",
+        "units": [
+          {
+            "limit": 400,
+            "resets_at": "2026-12-18",
+            "unit": "research_studies",
+            "used": 0
+          }
+        ]
+      },
+      "runs": {
+        "executed": 0,
+        "failed_content": 0,
+        "failed_platform": 0,
+        "planned": 0,
+        "reused": 0,
+        "words": "0 runs, 0 reused, none failed"
+      },
+      "versions_tried": {
+        "added": 0,
+        "family": "",
+        "why": ""
+      }
+    },
+    "footing": {
+      "coins": {
+        "chosen": "The coins Momentum rotation v3 trades",
+        "count": 100,
+        "names_sha256": "6892dc8e601171fcb382e7a0d253cf7c697378343e093731f8e5efcd580a72bd"
+      },
+      "costs": {
+        "fee": 0.00045,
+        "slippage": 0.00045
+      },
+      "data": "snap_6c1f0e8a2b9d4f37",
+      "days": {
+        "end": "2026-10-29",
+        "start": "2025-03-23"
+      },
+      "delay": 0,
+      "engine": "eng_000000000000000000000000000000000000000000000000000000000000",
+      "engine_words": "This version of the engine",
+      "leverage": 1.0,
+      "split": "2026-04-17",
+      "split_words": "Split on Apr 17, 2026: 390 days before, 195 after"
+    },
+    "hero_url": "https://app.usekeel.io/research/stu_000004",
+    "links": {
+      "app": "https://app.usekeel.io/research/stu_000004"
+    },
+    "locked": [],
+    "not_measured": [],
+    "notes": {
+      "notes_total": 0
+    },
+    "page": {
+      "default": 0,
+      "switch": [0, 1, 2, 3, 4]
+    },
+    "stale": [
+      {
+        "kind": "newer_subject",
+        "offer": {
+          "plan": {
+            "base": {
+              "evidence_hash": "048c0c87e6055b6b16c3c5a11db99a1cd29623c28d18bdbaa138007d482dcf10",
+              "revision": 1,
+              "version": 1
+            },
+            "study_id": "stu_000004"
+          },
+          "ref": "str_momrotpro00000000000000000@4"
+        },
+        "short": "v4 is out",
+        "words": "Momentum rotation v3 has a newer version, v4."
+      }
+    ],
+    "steps": {
+      "by_status": {
+        "completed": 5
+      },
+      "total": 5
+    },
+    "study": {
+      "archived": false,
+      "can_delete": true,
+      "evidence_hash": "048c0c87e6055b6b16c3c5a11db99a1cd29623c28d18bdbaa138007d482dcf10",
+      "kind_label": {
+        "key": "compare",
+        "name": "Compare",
+        "short": "Compare"
+      },
+      "linked_to": [],
+      "linked_to_total": 0,
+      "presentation_hash": "7bd3d12bce637274cccef8cec8affae88edc68ea9ec6737482568a8719feba68",
+      "revision": 1,
+      "run_set_id": "rus_000004",
+      "set_aside": false,
+      "state": "completed",
+      "study_id": "stu_000004",
+      "title": "Momentum rotation v3 vs v4",
+      "version": 1
+    },
+    "subjects": {
+      "total": 2
+    },
+    "url_line": "View in Keel: https://app.usekeel.io/research/stu_000004",
+    "view": {
+      "at": "2026-11-17T00:00:06.000Z",
+      "kind": "study",
+      "mode": "study",
+      "object": "stu_000004",
+      "seq": 7,
+      "size": "view",
+      "version": 1
+    },
+    "views": {
+      "total": 6
+    },
+    "words": {
+      "allowance": "Used 0 of 400 studies; resets Dec 1. Planning, reading, saving, and runs that reuse everything or run nothing, do not count."
+    }
+  }
+}

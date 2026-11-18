@@ -14,9 +14,12 @@ from __future__ import annotations
 
 from typing import Any
 
+from keel.errors import project_first_week
+
 from . import register
 from ._base import OutcomeResult, OutcomeTool, ToolContext
 from ._status_view import CAPABILITY_PHRASE, CAPABILITY_PHRASE_PAPER_LISTED
+from ._toolsets import live_write_opt_in
 
 
 #: The live-trading route's guidance on a HOSTED server without live-write
@@ -131,10 +134,7 @@ def _workflow_routes(
         "available": live_write_loaded,
         "read_available": live_read_loaded,
         "next": [
-            (
-                "Opt into live write tools with "
-                "KEEL_TOOLSETS=read-only,backtest,share,live-read,live-write."
-            ),
+            f"Opt into live write tools with {live_write_opt_in()}.",
             (
                 "Preview first; actual deploy requires confirmation_token, "
                 "--yes in agent-mode CLI, live OAuth scope, and local arming."
@@ -269,6 +269,13 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
                     **body["identity"],
                 }
 
+            # A plan grant (plan-grants spec 01 §7): only a paid org can hold
+            # one, so free and anon orgs never make this second call.
+            if org.get("plan") in ("starter", "trader", "pro"):
+                grant = _plan_grant(config)
+                if grant:
+                    body["identity"]["plan_grant"] = grant
+
             # Anonymous claim-later state (spec 05 R4): anon quota +
             # expiry + claim instructions, numbers straight from the
             # server (plan_status.remaining — never invented locally).
@@ -387,6 +394,12 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
                 for key in ("period", "resets_at", "seconds_to_reset", "reserved"):
                     if b.get(key) is not None:
                         entry[key] = b[key]
+                # The signup allowance, while the server reports one (plan
+                # change spec 01 §C6: both pots wherever a limit shows),
+                # projected to its allow-list like every agent surface.
+                first_week = project_first_week(b.get("first_week"))
+                if first_week:
+                    entry["first_week"] = first_week
                 # Mark unlimited explicitly so agents don't show
                 # "2147483647 remaining" to the user.
                 if granted == 2147483647:
@@ -477,3 +490,24 @@ STATUS = register(
         handler=_handler,
     )
 )
+
+
+def _plan_grant(config) -> dict | None:
+    """The org's active plan grant from ``GET /v1/billing/subscription``, or
+    None. Best-effort: a failure here never touches the identity probe."""
+    from datetime import datetime, timezone
+
+    from keel.client import KeelClient
+
+    try:
+        client = KeelClient(config=config)
+        try:
+            grant = (client.get("/v1/billing/subscription") or {}).get("grant")
+        finally:
+            client.close()
+    except Exception:  # noqa: BLE001 — optional context, never an error
+        return None
+    if not isinstance(grant, dict) or not grant.get("ends_at"):
+        return None
+    ends = datetime.fromtimestamp(int(grant["ends_at"]), tz=timezone.utc).date().isoformat()
+    return {"kind": grant.get("kind"), "free_until": ends, "then_plan": grant.get("then_plan")}

@@ -22,6 +22,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from keel.api_path import seg
 from keel.errors import KeelError
 
 from . import register
@@ -119,7 +120,7 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
 
     client = ctx.get_client()
     try:
-        result = client.get(f"/v1/strategies/{strategy_id}/versions", limit=limit)
+        result = client.get(f"/v1/strategies/{seg(strategy_id)}/versions", limit=limit)
     except KeelError:
         raise
     except Exception as e:

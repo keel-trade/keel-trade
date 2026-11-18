@@ -1,0 +1,358 @@
+{
+  "share_url": null,
+  "run_id": "res_aaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "hero_url": "https://app.usekeel.io/strategies/str_aaaaaaaaaaaaaaaaaaaaaaaaaa/edit?pane=view&srun=res_aaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "url_line": "View in Keel: https://app.usekeel.io/strategies/str_aaaaaaaaaaaaaaaaaaaaaaaaaa/edit?pane=view&srun=res_aaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "view": {
+    "kind": "screener",
+    "size": "view",
+    "name": "Golden screen",
+    "version": 1,
+    "status": "COMPLETED",
+    "object": "str_aaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "at": null,
+    "seq": 0,
+    "as_of": 1787486400000,
+    "freshness": "static",
+    "clock": "Daily bars closing 12:00 UTC",
+    "window": {
+      "start_ms": 1735646400000,
+      "end_ms": 1787486400000
+    },
+    "markdown": "**Golden screen** \u00b7 screen v1 \u00b7 Daily bars closing 12:00 UTC \u00b7 as of Aug 23 12:00 UTC \u00b7 A completed run.\nuniverse   \u00b7 Ranked by Price level (high \u2192 low)\n30 of 30 pass now: ASSET00, ASSET01, ASSET02, ASSET03, ASSET04 and 25 more\nSince Aug 22 12:00 UTC: entered none; left none\n\n| # | Asset | price_level (price) | negative (score) | regime (flag) |\n| --- | --- | --- | --- | --- |\n| 1 | ASSET28 | 1.807e+04 | \u22121.807e+04 | 1 |\n| 2 | ASSET29 | 1.807e+04 | \u22121.807e+04 | 1 |\n| 3 | ASSET27 | 1.687e+04 | \u22121.687e+04 | 1 |\n| 4 | ASSET26 | 1.627e+04 | \u22121.627e+04 | 1 |\n| 5 | ASSET25 | 1.567e+04 | \u22121.567e+04 | 1 |\n| 6 | ASSET24 | 1.508e+04 | \u22121.508e+04 | 1 |\n| 7 | ASSET23 | 1.448e+04 | \u22121.448e+04 | 1 |\n| 8 | ASSET22 | 1.388e+04 | \u22121.388e+04 | 1 |\n| 9 | ASSET21 | 1.328e+04 | \u22121.328e+04 | 1 |\n| 10 | ASSET20 | 1.268e+04 | \u22121.268e+04 | 1 |\n30 of 30 assets have a value.\n20 more assets.\nView in Keel: https://app.usekeel.io/strategies/str_aaaaaaaaaaaaaaaaaaaaaaaaaa/edit?pane=view&srun=res_aaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "screener": {
+    "strategy_id": "str_aaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "name": "Golden screen",
+    "version": 1
+  },
+  "run": {
+    "run_id": "res_aaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "status": "COMPLETED"
+  },
+  "in_flight": null,
+  "headline": {
+    "passing": 30,
+    "of": 30
+  },
+  "latest_top": {
+    "columns": ["asset", "price_level", "negative", "regime"],
+    "rows": [
+      ["ASSET28", 18070.0, -18070.0, 1.0],
+      ["ASSET29", 18070.0, -18070.0, 1.0],
+      ["ASSET27", 16870.0, -16870.0, 1.0],
+      ["ASSET26", 16270.0, -16270.0, 1.0],
+      ["ASSET25", 15670.0, -15670.0, 1.0]
+    ]
+  },
+  "labels": [
+    {
+      "label": "price_level",
+      "unit": "price"
+    },
+    {
+      "label": "negative",
+      "unit": "score"
+    },
+    {
+      "label": "regime",
+      "unit": "flag"
+    }
+  ],
+  "passing": {
+    "filter_hash": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+    "now": {
+      "bar_ms": 1787486400000,
+      "assets": ["ASSET00", "ASSET01", "ASSET02", "ASSET03", "ASSET04"]
+    },
+    "previous": {
+      "bar_ms": 1787400000000,
+      "assets": ["ASSET00", "ASSET01", "ASSET02", "ASSET03", "ASSET04"]
+    },
+    "entered": [],
+    "left": [],
+    "counts": {
+      "passing": 30,
+      "entered": 0,
+      "left": 0
+    }
+  },
+  "actions": [
+    {
+      "label": "Open in Keel",
+      "url": "https://app.usekeel.io/strategies/str_aaaaaaaaaaaaaaaaaaaaaaaaaa/edit?pane=view&srun=res_aaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    {
+      "label": "Test as a strategy",
+      "url": "https://app.usekeel.io/strategies/str_aaaaaaaaaaaaaaaaaaaaaaaaaa/edit?pane=view&automate=price_level"
+    }
+  ],
+  "copy": {
+    "ranking": "Ranked by Price level (high \u2192 low)",
+    "freshness": "A completed run.",
+    "coverage": "30 of 30 assets have a value.",
+    "gaps": null,
+    "rebased": null,
+    "clock": "Daily bars closing 12:00 UTC"
+  },
+  "manifest": {
+    "clock": {
+      "target_timeframe": "1d",
+      "bar_offset": "12h",
+      "bar_ms": 86400000,
+      "bar_ms_convention": "close"
+    },
+    "universe": {
+      "label": "",
+      "total": 30,
+      "with_value": 30
+    },
+    "outputs": [
+      {
+        "name": "price_level",
+        "shape": "panel",
+        "value_type": "PriceFrame",
+        "bounds": {
+          "interval": [0.001, 1000000.0]
+        },
+        "discrete": false
+      },
+      {
+        "name": "negative",
+        "shape": "panel",
+        "value_type": "PriceFrame",
+        "bounds": null,
+        "discrete": false
+      },
+      {
+        "name": "regime",
+        "shape": "panel",
+        "value_type": "PriceFrame",
+        "bounds": {
+          "set": [-1.0, 0.0, 1.0]
+        },
+        "discrete": true
+      }
+    ],
+    "run": {
+      "status": "COMPLETED",
+      "as_of": 1787486400000,
+      "window": {
+        "start_ms": 1735646400000,
+        "end_ms": 1787486400000
+      }
+    },
+    "ranked_by": "price_level",
+    "order": "desc",
+    "disclosures": [
+      {
+        "code": "UPSTREAM_GAPS",
+        "output": "price_level",
+        "assets": 3,
+        "cells": 21,
+        "first": null
+      },
+      {
+        "code": "UPSTREAM_GAPS",
+        "output": "negative",
+        "assets": 3,
+        "cells": 21,
+        "first": null
+      },
+      {
+        "code": "UPSTREAM_GAPS",
+        "output": "regime",
+        "assets": 3,
+        "cells": 21,
+        "first": null
+      }
+    ],
+    "disclosures_more": 0
+  },
+  "hero": {
+    "output": "price_level",
+    "t0_ms": 1736683200000,
+    "dt_ms": 1036800000,
+    "n": 50,
+    "assets": [
+      "ASSET00",
+      "ASSET01",
+      "ASSET28",
+      "ASSET29",
+      "ASSET27",
+      "ASSET26",
+      "ASSET25",
+      "ASSET24"
+    ],
+    "values": [
+      [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        40.0,
+        160.0,
+        280.0,
+        400.0,
+        520.0,
+        640.0,
+        760.0,
+        880.0,
+        1000.0,
+        1120.0,
+        null,
+        1360.0,
+        1480.0,
+        1600.0,
+        1720.0,
+        1840.0,
+        1960.0,
+        2080.0,
+        2200.0,
+        2320.0,
+        2440.0,
+        2560.0,
+        2680.0,
+        2800.0,
+        2920.0,
+        3040.0,
+        3160.0,
+        3280.0,
+        3400.0,
+        3520.0,
+        3640.0,
+        3760.0,
+        3880.0,
+        4000.0,
+        4120.0,
+        4240.0,
+        4360.0,
+        4480.0,
+        4600.0,
+        4720.0,
+        4840.0,
+        4960.0,
+        5080.0,
+        5200.0
+      ],
+      [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        35.0,
+        215.0,
+        395.0,
+        575.0,
+        755.0,
+        935.0,
+        1115.0,
+        1295.0,
+        1475.0,
+        1655.0,
+        1835.0,
+        2015.0,
+        2195.0,
+        2375.0,
+        2555.0,
+        2735.0,
+        null,
+        3095.0,
+        3275.0,
+        3455.0,
+        3635.0,
+        3815.0,
+        3995.0,
+        4175.0,
+        4355.0,
+        4535.0,
+        4715.0,
+        4895.0,
+        5075.0,
+        5255.0,
+        5435.0,
+        5615.0,
+        5795.0,
+        5975.0,
+        6155.0,
+        6335.0,
+        6515.0,
+        6695.0,
+        6875.0,
+        7055.0
+      ],
+      [
+        430.0, 790.0, 1150.0, 1510.0, 1870.0, 2230.0, 2590.0, 2950.0, 3310.0,
+        3670.0, 4030.0, 4390.0, 4750.0, 5110.0, 5470.0, 5830.0, 6190.0, 6550.0,
+        6910.0, 7270.0, 7630.0, 7990.0, 8350.0, 8710.0, 9070.0, 9430.0, 9790.0,
+        10150.0, 10510.0, 10870.0, 11230.0, 11590.0, 11950.0, 12310.0, 12670.0,
+        13030.0, 13390.0, 13750.0, 14110.0, 14470.0, 14830.0, 15190.0, 15550.0,
+        15910.0, 16270.0, 16630.0, 16990.0, 17350.0, 17710.0, 18070.0
+      ],
+      [
+        430.0, 790.0, 1150.0, 1510.0, 1870.0, 2230.0, 2590.0, 2950.0, 3310.0,
+        3670.0, 4030.0, 4390.0, 4750.0, 5110.0, 5470.0, 5830.0, 6190.0, 6550.0,
+        6910.0, 7270.0, 7630.0, 7990.0, 8350.0, 8710.0, 9070.0, 9430.0, 9790.0,
+        10150.0, 10510.0, 10870.0, 11230.0, 11590.0, 11950.0, 12310.0, 12670.0,
+        13030.0, 13390.0, 13750.0, 14110.0, 14470.0, 14830.0, 15190.0, 15550.0,
+        15910.0, 16270.0, 16630.0, 16990.0, 17350.0, 17710.0, 18070.0
+      ],
+      [
+        408.0, 744.0, 1080.0, 1416.0, 1752.0, 2088.0, 2424.0, 2760.0, 3096.0,
+        3432.0, 3768.0, 4104.0, 4440.0, 4776.0, 5112.0, 5448.0, 5784.0, 6120.0,
+        6456.0, 6792.0, 7128.0, 7464.0, 7800.0, 8136.0, 8472.0, 8808.0, 9144.0,
+        9480.0, 9816.0, 10150.0, 10490.0, 10820.0, 11160.0, 11500.0, 11830.0,
+        12170.0, 12500.0, 12840.0, 13180.0, 13510.0, 13850.0, 14180.0, 14520.0,
+        14860.0, 15190.0, 15530.0, 15860.0, 16200.0, 16540.0, 16870.0
+      ],
+      [
+        397.0, 721.0, 1045.0, 1369.0, 1693.0, 2017.0, 2341.0, 2665.0, 2989.0,
+        3313.0, 3637.0, 3961.0, 4285.0, 4609.0, 4933.0, 5257.0, 5581.0, 5905.0,
+        6229.0, 6553.0, 6877.0, 7201.0, 7525.0, 7849.0, 8173.0, 8497.0, 8821.0,
+        9145.0, 9469.0, 9793.0, 10120.0, 10440.0, 10760.0, 11090.0, 11410.0,
+        11740.0, 12060.0, 12380.0, 12710.0, 13030.0, 13360.0, 13680.0, 14000.0,
+        14330.0, 14650.0, 14980.0, 15300.0, 15620.0, 15950.0, 16270.0
+      ],
+      [
+        386.0, 698.0, 1010.0, 1322.0, 1634.0, 1946.0, 2258.0, 2570.0, 2882.0,
+        3194.0, 3506.0, 3818.0, 4130.0, 4442.0, 4754.0, 5066.0, 5378.0, 5690.0,
+        6002.0, 6314.0, 6626.0, 6938.0, 7250.0, 7562.0, 7874.0, 8186.0, 8498.0,
+        8810.0, 9122.0, 9434.0, 9746.0, 10060.0, 10370.0, 10680.0, 10990.0,
+        11310.0, 11620.0, 11930.0, 12240.0, 12550.0, 12870.0, 13180.0, 13490.0,
+        13800.0, 14110.0, 14430.0, 14740.0, 15050.0, 15360.0, 15670.0
+      ],
+      [
+        375.0, 675.0, 975.0, 1275.0, 1575.0, 1875.0, 2175.0, 2475.0, 2775.0,
+        3075.0, 3375.0, 3675.0, 3975.0, 4275.0, 4575.0, 4875.0, 5175.0, 5475.0,
+        5775.0, 6075.0, 6375.0, 6675.0, 6975.0, 7275.0, 7575.0, 7875.0, 8175.0,
+        8475.0, 8775.0, 9075.0, 9375.0, 9675.0, 9975.0, 10280.0, 10580.0,
+        10880.0, 11180.0, 11480.0, 11780.0, 12080.0, 12380.0, 12680.0, 12980.0,
+        13280.0, 13580.0, 13880.0, 14180.0, 14480.0, 14780.0, 15080.0
+      ]
+    ],
+    "anchor_values": {
+      "ASSET00": [1742644800000, 10.0],
+      "ASSET01": [1746964800000, 20.0],
+      "ASSET28": [1735732800000, 100.0],
+      "ASSET29": [1735732800000, 100.0],
+      "ASSET27": [1735732800000, 100.0],
+      "ASSET26": [1735732800000, 100.0],
+      "ASSET25": [1735732800000, 100.0],
+      "ASSET24": [1735732800000, 100.0]
+    },
+    "relative": "rebase_100",
+    "anchor_ms": 1735732800000,
+    "y_scale": "linear",
+    "sampling": "last_in_bucket",
+    "source_points": 600
+  },
+  "graphs": {}
+}

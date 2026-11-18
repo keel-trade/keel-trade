@@ -14,6 +14,7 @@ Exit codes:
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 
 
 class KeelError(Exception):
@@ -196,6 +197,12 @@ class UsageError(KeelError):
 #: paper is off on that environment (S06 §3.2.4 (c), IC-01-11).
 PAPER_NOT_ENABLED_CODE = "paper_not_enabled"
 PAPER_NOT_ENABLED_MESSAGE = "Paper trading is not available on this Keel environment yet."
+
+#: keel-api's research routes answer ``404 {"detail": "Research is paused.",
+#: "code": "RESEARCH_PAUSED"}`` while ``research.enabled`` is off (Research 07
+#: §3.4, RL-91 §4). The SDK serves keel-api's sentence, typed on the code,
+#: with no next action and no link.
+RESEARCH_PAUSED_CODE = "RESEARCH_PAUSED"
 
 
 def _problem_code(body: str | None) -> dict | None:
@@ -383,16 +390,50 @@ WINDOW_CODES: frozenset[str] = frozenset(
 )
 
 
+#: keel-api's backtest SIZE refusal (``utils/backtest_memory.py``, Q-3316):
+#: the run is too large to run. Like the window family it is
+#: never about the strategy source, and unlike it the dates are only one of
+#: three ways to fit — fewer symbols and a coarser clock are the others.
+RUN_SIZE_CODES: frozenset[str] = frozenset({"BACKTEST_TOO_LARGE"})
+
+
+#: keel-api's paper/live TIMEFRAME-FLOOR refusal (plan change spec 01 §C10,
+#: contract §L7): the plan runs paper and live strategies at or above a clock
+#: floor, and this strategy's ``target_timeframe`` is below it. A plan limit
+#: (doc 07 §5, D-14): ``floor``, ``requested``, the caller's plan and the
+#: served ``higher_plans`` travel on ``detail``, the message is the floor
+#: wall (:func:`floor_wall_lines`), and ``keel_paper_deploy`` turns it into
+#: the plan-limit handoff with a card.
+PLAN_FLOOR_CODES: frozenset[str] = frozenset({"SERVING_CLOCK_BELOW_PLAN_FLOOR"})
+
+#: The suggestion on a timeframe-floor refusal (D-14 rule 5): an instruction,
+#: never a pitch. Backtests are not floored (D-16).
+PLAN_FLOOR_SUGGESTION = (
+    "Plan limit; resubmitting it unchanged returns the same refusal. Change the "
+    "strategy's `target_timeframe` to `floor` or slower; backtests run at every timeframe."
+)
+
+
 def _expectation_for_422(detail: dict | None) -> str:
     """``what_was_expected`` for a 422, specific to the class of refusal.
 
-    Three classes, told apart by the server's machine ``code``: a backtest
+    Five classes, told apart by the server's machine ``code``: a paper/live
+    TIMEFRAME-FLOOR refusal (a plan limit, held to the neutral-wall scan), a
+    backtest SIZE refusal (the run's cells, never the source), a backtest
     WINDOW refusal (the dates, never the source), any other CODED refusal
     (the server named what it rejected), and an UNCODED one — the
     strategy-validation gate (an ``issues`` list, no code), where the DSL dry
     run is the right advice.
     """
     code = detail.get("code") if isinstance(detail, dict) else None
+    if code in PLAN_FLOOR_CODES:
+        return assert_plan_copy(PLAN_FLOOR_SUGGESTION)
+    if code in RUN_SIZE_CODES:
+        return (
+            "A smaller backtest: fewer symbols, a coarser timeframe, or a shorter "
+            "window. The message names the largest of each that fits. The strategy "
+            "source is valid; resubmitting the same run returns the same refusal."
+        )
     if code in WINDOW_CODES:
         return (
             "A backtest window the platform can serve: start_date before end_date "
@@ -481,6 +522,16 @@ def translate_http_error(status: int, body: str) -> KeelError:
             err = NotFoundError(PAPER_NOT_ENABLED_MESSAGE, error_code=PAPER_NOT_ENABLED_CODE)
             err.detail = coded
             return err
+        if coded is not None and coded.get("code") == RESEARCH_PAUSED_CODE:
+            # Research 07 §3.4: one code, keel-api's one sentence, nothing to
+            # retry, no sign-in, no plan change and no link.
+            err = NotFoundError(
+                _extract_detail(body) or "Research is paused.", error_code=RESEARCH_PAUSED_CODE
+            )
+            err.detail = coded
+            err.recovery_tool, err.recovery_tool_args, err.suggestion = None, None, None
+            err.retryable = False
+            return err
         # `keel_audit_list_last` is not on the listed or hosted surface
         # (spec 05 §4 item 7): named only where this server registers it.
         backtests_where = (
@@ -488,7 +539,7 @@ def translate_http_error(status: int, body: str) -> KeelError:
             if _local_tools_registered()
             else "the strategy page in the web app"
         )
-        return NotFoundError(
+        err = NotFoundError(
             _extract_detail(body) or "Resource not found",
             suggestion=(
                 "Verify the id is correct and that you have access. For "
@@ -497,6 +548,20 @@ def translate_http_error(status: int, body: str) -> KeelError:
                 f"backtests, find via {backtests_where}."
             ),
         )
+        # A coded HTTPException(detail={code, …}) 404 keeps its machine half
+        # (Q-1742's rule): `unknown_variant`'s `known_variant_ids`, or
+        # `unknown_library_entry`'s `known_slugs` (R-011), ride `detail` so a
+        # tool can name the valid ids. The class code is unchanged.
+        served = _server_detail(body)
+        if isinstance(served, dict) and isinstance(served.get("code"), str):
+            err.detail = served
+        elif coded is not None:
+            # A CodedHTTPException 404 (top-level `code` beside a string
+            # `detail`) keeps its code too, so a tool can name the next step
+            # for it — a screen with no run yet (Q-3634) — whichever of the
+            # two coded shapes keel-api raised it in.
+            err.detail = coded
+        return err
     if status == 409:
         coded = _problem_code(body)
         if coded is None:
@@ -546,9 +611,27 @@ def translate_http_error(status: int, body: str) -> KeelError:
             suggestion=_expectation_for_422(detail),
         )
         err.detail = detail
+        if (
+            code in PLAN_FLOOR_CODES
+            and isinstance(detail, dict)
+            and isinstance(detail.get("floor"), str)
+        ):
+            # The floor wall in the one grammar (doc 07 §5): the served floor,
+            # the strategy's clock, the plans that run faster. `detail` keeps
+            # the machine half with the other plans as NAMES only (founder
+            # Q1): keel-api's `higher_plans` may carry their floors.
+            info = floor_info(detail)
+            err.args = (" ".join(floor_wall_lines(info)),)
+            projected = {k: detail[k] for k in ("code", "floor", "requested") if k in detail}
+            for key in ("plan", "plan_name"):
+                if isinstance(detail.get(key), str):
+                    projected[key] = detail[key]
+            if "higher_plans" in detail or "more_plans" in detail:
+                projected["more_plans"] = more_plan_names(detail)
+            err.detail = projected
         return err
     if status == 429:
-        return rate_limited_error(None)
+        return rate_limited_error(None, server_words(body))
     if status >= 500:
         err = KeelError(
             f"Server error (HTTP {status})",
@@ -575,6 +658,23 @@ def translate_http_error(status: int, body: str) -> KeelError:
             and not detail.lstrip().startswith(("{", "[", "<"))
             else None
         )
+        # A CODED 5xx is a deliberate refusal (keel-api's screen refresh
+        # capacity, its storage-unavailable read): keep its code, its machine
+        # half and its words, and its own ``retryable`` verdict when it states
+        # one (an exhausted capacity does not free itself). ``refused`` tells
+        # the client nothing was applied, so it is not a write-unconfirmed.
+        code, served = _refusal_detail(body)
+        if code is not None:
+            err.error_code = code
+            err.detail = served
+            err.refused = True
+            words = _extract_detail(body)
+            if isinstance(words, str) and words.strip() and len(words) <= 300:
+                err.args = (words.strip(),)
+            if isinstance(served.get("retryable"), bool):
+                err.retryable = served["retryable"]
+            if isinstance(served.get("next"), str) and served["next"]:
+                err.suggestion = served["next"]
         return err
     # Any other status (405, 413, 418 …): a plain sentence. The raw body —
     # JSON framing, a request id, an HTML error page — is never the message
@@ -640,27 +740,59 @@ def retry_after_seconds(value: str | None) -> float | None:
     return max(0.0, (when - datetime.now(timezone.utc)).total_seconds())
 
 
-def rate_limited_error(retry_after_s: float | None) -> KeelError:
-    """The ``rate_limited`` refusal, carrying the server's wait when it sent
-    one (``detail.retry_after_s``) so the caller can schedule the retry."""
+def server_words(body: str | None) -> str | None:
+    """The server's own short plain sentence from a refusal body, or ``None``
+    (JSON framing, an HTML page or a long dump is never a message)."""
+    detail = _extract_detail(body)
+    if (
+        isinstance(detail, str)
+        and detail.strip()
+        and detail is not body
+        and len(detail) <= 300
+        and not detail.lstrip().startswith(("{", "[", "<"))
+    ):
+        return detail.strip()
+    return None
+
+
+#: Server words that already state when to retry ("Retry after 15 seconds.",
+#: "try again in 2 minutes"): the message then adds only the plan-limit half,
+#: never a second retry time (Q-7601 fix round).
+_STATES_RETRY_RE = re.compile(
+    r"\b(?:retry|try\s+again)\b[^.]*?\b\d+\s*(?:s|secs?|seconds?|mins?|minutes?|h|hours?)\b",
+    re.IGNORECASE,
+)
+
+
+def rate_limited_error(retry_after_s: float | None, words: str | None = None) -> KeelError:
+    """The ``rate_limited`` refusal: the server's own words when it sent a
+    sentence, then the one instruction (doc 07 §5) — a rate limit is not a
+    plan limit, and the wait is the server's (``detail.retry_after_s``).
+
+    When the server's words already say when to retry, the message adds
+    only ``Rate limit, not a plan limit.`` (``Rate limit exceeded. Retry
+    after 15 seconds. Rate limit, not a plan limit.``); the suggestion keeps
+    the full instruction with the wait."""
     import math
 
-    if retry_after_s is None:
-        message = "Rate limited — too many requests in a short time."
-        suggestion = "Wait a few seconds, then retry."
+    wait = None if retry_after_s is None else max(1, math.ceil(retry_after_s))
+    retry = f"retry in {wait} s" if wait is not None else "retry in a few seconds"
+    instruction = f"Rate limit, not a plan limit; {retry}."
+    if isinstance(words, str) and words.strip():
+        said = words.strip().rstrip(".")
+        tail = "Rate limit, not a plan limit." if _STATES_RETRY_RE.search(said) else instruction
+        message = f"{said}. {tail}"
     else:
-        wait = max(1, math.ceil(retry_after_s))
-        message = f"Rate limited — too many requests. Retry after {wait} seconds."
-        suggestion = f"Wait {wait} seconds, then retry."
+        message = f"Too many requests in a short time. {instruction}"
     err = KeelError(
         message,
         error_code="rate_limited",
         exit_code=1,
         retryable=True,
-        suggestion=suggestion,
+        suggestion=instruction,
     )
-    if retry_after_s is not None:
-        err.detail = {"retry_after_s": max(1, math.ceil(retry_after_s))}
+    if wait is not None:
+        err.detail = {"retry_after_s": wait}
     return err
 
 
@@ -713,11 +845,16 @@ QUOTA_CODES: frozenset[str] = frozenset(
 #: Q-1590.
 NO_GRANT_KINDS: frozenset[str] = frozenset({"no_grants", "no_cap_grants", "feature_not_available"})
 
-#: period → the phrase that names the window in a sentence.
+#: period → the phrase that names the window in a sentence. ``30d`` is the
+#: per-account 30-day cycle (plan change spec 01 §C5/§C11): "this 30-day
+#: period", never "monthly" — that word is a billing cadence the plan-copy
+#: scan refuses, and the cycle is not a calendar month. Read by
+#: keel_account_status only; plan-limit copy names no window (D-14 rule 8).
 _PERIOD_PHRASES: dict[str, str] = {
     "daily": "today",
     "weekly": "this week",
     "monthly": "this month",
+    "30d": "this 30-day period",
 }
 
 
@@ -738,29 +875,24 @@ def _local_tools_registered() -> bool:
     return local_tools_registered()
 
 
-# ─── The neutral-wall guard (mcp-conversion D-12, 2026-09-28) ───────────
+# ─── The plan-copy guard (mcp-conversion D-14, 2026-11-16; was D-12) ─────
 #
 # Every plan-limit text an agent surface emits — the 403 message and
 # suggestion, the handoff's talking points, reason, suggestion and
 # `limit_view`, the run's `quota_notice`, `keel_plan_usage`'s talking
-# point — states the caller's own limit and reset and stops. OpenAI
-# rejected Keel v1.0.0 for "commerce for disallowed offerings" while the
-# wall named the other tiers and linked the billing tab (Q-2080). Four
-# families are banned, each of which HAS shipped here: a price or billing
-# cadence, a capacity promise or pitch verb, a transactional or plan
-# destination (checkout, the billing tab, /pricing, "see plans"), and the
-# other plans themselves ("higher plans", "plan tier", the builder fee).
+# points — states the caller's own numbers and reset, and names the plans
+# that include more of THAT limit (D-14, doc 07 §3). What it may never carry
+# is what OpenAI's rule bars and what Keel v1.0.0 was rejected for (Q-2080):
+# a price or billing cadence, a link to pricing, billing or checkout, and a
+# pitch. The plan NAMES are not banned here: they reach copy only through
+# the renderer below (`own_plan_name`, `more_clause`), from served data, and
+# tests/test_policy_scan.py holds every payload to "a plan name appears only
+# in the own-plan or more clause, and only for a served higher plan".
 #
-# ONE plan sentence is allowed, and only on the FREE plan's wall (D-12 Q1,
-# its recorded fallback since 2026-10-01 — Q-2268): "Plans are changed in
-# the Keel web app." — where plans are changed, with no names, prices,
-# comparison, capacity claim, verb or link. A paid user already knows plans
-# exist, so their wall carries no plan sentence at all (Q2).
-#
-# A fifth family, expiry urgency, joined with the first-week allowance
-# (connect-onboarding spec 01 §1.9): the one first-week sentence states its
-# end instant and nothing else. It is a separate constant so the agent-surface
-# guards in tests/ read the SAME pattern rather than a copy.
+# Expiry urgency joined with the first-week allowance (connect-onboarding
+# spec 01 §1.9): the one first-week clause states its end date and nothing
+# else. It is a separate constant so the agent-surface guards in
+# tests/ read the SAME pattern rather than a copy.
 EXPIRY_URGENCY_PATTERN = (
     r"\bbefore\s+(?:they|it)\s+expires?\b"
     r"|\bdon[’']?t\s+lose\b"
@@ -770,16 +902,16 @@ EXPIRY_URGENCY_PATTERN = (
 )
 FORBIDDEN_UPSELL_RE = re.compile(
     r"\$\s?\d"  # a price
-    r"|\b\d+\s?(?:usd|dollars)\b"
+    r"|\b\d+\s?(?:usd|dollars)\b|\busd\s?\d"
     r"|\bper month\b|\bper year\b|\b/mo\b|\bmonthly\b|\bannually\b"
     r"|\badds?\s+capacity\b|\bmore\s+capacity\b|\bextra\s+capacity\b"
     r"|\bunlocks?\b"
     r"|\bupgrad(?:e|es|ed|ing)\b|\bupgrade_\w+"
     r"|\bcheckout\b|\bstripe\b"
     r"|\bact\s+now\b|\bhurry\b|\blimited[\s-]time\b|\bdon'?t\s+miss\b"
-    # D-12: the other plans, and every plan destination.
+    # Plan destinations, and the retired ladder's phrasing (Q-2080).
     r"|\bhigher\s+plans?\b|\bplan\s+tiers?\b|\bbuilder\s+fees?\b|\bsee\s+plans\b"
-    r"|tab=billing|/pricing\b"
+    r"|tab=billing|/pricing\b|/billing\b|/checkout\b"
     # Expiry urgency (connect-onboarding spec 01 §1.9): a time-limited
     # allowance is stated as a fact ("…; they end Tue 13 Oct 15:02 UTC."),
     # never as a push to spend it before it goes.
@@ -787,40 +919,53 @@ FORBIDDEN_UPSELL_RE = re.compile(
     re.IGNORECASE,
 )
 
-#: The one other-plans sentence (D-12 Q1) — legal on the free plan only.
-_PAID_PLANS_RE = re.compile(r"\bpaid\s+plans?\b", re.IGNORECASE)
+#: Pitch words (D-14 §7): refused on PLAN-LIMIT copy. Kept apart from
+#: :data:`FORBIDDEN_UPSELL_RE`, which the shared talking-point validator also
+#: reads for sign-in and consent walls, where "now" or "only" is a plain word.
+PITCH_WORDS_RE = re.compile(
+    r"\bnow\b|\bonly\b|\blimited\b|\bdeals?\b|\bsave\b|\bsavings?\b", re.IGNORECASE
+)
+
+#: Where plans are changed: plain words, never a URL (D-14 rule 4).
+WEB_APP_SENTENCE = "Plans are changed in the Keel web app."
+
+#: The one description clause of every tool whose call spends a backtest
+#: (doc 07 §5 "Descriptions", rule 8: one clause, no number, no plan name):
+#: `keel_backtest_run` and `keel_screener_run` (a screen run is counted as a
+#: backtest run).
+BACKTEST_ALLOWANCE_CLAUSE = "Uses one backtest from the plan's allowance; see `keel_plan_usage`."
+
+#: The same clause for `keel_research_run`, which spends a study (D-344 (4), CONFORM-MCP F6; doc 07 §5
+#: "Consumable (backtests, compute, studies)": one clause, no number, no plan name).
+RESEARCH_ALLOWANCE_CLAUSE = (
+    "New work uses one study from the plan's allowance; see `keel_plan_usage`."
+)
 
 
-def assert_neutral_wall_text(text: str, *, free_plan: bool) -> str:
-    """Raise ``ValueError`` if ``text`` is not neutral plan-limit copy (D-12).
+def assert_plan_copy(text: str) -> str:
+    """Raise ``ValueError`` if ``text`` is not legal plan-limit copy (D-14 §7).
 
-    ``free_plan`` is the ONLY switch: it admits the one "Paid plans include
-    more …" sentence. Returns ``text`` unchanged — validators behave one
-    exact way (repo lesson), so a violation is a programming error that
-    fails the call rather than a string quietly edited on the way out.
+    No price, currency or billing cadence; no pricing, billing or checkout
+    destination; no pitch word. Returns ``text`` unchanged — validators
+    behave one exact way (repo lesson), so a violation is a programming error
+    that fails the call rather than a string quietly edited on the way out.
     """
     if not isinstance(text, str):
-        raise ValueError(f"wall text must be a string, got {type(text).__name__}")
-    hit = FORBIDDEN_UPSELL_RE.search(text)
+        raise ValueError(f"plan copy must be a string, got {type(text).__name__}")
+    hit = FORBIDDEN_UPSELL_RE.search(text) or PITCH_WORDS_RE.search(text)
     if hit:
         raise ValueError(
-            f"wall text uses forbidden plan/upsell language {hit.group(0)!r} "
-            f"(mcp-conversion D-12: the caller's own limit and reset only): {text!r}"
+            f"plan copy uses forbidden price/link/pitch language {hit.group(0)!r} "
+            f"(mcp-conversion D-14 §7): {text!r}"
         )
-    if not free_plan:
-        hit = _PAID_PLANS_RE.search(text)
-        if hit:
-            raise ValueError(
-                f"wall text names other plans ({hit.group(0)!r}) off the free plan "
-                f"(D-12 Q2: a paid wall states its limit and reset only): {text!r}"
-            )
     return text
 
 
 def _label_for_unit(unit: str) -> str:
     """Label for a unit the SERVER did not label (a keel-api older than the
-    quota contract). Mechanical, never a table: the authority is
-    ``platform_auth.quota.UNIT_LABELS`` and it is served on the wire."""
+    quota contract). Mechanical: the authority is
+    ``platform_auth.quota.UNIT_LABELS``, served on the wire; plan-limit copy
+    reads :data:`LIMIT_UNITS` first (``_unit_label``)."""
     if unit.startswith("feature:"):
         return unit[len("feature:") :].replace("_", " ")
     return unit.replace("_", " ")
@@ -868,7 +1013,8 @@ def format_reset_instant(when) -> str:
 
 
 def quota_period_phrase(block: dict) -> str:
-    """`` this week`` / `` today`` / `` this month`` — or empty.
+    """`` this week`` / `` today`` / `` this month`` / `` this 30-day period``
+    — or empty.
 
     Empty for a cap (live strategy slots): a slot frees when a deployment
     stops, not when a clock rolls over, so naming a window would be a lie.
@@ -884,40 +1030,19 @@ def quota_reset_sentence(block: dict) -> str:
     return f" They reset {format_reset_instant(when)}." if when else ""
 
 
-def render_quota_sentence(block: dict) -> str | None:
-    """ONE factual line from a served quota block (mcp-conversion D-10/M1.2).
-
-    The API carries numbers; the SDK renders the sentence. Facts and stop
-    (D-11): both halves of the fraction, the window, the reset instant —
-    no tier names, no prices, no recommendation.
-
-        >>> render_quota_sentence({"label": "backtests", "limit": 50,
-        ...                        "used": 44, "remaining": 6,
-        ...                        "period": "weekly",
-        ...                        "resets_at": "2026-09-22T00:00:00Z"})
-        '6 of 50 backtests left this week; they reset Mon 22 Sep 00:00 UTC.'
-
-    ``None`` when the block carries no finite allowance to report (an
-    unlimited unit, or a server that sent no numbers) — rendering "left"
-    without a number is exactly the null-number sentence Q-1590 shipped.
-    """
-    if not isinstance(block, dict) or block.get("unlimited"):
-        return None
-    limit = block.get("limit")
-    remaining = block.get("remaining")
-    if not isinstance(limit, int) or not isinstance(remaining, int):
-        return None
-    label = block.get("label") or _label_for_unit(str(block.get("unit") or ""))
-    when = quota_reset_instant(block)
-    reset_clause = f"; they reset {format_reset_instant(when)}" if when else ""
-    return f"{remaining} of {limit} {label} left{quota_period_phrase(block)}{reset_clause}."
-
-
 #: The keys of a served ``first_week`` block (connect-onboarding spec 01
 #: §1.8) an agent surface passes through — an allow-list, like the quota
 #: block's own, so a future server field never reaches a surface whose
-#: policy was not reviewed for it.
-FIRST_WEEK_KEYS: tuple[str, ...] = ("granted", "remaining", "ends_at")
+#: policy was not reviewed for it. ``then_remaining`` / ``then_limit`` (plan
+#: change spec 01 §C6, both pots) are the plan's own pot once the first-week
+#: part is gone, served only where that part is spent first (v2 Free).
+FIRST_WEEK_KEYS: tuple[str, ...] = (
+    "granted",
+    "remaining",
+    "ends_at",
+    "then_remaining",
+    "then_limit",
+)
 
 
 def project_first_week(block: object) -> dict | None:
@@ -930,29 +1055,75 @@ def project_first_week(block: object) -> dict | None:
     return projected or None
 
 
-def render_first_week_sentence(block: object) -> str | None:
-    """THE one first-week sentence (connect-onboarding spec 01 §1.9, founder
-    decision 5), from a served ``first_week`` block::
+def _is_count(n: object) -> bool:
+    return isinstance(n, int) and not isinstance(n, bool)
 
-        >>> render_first_week_sentence({"granted": 200, "remaining": 154,
-        ...                             "ends_at": "2026-10-13T15:02:11Z"})
-        '154 of 200 first-week backtests left; they end Tue 13 Oct 15:02 UTC.'
 
-    It mirrors :func:`render_quota_sentence`: the caller's own numbers and
-    the instant, verbatim from the server, and nothing about what follows
-    (D-11(a), D-12). ``None`` unless all three facts arrived — a sentence
-    with a missing number or an invented end is the null-number sentence
-    Q-1590 shipped.
+def render_first_week_clause(block: object) -> str | None:
+    """THE first-week clause (Q-7601 fix round, D-14 rule 8), folded into a
+    backtests line in parentheses, from the block's own served ``first_week``::
+
+        >>> render_first_week_clause({"unit": "backtest_runs", "first_week":
+        ...     {"granted": 50, "remaining": 12, "ends_at": "2026-11-23T18:37:25Z"}})
+        '(12 first-week extras until Mon 23 Nov)'
+
+    The served ``limit`` / ``remaining`` already include the first-week part
+    (``platform_auth.entitlements.get_consumable_balance``: ``granted`` adds
+    the grant while it is active), so the clause says how many of those are
+    first-week extras and the date they go, nothing more: no window phrase,
+    no "then" pot, no time of day (the exact instant stays in the structured
+    ``first_week.ends_at``).
+
+    ``None`` — no clause at all — unless the block counts backtests (the
+    clause is a backtest count, connect-onboarding spec 01 §1.9), the
+    first-week part still has some left, and its facts arrived whole. A
+    spent or expired first week says nothing: "0 of 50 first-week backtests
+    left until …" read as if nothing could run until that date (staging
+    probe, 2026-11-16).
     """
-    if not isinstance(block, dict):
+    if not isinstance(block, dict) or str(block.get("unit") or "") != "backtest_runs":
         return None
-    granted, remaining = block.get("granted"), block.get("remaining")
-    if not all(isinstance(n, int) and not isinstance(n, bool) for n in (granted, remaining)):
+    first_week = block.get("first_week")
+    if not isinstance(first_week, dict):
         return None
-    when = quota_reset_instant(block.get("ends_at"))
+    granted, remaining = first_week.get("granted"), first_week.get("remaining")
+    if not (_is_count(granted) and _is_count(remaining)) or remaining <= 0:
+        return None
+    when = quota_reset_instant(first_week.get("ends_at"))
     if when is None:
         return None
-    return f"{remaining} of {granted} first-week backtests left; they end {format_reset_instant(when)}."
+    return f"({remaining:,} first-week extras until {format_reset_date(when)})"
+
+
+def first_week_from_reason(info: dict) -> dict | None:
+    """The both-pots first week a 403 carries (``platform_auth.quota``'s
+    ``first_week_*`` reason keys), as a ``first_week`` block — or ``None``.
+    Structured data only: the wall's line folds
+    :func:`render_first_week_clause` from it.
+
+    Only the full bonus-first set is read (granted, remaining, end, and the
+    plan's own pot): a v1 wall carries the first pair alone and keeps
+    today's lines exactly.
+    """
+    keys = (
+        "first_week_granted",
+        "first_week_remaining",
+        "first_week_ends_epoch",
+        "first_week_then_remaining",
+        "first_week_then_limit",
+    )
+    if not all(_is_count(info.get(k)) for k in keys):
+        return None
+    when = quota_reset_instant(info["first_week_ends_epoch"])
+    if when is None:
+        return None
+    return {
+        "granted": info["first_week_granted"],
+        "remaining": info["first_week_remaining"],
+        "ends_at": when.isoformat().replace("+00:00", "Z"),
+        "then_remaining": info["first_week_then_remaining"],
+        "then_limit": info["first_week_then_limit"],
+    }
 
 
 def _quota_context(payload: dict, reasons: list | None) -> dict | None:
@@ -991,20 +1162,31 @@ def _quota_context(payload: dict, reasons: list | None) -> dict | None:
         return None
 
     unit = str(info["unit"])
-    label = info.get("label") or info.get("unit_label") or _label_for_unit(unit)
+    label = _unit_label(info)
     out: dict = {"unit": unit, "label": label, "unit_label": label}
     for key in ("kind", "code", "limit", "used", "remaining", "period", "reset_epoch", "need"):
         if info.get(key) is not None:
             out[key] = info[key]
     if info.get("resets_at") is not None:
         out["resets_at"] = info["resets_at"]
-    # The caller's OWN plan — the one plan fact a wall states (D-12). keel-api
-    # also serves `higher_plans` (the other plans' limits on this unit, D-10:
-    # the API carries numbers); no agent surface renders other plans any
-    # more, so it is deliberately not projected here and cannot reach
-    # `example`, `limit_details` or any sentence (Q-2080).
+    # The caller's OWN plan, and the NAMES of the plans that include more of
+    # this unit (D-14). keel-api's `higher_plans` also carries those plans'
+    # limits (D-10: the API carries numbers); only the names are projected,
+    # as `more_plans`, so no other plan's number reaches `example`,
+    # `limit_details` or any sentence (founder Q1, Q-2080). An absent
+    # `higher_plans` projects nothing: no more clause is ever guessed.
     if isinstance(info.get("plan"), str) and info["plan"]:
         out["plan"] = info["plan"]
+    if isinstance(info.get("plan_name"), str) and info["plan_name"].strip():
+        out["plan_name"] = info["plan_name"].strip()
+    if isinstance(info.get("higher_plans"), list):
+        out["more_plans"] = more_plan_names(info)
+    # Both pots (plan change spec 01 §C6): the first-week part and the plan's
+    # own pot, served on the 403 only where the first-week part is spent
+    # first. Absent on every other wall, which therefore keeps its lines.
+    first_week = first_week_from_reason(info)
+    if first_week is not None:
+        out["first_week"] = first_week
     # `current` is the legacy name for `used` (the pre-contract vocabulary).
     # Kept as an alias so SDK consumers reading `example.current` keep
     # working; nothing new should read it.
@@ -1057,7 +1239,7 @@ def _parse_entitlement_reasons(reasons: list | None) -> dict | None:
             extras_start = 4
         else:
             extras_start = 3
-        info: dict = {"kind": kind, "unit": unit, "unit_label": _label_for_unit(unit)}
+        info: dict = {"kind": kind, "unit": unit}
         for p in parts[extras_start:]:
             if "=" in p:
                 k, v = p.split("=", 1)
@@ -1069,14 +1251,224 @@ def _parse_entitlement_reasons(reasons: list | None) -> dict | None:
     return None
 
 
-#: period → the adjective that titles a limit ("Weekly backtests").
-_PERIOD_ADJECTIVE: dict[str, str] = {"daily": "Daily", "weekly": "Weekly", "monthly": "Monthly"}
+# ─── Plan limits the agent can explain (mcp-conversion D-14, doc 07) ─────
+#
+# ONE renderer for every plan-limit sentence on an agent surface: the wall
+# (403 message, handoff talking points, card), the near-limit notice on a
+# successful result, and `keel_plan_usage`. It is keyed by limit KIND, not by
+# unit, and every plan name, number and floor in its output is SERVED data
+# (doc 07 §6.1): a new plan, a rename, a re-priced tier or a new limit is a
+# `plans.yaml` edit, never an SDK change. The one SDK table is
+# :data:`LIMIT_UNITS` (unit → label and kind); a test reads plans.yaml and
+# fails when a unit a listed tool can hit has no row, or a row's kind
+# disagrees with the unit's ``type`` there.
+
+#: The four limit kinds (doc 07 §5). plans.yaml's ``type`` maps onto them:
+#: consumable → consumable, cap → cap, boolean → feature; a floor is a
+#: ``setting`` or a plan attr (``paper_live_clock_floor``).
+CONSUMABLE = "consumable"
+CAP = "cap"
+FLOOR = "floor"
+FEATURE = "feature"
+LIMIT_KINDS: tuple[str, ...] = (CONSUMABLE, CAP, FLOOR, FEATURE)
+
+
+@dataclass(frozen=True)
+class LimitUnit:
+    """One unit's row: what the renderer needs that the wire does not carry.
+
+    ``label`` is ``platform_auth.quota.UNIT_LABELS``'s noun (a test pins the
+    two equal; the served label still wins at runtime). ``held`` / ``frees`` / ``slot``
+    are a cap's words: what a used slot is doing, how one frees, and the
+    one-slot noun of the last-slot notice. ``absent`` is a feature wall's
+    own head and remedy, for a unit whose generic sentence reads badly.
+    """
+
+    label: str
+    kind: str
+    held: str = "in use"
+    frees: str | None = None
+    slot: str | None = None
+    absent: tuple[str, str] | None = None
+
+
+#: The one unit table (doc 07 §6.1). A new unit is one row.
+LIMIT_UNITS: dict[str, LimitUnit] = {
+    "backtest_runs": LimitUnit("backtests", CONSUMABLE),
+    "backtest_compute_seconds": LimitUnit("backtest compute time", CONSUMABLE),
+    "research_studies": LimitUnit("studies", CONSUMABLE),
+    "research_compute_seconds": LimitUnit("research time", CONSUMABLE),
+    "paper_strategies_max": LimitUnit(
+        "paper strategies",
+        CAP,
+        held="running",
+        frees="stop one to free it",
+        slot="paper slot",
+    ),
+    "live_strategies_max": LimitUnit(
+        "live strategies",
+        CAP,
+        held="running",
+        frees="stop one to free it",
+        slot="live slot",
+    ),
+    "screeners_live_max": LimitUnit(
+        "auto-refreshing screens", CAP, frees="turn one off to free it"
+    ),
+    "screeners_published_max": LimitUnit("public screens", CAP, frees="unpublish one to free it"),
+    "screeners_private_max": LimitUnit(
+        "private auto-refreshing screens",
+        CAP,
+        frees="turn one off to free it",
+        absent=("Private screen auto-refresh", "publish it to keep refreshing"),
+    ),
+    "screeners_max": LimitUnit("saved screens", CAP),
+    "research_shares_max": LimitUnit("shared studies", CAP),
+    "research_saved_studies_max": LimitUnit("saved studies", CAP),
+    "research_evidence_bytes_max": LimitUnit("stored study results", CAP),
+    "feature:research": LimitUnit("running studies", FEATURE),
+    "feature:research_copy": LimitUnit("making a study yours", FEATURE),
+    "feature:research_agent": LimitUnit("research with your agent", FEATURE),
+    "feature:research_repick": LimitUnit("Re-picking settings", FEATURE),
+    "feature:research_template_check": LimitUnit("Check a strategy", FEATURE),
+    "feature:research_template_signal": LimitUnit("Study a signal", FEATURE),
+    "feature:research_template_compare": LimitUnit("Compare", FEATURE),
+    "feature:research_template_map": LimitUnit("Map a strategy's settings", FEATURE),
+    "feature:research_template_entries": LimitUnit("Entries and exits", FEATURE),
+    "screener_refresh_min_minutes": LimitUnit("screen refresh", FLOOR),
+    "paper_live_clock_floor": LimitUnit("paper and live timeframe", FLOOR),
+}
+
+#: The more clause's verb by kind, singular then plural (doc 07 §4/§5):
+#: "Pro includes more." / "Trader and Pro include more." · caps "run more" ·
+#: floors "run faster" · features "include it".
+_MORE_VERBS: dict[str, tuple[str, str]] = {
+    CONSUMABLE: ("includes more", "include more"),
+    CAP: ("runs more", "run more"),
+    FLOOR: ("runs faster", "run faster"),
+    FEATURE: ("includes it", "include it"),
+}
+
+#: The notice tiers that carry the more clause (founder Q3, doc 07 §9): 75%,
+#: 90% and exhausted. The 50% notice stays a bare count.
+MORE_CLAUSE_TIERS: frozenset[str] = frozenset({"warn", "critical", "exhausted"})
+
+
+def join_plan_names(names: list[str]) -> str:
+    """``Pro`` · ``Trader and Pro`` · ``A, B and C``."""
+    if len(names) <= 2:
+        return " and ".join(names)
+    return f"{', '.join(names[:-1])} and {names[-1]}"
+
+
+def more_clause(kind: str, names: list[str] | tuple[str, ...] | None) -> str | None:
+    """THE more clause (doc 07 §4), or ``None`` when no plan includes more.
+
+    ``names`` are the served display names of the plans that beat the
+    caller on this limit, in catalog order. Empty (the top plan) → ``None``:
+    Pro gets nothing.
+
+        >>> more_clause("consumable", ["Trader", "Pro"])
+        'Trader and Pro include more.'
+        >>> more_clause("cap", ["Pro"])
+        'Pro runs more.'
+    """
+    if kind not in _MORE_VERBS:
+        raise ValueError(f"unknown limit kind {kind!r} (one of {LIMIT_KINDS})")
+    clean = [n.strip() for n in (names or ()) if isinstance(n, str) and n.strip()]
+    if not clean:
+        return None
+    one, many = _MORE_VERBS[kind]
+    return f"{join_plan_names(clean)} {one if len(clean) == 1 else many}."
 
 
 def plan_display_name(plan: str | None) -> str | None:
-    """``free`` → ``Free``. The served plan id, capitalised — never a lookup
-    table that could name a plan the server did not."""
+    """``free`` → ``Free``. The served plan id, capitalised — the fallback
+    for a server that sent no ``plan_name`` (the same identity, never a
+    lookup table that could name a plan the server did not)."""
     return plan.capitalize() if isinstance(plan, str) and plan else None
+
+
+def own_plan_name(info: dict) -> str | None:
+    """The caller's own plan's display name: the served ``plan_name``, else
+    the served plan id capitalised, else ``None``."""
+    if not isinstance(info, dict) or info.get("plan") == "anon":
+        return None  # an anonymous workspace is not a plan; it reads "this plan"
+    name = info.get("plan_name")
+    if isinstance(name, str) and name.strip():
+        return name.strip()
+    return plan_display_name(info.get("plan"))
+
+
+def more_plan_names(info: dict) -> list[str]:
+    """The names of the plans that include more of this limit, from served
+    data only: the projected ``more_plans`` (names), else keel-api's
+    ``higher_plans`` entries' ``name`` (the served plan id capitalised for
+    an entry with none). Absent → ``[]``: no clause is ever guessed."""
+    if not isinstance(info, dict):
+        return []
+    projected = info.get("more_plans")
+    if isinstance(projected, list):
+        return [n for n in projected if isinstance(n, str) and n.strip()]
+    served = info.get("higher_plans")
+    if not isinstance(served, list):
+        return []
+    names: list[str] = []
+    for entry in served:
+        if not isinstance(entry, dict):
+            continue
+        name = entry.get("name")
+        name = name.strip() if isinstance(name, str) and name.strip() else None
+        name = name or plan_display_name(entry.get("plan"))
+        if name and name not in names:
+            names.append(name)
+    return names
+
+
+def limit_unit(unit: object) -> LimitUnit | None:
+    return LIMIT_UNITS.get(str(unit or ""))
+
+
+def limit_kind(info: dict) -> str:
+    """The kind a refusal or block renders as. A no-grant denial is a
+    FEATURE wall whatever its unit's type (Free has no private screens: a
+    cap unit, refused as "isn't on Free"); otherwise the unit's row, then
+    the server's own code."""
+    kind, code = info.get("kind"), info.get("code")
+    if kind in NO_GRANT_KINDS or code == "plan_feature_unavailable":
+        return FEATURE
+    if kind in (FLOOR, "clock_below_floor"):
+        return FLOOR
+    row = limit_unit(info.get("unit"))
+    if row is not None:
+        return row.kind
+    if kind == "cap_exceeded" or code == "quota_cap_reached":
+        return CAP
+    return CONSUMABLE
+
+
+def limit_more_clause(info: dict) -> str | None:
+    """The more clause for this refusal or block, from its served names."""
+    return more_clause(limit_kind(info), more_plan_names(info))
+
+
+def _unit_label(info: dict) -> str:
+    unit = str(info.get("unit") or "")
+    served = info.get("label") or info.get("unit_label")
+    if isinstance(served, str) and served:
+        return served
+    row = limit_unit(unit)
+    return row.label if row is not None else _label_for_unit(unit)
+
+
+def _capital(text: str) -> str:
+    return f"{text[:1].upper()}{text[1:]}"
+
+
+def format_reset_date(when) -> str:
+    """``Sat 5 Dec`` — the date a sentence carries (doc 07 §4). The exact
+    instant stays in the structured ``resets_at``."""
+    return f"{when:%a} {when.day} {when:%b}"
 
 
 def quota_amount(unit: str, n: int) -> str:
@@ -1085,36 +1477,14 @@ def quota_amount(unit: str, n: int) -> str:
     return f"{n:,} s" if str(unit).endswith("_seconds") else f"{n:,}"
 
 
-def is_free_plan(info: dict) -> bool:
-    """True when the server named the caller's plan and it is ``free``.
-
-    The one switch on a plan-limit wall (D-12): only the free plan's wall
-    carries the "Paid plans include more …" sentence. A server that named no
-    plan gets the paid shape — the sentence is never guessed onto a wall.
-    """
-    plan = info.get("plan")
-    return isinstance(plan, str) and plan.strip().lower() == "free"
-
-
-#: The units whose wall carries the allowance note: what a backtest
-#: allowance does NOT pay for (composing, validating, reading results) is
-#: true of the backtest units only — on a compose wall it would be false.
-_ALLOWANCE_NOTE_UNITS = frozenset({"backtest_runs", "backtest_compute_seconds"})
-
-#: The note (D-12 §4.1, exact copy): what keeps working at the wall.
-QUOTA_ALLOWANCE_NOTE = (
-    "Composing, validating and reading existing results don't use this allowance."
-)
-
-
 def _is_short_of_need(info: dict) -> bool:
     """True when the refusal fired with allowance still on the meter — a
     submit reserves more than is left (the compute edge, Q-1806)."""
     limit, used, remaining = info.get("limit"), info.get("used"), info.get("remaining")
     return (
-        isinstance(limit, int)
-        and isinstance(used, int)
-        and isinstance(remaining, int)
+        _is_count(limit)
+        and _is_count(used)
+        and _is_count(remaining)
         and remaining > 0
         and used < limit
     )
@@ -1123,79 +1493,76 @@ def _is_short_of_need(info: dict) -> bool:
 def quota_headline(info: dict) -> str:
     """What happened, in one human line — no field names, no instructions.
 
-    ``Weekly backtests used — 50 of 50 on the Free plan`` (free) /
-    ``Weekly backtests used — 500 of 500 on your plan`` (any other plan —
-    D-12 names only the free plan, the one whose wall explains that paid
-    plans include more) / ``Weekly backtest compute time — 10 s of 1,500 s
-    left on the Free plan, not enough to start this`` / ``The Free plan does
-    not include backtests``. Readable by the person looking at the card AND
-    the model reading the envelope; the Q-1806 defect was a card that
-    showed the user a line written to steer the model.
+    ``Backtests: 25 of 25 used on Free`` · ``Backtest compute time: 10 s of
+    750 s left on Free, not enough to start this`` · ``Paper strategies: 1 of
+    1 running on Free`` · ``Private screen auto-refresh isn't on Free`` ·
+    ``Free doesn't include Compare``. Readable by the person looking at the
+    card AND the model reading the envelope (Q-1806).
     """
-    kind = info.get("kind")
     unit = str(info.get("unit") or "")
-    label = info.get("label") or info.get("unit_label") or _label_for_unit(unit)
-    free = is_free_plan(info)
-    on_plan = " on the Free plan" if free else " on your plan"
-    if kind in NO_GRANT_KINDS:
-        return f"{'The Free plan' if free else 'Your plan'} does not include {label}"
-    adjective = _PERIOD_ADJECTIVE.get(str(info.get("period") or ""))
-    title = f"{adjective} {label}" if adjective else f"{label[:1].upper()}{label[1:]}"
+    label = _unit_label(info)
+    plan = own_plan_name(info)
+    on = f"on {plan}" if plan else "on this plan"
+    kind = limit_kind(info)
+    row = limit_unit(unit)
+    if kind == FEATURE:
+        if row is not None and row.absent:
+            return f"{row.absent[0]} isn't on {plan or 'this plan'}"
+        return f"{plan or 'This plan'} doesn't include {label}"
     limit, used, remaining = info.get("limit"), info.get("used"), info.get("remaining")
+    title = _capital(label)
+    if kind == CAP:
+        if _is_count(limit) and _is_count(used):
+            held = row.held if row is not None else "in use"
+            return f"{title}: {used:,} of {limit:,} {held} {on}"
+        return f"{title}: plan limit reached {on}"
     if _is_short_of_need(info):
         return (
-            f"{title} — {quota_amount(unit, remaining)} of {quota_amount(unit, limit)} "
-            f"left{on_plan}, not enough to start this"
+            f"{title}: {quota_amount(unit, remaining)} of {quota_amount(unit, limit)} "
+            f"left {on}, not enough to start this"
         )
-    if isinstance(limit, int) and isinstance(used, int):
-        if kind == "cap_exceeded":
-            return f"{title} — {used} of {limit} in use{on_plan}, the plan maximum"
-        return f"{title} used — {quota_amount(unit, used)} of {quota_amount(unit, limit)}{on_plan}"
-    return f"{title} — plan limit reached{on_plan}"
+    if _is_count(limit) and _is_count(used):
+        return f"{title}: {quota_amount(unit, used)} of {quota_amount(unit, limit)} used {on}"
+    return f"{title}: plan limit reached {on}"
+
+
+def quota_after_clause(info: dict) -> str | None:
+    """What follows the headline: ``resets Sat 5 Dec`` (a consumable with a
+    served instant) · a cap's ``stop one to free it`` (or ``it doesn't
+    reset``) · a feature's own remedy · ``None``."""
+    kind = limit_kind(info)
+    row = limit_unit(info.get("unit"))
+    if kind == FEATURE:
+        return row.absent[1] if row is not None and row.absent else None
+    if kind == CAP:
+        return (row.frees if row is not None and row.frees else None) or "it doesn't reset"
+    when = quota_reset_instant(info)
+    return f"resets {format_reset_date(when)}" if when else None
 
 
 def quota_reset_text(info: dict) -> str | None:
-    """``They reset Mon 29 Sep 00:00 UTC.`` — or ``None`` (a cap, or no
-    instant the server sent)."""
-    return quota_reset_sentence(info).strip() or None
-
-
-def quota_is_concurrent_cap(info: dict) -> bool:
-    """True for a limit on how many run AT ONCE (``cap_exceeded``, no reset).
-
-    A concurrent cap (live strategy slots, paper runs) never refills on a
-    clock, so a wall that says it "lifts at the reset" is false for it
-    (finding QA-W1). The wall stays neutral either way (D-12, paper-trading-v2
-    R-59): it says the limit does not reset, and proposes no action.
-    """
-    return info.get("kind") == "cap_exceeded" and quota_reset_instant(info) is None
-
-
-#: The no-reset clause of a concurrent cap's wall (QA-W1): a fact, no action.
-QUOTA_CAP_NO_RESET = "It limits how many run at once and does not reset on a clock"
-
-
-#: The free-plan wall's one plan sentence (D-12 Q1's recorded FALLBACK,
-#: taken 2026-10-01 — Q-2268): where plans are changed, and nothing about
-#: what other plans include. D-12 first shipped "Paid plans include more
-#: <unit>; plans are changed in the Keel web app." and recorded, so nobody
-#: re-litigates it, that if a reviewer objects the first clause is dropped
-#: and the rest kept. The round-2 audit read the first clause as a plan
-#: pitch on the listed surface, so the fallback is now the sentence.
-FREE_PLAN_SENTENCE = "Plans are changed in the Keel web app."
+    """The card's second line: :func:`quota_after_clause` as a sentence."""
+    after = quota_after_clause(info)
+    return f"{_capital(after)}." if after else None
 
 
 def quota_plans_line(info: dict) -> str | None:
-    """The one plan sentence (D-12 Q1, its recorded fallback) — FREE plan
-    only, else ``None``.
+    """The wall's plan line (doc 07 §4): the more clause, then where plans
+    are changed — or ``None`` when no plan includes more (Pro, or a server
+    that named none: never guessed)."""
+    more = limit_more_clause(info)
+    return f"{more} {WEB_APP_SENTENCE}" if more else None
 
-    :data:`FREE_PLAN_SENTENCE`: no plan name, number, price, verb, link or
-    capacity claim — only where plans are changed. A paid user already knows
-    plans exist, so their wall carries no plan sentence at all (Q2).
-    """
-    if not is_free_plan(info):
-        return None
-    return FREE_PLAN_SENTENCE
+
+#: The units whose wall carries the allowance note: what a backtest
+#: allowance does NOT pay for (composing, validating, reading results) is
+#: true of the backtest units only — on a compose wall it would be false.
+_ALLOWANCE_NOTE_UNITS = frozenset({"backtest_runs", "backtest_compute_seconds"})
+
+#: The note (D-12 §4.1, kept by D-14): what keeps working at the wall.
+QUOTA_ALLOWANCE_NOTE = (
+    "Composing, validating and reading existing results don't use this allowance."
+)
 
 
 def quota_allowance_note(info: dict) -> str | None:
@@ -1203,46 +1570,238 @@ def quota_allowance_note(info: dict) -> str | None:
     return QUOTA_ALLOWANCE_NOTE if str(info.get("unit") or "") in _ALLOWANCE_NOTE_UNITS else None
 
 
+def quota_is_concurrent_cap(info: dict) -> bool:
+    """True for a limit on how many run AT ONCE (a cap, no reset): it never
+    refills on a clock, so "lifts at the reset" is false for it (QA-W1)."""
+    return limit_kind(info) == CAP and quota_reset_instant(info) is None
+
+
 def quota_wall_lines(info: dict) -> list[str]:
-    """The plan-limit wall, one line per sentence group (D-12 §4.1, exact).
+    """The plan-limit wall, one line per sentence group (doc 07 §4/§5)::
 
-    Free plan::
-
-        Weekly backtests used — 50 of 50 on the Free plan. They reset Mon 29 Sep 00:00 UTC.
-        Plans are changed in the Keel web app.
+        Backtests: 25 of 25 used on Free; resets Sat 5 Dec.
+        Trader and Pro include more. Plans are changed in the Keel web app.
         Composing, validating and reading existing results don't use this allowance.
 
-    Any paid plan: the first and third lines, "on your plan".
+        Paper strategies: 1 of 1 running on Free; stop one to free it.
+        Trader and Pro run more. Plans are changed in the Keel web app.
 
-    The ONE computation owner of the wall's copy: the 403 ``message``, the
-    handoff's ``talking_points`` and its card ``limit_view`` all read these
-    lines, so they cannot drift apart. Each line passes
-    :func:`assert_neutral_wall_text` before it leaves.
+    Pro: no plan line. The ONE computation owner of the wall's copy: the
+    403 ``message``, the handoff's ``talking_points`` and its card
+    ``limit_view`` all read these lines, so they cannot drift apart. Each
+    line passes :func:`assert_plan_copy` before it leaves.
     """
-    free = is_free_plan(info)
-    first = quota_headline(info) + "."
-    reset = quota_reset_text(info)
-    if reset:
-        first = f"{first} {reset}"
-    lines = [first]
+    after = quota_after_clause(info)
+    clause = render_first_week_clause(info)
+    head = quota_headline(info) + (f" {clause}" if clause else "")
+    lines = [head + (f"; {after}." if after else ".")]
     for extra in (quota_plans_line(info), quota_allowance_note(info)):
         if extra:
             lines.append(extra)
-    return [assert_neutral_wall_text(line, free_plan=free) for line in lines]
+    return [assert_plan_copy(line) for line in lines]
+
+
+#: The agent's instruction at a wall (doc 07 §4, D-14 rule 5): what not to
+#: do, and what to tell the user. Never a pitch.
+_WAIT_FOR: dict[str, str] = {
+    CONSUMABLE: "don't retry before the reset",
+    CAP: "don't retry before a slot frees",
+    FEATURE: "retrying doesn't change it",
+    FLOOR: "resubmitting it unchanged returns the same refusal",
+}
+
+
+def quota_suggestion(info: dict) -> str:
+    """``Plan limit; don't retry before the reset. Tell the user the numbers
+    and which plans include more.`` — the more half only when the server
+    named a plan that does."""
+    kind = limit_kind(info)
+    tell = "the floor" if kind == FLOOR else "the numbers"
+    if kind == FEATURE:
+        tell = "what this plan includes"
+    tail = f"Tell the user {tell}"
+    if more_plan_names(info):
+        verb = {FLOOR: "run faster", FEATURE: "include it"}.get(kind, "include more")
+        tail += f" and which plans {verb}"
+    return assert_plan_copy(f"Plan limit; {_WAIT_FOR[kind]}. {tail}.")
+
+
+def render_quota_sentence(block: dict) -> str | None:
+    """ONE factual count line from a served quota block (doc 07 §5)::
+
+        >>> render_quota_sentence({"unit": "backtest_runs", "label": "backtests",
+        ...     "limit": 25, "used": 21, "remaining": 4,
+        ...     "resets_at": "2026-12-05T00:00:00Z"})
+        '4 of 25 backtests left; resets Sat 5 Dec.'
+
+    A cap counts what is held, and the last slot says so: ``Last paper slot
+    in use (1 of 1).`` ``None`` when the block carries no finite allowance
+    (an unlimited unit, or a server that sent no numbers) — rendering "left"
+    without a number is exactly the null-number sentence Q-1590 shipped.
+    """
+    if not isinstance(block, dict) or block.get("unlimited"):
+        return None
+    limit, remaining = block.get("limit"), block.get("remaining")
+    if not _is_count(limit) or not _is_count(remaining):
+        return None
+    unit = str(block.get("unit") or "")
+    label = _unit_label(block)
+    row = limit_unit(unit)
+    if limit_kind(block) == CAP:
+        used = block.get("used") if _is_count(block.get("used")) else max(0, limit - remaining)
+        if remaining == 0 and row is not None and row.slot:
+            return f"Last {row.slot} in use ({used:,} of {limit:,})."
+        held = row.held if row is not None else "in use"
+        return f"{_capital(label)}: {used:,} of {limit:,} {held}."
+    when = quota_reset_instant(block)
+    reset_clause = f"; resets {format_reset_date(when)}" if when else ""
+    clause = render_first_week_clause(block)
+    extras = f" {clause}" if clause else ""
+    return (
+        f"{quota_amount(unit, remaining)} of {quota_amount(unit, limit)} {label} "
+        f"left{extras}{reset_clause}."
+    )
+
+
+def notice_more_clause(block: dict) -> str | None:
+    """A notice's more clause: only at the warn, critical and exhausted
+    tiers (founder Q3), from the block's served names."""
+    if not isinstance(block, dict) or block.get("tier") not in MORE_CLAUSE_TIERS:
+        return None
+    return limit_more_clause(block)
+
+
+def render_quota_notice(block: dict) -> str | None:
+    """The near-limit notice: :func:`render_quota_sentence` (which folds the
+    first-week clause in, while one has some left) and the more clause at
+    the warn, critical and exhausted tiers::
+
+        4 of 25 backtests left; resets Sat 5 Dec. Trader and Pro include more.
+        37 of 75 backtests left (12 first-week extras until Mon 23 Nov); resets Wed 16 Dec. Trader and Pro include more.
+    """
+    sentence = render_quota_sentence(block)
+    if sentence is None:
+        return None
+    parts = [sentence, notice_more_clause(block)]
+    return assert_plan_copy(" ".join(p for p in parts if p))
 
 
 def _quota_message(info: dict) -> str:
     """The message for a plan-limit 403 — :func:`quota_wall_lines`, joined.
 
-    Copy posture (mcp-conversion D-12, 2026-09-28 — decisions.md): the
-    caller's own limit and when it resets; on the free plan, that paid plans
-    include more; what does not use the allowance. No other plan's name or
-    number, no URL, no field names and no imperatives — every card renders
-    ``message`` verbatim, and it used to end with a directive to the model
-    (Q-1806) and, later, name the other tiers (Q-2080). ``retryable: false``
-    and the structured numbers say the rest.
+    Copy posture (mcp-conversion D-14, 2026-11-16 — decisions.md): the
+    caller's own numbers and reset, the plans that include more of this
+    limit, where plans are changed, and what does not use the allowance. No
+    price, URL, field name or pitch — every card renders ``message``
+    verbatim (Q-1806, Q-2080). ``retryable: false``, the suggestion and the
+    structured numbers say the rest.
     """
     return " ".join(quota_wall_lines(info))
+
+
+# ─── The paper/live timeframe floor (doc 07 §5, D-14) ────────────────────
+
+
+def floor_info(detail: dict) -> dict:
+    """A served floor refusal or ``serving_floor`` block as the renderer's
+    info dict (kind FLOOR)."""
+    out: dict = {"unit": "paper_live_clock_floor", "kind": FLOOR}
+    for key in ("floor", "requested", "plan", "plan_name", "higher_plans", "more_plans"):
+        if detail.get(key) is not None:
+            out[key] = detail[key]
+    return out
+
+
+def floor_headline(info: dict) -> str:
+    """``Paper and live on Free need 1h or slower; this is 15min`` — the
+    served floor and requested clock, verbatim."""
+    plan = own_plan_name(info)
+    where = f"on {plan}" if plan else "on this plan"
+    head = f"Paper and live {where} need {info['floor']} or slower"
+    requested = info.get("requested")
+    return f"{head}; this is {requested}" if isinstance(requested, str) and requested else head
+
+
+def floor_change_line(info: dict, *, card: bool = False) -> str:
+    """What to change: the DSL field for the agent (the handoff's
+    ``message`` and talking points), plain words on the card's
+    ``limit_view.reset`` (which draws no code)."""
+    what = "the strategy's timeframe" if card else "`target_timeframe`"
+    return f"Change {what} to {info['floor']} or slower."
+
+
+def floor_wall_lines(info: dict, *, card: bool = False) -> list[str]:
+    """The floor refusal's wall (doc 07 §5)::
+
+        Paper and live on Free need 1h or slower; this is 15min.
+        Change `target_timeframe` to 1h or slower.
+        Trader and Pro run faster. Plans are changed in the Keel web app.
+
+    ``card`` renders the change line in the card's plain words.
+    """
+    lines = [floor_headline(info) + ".", floor_change_line(info, card=card)]
+    more = limit_more_clause(info)
+    if more:
+        lines.append(f"{more} {WEB_APP_SENTENCE}")
+    return [assert_plan_copy(line) for line in lines]
+
+
+def floor_notice(block: object) -> str | None:
+    """The backtest result's heads-up from a served ``serving_floor``::
+
+        Note: paper and live on Free need 1h or slower; this is 15min. Trader and Pro run faster.
+
+    ``None`` without a served floor."""
+    if not isinstance(block, dict) or not isinstance(block.get("floor"), str):
+        return None
+    info = floor_info(block)
+    head = floor_headline(info)
+    sentence = f"Note: {head[:1].lower()}{head[1:]}."
+    more = limit_more_clause(info)
+    return assert_plan_copy(f"{sentence} {more}" if more else sentence)
+
+
+#: What a research refusal with its own RESEARCH_* code expects.
+RESEARCH_REFUSAL_EXPECTED = "The message says what this call needs."
+
+
+def _research_refusal(payload: dict) -> "EntitlementError | None":
+    """A research route's 403 (RI-237; 07 §3.4), or ``None`` for any other body.
+
+    keel-api's research routes raise ``HTTPException(403, detail={"code",
+    "message", "unit"})``: the code is one of the existing quota codes
+    (``quota_exhausted``, ``quota_cap_reached``, ``plan_feature_unavailable``)
+    or a ``RESEARCH_*`` code, and the message is the served sentence
+    (``libs/research/words.py``, RL-53). Until RI-237 the nested shape fell to
+    the scope-missing arm: code ``None``, the raw body as the message, and on
+    the full profile "Re-login with live scope". Now the message is the served
+    words, ``detail`` keeps the machine half (``code``, ``unit``), nothing
+    re-authenticates, and a ``RESEARCH_*`` code is the envelope's own code (as
+    a screen refusal's is). The quota codes keep ``insufficient_entitlements``
+    with the specific code in ``detail.code`` (07 §3.4's row). A nested dict
+    without a string message, or with any other code, is not this shape.
+    """
+    detail = payload.get("detail")
+    if not isinstance(detail, dict):
+        return None
+    code, words = detail.get("code"), detail.get("message")
+    if not isinstance(code, str) or not isinstance(words, str) or not words.strip():
+        return None
+    own = code.startswith("RESEARCH_")
+    if code not in QUOTA_CODES and not own:
+        return None
+    err = EntitlementError(
+        words.strip(),
+        # D-14 rule 5 (ENGINE relay, D-350): a research wall carries the mature tools' instruction ("Plan limit;
+        # don't retry before the reset. Tell the user the numbers …"), from the same quota_suggestion over the unit.
+        suggestion=RESEARCH_REFUSAL_EXPECTED if own else quota_suggestion({**detail, "code": code}),
+    )
+    if own:
+        err.error_code = code
+    err.detail = {k: v for k, v in detail.items() if k != "message"}
+    err.recovery_tool = None
+    err.recovery_tool_args = None
+    return err
 
 
 def _translate_403(body: str) -> "EntitlementError":
@@ -1317,26 +1876,21 @@ def _translate_403(body: str) -> "EntitlementError":
         err.recovery_tool_args = None
         return err
 
+    # RI-237 (research spec 07 §3.3-§3.4): a research route refuses with its own
+    # served words nested under `detail` ({"code", "message", "unit"}); read that
+    # shape before anything below, so the words are the message and the raw body
+    # never is. Every other 403 takes the arms below exactly as before.
+    research = _research_refusal(payload)
+    if research is not None:
+        return research
+
     info = _quota_context(payload, payload.get("reasons"))
 
     if info is not None:
-        # D-12: facts only, and no destination — no `docs_url`, no URL in
-        # `example`. A metered limit lifts at the reset; a concurrent cap has
-        # no reset (QA-W1). The wall says which and stops.
-        suggestion = assert_neutral_wall_text(
-            (
-                f"A plan limit on {info['label']} stopped this call; `example` carries "
-                f"the numbers. {QUOTA_CAP_NO_RESET}; neither a retry nor a new sign-in "
-                "changes it."
-            )
-            if quota_is_concurrent_cap(info)
-            else (
-                f"A plan limit on {info['label']} stopped this call; `example` carries "
-                "the numbers and the reset instant. Neither a retry nor a new sign-in "
-                "changes it before the reset."
-            ),
-            free_plan=is_free_plan(info),
-        )
+        # D-14: the agent's instruction, never a pitch — and no destination
+        # (no `docs_url`, no URL in `example`). A metered limit lifts at the
+        # reset; a cap when a slot frees (QA-W1); a feature not at all.
+        suggestion = quota_suggestion(info)
         err = EntitlementError(
             _quota_message(info),
             suggestion=suggestion,
@@ -1347,6 +1901,21 @@ def _translate_403(body: str) -> "EntitlementError":
         err.recovery_tool = None
         err.recovery_tool_args = None
         return err
+
+    # A CODED non-quota 403 (a feature flag such as SCREENER_PUBLISH_DISABLED)
+    # keeps its machine half on `detail`, as the 404/409/422 arms do (Q-1742),
+    # so a command can name the refusal's own next step (spec 06 §D1.7).
+    machine, served = _refusal_detail(body)
+    coded = served if machine is not None and machine not in QUOTA_CODES else None
+    # A screen refusal (SCREENER_REFRESH_BELOW_FLOOR, a feature flag) is the
+    # API's own coded 403, never a missing scope: it keeps its code and words.
+    screen_refusal = coded is not None and machine.startswith(("SCREENER_", "SCREEN_"))
+    if screen_refusal and not (isinstance(detail, str) and detail):
+        # keel-api's HTTPException(detail={"code", "detail": <words>, ...})
+        # nests its sentence; the raw body is never the message.
+        words = _extract_detail(body)
+        if isinstance(words, str) and words.strip() and not words.lstrip().startswith("{"):
+            detail_text = words.strip()
 
     if not _local_tools_registered():
         # Hosted / listed: no live-write tool and no `keel_auth_login` is
@@ -1361,6 +1930,9 @@ def _translate_403(body: str) -> "EntitlementError":
         err.recovery_tool = None
         err.recovery_tool_args = None
         err.server_reasons = reasons
+        err.detail = coded
+        if screen_refusal:
+            err.error_code = machine
         return err
 
     # Not a plan limit → the scope-missing default shape.
@@ -1379,4 +1951,12 @@ def _translate_403(body: str) -> "EntitlementError":
         ),
     )
     err.server_reasons = reasons
+    err.detail = coded
+    if screen_refusal:
+        # A coded non-quota refusal (SCREENER_REFRESH_BELOW_FLOOR) is not a
+        # missing scope: no re-login, and the envelope carries its own code.
+        err.error_code = machine
+        err.recovery_tool = None
+        err.recovery_tool_args = None
+        err.suggestion = None
     return err

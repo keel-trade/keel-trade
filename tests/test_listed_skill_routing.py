@@ -49,7 +49,7 @@ import re
 from pathlib import Path
 
 import pytest
-from keel.mcp.server import LISTED_EXCLUDED_SKILLS
+from keel.mcp.server import LISTED_EXCLUDED_SKILLS, listed_excluded_skills
 from keel.skills import BUNDLED_SKILLS, compose_skill, load_skill, render_body_for_profile
 from keel.tools.outcomes import OUTCOMES, _bootstrap
 from keel.tools.outcomes._toolsets import LISTED_PROFILE_TOOLS, SERVER_PROFILE_ENV
@@ -414,8 +414,9 @@ def test_the_served_population_matches_the_registry_and_the_manifest(listed_prof
     and that the served set is exactly what the prompt surface and the
     published manifest say minus the one exclusion list."""
     served = _served_bodies()
-    expected = set(BUNDLED_SKILLS) - set(LISTED_EXCLUDED_SKILLS)
-    assert len(served) == len(BUNDLED_SKILLS) - len(LISTED_EXCLUDED_SKILLS)
+    excluded = set(listed_excluded_skills())
+    expected = set(BUNDLED_SKILLS) - excluded
+    assert len(served) == len(BUNDLED_SKILLS) - len(excluded)
     assert set(served) == expected
 
     from keel.mcp.server import create_server
@@ -436,7 +437,7 @@ def test_the_served_population_matches_the_registry_and_the_manifest(listed_prof
     if _SKILLS_MANIFEST.exists():  # monorepo checkout — the public mirror has no keel-site
         manifest = {s["name"] for s in json.loads(_SKILLS_MANIFEST.read_text())["skills"]}
         assert manifest == set(BUNDLED_SKILLS), "the published skills manifest is stale"
-        assert set(served) == manifest - set(LISTED_EXCLUDED_SKILLS)
+        assert set(served) == manifest - excluded
 
 
 def test_the_full_profile_bodies_do_trip_the_scanner(monkeypatch):

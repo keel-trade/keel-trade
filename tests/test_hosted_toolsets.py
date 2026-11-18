@@ -58,7 +58,8 @@ def test_hosted_loads_everything_except_the_8(monkeypatch):
     monkeypatch.setenv("KEEL_TOOLSETS", ALL_TOOLSETS_ENV)
     monkeypatch.setenv("KEEL_EXECUTION_MODE", "hosted")
     hosted = set(loaded_tool_names(OUTCOMES))
-    assert hosted == set(OUTCOMES) - HOSTED_EXCLUDED
+    cli_only = {t.name for t in OUTCOMES.values() if t.cli_only}
+    assert hosted == set(OUTCOMES) - HOSTED_EXCLUDED - cli_only
     assert hosted.isdisjoint(HOSTED_EXCLUDED)
 
 
@@ -67,7 +68,33 @@ def test_local_mode_tool_surface_is_unchanged(monkeypatch):
     outside hosted mode."""
     monkeypatch.setenv("KEEL_TOOLSETS", ALL_TOOLSETS_ENV)
     monkeypatch.delenv("KEEL_EXECUTION_MODE", raising=False)
-    assert set(loaded_tool_names(OUTCOMES)) == set(OUTCOMES)
+    cli_only = {t.name for t in OUTCOMES.values() if t.cli_only}
+    assert set(loaded_tool_names(OUTCOMES)) == set(OUTCOMES) - cli_only
+
+
+def test_exactly_the_five_cli_only_tools_and_the_cli_still_registers_them():
+    """L13 §2b: five screen commands are CLI-only — absent from MCP on every
+    profile, still `keel` commands.
+
+    # SEED (L13, 2026-11-03): drop `cli_only=True` from
+    # `keel/tools/outcomes/screener_copy.py` — this reds. Reverse the edit.
+    """
+    import click
+    from keel.tools.outcomes._cli_adapter import register_all as cli_register_all
+
+    from tests._research_delta import RESEARCH_CLI_ONLY
+    from tests._screeners_delta import SCREENER_CLI_ONLY
+
+    # Research's CLI-only verbs (07 §2.2, AT-1).
+    cli_only = {t.name for t in OUTCOMES.values() if t.cli_only}
+    assert cli_only == SCREENER_CLI_ONLY | RESEARCH_CLI_ONLY
+    root = click.Group("keel")
+    cli_register_all(root, OUTCOMES)
+    for name in sorted(cli_only):
+        node = root
+        for part in OUTCOMES[name].cli_path:
+            node = node.commands.get(part)
+            assert node is not None, f"CLI lost {name}"
 
 
 def test_cli_registration_ignores_hosted_exclusion(monkeypatch):
@@ -215,5 +242,6 @@ def test_hosted_status_reports_hosted_visible_tools(monkeypatch):
     ):
         result = OUTCOMES["keel_account_status"].handler({}, ToolContext(is_tty=False))
     visible = set(result.extra["tools_visible"])
-    assert visible == set(OUTCOMES) - HOSTED_EXCLUDED
+    cli_only = {t.name for t in OUTCOMES.values() if t.cli_only}
+    assert visible == set(OUTCOMES) - HOSTED_EXCLUDED - cli_only
     assert json.loads(json.dumps(result.extra))  # envelope stays serializable

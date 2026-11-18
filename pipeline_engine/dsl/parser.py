@@ -12,18 +12,21 @@ Quick Start:
 from __future__ import annotations
 
 import ast
+import contextvars
 import re
 from typing import Any
 
 from pipeline_engine.dsl.spec import (
     EXECUTION_PARAM_NAMES,
     MISSING,
+    OUTPUT_ROLES,
     ComponentRef,
     ExecutionSpec,
     FactoryCallSpec,
     FactoryDef,
     FactoryParam,
     GlobalsSpec,
+    OutputsSpec,
     ParallelSpec,
     PipelineSpec,
     SlotExtractSpec,
@@ -36,6 +39,8 @@ from pipeline_engine.dsl.spec import (
     UniverseSpec,
     VariableAssignment,
     VariableRef,
+    file_kind,
+    output_name_problems,
 )
 
 
@@ -124,7 +129,16 @@ class DSLParseError(Exception):
 #: TEXT with it, so ``_loc`` converts — which needs the line it is on.
 #: ``None`` (a caller reaching the node helpers without a parse in flight)
 #: degrades to the raw byte offset, exactly today's behavior.
-_SOURCE_LINES: list[str] | None = None
+#:
+#: A context variable, not module state (Q-7059): parses run on worker threads
+#: (the save's ``_compile_off_loop``, the update's ``to_thread``, /validate),
+#: and a module global let one thread's ``finally`` reset the lines to
+#: ``None`` while another thread was mid-parse, so that parse's columns fell
+#: back to byte offsets. Each ``to_thread`` call runs in its own copy of the
+#: context, so a value set here is private to its parse.
+_SOURCE_LINES: contextvars.ContextVar[list[str] | None] = contextvars.ContextVar(
+    "dsl_parser_source_lines", default=None
+)
 
 
 def _char_col(lineno: int, byte_col: int) -> int:
@@ -135,9 +149,10 @@ def _char_col(lineno: int, byte_col: int) -> int:
     builds an index over the whole source for surgical edits, while this
     needs one line at a time during the parse.
     """
-    if byte_col <= 0 or _SOURCE_LINES is None or not (1 <= lineno <= len(_SOURCE_LINES)):
+    lines = _SOURCE_LINES.get()
+    if byte_col <= 0 or lines is None or not (1 <= lineno <= len(lines)):
         return byte_col
-    line = _SOURCE_LINES[lineno - 1]
+    line = lines[lineno - 1]
     return len(line.encode("utf-8")[:byte_col].decode("utf-8", errors="ignore"))
 
 
@@ -449,25 +464,34 @@ def _parse_step(node: ast.expr, factory_names: set[str], context: str = "") -> S
                 node,
             )
 
+        if name == "Use":
+            from pipeline_engine.dsl.use import UseParseError, parse_use_call
+
+            try:
+                return parse_use_call(node, location=_loc(node, context))
+            except UseParseError as exc:
+                raise _error("USE_REF_MALFORMED", str(exc), node) from exc
+
         # Pipeline(...) -> PipelineSpec
         if name == "Pipeline":
             return _parse_pipeline_call(node, factory_names, context)
 
         # Store("slot_name") -> SlotStoreSpec
+        # Q-7156: a slot step is located by its step path, as the edit layer names it.
         if name == "Store":
-            return _parse_store(node)
+            return _parse_store(node, context)
 
         # Load("slot_name") -> SlotLoadSpec
         if name == "Load":
-            return _parse_load(node)
+            return _parse_load(node, context)
 
         # StoreValue("slot_name", value) -> SlotStoreValueSpec
         if name == "StoreValue":
-            return _parse_store_value(node)
+            return _parse_store_value(node, context)
 
         # Extract("key") -> SlotExtractSpec
         if name == "Extract":
-            return _parse_extract(node)
+            return _parse_extract(node, context)
 
         # Parallel(...) is the Python pipeline API's class, not DSL. Without
         # this arm the call failed on its FIRST BRANCH's first component —
@@ -498,7 +522,7 @@ def _parse_step(node: ast.expr, factory_names: set[str], context: str = "") -> S
             return FactoryCallSpec(
                 name=name,
                 args=args,
-                location=_loc(node, f"factory_call[{name}]"),
+                location=_loc(node, context or f"factory_call[{name}]"),  # Q-7156
             )
 
         # Component call -> ComponentRef
@@ -644,7 +668,7 @@ def _parse_pipeline_call(
     )
 
 
-def _parse_store(node: ast.Call) -> SlotStoreSpec:
+def _parse_store(node: ast.Call, context: str = "") -> SlotStoreSpec:
     """Parse Store("slot_name") into SlotStoreSpec."""
     if node.keywords:
         raise _error(
@@ -667,11 +691,11 @@ def _parse_store(node: ast.Call) -> SlotStoreSpec:
         )
     return SlotStoreSpec(
         slot_name=arg.value,
-        location=_loc(node, f"store[{arg.value}]"),
+        location=_loc(node, context or f"store[{arg.value}]"),  # Q-7156
     )
 
 
-def _parse_load(node: ast.Call) -> SlotLoadSpec:
+def _parse_load(node: ast.Call, context: str = "") -> SlotLoadSpec:
     """Parse Load("slot_name") into SlotLoadSpec."""
     if node.keywords:
         raise _error(
@@ -694,11 +718,11 @@ def _parse_load(node: ast.Call) -> SlotLoadSpec:
         )
     return SlotLoadSpec(
         slot_name=arg.value,
-        location=_loc(node, f"load[{arg.value}]"),
+        location=_loc(node, context or f"load[{arg.value}]"),  # Q-7156
     )
 
 
-def _parse_extract(node: ast.Call) -> SlotExtractSpec:
+def _parse_extract(node: ast.Call, context: str = "") -> SlotExtractSpec:
     """Parse Extract("key") or Extract(key="key") into SlotExtractSpec."""
     # Accept either positional or keyword 'key' arg
     if len(node.args) == 1 and not node.keywords:
@@ -711,7 +735,7 @@ def _parse_extract(node: ast.Call) -> SlotExtractSpec:
             )
         return SlotExtractSpec(
             key=arg.value,
-            location=_loc(node, f"extract[{arg.value}]"),
+            location=_loc(node, context or f"extract[{arg.value}]"),  # Q-7156
         )
     if not node.args and len(node.keywords) == 1 and node.keywords[0].arg == "key":
         kw = node.keywords[0]
@@ -723,7 +747,7 @@ def _parse_extract(node: ast.Call) -> SlotExtractSpec:
             )
         return SlotExtractSpec(
             key=kw.value.value,
-            location=_loc(node, f"extract[{kw.value.value}]"),
+            location=_loc(node, context or f"extract[{kw.value.value}]"),  # Q-7156
         )
     raise _error(
         "SLOT_OP_ARG_SHAPE",
@@ -732,7 +756,7 @@ def _parse_extract(node: ast.Call) -> SlotExtractSpec:
     )
 
 
-def _parse_store_value(node: ast.Call) -> SlotStoreValueSpec:
+def _parse_store_value(node: ast.Call, context: str = "") -> SlotStoreValueSpec:
     """Parse StoreValue("slot_name", value) into SlotStoreValueSpec."""
     if node.keywords:
         raise _error(
@@ -764,13 +788,14 @@ def _parse_store_value(node: ast.Call) -> SlotStoreValueSpec:
     return SlotStoreValueSpec(
         slot_name=slot_arg.value,
         value=value_arg.value,
-        location=_loc(node, f"store_value[{slot_arg.value}]"),
+        location=_loc(node, context or f"store_value[{slot_arg.value}]"),  # Q-7156
     )
 
 
 def _parse_parallel(node: ast.Dict, factory_names: set[str], context: str = "") -> ParallelSpec:
     """Parse a dict literal into ParallelSpec."""
     branches: dict[str, list[StepSpec]] = {}
+    duplicates: list[str] = []
     for key, value in zip(node.keys, node.values):
         if key is None:
             raise _error(
@@ -786,17 +811,21 @@ def _parse_parallel(node: ast.Dict, factory_names: set[str], context: str = "") 
             )
 
         branch_name = key.value
+        if branch_name in branches and branch_name not in duplicates:
+            duplicates.append(branch_name)  # Q-7153: the later value wins, as before
         branch_context = f"{context}.branch[{branch_name}]" if context else f"branch[{branch_name}]"
 
         if isinstance(value, ast.List):
             branches[branch_name] = _parse_step_list(value.elts, factory_names, branch_context)
         else:
-            # Single step as branch value (e.g., factory call)
-            branches[branch_name] = [_parse_step(value, factory_names, branch_context)]
+            # Single step as branch value (e.g., factory call). Q-7156: the step
+            # is the branch's step[0], as edits.py names it.
+            branches[branch_name] = [_parse_step(value, factory_names, f"{branch_context}.step[0]")]
 
     return ParallelSpec(
         branches=branches,
         location=_loc(node, context or "parallel"),
+        duplicate_keys=tuple(duplicates),
     )
 
 
@@ -1072,6 +1101,78 @@ def _parse_execution_call(node: ast.Call, factory_names: set[str]) -> ExecutionS
     return ExecutionSpec(**spec_kwargs)
 
 
+def _parse_outputs_call(node: ast.Call) -> OutputsSpec:
+    """Parse the closed Outputs declaration; never execute a source expression."""
+    if node.args:
+        raise _error("DECLARATION_ARG_SHAPE", "Outputs() takes only keyword arguments", node)
+    _check_declaration_keys("Outputs", "Outputs parameter", node, ("slots", "roles"))
+    kwargs = {}
+    for kw in node.keywords:
+        if kw.arg is None:
+            raise _error("DECLARATION_ARG_SHAPE", "**kwargs not allowed in Outputs()", node)
+        if kw.arg in kwargs:
+            raise _error("DECLARATION_ARG_SHAPE", f"Outputs() repeats '{kw.arg}'", node)
+        kwargs[kw.arg] = kw.value
+    if "slots" not in kwargs:
+        raise _error(
+            "DECLARATION_ARG_SHAPE",
+            "Outputs() requires slots=[...] naming at least one stored slot",
+            node,
+        )
+    raw = kwargs["slots"]
+    if not isinstance(raw, ast.List):
+        raise _error(
+            "DECLARATION_ARG_SHAPE", "Outputs(slots=...) must be a list literal of slot names", raw
+        )
+    if not raw.elts:
+        raise _error(
+            "DECLARATION_ARG_SHAPE", "Outputs(slots=[]) must name at least one stored slot", raw
+        )
+    if any(not isinstance(n, ast.Constant) or not isinstance(n.value, str) for n in raw.elts):
+        raise _error(
+            "DECLARATION_ARG_SHAPE", "Outputs(slots=[...]) elements must be string literals", raw
+        )
+    slots = [n.value for n in raw.elts]
+    problems = output_name_problems(slots)
+    if problems:
+        raise _error("DECLARATION_ARG_SHAPE", problems[0][1], raw)
+    roles = None
+    if "roles" in kwargs:
+        raw_roles = kwargs["roles"]
+        if not isinstance(raw_roles, ast.Dict):
+            raise _error(
+                "DECLARATION_ARG_SHAPE",
+                "Outputs(roles=...) must be a dict literal of slot name to role",
+                raw_roles,
+            )
+        roles = {}
+        for k, v in zip(raw_roles.keys, raw_roles.values, strict=True):
+            if not all(isinstance(n, ast.Constant) and isinstance(n.value, str) for n in (k, v)):
+                raise _error(
+                    "DECLARATION_ARG_SHAPE",
+                    "Outputs(roles={...}) keys and values must be string literals",
+                    raw_roles,
+                )
+            if k.value not in slots:
+                raise _error(
+                    "DECLARATION_ARG_SHAPE",
+                    f"Outputs(roles={{...}}) names '{k.value}', which is not a declared slot; declare it in slots=[...] first",
+                    k,
+                )
+            if v.value not in OUTPUT_ROLES:
+                raise _error(
+                    "DECLARATION_ARG_SHAPE",
+                    f"'{v.value}' is not a role; roles are {', '.join(OUTPUT_ROLES)}",
+                    v,
+                )
+            if k.value in roles:
+                raise _error(
+                    "DECLARATION_ARG_SHAPE", f"Outputs(roles={{...}}) names '{k.value}' twice", k
+                )
+            roles[k.value] = v.value
+    return OutputsSpec(slots=slots, roles=roles, location=_loc(node, "outputs"))
+
+
 def _parse_universe_call(node: ast.Call, factory_names: set[str]) -> UniverseSpec:
     """Parse Universe(...) into UniverseSpec."""
     if node.args:
@@ -1125,7 +1226,6 @@ def parse_strategy(source: str) -> StrategyFile:
     Raises:
         DSLParseError: If the source contains disallowed constructs or is malformed.
     """
-    global _SOURCE_LINES
     try:
         tree = ast.parse(source)
     except SyntaxError as e:
@@ -1137,15 +1237,15 @@ def parse_strategy(source: str) -> StrategyFile:
         )
 
     # Byte→char column correction for every SourceLocation minted below
-    # (Q-1697). Module state rather than a threaded argument because `_loc`
-    # is called from ~60 node helpers; restored in the `finally` so a nested
-    # or concurrent parse can never read another parse's text.
-    _prev_source_lines = _SOURCE_LINES
-    _SOURCE_LINES = source.splitlines()
+    # (Q-1697). Context state rather than a threaded argument because `_loc`
+    # is called from ~60 node helpers; a context variable (Q-7059) so a nested
+    # parse restores its caller's text and a parse on another thread never
+    # reads or resets this one's.
+    token = _SOURCE_LINES.set(source.splitlines())
     try:
         return _parse_body(source, tree)
     finally:
-        _SOURCE_LINES = _prev_source_lines
+        _SOURCE_LINES.reset(token)
 
 
 def _parse_body(source: str, tree: ast.Module) -> StrategyFile:
@@ -1157,12 +1257,14 @@ def _parse_body(source: str, tree: ast.Module) -> StrategyFile:
     globals_spec: GlobalsSpec | None = None
     universe_spec: UniverseSpec | None = None
     execution_spec: ExecutionSpec | None = None
+    outputs_spec: OutputsSpec | None = None
     factory_names: set[str] = set()
 
     # Track declaration ordering for enforcement
     _seen_globals = False
     _seen_universe = False
     _seen_execution = False
+    _seen_outputs = False
     _seen_var_or_factory = False
     _seen_pipeline = False
 
@@ -1237,6 +1339,12 @@ def _parse_body(source: str, tree: ast.Module) -> StrategyFile:
                             "Only one Execution declaration allowed",
                             node,
                         )
+                    if _seen_outputs:
+                        raise _error(
+                            "DECLARATION_CONFLICT",
+                            "Execution(...) and Outputs(...) cannot both appear: Execution makes a strategy, Outputs makes a screener",
+                            node,
+                        )
                     if _seen_var_or_factory:
                         raise _error(
                             "DECLARATION_ORDER",
@@ -1251,6 +1359,31 @@ def _parse_body(source: str, tree: ast.Module) -> StrategyFile:
                         )
                     _seen_execution = True
                     execution_spec = _parse_execution_call(node.value, factory_names)
+                    continue
+
+                if call_name == "Outputs":
+                    if _seen_outputs:
+                        raise _error(
+                            "DECLARATION_DUPLICATE", "Only one Outputs declaration allowed", node
+                        )
+                    if _seen_execution:
+                        raise _error(
+                            "DECLARATION_CONFLICT",
+                            "Execution(...) and Outputs(...) cannot both appear: Execution makes a strategy, Outputs makes a screener",
+                            node,
+                        )
+                    if _seen_var_or_factory:
+                        raise _error(
+                            "DECLARATION_ORDER",
+                            "Outputs must appear before factories and variables",
+                            node,
+                        )
+                    if _seen_pipeline:
+                        raise _error(
+                            "DECLARATION_ORDER", "Outputs must appear before Pipeline", node
+                        )
+                    _seen_outputs = True
+                    outputs_spec = _parse_outputs_call(node.value)
                     continue
 
                 # Pipeline(...)
@@ -1284,7 +1417,7 @@ def _parse_body(source: str, tree: ast.Module) -> StrategyFile:
             # Non-Pipeline/Globals/Universe/Execution expression
             raise _error(
                 "UNKNOWN_TOP_LEVEL_STATEMENT",
-                "Only Globals(...), Universe(...), Execution(...), and Pipeline(...) calls "
+                "Only Globals(...), Universe(...), Execution(...), Outputs(...), and Pipeline(...) calls "
                 "allowed as expression statements",
                 node,
             )
@@ -1369,10 +1502,17 @@ def _parse_body(source: str, tree: ast.Module) -> StrategyFile:
         globals_=globals_spec,
         universe=universe_spec,
         execution=execution_spec,
+        outputs=outputs_spec,
     )
 
 
+def source_kind(source: str) -> str:
+    """Read kind from the sole source declaration, never entry metadata."""
+    return file_kind(parse_strategy(source))
+
+
 __all__ = [
+    "source_kind",
     "DSLParseError",
     "parse_strategy",
 ]

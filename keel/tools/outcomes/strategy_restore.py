@@ -17,6 +17,7 @@ After restoring, the local workspace (if checked out) will be
 
 from __future__ import annotations
 
+from keel.api_path import seg
 from keel.errors import KeelError, NotFoundError
 
 from . import register
@@ -64,7 +65,7 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
     client = ctx.get_client()
     try:
         result = client.post(
-            f"/v1/strategies/{strategy_id}/versions/restore",
+            f"/v1/strategies/{seg(strategy_id)}/versions/restore",
             json=body,
         )
     except NotFoundError:
@@ -155,7 +156,7 @@ def _head_version(client, strategy_id: str, new_sequence: object) -> dict:
 
     try:
         rows = _normalize_paginated_versions(
-            client.get(f"/v1/strategies/{strategy_id}/versions", limit=1)
+            client.get(f"/v1/strategies/{seg(strategy_id)}/versions", limit=1)
         )
     except Exception:  # noqa: BLE001 — advisory read; the restore stands without it
         return {}
@@ -194,6 +195,7 @@ STRATEGY_RESTORE = register(
     OutcomeTool(
         name="keel_strategy_restore",
         required_action="strategy.update",
+        rate_tier="mutation",
         cli_path=("strategy", "restore"),
         toolset="backtest",
         # grounded-in: strategy_restore.py docstring (git-revert semantics —

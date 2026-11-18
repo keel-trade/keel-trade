@@ -92,6 +92,25 @@ _CORE_CANDIDATES = (
 )
 
 
+#: The screens corpus source (screeners L13): the same sectioned format, kept
+#: out of `system/` (a strategy prompt carrier for Keel's chat). The SAME
+#: relative place in both trees: `reference/screens_core.md` in the monorepo,
+#: `<sdk_root>/pipeline_engine/reference/screens_core.md` in the wheel
+#: (`build_data.py` copies it beside the vendored builder).
+SCREENS_CORE_NAME = "screens_core.md"
+
+
+def screens_core_path() -> Path:
+    """The screens corpus source, or a loud error naming the rebuild."""
+    path = _SYSTEM_DIR.parent / SCREENS_CORE_NAME
+    if not path.exists():
+        raise FileNotFoundError(
+            f"{SCREENS_CORE_NAME} not found at {path}. Re-run: PYTHONPATH=libs python "
+            "packages/keel-trade/keel-sdk/scripts/build_data.py"
+        )
+    return path
+
+
 def core_path() -> Path:
     """The corpus source file, or a loud error naming the rebuild."""
     for candidate in _CORE_CANDIDATES:
@@ -127,8 +146,10 @@ LAYER_VALUES = frozenset({"reference", "opinion", "sectioned"})
 #: The layers the SDK wheel vendors and MCP serves (R-L2).
 SERVED_LAYERS = frozenset({"reference", "sectioned"})
 
-#: The one `sectioned` file (05 §3.3).
+#: The one `sectioned` file of the strategy corpus (05 §3.3).
 SECTIONED_PATH = "system/operating_core.md"
+#: Every `sectioned` file: the operating core and the screens core (L13).
+SECTIONED_PATHS = frozenset({SECTIONED_PATH, "screens_core.md"})
 
 #: The directory name that marks an in-app-only file, at any depth.
 CHAT_DIR = "chat"
@@ -225,7 +246,7 @@ def is_chat_path(path: str) -> bool:
 
 def expected_layer(path: str) -> str:
     """The one layer a path may declare (05 §3 invariants)."""
-    if path == SECTIONED_PATH:
+    if path in SECTIONED_PATHS:
         return "sectioned"
     return "opinion" if is_chat_path(path) else "reference"
 
@@ -298,6 +319,8 @@ __all__ = [
     "LAYER_VALUES",
     "RuleOwner",
     "SECTIONED_PATH",
+    "SECTIONED_PATHS",
+    "SCREENS_CORE_NAME",
     "SERVED_LAYERS",
     "Section",
     "base_document",
@@ -428,8 +451,11 @@ _VALID_LAYERS = frozenset({"head", "body", "skill", "reference"})
 #:   listed flag ``KEEL_LISTED_PAPER`` is on / off (S06 §3.4.2): the amended
 #:   boundary sentence and the listed paper row replace their flag-off forms
 #:   only with the flag on, so the flag-off listed instructions are HEAD's.
+#: * ``screens`` — emitted on the full profiles always, and on the listed
+#:   profile only while ``KEEL_LISTED_SCREENS_HOSTS`` is on for the caller
+#:   (screeners L13): with it off the listed instructions are the base's.
 WHEN_CONDITIONS = frozenset(
-    {"live_write_absent", "paper_loaded", "paper_listed", "paper_listed_absent"}
+    {"live_write_absent", "paper_loaded", "paper_listed", "paper_listed_absent", "screens"}
 )
 
 #: The two registers (spec 01 §2.1). No default: a silently-defaulted
@@ -470,9 +496,17 @@ def _parse_front_matter(chunk: str) -> dict[str, object] | None:
 
 @lru_cache(maxsize=1)
 def load_sections(path: str | None = None) -> tuple[Section, ...]:
-    """Parse `operating_core.md` into its ordered sections."""
-    src = Path(path) if path else core_path()
-    text = src.read_text()
+    """Parse the corpus into its ordered sections: `operating_core.md`, then
+    `screens_core.md` (L13). An explicit ``path`` parses that one file."""
+    if path is None:
+        return _parse_sections(core_path().read_text()) + _parse_sections(
+            screens_core_path().read_text()
+        )
+    return _parse_sections(Path(path).read_text())
+
+
+def _parse_sections(text: str) -> tuple[Section, ...]:
+    """One sectioned file's text, parsed."""
     # Everything before the first fence is the file's own preamble (an HTML
     # comment naming this module as the only reader). Dropping it here is
     # what keeps the file from opening with a YAML front-matter block —
@@ -634,9 +668,16 @@ def head_fact_positions(text: str | None = None) -> dict[str, int]:
 
 
 def _when_holds(
-    sec: Section, *, live_write_loaded: bool, paper_loaded: bool, paper_listed: bool = False
+    sec: Section,
+    *,
+    live_write_loaded: bool,
+    paper_loaded: bool,
+    paper_listed: bool = False,
+    screens: bool = False,
 ) -> bool:
     """Whether a section's `when:` condition holds (absent = always)."""
+    if sec.when == "screens":
+        return screens
     if sec.when == "live_write_absent":
         return not live_write_loaded
     if sec.when == "paper_loaded":
@@ -655,6 +696,7 @@ def _included(
     live_write_loaded: bool,
     paper_loaded: bool = False,
     paper_listed: bool = False,
+    screens_listed: bool = False,
 ) -> bool:
     if "mcp" not in sec.surfaces:
         return False
@@ -672,6 +714,7 @@ def _included(
         live_write_loaded=live_write_loaded,
         paper_loaded=paper_loaded,
         paper_listed=paper_listed,
+        screens=screens_listed or profile != "listed",
     )
 
 
@@ -681,6 +724,7 @@ def instructions(
     live_write_loaded: bool = False,
     paper_loaded: bool = False,
     paper_listed: bool = False,
+    screens_listed: bool = False,
     include_ids: bool = False,
 ) -> str:
     """Assemble the server instructions for one profile.
@@ -691,7 +735,9 @@ def instructions(
     loaded ``keel_paper_deploy`` (S06 §3.9 row 3); a `when: paper_loaded`
     section is emitted only then. ``paper_listed`` is the listed flag (S06
     §3.4.2): `when: paper_listed` sections are emitted only with it on and
-    `when: paper_listed_absent` sections only with it off.
+    `when: paper_listed_absent` sections only with it off. ``screens_listed``
+    is the listed screens flag: a `when: screens` section is emitted on the
+    full profiles always and on `listed` only with it on.
     """
     if profile not in PROFILE_TAGS:
         raise ValueError(f"unknown profile {profile!r}; valid: {sorted(PROFILE_TAGS)}")
@@ -699,6 +745,7 @@ def instructions(
         "live_write_loaded": live_write_loaded,
         "paper_loaded": paper_loaded,
         "paper_listed": paper_listed,
+        "screens_listed": screens_listed,
     }
     blocks = [s.terse for s in load_sections() if _included(s, profile, **flags)]
     if include_ids:  # pragma: no cover - debugging aid
@@ -714,6 +761,7 @@ def instruction_section_ids(
     live_write_loaded: bool = False,
     paper_loaded: bool = False,
     paper_listed: bool = False,
+    screens_listed: bool = False,
 ) -> tuple[str, ...]:
     return tuple(
         s.id
@@ -724,6 +772,7 @@ def instruction_section_ids(
             live_write_loaded=live_write_loaded,
             paper_loaded=paper_loaded,
             paper_listed=paper_listed,
+            screens_listed=screens_listed,
         )
     )
 
@@ -748,6 +797,7 @@ def base_document(
     profile: str | None = None,
     paper_loaded: bool = False,
     paper_listed: bool = False,
+    screens_listed: bool = False,
 ) -> str:
     """The SERVED form of the corpus (spec 01 §2.1.1, R-5).
 
@@ -772,18 +822,23 @@ def base_document(
     Serving a profile, the listed flag's pair follows ``paper_listed`` (S06
     §3.4.2): a `when: paper_listed` section is included only with it on and a
     `when: paper_listed_absent` section only with it off, so the flag-off
-    served document is HEAD's.
+    served document is HEAD's. A `when: screens` section follows
+    ``screens_listed`` on `listed` and is served on every other profile.
     """
     if profile is not None and profile not in PROFILE_TAGS:
         raise ValueError(f"unknown profile {profile!r}; valid: {sorted(PROFILE_TAGS)}")
     return "\n\n".join(
         s.body.strip()
         for s in base_sections(sections)
-        if profile is None or (_in_profile(s, profile) and _served(s, paper_loaded, paper_listed))
+        if profile is None
+        or (
+            _in_profile(s, profile)
+            and _served(s, paper_loaded, paper_listed, screens_listed or profile != "listed")
+        )
     )
 
 
-def _served(sec: Section, paper_loaded: bool, paper_listed: bool) -> bool:
+def _served(sec: Section, paper_loaded: bool, paper_listed: bool, screens: bool = True) -> bool:
     """`base_document`'s `when:` rule serving one profile: the held paper
     section and the listed flag's pair follow their flags; every other
     `when:` is served regardless (a fact about configuration)."""
@@ -793,6 +848,8 @@ def _served(sec: Section, paper_loaded: bool, paper_listed: bool) -> bool:
         return paper_listed
     if sec.when == "paper_listed_absent":
         return not paper_listed
+    if sec.when == "screens":
+        return screens
     return True
 
 

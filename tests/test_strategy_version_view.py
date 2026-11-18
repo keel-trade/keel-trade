@@ -64,7 +64,16 @@ def _run(run_id: str, seq: int, window: tuple[str, str], completed: str, sharpe:
     }
 
 
-def _get(version: str = "HEAD", runs=None, listing_fails: bool = False) -> dict:
+def _get(
+    version: str = "HEAD",
+    runs=None,
+    listing_fails: bool = False,
+    *,
+    head_validation: dict | None = None,
+    v1_validation: dict | None = None,
+    include_source: bool = False,
+    version_read_raises: Exception | None = None,
+) -> dict:
     from keel.tools.outcomes import _bootstrap, get
     from keel.tools.outcomes._base import ToolContext
 
@@ -73,11 +82,22 @@ def _get(version: str = "HEAD", runs=None, listing_fails: bool = False) -> dict:
 
     def fake_get(path, **_kw):
         if path == f"/v1/strategies/{SID}":
-            return RECORDED["metadata"]
+            row = dict(RECORDED["metadata"])
+            if head_validation is not None:
+                # keel-api's `include=graph` read carries HEAD's verdict (Q-7605).
+                row["validation"] = head_validation
+            return row
+        if version_read_raises is not None and "/versions/" in path:
+            raise version_read_raises
         if path.endswith("/versions/HEAD/source") or path.endswith(f"/versions/{HEAD}/source"):
             return {"source": HEAD_SOURCE, "sequence_number": HEAD}
-        if path.endswith("/versions/1/source"):
-            return {"source": V1_SOURCE, "sequence_number": 1}
+        # keel-api resolves `v1` / `V1` as sequence 1, exactly as `1` (Q-7657).
+        if path.endswith(("/versions/1/source", "/versions/v1/source", "/versions/V1/source")):
+            payload = {"source": V1_SOURCE, "sequence_number": 1}
+            # keel-api serves a version's own verdict only when asked (Q-7610).
+            if v1_validation is not None and _kw.get("include") == "validation":
+                payload["validation"] = v1_validation
+            return payload
         if path == "/v1/backtests":
             if listing_fails:
                 raise RuntimeError("listing down")
@@ -87,6 +107,8 @@ def _get(version: str = "HEAD", runs=None, listing_fails: bool = False) -> dict:
     client.get.side_effect = fake_get
     ctx = ToolContext(api_client=client, app_url="https://app.usekeel.io", is_tty=False)
     args = {"strategy_id": SID, "version": version, "skip_readiness": True}
+    if include_source:
+        args["include_source"] = True
     return get("keel_strategy_get").handler(args, ctx).to_envelope()
 
 
@@ -173,3 +195,139 @@ def test_the_evidence_net_of_is_the_results_words(included: bool, expected) -> N
     assert "funding" not in evidence["net_of"]
     assert evidence["net_of"][:2] == ["fees", "slippage"]
     assert (evidence["net_of"][2:] or [None])[0] == expected
+
+
+_INVALID_GLOBAL = {
+    "valid": False,
+    "errors": [
+        {
+            "severity": "error",
+            "code": "INVALID_GLOBAL",
+            "message": "Globals target_timeframe '15m' is not a valid timeframe.",
+            "location": "line 1, globals",
+        }
+    ],
+    "warnings": [],
+}
+_CLEAN = {"valid": True, "errors": [], "warnings": []}
+
+
+@pytest.mark.parametrize("include_source", [False, True])
+@pytest.mark.parametrize(
+    ("v1_validation", "word"),
+    [
+        (_INVALID_GLOBAL, "1 error"),
+        (_CLEAN, "valid"),
+        # An older keel-api serves no version verdict: the documented fallback.
+        (None, "valid"),
+    ],
+)
+def test_a_historical_version_reads_its_own_verdict(v1_validation, word, include_source) -> None:
+    """Q-7610: `version=1` of a strategy whose v1 carries a validation error
+    read `valid` under a valid HEAD — the version read served no verdict and
+    the view reads absence as "compiled, so valid". keel-api now serves the
+    version's own verdict under `include=validation`; HEAD's (valid) must not
+    leak in. Both version reads are covered: the view's own and the
+    `include_source` one it reuses.
+
+    SEEDS (run 2026-11-16, each reversed by reversing the edit): see the
+    Q-7610 ledger entry's Log."""
+    env = _get(
+        "1",
+        RUNS,
+        head_validation=_CLEAN,
+        v1_validation=v1_validation,
+        include_source=include_source,
+    )
+    errors = len(v1_validation["errors"]) if v1_validation else 0
+    assert env["view"]["validation"] == {"ok": errors == 0, "errors": errors, "warnings": 0}
+    first = env["view"]["markdown"].splitlines()[0]
+    assert f"v1 · HEAD is v{HEAD} · {word} · " in first, first
+
+
+def test_head_reads_heads_verdict_not_an_older_versions() -> None:
+    """CONTROL: at HEAD the verdict is the strategy GET's (Q-7605), never a
+    version read's — an invalid v1 does not touch a valid HEAD's header."""
+    env = _get("HEAD", RUNS, head_validation=_CLEAN, v1_validation=_INVALID_GLOBAL)
+    assert env["view"]["validation"] == {"ok": True, "errors": 0, "warnings": 0}
+    assert f"v{HEAD} · valid · " in env["view"]["markdown"].splitlines()[0]
+
+
+# ── Q-7657: an unread version is never answered with HEAD's view ──────────────
+#
+# `version="v1"` 404'd at keel-api (its resolver had no `vN` arm), the SDK's
+# version read swallowed the 404, and `_version_view_inputs` read the missing
+# payload as HEAD: the result was HEAD's view, "valid", with no word that v1
+# was never read.
+#
+# SEEDS (run 2026-11-16, each reversed by reversing the exact edit):
+# * `_read_version` degrades a non-HEAD 404 like HEAD's (`if True:` for
+#   `if _is_head(version):`): `test_an_unknown_version_is_not_found` reds
+#   (no raise); the `v1` arms and the HEAD controls stay green;
+# * the "not read" branch skipped (`if False:`), restoring the HEAD fallback:
+#   `test_a_failed_version_read_says_so_and_draws_no_head` reds (HEAD's view
+#   is drawn under v1); the `v1` arms and the HEAD controls stay green.
+
+
+@pytest.mark.parametrize("ref", ["v1", "V1"])
+@pytest.mark.parametrize("include_source", [False, True])
+def test_a_displayed_version_reads_that_version(ref, include_source) -> None:
+    env = _get(
+        ref,
+        RUNS,
+        head_validation=_CLEAN,
+        v1_validation=_INVALID_GLOBAL,
+        include_source=include_source,
+    )
+    view = env["view"]
+    assert view["version"] == 1 and view["head_version"] == HEAD
+    assert view["header"]["universe"]["label"].startswith("Top 10 by volume")
+    first = view["markdown"].splitlines()[0]
+    assert f"v1 · HEAD is v{HEAD} · 1 error · " in first, first
+    assert "source_error" not in env
+    assert ("source" in env) is include_source
+
+
+def test_an_unknown_version_is_not_found() -> None:
+    from keel.errors import NotFoundError
+
+    with pytest.raises(NotFoundError) as caught:
+        _get("v9", RUNS, version_read_raises=NotFoundError("version not found: v9"))
+    err = caught.value
+    assert "Version 'v9'" in str(err) and "version not found: v9" in str(err)
+    assert err.recovery_tool == "keel_strategy_get"
+    assert err.recovery_tool_args == {"strategy_id": SID, "include_versions": True}
+    assert "include_versions=true" in (err.suggestion or "")
+
+
+@pytest.mark.parametrize("include_source", [False, True])
+def test_a_failed_version_read_says_so_and_draws_no_head(include_source) -> None:
+    from keel.errors import KeelError
+
+    env = _get(
+        "v1",
+        RUNS,
+        head_validation=_CLEAN,
+        include_source=include_source,
+        version_read_raises=KeelError("HTTP 503: upstream unavailable"),
+    )
+    assert "view" not in env
+    assert "source" not in env
+    note = env["source_error"]
+    assert "Version 'v1' was not read" in note and "HTTP 503" in note
+    assert "HEAD's is not shown in its place" in note
+    assert env["head_summary"]["version"] == HEAD
+    # What the model reads: the note, and no HEAD structure under v1's name.
+    text = _text(env)
+    assert "Version 'v1' was not read" in text
+    assert "Top 30 by volume" not in text
+
+
+def test_a_failed_head_read_keeps_heads_view() -> None:
+    """CONTROL: HEAD's view stands on the strategy GET, so a failed source
+    read costs only the Code tab, exactly as before."""
+    from keel.errors import KeelError
+
+    env = _get("HEAD", RUNS, version_read_raises=KeelError("HTTP 503"))
+    assert env["view"]["version"] == HEAD
+    assert "source_error" not in env and "head_summary" not in env

@@ -1,4 +1,4 @@
-<!-- keywords: entry, exit, stop loss, stop, take profit, target, trailing stop, trail, structure stop, level stop, risk reward, breakeven, partial, scale out, scale in, dca, safety order, pyramid, ladder, max hold, time exit, cooldown, re-entry, daily limit, R multiple, risk per trade, TradeManager, position, trade, binary, threshold, RSI, mean reversion, breakout -->
+<!-- keywords: entry, exit, stop loss, stop, take profit, target, trailing stop, trail, structure stop, level stop, risk reward, breakeven, partial, scale out, scale in, dca, safety order, pyramid, ladder, max hold, time exit, cooldown, re-entry, daily limit, R multiple, risk per trade, TradeManager, position, trade, binary, threshold, RSI, mean reversion, breakout, take profit at a level, stop buffer, ratchet stop, enter at a level -->
 <!-- pattern: entry_exit -->
 <!-- topic: structure_stop -->
 <!-- topic: risk_reward -->
@@ -12,7 +12,7 @@ Four layers, in one direction: signals (market only; entry and exit signals are 
 
 Position layer: TradeManager turns entry signals into a Position; each rule is a reader, then ordinary components, then an action (Exit, Reduce, ScaleIn, AllowEntry).
 
-- Store the entry signal (−1/0/1), then `TradeManager(entries='entries', prices='ohlcv')`.
+- Store the entry signal (−1/0/1; a 0/1 mask enters long and `NegateTransform()` makes it short), then `TradeManager(entries='entries', prices='ohlcv')`.
 - A rule is one branch of the dict step below it. The branch name is the rule's name and its exit reason; names never change what a rule does. "Stop OR target" is two branches.
 - A trade value comes from a reader; a market value enters a rule with `Load('slot')` and keeps its full-history meaning.
 - A rule that reads what another rule did (`SoldFraction()`, `AddCount()`) goes in a later stage: a second dict step.
@@ -51,7 +51,7 @@ Return readers are fractions: −0.05 is a 5% loss; `-5` is −500%. Windows are
 - `AllowEntry()` gates new entries: a trade opens only where every gate is 1 and the entry signal has reset.
 - `Exposure()` turns the Position into signed units held. It sits between the rules and every sizer except `RiskSizer`, which takes the Position.
 
-Short forms expand to the same rules: `StopLoss(pct=0.05)`, `TakeProfit(pct=0.10)` (`fraction=` makes it a `Reduce`), `TrailingStop(pct=0.08)` or `TrailingStop(atr=2.5, period=14)`, `LevelStop(level='ob_edge')`, `LevelTarget(level='ob_edge', r=2.0)`, `MaxHold(bars=48)`, `Cooldown(bars=4)`; `MaxHold` and `Cooldown` also take `window='2d'`.
+Short forms expand to the same rules: `StopLoss(pct=0.05)`, `TakeProfit(pct=0.10)` (`fraction=` makes it a `Reduce`), `TrailingStop(pct=0.08)` or `TrailingStop(atr=2.5, period=14)`, `LevelStop(level='ob_edge')` (`buffer=` a stored distance beyond the level; `trail=True` only tightens), `LevelTakeProfit(level='swing_low')`, `RiskRewardTarget(stop_level='ob_edge', r=2.0)`, `MaxHold(bars=48)`, `Cooldown(bars=4)`; `MaxHold` and `Cooldown` also take `window='2d'`.
 
 ## Exits
 
@@ -61,7 +61,8 @@ Short forms expand to the same rules: `StopLoss(pct=0.05)`, `TakeProfit(pct=0.10
 | Target at a % gain, or a partial       | `'tp': [TakeProfit(pct=0.10, fraction=0.5)]`                                                                     |
 | Trailing stop                          | `'trail': [TrailingStop(atr=2.5)]`                                                                               |
 | Structure stop: a price level at entry | `'stop': [LevelStop(level='ob_edge')]`, any stored price series (zone edge, swing low, EMA)                      |
-| Target at r × the entry-to-level risk  | `'target': [LevelTarget(level='ob_edge', r=2.0)]`                                                                |
+| Target at r × the entry-to-stop risk   | `'target': [RiskRewardTarget(stop_level='ob_edge', r=2.0)]`                                                      |
+| Target at a level frozen at entry      | `'target': [LevelTakeProfit(level='swing_low')]` (`fraction=` makes it a `Reduce`)                               |
 | Time exit                              | `'hold': [MaxHold(bars=48)]`, or `[BarsHeld(), AboveThresholdFilter(threshold=48, inclusive=True), Exit()]`      |
 | R multiple of any 1R frozen at entry   | `{'numerator': [TradePnL()], 'denominator': [AtEntry(slot='one_r')]}, SignalRatio()`, then thresholds at −1 / +2 |
 
@@ -134,7 +135,7 @@ Pipeline([
 
 ## More rules
 
-**Structure stop, 2R target, 1% risk.** `OrderBlock(output='edge')` is the zone's invalidation price; `LevelStop` freezes it at each entry and exits when the close crosses it, and `LevelTarget` exits at twice the entry-to-edge distance. `RiskSizer` sizes on the same distance. A level with a buffer is a difference: `Load('ohlcv'), {'fast': [Load('ob_edge')], 'slow': [ATR(period=14), Scale(by=0.5)]}, Crossover(), Store('stop_level')` is the edge minus 0.5 ATR.
+**Structure stop, 2R target, 1% risk.** `OrderBlock(output='level', at='distal')` (the same price as `output='edge'`) is the zone's invalidation price; `LevelStop` freezes it at each entry and exits when the close crosses it, and `RiskRewardTarget` exits at twice the entry-to-stop distance. `RiskSizer` sizes on the same distance, `close − level` (`SignalDifference`). A stop beyond the level is `LevelStop(level='ob_edge', buffer='half_atr')` (a stored `ATR(period=14), Scale(by=0.5)`); give `RiskRewardTarget` the same `buffer` and add it to the sizing distance (`SignalSum`). With `trail=True` a long's stop follows each higher swing low; `side='long'` or `'short'` scopes a rule to one side of a two-sided strategy. `LevelEntry(level='ob_edge', side='long')` enters on the bar price reaches a stored level.
 
 ```python
 # canonical: structure_stop_2r
@@ -144,11 +145,11 @@ Execution(rebalance='on_change')
 Pipeline([
     PriceDataLoader(),
     Store('ohlcv'),
-    OrderBlock(direction='bullish', mitigation='close_through', output='edge'),
+    OrderBlock(direction='bullish', mitigation='close_through', output='level', at='distal'),
     Store('ob_edge'),
     Load('ohlcv'),
-    {'fast': [ExtractSeries(series_name='close')], 'slow': [Load('ob_edge')]},
-    Crossover(),
+    {'left': [ExtractSeries(series_name='close')], 'right': [Load('ob_edge')]},
+    SignalDifference(),
     Store('stop_dist'),
     Load('ohlcv'),
     OrderBlock(direction='bullish', mitigation='close_through'),
@@ -157,7 +158,7 @@ Pipeline([
     TradeManager(entries='entries', prices='ohlcv'),
     {
         'stop':   [LevelStop(level='ob_edge')],
-        'target': [LevelTarget(level='ob_edge', r=2.0)],
+        'target': [RiskRewardTarget(stop_level='ob_edge', r=2.0)],
     },
     RiskSizer(risk=0.01, distance='stop_dist', max_weight=1.0),
 ])

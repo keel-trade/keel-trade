@@ -61,6 +61,8 @@ def _normalize_topic(topic: str) -> str:
 
 
 def _bundled_index() -> dict[str, tuple[str, str]]:
+    from ._toolsets import research_topic_withheld, screen_topic_withheld
+
     """Normalized slug → (stem as the index lists it, subdir).
 
     Resolution goes through the same normalization as the request so the
@@ -81,6 +83,10 @@ def _bundled_index() -> dict[str, tuple[str, str]]:
             for entry in dir_ref.iterdir():
                 if entry.name.endswith(".md"):
                     stem = entry.name[:-3]
+                    if screen_topic_withheld(_normalize_topic(stem)):
+                        continue  # the listed screens flag is off for this caller
+                    if research_topic_withheld(_normalize_topic(stem)):
+                        continue  # Research is not served to this caller (07 §4.10)
                     index.setdefault(_normalize_topic(stem), (stem, subdir))
         except (FileNotFoundError, ModuleNotFoundError):
             continue
@@ -258,12 +264,12 @@ def _skill_names() -> tuple[str, ...]:
     are function-local: ``keel.mcp.server`` pulls in fastmcp, and the
     CLI keeps that off its startup path.
     """
-    from keel.mcp.server import LISTED_EXCLUDED_SKILLS
+    from keel.mcp.server import listed_excluded_skills
     from keel.skills import BUNDLED_SKILLS
 
     from ._toolsets import is_listed_profile
 
-    excluded = LISTED_EXCLUDED_SKILLS if is_listed_profile() else frozenset()
+    excluded = listed_excluded_skills() if is_listed_profile() else frozenset()
     return tuple(name for name in BUNDLED_SKILLS if name not in excluded)
 
 
@@ -397,6 +403,11 @@ _RELATED_BY_PASS: dict[str, tuple[str, ...]] = {
     "8": ("slots", "composition_mechanics"),
     "9": ("dsl_syntax", "universe_selection"),
     "9.resampler": ("composition_mechanics", "data_loading"),
+    # Pass 2b is the size ceiling (PIPELINE_TOO_LARGE, Q-7058): how a strategy composes is what grows it.
+    "2b": ("composition_mechanics", "mistakes"),
+    # Pass "cap" is the issue list's own ceiling (ISSUES_TRUNCATED, Q-7067): the DSL reference and the
+    # structural-mistake catalog, as for a rule with no pass.
+    "cap": ("dsl_syntax", "mistakes"),
 }
 # Rules the catalog gives no pass (blob, lock, parse and runtime codes): the
 # DSL reference plus the structural-mistake catalog is the honest pair.
@@ -610,6 +621,134 @@ def _rule_result(requested: str) -> OutcomeResult:
     return OutcomeResult(run_id=None, hero_url=None, share_url=None, extra=payload)
 
 
+# ── Research's steps: `step:<Name>` (07 §4.10, §4.12) ───────────────────
+
+_STEP_PREFIX = "step:"
+
+
+def _step_catalog() -> dict:
+    """STEP-B's generated step catalog, bundled by build_data.py."""
+    import json
+
+    return json.loads(
+        resources.files("keel.data").joinpath("research_step_catalog.json").read_text("utf-8")
+    )
+
+
+def _param_line(param: dict) -> str:
+    """One parameter: its type, default (or required), when it resolves, its hard range, typical guidance, options
+    and length (R-23: what the full ``research_steps`` topic said per step, now said here only)."""
+    import json
+
+    default = (
+        "required"
+        if param.get("required")
+        else f"default `{json.dumps(param.get('default'), ensure_ascii=False)}`"
+    )
+    bits = [str(param.get("type") or ""), default]
+    if param.get("save_resolved"):
+        bits.append("resolved at save")
+    rng = param.get("range") or {}
+    if rng.get("hard_limit"):
+        bits.append(f"hard limit {rng['hard_limit']}")
+    if rng.get("typical_guidance"):
+        bits.append(f"typical {rng['typical_guidance']}")
+    options = (param.get("constraints") or {}).get("options")
+    if options is not None:
+        bits.append("one of " + ", ".join(json.dumps(o) for o in options))
+    if param.get("length"):
+        lo, hi = param["length"]
+        bits.append(f"{lo} to {hi} values" + (", distinct" if param.get("distinct") else ""))
+    about = f": {param['about']}" if param.get("about") else ""
+    return f"  - `{param.get('name')}` ({', '.join(b for b in bits if b)}){about}"
+
+
+def _render_step(step: dict) -> str:
+    """``step:<Name>``: one step in full, from the bundled catalog (07 §4.10). R-23 made ``research_steps`` an index
+    of one line per step, so everything it once said per step is said here: what the step accepts, each parameter
+    with its range and default, each output with its axes, condition and measures, its runs and cost, how it counts
+    versions tried, its plan gate, variant and example."""
+    lines = [f"# {step['name']}: {step.get('label', '')}", "", str(step.get("about", ""))]
+    lines.append("")
+    lines.append(f"- Category: {step.get('category')}, version {step.get('version')}.")
+    accepts = step.get("accepts") or {}
+    if accepts.get("types"):
+        note = f"; {accepts['note']}" if accepts.get("note") else ""
+        lines.append(f"- Accepts: {', '.join(accepts['types'])} ({accepts.get('arity')}{note}).")
+    params = step.get("params") or []
+    if params:
+        lines.append("- Parameters:")
+        lines.extend(_param_line(param) for param in params)
+    else:
+        lines.append("- Parameters: none.")
+    outputs = step.get("outputs") or []
+    if outputs:
+        lines.append("- Outputs:")
+        for out in outputs:
+            # RI-477 (D-299): a money measure shows its label, which names the return it reads
+            measures = ", ".join(
+                f"{m.get('name', '')} ({m['label']})"
+                if m.get("basis") and m.get("label")
+                else m.get("name", "")
+                for m in out.get("measures") or []
+            )
+            axes = " × ".join(str(a.get("name")) for a in out.get("axes") or [])
+            when = f" (when {out['when']})" if out.get("when") else ""
+            detail = "" if out.get("evidence", True) else "; detail, expires"
+            lines.append(f"  - `{out.get('name')}`{when}: {axes} → {measures}{detail}")
+    variant = step.get("variant")
+    if variant:  # D-296 (01 §4.9): the edit a variant step makes, null on every other step
+        edits = "; ".join(
+            f"{e.get('kind')} `{e.get('changes')}` through {e.get('through')}"
+            for e in variant.get("edits") or []
+        )
+        when = f" (when {variant['when']})" if variant.get("when") else ""
+        varies = ", ".join(f"`{v}`" for v in variant.get("varies") or [])
+        lines.append(
+            f"- Variant{when}: varies {varies}; edits {edits}. {variant.get('about', '')}".rstrip()
+        )
+    runs = ", ".join(f"{r.get('count')} {r.get('kind')}" for r in step.get("runs") or [])
+    if runs:
+        lines.append(f"- Runs: {runs}.")
+    if step.get("cost"):
+        lines.append(f"- Cost hint: {step['cost']}.")
+    if step.get("counts"):
+        lines.append(f"- Versions tried: {step['counts']}.")
+    if step.get("gate"):
+        lines.append(f"- Plan gate: {step['gate']}.")
+    if step.get("example"):
+        lines.append(f"- Example: `{step['example']}`")
+    return "\n".join(lines)
+
+
+def _step_result(name: str) -> OutcomeResult:
+    from ._toolsets import research_topic_withheld
+
+    steps = (
+        {}
+        if research_topic_withheld(_STEP_PREFIX + name)
+        else {s["name"]: s for s in _step_catalog().get("steps", [])}
+    )
+    step = steps.get(name)
+    if step is None:
+        close = difflib.get_close_matches(name, sorted(steps), n=3, cutoff=0.6)
+        did_you_mean = f"Did you mean: {', '.join(close)}? " if close else ""
+        raise KeelError(
+            f"Help topic not found: {_STEP_PREFIX + name!r}.",
+            error_code="not_found",
+            exit_code=3,
+            suggestion=f'{did_you_mean}`topic="research_steps"` lists every step.'
+            if steps
+            else None,
+        )
+    return OutcomeResult(
+        run_id=None,
+        hero_url=None,
+        share_url=None,
+        extra={"topic": _STEP_PREFIX + name, "body": _render_step(step), "source": "bundled"},
+    )
+
+
 #: The doc reference a no-topic call records: it was served the listing.
 _INDEX_DOC_REF = "(index)"
 
@@ -695,6 +834,11 @@ def _resolve(args: dict) -> OutcomeResult:
         return _rules_index_result()
     if topic.lower().startswith(_RULE_PREFIX):
         return _rule_result(topic[len(_RULE_PREFIX) :])
+
+    # Research's one step in full (07 §4.10, §4.12): `step:<Name>`, from the
+    # bundled step catalog, withheld where Research is not served.
+    if topic.lower().startswith(_STEP_PREFIX):
+        return _step_result(topic[len(_STEP_PREFIX) :].strip())
 
     # Bundled lookup on the normalized slug (works without auth; the only
     # storage — there is no API fallback, see module docstring).

@@ -1170,3 +1170,17 @@ __all__ = [
     "terminal_valid_options",
     "token_for",
 ]
+
+
+def terminal_repair_arm(k_actual: Clock, k_exec: Clock) -> str:
+    """One direction decision for terminal weights and stored outputs."""
+    return "project" if is_subclock(k_actual, k_exec) else "aggregate"
+
+
+def output_resample_up_suggestion(slot: str, k_actual: Clock, k_exec: Clock) -> str:
+    return (
+        f"Output '{slot}' is on {render_clock(k_actual)}. Resample the RAW data onto "
+        f"{render_clock(k_exec)} BEFORE the indicators that produce '{slot}' "
+        f"({_RAW_RESAMPLERS}), then compute and Store('{slot}'). "
+        "TargetSignalProjector() only projects coarse data onto a finer clock."
+    )

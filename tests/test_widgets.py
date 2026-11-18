@@ -33,7 +33,7 @@ from keel.widgets import (
 
 _bootstrap()
 
-ALL_TOOLSETS_ENV = "read-only,backtest,share,live-read,live-write"
+ALL_TOOLSETS_ENV = "read-only,backtest,share,live-read,live-write,paper"
 
 _PROFILE_KEYS = ("KEEL_SERVER_PROFILE", "KEEL_EXECUTION_MODE", "KEEL_TOOLSETS", "KEEL_APP_URL")
 
@@ -452,10 +452,12 @@ def test_card_composition_placeholders_are_the_five_the_render_test_uses():
         assert "{{" not in build_card_html(kind)
 
 
-def test_listed_excluded_cards_is_exactly_preflight():
+def test_listed_excluded_cards_are_preflight_and_unreleased_screener():
     """Deliberate-edit guard: widening the widget surface on the listed
     profile must show up in this file's diff."""
-    assert LISTED_EXCLUDED_CARDS == {"preflight"}
+    # The study card follows research_served (07 §3.3), like the screen card
+    # follows the listed screens flag.
+    assert LISTED_EXCLUDED_CARDS == {"preflight", "screener", "study"}
 
 
 # ─── Simulated widget failure → fallback URL line (spec 06 AC) ──────────
@@ -711,7 +713,7 @@ _BACKTEST_TILE_KEYS = (
     ("profit_factor",),
 )
 
-_ID_TOKEN_RE = re.compile(r"\b(?:str|btr|dep|cmt|shr|int)_[A-Za-z0-9]+\b")
+_ID_TOKEN_RE = re.compile(r"\b(?:str|btr|res|dep|cmt|shr|int)_[A-Za-z0-9]+\b")
 
 
 def _fixture(name: str) -> dict:
@@ -1146,10 +1148,30 @@ def test_card_titles_are_user_words_not_internal_names():
     from keel.widgets import CARD_KINDS, CARD_TITLES, build_card_html
 
     internal = ("glass box", "preflight", "result", "view")
-    assert set(CARD_TITLES) == set(CARD_KINDS) and len(CARD_KINDS) == 5
+    assert set(CARD_TITLES) == set(CARD_KINDS) and set(CARD_KINDS) == {
+        "backtest",
+        "strategy",
+        "live",
+        "preflight",
+        "compare",
+        "screener",
+        "study",
+    }
     for kind in CARD_KINDS:
         title = CARD_TITLES[kind]
         assert not any(w in title.lower() for w in internal), (kind, title)
         html = build_card_html(kind)
         assert f"<title>{title}</title>" in html, kind
         assert f'<span id="card-title" class="card-title">{title}</span>' in html, kind
+
+
+def test_screener_scan_draws_selected_assets_on_both_widths(rendered_cards: dict) -> None:
+    fixture = _fixture("c_screener.envelope.json")
+    names = [row[0] for row in fixture["latest_top"]["rows"][:4]]
+    assert len(names) == 4 and fixture["run"]["run_id"].startswith("res_")
+    for key in ("screener", "screenerNarrow"):
+        measured = rendered_cards[key]
+        assert all(name in measured["text"] for name in names)
+        assert measured["overflowX"] <= 1
+        assert measured["bodyBackground"] in ("rgba(0, 0, 0, 0)", "transparent")
+        assert not _ID_TOKEN_RE.findall(measured["text"])

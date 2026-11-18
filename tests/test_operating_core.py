@@ -38,6 +38,7 @@ from pathlib import Path
 
 import pytest
 from keel.data.knowledge import load_operating_core, load_section
+from keel.errors import NotFoundError
 from keel.tools.outcomes import OUTCOMES, _bootstrap
 from keel.tools.outcomes._toolsets import LISTED_PROFILE_TOOLS
 
@@ -152,7 +153,8 @@ def test_every_core_tool_reference_is_a_real_tool() -> None:
 
     tool_re = re.compile(r"\bkeel_[a-z0-9_]+\b")
     refs = set(tool_re.findall(load_operating_core()))
-    sections = assemble.load_sections()
+    # The operating core's own sections (the screens core's are judged below).
+    sections = assemble.load_sections(str(assemble.core_path()))
     # The listed flag's paper row (`when: paper_listed`, S06 §3.4.2) is held
     # the same way: the flag is refused while the paper SDK is held.
     held_whens = ("paper_loaded", "paper_listed")
@@ -167,6 +169,14 @@ def test_every_core_tool_reference_is_a_real_tool() -> None:
     assert not unknown_paper, f"paper sections reference unknown `keel_*` names: {unknown_paper}"
     assert len(refs) >= 10, f"only {len(refs)} tool references found in the core"
     assert paper_refs, "no paper section names a tool; the released arm judges nothing"
+    # The screens core (screeners L13): every name is a registered tool.
+    screens_refs = {
+        r
+        for s in assemble.load_sections(str(assemble.screens_core_path()))
+        for r in tool_re.findall(s.body)
+    }
+    assert screens_refs >= {"keel_screener_run", "keel_screener_view_set"}
+    assert not sorted(r for r in screens_refs if r not in set(OUTCOMES))
 
 
 # The est-token ratchet that stood here from 2026-09-19 measured the FILE.
@@ -240,12 +250,12 @@ def test_pointer_sections_all_resolve() -> None:
         assert re.search(rf"\b{re.escape(section)}\b", core), (
             f"expected pointer section '{section}' not named in the core"
         )
-        text = load_section(section)  # raises FileNotFoundError if it's a dead pointer
+        text = load_section(section)  # raises NotFoundError if it's a dead pointer
         assert len(text) > 100, f"pointer section '{section}' is suspiciously short"
     served = assemble.base_document()
     for topic in IN_APP_ONLY_TOPICS:
         assert not re.search(rf"\b{topic}\b", served), f"the served core points at {topic}"
-        with pytest.raises(FileNotFoundError):
+        with pytest.raises(NotFoundError):
             load_section(topic)
     # Non-vacuity: the base document is the real one and names the pointers.
     assert "backtest_costs" in served and len(served) > 1000

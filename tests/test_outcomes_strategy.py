@@ -305,8 +305,11 @@ def test_strategy_compose_dry_run_view_comes_from_the_servers_own_parse(monkeypa
     # structure is what `present="view"` asks for.
     assert env["view"]["size"] == "receipt"
     # Eight LEAF blocks (the five top-level rows include a parallel with
-    # branches) — `count_blocks` is the card's own counter.
-    assert env["view"]["markdown"].strip() == "Preview · 8 blocks · valid"
+    # branches) — `count_blocks` is the card's own counter — then the
+    # universe the draft would hold (Q-3637).
+    assert env["view"]["markdown"].strip() == (
+        "Preview · 8 blocks · valid\nuniverse  Top 15 by volume · HL perps"
+    )
 
 
 # ─── Q-1686: a card's action must go somewhere specific ────────────────
@@ -1253,6 +1256,133 @@ def test_strategy_diff_version_mode_calls_remote():
     assert env["hero_url"] == "https://app.usekeel.io/strategies/str_abc/edit?version=HEAD"
     # Summary surfaces the most interesting bit — the actual param delta.
     assert "ROC.period 20→14" in env["summary_text"]
+
+
+_DIFF_SOURCE_V1 = """Pipeline([
+    ROC(period=20),
+], name="d")
+"""
+_DIFF_SOURCE_V2 = _DIFF_SOURCE_V1.replace("period=20", "period=14")
+
+
+class _VersionVerdictClient(_FakeClient):
+    """A version-source read that serves `ref_b`'s verdict only when asked
+    (`include=validation`, keel-api's opt-in, Q-7610)."""
+
+    def __init__(self, verdict, **kwargs):
+        super().__init__(**kwargs)
+        self.verdict = verdict
+
+    def get(self, path, **params):
+        payload = super().get(path, **params)
+        if path.endswith("/versions/2/source"):
+            payload = {"source": _DIFF_SOURCE_V2, "sequence_number": 2}
+            if params.get("include") == "validation" and self.verdict is not None:
+                payload["validation"] = self.verdict
+        elif path.endswith("/versions/1/source"):
+            payload = {"source": _DIFF_SOURCE_V1, "sequence_number": 1}
+        return payload
+
+
+@pytest.mark.parametrize(
+    ("verdict", "word"),
+    [
+        (
+            {
+                "valid": False,
+                "errors": [{"severity": "error", "code": "INVALID_GLOBAL", "message": "bad"}],
+                "warnings": [],
+            },
+            "1 error",
+        ),
+        ({"valid": True, "errors": [], "warnings": []}, "valid"),
+    ],
+)
+def test_strategy_diff_version_view_reads_ref_b_verdict(verdict, word):
+    """Q-7610: a version-pair diff's view draws `ref_b` and read `valid` for
+    an invalid `ref_b` (its source read carried no verdict). It now asks
+    keel-api for `ref_b`'s own; the clean row is the control."""
+    fake = _VersionVerdictClient(
+        verdict, post_payloads={"/v1/strategies/str_abc/versions/diff": {"changes": {}}}
+    )
+    ctx = ToolContext(api_client=fake, is_tty=False)
+    env = (
+        OUTCOMES["keel_strategy_diff"]
+        .handler({"strategy_id": "str_abc", "ref_a": "1", "ref_b": "2"}, ctx)
+        .to_envelope()
+    )
+    errors = len(verdict["errors"])
+    assert env["view"]["validation"] == {"ok": errors == 0, "errors": errors, "warnings": 0}
+    assert f" · {word}" in env["view"]["markdown"].splitlines()[0]
+
+
+class _DisplayedRefClient(_VersionVerdictClient):
+    """keel-api resolves `v1` / `v2` as sequences 1 / 2 (Q-7657); `fail_b`
+    makes `ref_b`'s source read fail after the diff itself succeeded."""
+
+    def __init__(self, *, fail_b: bool = False, **kwargs):
+        super().__init__(None, **kwargs)
+        self.fail_b = fail_b
+
+    def get(self, path, **params):
+        if path.endswith("/versions/v2/source"):
+            if self.fail_b:
+                from keel.errors import KeelError
+
+                raise KeelError("HTTP 503: upstream unavailable")
+            path = path.replace("/v2/source", "/2/source")
+        elif path.endswith("/versions/v1/source"):
+            path = path.replace("/v1/source", "/1/source")
+        return super().get(path, **params)
+
+
+def test_strategy_diff_labels_the_versions_keel_api_resolved():
+    """Q-7657: the view labelled versions only for bare-digit refs, so a
+    `v1`..`v2` diff drew `ref_b` with no version. It now labels what
+    keel-api's reads resolved (their `sequence_number`).
+
+    SEED (run 2026-11-16, reversed by reversing the exact edit): labelling
+    `to_version` from the ref again (`int(ref_b) if ref_b.isdigit()`) reds
+    this test; the digit-ref control below stays green."""
+    fake = _DisplayedRefClient(
+        post_payloads={"/v1/strategies/str_abc/versions/diff": {"changes": {}}}
+    )
+    ctx = ToolContext(api_client=fake, is_tty=False)
+    env = (
+        OUTCOMES["keel_strategy_diff"]
+        .handler({"strategy_id": "str_abc", "ref_a": "v1", "ref_b": "v2"}, ctx)
+        .to_envelope()
+    )
+    assert env["view"]["version"] == 2
+    assert "source_error" not in env
+    # CONTROL: digit refs label the same way.
+    control = (
+        OUTCOMES["keel_strategy_diff"]
+        .handler({"strategy_id": "str_abc", "ref_a": "1", "ref_b": "2"}, ctx)
+        .to_envelope()
+    )
+    assert control["view"]["version"] == 2
+
+
+def test_strategy_diff_says_when_ref_b_was_not_read():
+    """Q-7657: the diff stands (keel-api resolved both refs), but a failed
+    read of `ref_b` used to drop the view without a word.
+
+    SEED (run 2026-11-16, reversed by reversing the exact edit): the note's
+    `if not source_b:` disabled reds this test (KeyError) and the labelling
+    test stays green."""
+    fake = _DisplayedRefClient(
+        fail_b=True, post_payloads={"/v1/strategies/str_abc/versions/diff": {"changes": {}}}
+    )
+    ctx = ToolContext(api_client=fake, is_tty=False)
+    env = (
+        OUTCOMES["keel_strategy_diff"]
+        .handler({"strategy_id": "str_abc", "ref_a": "v1", "ref_b": "v2"}, ctx)
+        .to_envelope()
+    )
+    assert env["mode"] == "version"
+    assert "view" not in env
+    assert "Version 'v2' was not read" in env["source_error"]
 
 
 def test_strategy_delete_hard_deletes():

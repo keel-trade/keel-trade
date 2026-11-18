@@ -57,13 +57,16 @@ def _one_line(text: str) -> str:
 def build_manifest() -> dict:
     """Build the manifest dict from the live skill registry."""
     sys.path.insert(0, str(SDK_ROOT))
-    from keel.mcp.server import LISTED_EXCLUDED_SKILLS
+    from keel.mcp.server import LISTED_EXCLUDED_SKILLS, LISTED_SCREEN_SKILLS
     from keel.skills import BUNDLED_SKILLS, list_skills
 
     surface = json.loads(AGENT_SURFACE_PATH.read_text(encoding="utf-8"))
     endpoint = surface["endpoint"]["hosted"]
-    served = [name for name in BUNDLED_SKILLS if name not in LISTED_EXCLUDED_SKILLS]
-    excluded = [name for name in BUNDLED_SKILLS if name in LISTED_EXCLUDED_SKILLS]
+    # The hosted endpoint as every caller is served it: the screens flag is
+    # per host and off in prod until the founder flips it (screeners L13).
+    hosted_excluded = LISTED_EXCLUDED_SKILLS | LISTED_SCREEN_SKILLS
+    served = [name for name in BUNDLED_SKILLS if name not in hosted_excluded]
+    excluded = [name for name in BUNDLED_SKILLS if name in hosted_excluded]
     skills_map = list_skills()
     skills = []
     for name in BUNDLED_SKILLS:

@@ -123,6 +123,8 @@ class AgentCardMcp(BaseModel):
     # hand-authored; these carry the setup page, the hosted surface and the
     # one handoff sentence (AS-14).
     hosted_setup: HttpUrl
+    # The official listing per client id (task 6.4): Claude and ChatGPT.
+    directories: dict[str, HttpUrl]
     hosted_tool_count: int
     hosted_tools: list[str]
     handoff: str
@@ -187,9 +189,11 @@ def test_skills_manifest_validates_against_schema():
     assert sorted(manifest.hosted.served + manifest.hosted.excluded) == sorted(BUNDLED_SKILLS)
     assert not set(manifest.hosted.served) & set(manifest.hosted.excluded)
     assert manifest.hosted.excluded and manifest.hosted.served
-    from keel.mcp.server import LISTED_EXCLUDED_SKILLS
+    from keel.mcp.server import LISTED_EXCLUDED_SKILLS, LISTED_SCREEN_SKILLS
 
-    assert set(manifest.hosted.excluded) == set(LISTED_EXCLUDED_SKILLS)
+    # The hosted endpoint as prod serves every caller: screen-creation is
+    # withheld until the listed screens flag is flipped (screeners L13).
+    assert set(manifest.hosted.excluded) == set(LISTED_EXCLUDED_SKILLS | LISTED_SCREEN_SKILLS)
 
 
 @monorepo_only

@@ -140,7 +140,15 @@ def test_the_inflight_default_size_is_the_servers_default() -> None:
     # Reads, compare, live and the fork/save defaults are full views
     # (BUILD §2.4); only a dry run and the two run tools start as a row.
     receipts = sorted(t for t, r in table.items() if r["size"] == "receipt")
-    assert receipts == ["keel_backtest_run", "keel_backtest_watch"]
+    # Research's run waits as its run card (13 §4.3: the `progress` size,
+    # one fixed height its progress and its compact result both fill).
+    assert table["keel_research_run"]["size"] == "progress"
+    assert receipts == [
+        "keel_backtest_run",
+        "keel_backtest_watch",
+        "keel_research_plan",  # D-328 D1: the plan card is one row
+        "keel_screener_run",
+    ]
     assert table["keel_strategy_compose"]["dryRun"] == "receipt"
 
 
@@ -554,7 +562,7 @@ def test_chatgpt_draws_a_meta_move_receipt_and_plan_limit(samples: dict) -> None
     limit = samples["metaMoveLimit"]
     wait, done = (limit[t] for t in sorted(limit, key=int))
     assert _in_flight(wait)
-    assert done["text"].startswith("Weekly backtests used"), done["text"][:120]
+    assert done["text"].startswith("Backtests: 50 of 50 used"), done["text"][:120]
     assert done["height"] > 100 and not _in_flight(done)
     for s in (*receipt.values(), *limit.values()):
         assert s["text"].strip(), "a blank card"

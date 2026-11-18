@@ -181,7 +181,9 @@ class TestReference:
     def test_load_reference_invalid(self):
         from keel.data.reference import load_reference
 
-        with pytest.raises(ValueError):
+        from keel.errors import NotFoundError
+
+        with pytest.raises(NotFoundError):
             load_reference("nonexistent_topic")
 
 

@@ -261,7 +261,8 @@ def _account_has_work() -> bool:
     try:
         client = KeelClient(config=_stored_login_config())
         try:
-            resp = client.get("/v1/strategies")
+            # Any work counts, screens included (the list defaults to strategies).
+            resp = client.get("/v1/strategies", kind="all")
         finally:
             client.close()
         data = resp.get("data") if isinstance(resp, dict) else None

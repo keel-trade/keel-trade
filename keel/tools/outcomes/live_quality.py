@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from keel.api_path import seg
 from keel.errors import KeelError, ValidationError
 
 from . import register
@@ -40,7 +41,7 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
             params[key] = value
 
     client = ctx.get_client()
-    path = f"/v1/deployments/{deployment_id}/execution-quality"
+    path = f"/v1/deployments/{seg(deployment_id)}/execution-quality"
     try:
         quality = client.get(path, **params) if params else client.get(path)
     except KeelError:

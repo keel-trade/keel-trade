@@ -25,6 +25,7 @@ Do NOT use to go live / deploy a new strategy — call `keel_live_deploy`
 
 from __future__ import annotations
 
+from keel.api_path import seg
 from keel.errors import EntitlementError, KeelError, NotFoundError, ValidationError
 
 from . import register
@@ -39,6 +40,39 @@ _ACTIONS: dict[str, tuple[str, str]] = {
     "stop": ("DELETE", ""),
     "trigger": ("POST", "/trigger"),
 }
+
+
+def run_block(result: object) -> dict[str, str] | None:
+    """The write's ``run: {request_id, status} | null`` (spec 02 §2.5, RF-80.4).
+
+    With ``run.on_lifecycle_change`` on, a deploy, resume or restart writes its
+    run request in the state change's transaction, so the book trades at once,
+    and the route answers the request it wrote. Returned only as the route sent
+    it, reduced to its two fields; an unknown shape raises rather than reading
+    as "no run". The caller adds the key only when the route carried it, so
+    with the switch off every envelope is exactly today's.
+    """
+    run = result.get("run") if isinstance(result, dict) else None
+    if run is None:
+        return None
+    if (
+        not isinstance(run, dict)
+        or not isinstance(run.get("request_id"), str)
+        or not isinstance(run.get("status"), str)
+    ):
+        raise KeelError(
+            f"keel-api answered a run block outside its contract: {run!r}",
+            error_code="unexpected_response",
+            exit_code=1,
+            suggestion="Read the deployment with `keel_live_monitor`; report the SDK version.",
+        )
+    return {"request_id": run["request_id"], "status": run["status"]}
+
+
+def carries_run_block(result: object) -> bool:
+    """Whether the route's answer carried a ``run`` key (null included)."""
+    return isinstance(result, dict) and "run" in result
+
 
 # Where the deployment ends up in lifecycle terms after each action.
 _NEW_STATE: dict[str, str] = {
@@ -90,16 +124,17 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
     assert_armed_for_account(None)  # no account_id in path; cross-account allowed
 
     method, suffix = _ACTIONS[action]
-    path = f"/v1/deployments/{deployment_id}{suffix}"
-    if override:
-        path = f"{path}?override=true"
+    path = f"/v1/deployments/{seg(deployment_id)}{suffix}"
+    # A query parameter, never text in the path: the client refuses a path
+    # carrying `?` (Q-3352).
+    params = {"override": "true"} if override else {}
 
     client = ctx.get_client()
     try:
         if method == "POST":
-            result = client.post(path)
+            result = client.post(path, **params)
         elif method == "DELETE":
-            result = client.delete(path)
+            result = client.delete(path, **params)
         else:  # pragma: no cover — _ACTIONS is closed
             raise KeelError(
                 f"Internal error: unsupported method {method!r}.",
@@ -161,15 +196,19 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
             raise refusal from e
         raise
 
+    extra = {
+        "action": action,
+        "new_state": _NEW_STATE[action],
+        "result": result,
+    }
+    if action == "resume" and carries_run_block(result):
+        # RF-80.4: the resume trades at once; the run it requested.
+        extra["run"] = run_block(result)
     return OutcomeResult(
         run_id=deployment_id,
         hero_url=app_url_for("live", deployment_id, ctx),
         share_url=None,
-        extra={
-            "action": action,
-            "new_state": _NEW_STATE[action],
-            "result": result,
-        },
+        extra=extra,
     )
 
 
@@ -194,6 +233,7 @@ LIVE_CONTROL = register(
     OutcomeTool(
         name="keel_live_control",
         required_action="runner.pause",
+        rate_tier="live",
         cli_path=("live", "control"),
         toolset="live-write",
         # grounded-in: live_control.py D7 scope note (:7-13 — every action

@@ -54,7 +54,12 @@ card kind      owning tool               renders
                                          in-card equity sparkline (``curve``) + hygiene
                                          warnings; positions / portfolio / stats / equity /
                                          pnl = tiles + a capped table; other views = a capped
-                                         table with a per-view column whitelist
+                                         table with a per-view column whitelist. A paper run
+                                         with no history yet draws a waiting state instead
+               keel_paper_deploy,        the paper receipt (``card-live-paper.js``, Q-7603):
+               keel_paper_control        name · version · state · PAPER stamp, then what is
+                                         known (starting balance, clock, next run), never
+                                         empty tiles; a plan wall draws the plan-limit card
 ``preflight``  keel_live_deploy          name + schedule header, sizing / expected-DD /
                                          est. cost / asset-count tiles, confirm-by row
 =============  ========================  =====================================
@@ -123,6 +128,7 @@ __all__ = [
     "MAX_INVOCATION_STRING_CHARS",
     "MAX_WIDGET_DESCRIPTION_CHARS",
     "TOOL_INVOCATION_STRINGS",
+    "TOOL_WIDGET_DESCRIPTIONS",
     "WIDGET_DESCRIPTIONS",
     "build_card_html",
     "card_kind_for_tool",
@@ -148,7 +154,26 @@ _ASSETS = Path(__file__).parent / "assets"
 # size (one row that opens in place), the same card `summarize` draws in
 # full. A step in a set is a receipt; the run being discussed is the
 # evidence block.
+#
+# `keel_paper_deploy` and `keel_paper_control` draw the `live` card (Q-7603).
+# Paper has no card kind of its own by decision (paper-trading-v2 spec 06
+# §3.5.6, "No new card kind"; the PAPER stamp rides the live card). Both are in
+# `_channels.KIND_BY_TOOL` as `live`, so they register in the monitor's mode
+# (`_mcp_adapter.registration_mode`): under the card-meta arm the envelope rides
+# as structuredContent `{"result": <text>}` and the card-only `render` block
+# moves to `_meta["keel/card"]`, so the text block is what it was. The card's
+# paper fragment draws a deploy or control result as the paper receipt, and a
+# plan wall (the paper slot cap, the timeframe floor) draws as the plan-limit
+# card every kind draws (`host-adapter.js` `planLimitOf`). Before Q-7603 the
+# rows were absent: in `text` mode a row would have opened an empty "No result
+# to show here" card on every paper call. A row publishes `_meta.ui` in
+# tools/list, which is listed-profile collateral (R-60), accepted by the founder.
 CARD_TOOLS: dict[str, str] = {
+    "keel_screener_run": "screener",
+    "keel_screener_view": "screener",
+    # A view edit answers with the screen it now shows (Q-3639); a dry run
+    # draws one receipt row.
+    "keel_screener_view_set": "screener",
     "keel_backtest_summarize": "backtest",
     "keel_backtest_run": "backtest",
     "keel_backtest_watch": "backtest",
@@ -159,16 +184,55 @@ CARD_TOOLS: dict[str, str] = {
     "keel_library_fork": "strategy",
     "keel_backtest_compare": "compare",
     "keel_live_monitor": "live",
+    "keel_paper_deploy": "live",
+    "keel_paper_control": "live",
     "keel_live_deploy": "preflight",
+    # Research (07 §3.3): run in flight is a receipt, complete a view; get and
+    # view_set answer with the study as it now reads. D-328 D1 (13 §2.6): a
+    # plan draws one row with its count line, never a Run button.
+    "keel_research_plan": "study",
+    "keel_research_run": "study",
+    "keel_research_get": "study",
+    "keel_research_view_set": "study",
 }
 
-CARD_KINDS: tuple[str, ...] = ("backtest", "strategy", "live", "preflight", "compare")
+CARD_KINDS: tuple[str, ...] = (
+    "backtest",
+    "strategy",
+    "live",
+    "preflight",
+    "compare",
+    "screener",
+    "study",
+)
 
 # Cards that must NEVER exist on the directory-listed profile (spec 06
 # R2 AC). keel_live_deploy is already outside LISTED_PROFILE_TOOLS, so
 # this is defense-in-depth — a future allow-list edit can't quietly
 # bring the card along.
-LISTED_EXCLUDED_CARDS: frozenset[str] = frozenset({"preflight"})
+LISTED_EXCLUDED_CARDS: frozenset[str] = frozenset({"preflight", "screener", "study"})
+
+#: Cards the listed screens flag admits for the caller's host (screeners L13):
+#: the screen card exists on the listed surface exactly when its tools do.
+LISTED_SCREEN_CARDS: frozenset[str] = frozenset({"screener"})
+
+
+def listed_card_excluded(kind: str) -> bool:
+    """Whether the active listed surface withholds card ``kind``: every
+    :data:`LISTED_EXCLUDED_CARDS` kind, except the screen card while
+    ``listed_screens_enabled()``. False on the full profile."""
+    from keel.tools.outcomes._toolsets import is_listed_profile, listed_screens_enabled
+
+    if not is_listed_profile() or kind not in LISTED_EXCLUDED_CARDS:
+        return False
+    if kind == "study":
+        # 07 §3.3: the study card exists on the listed surface exactly when its
+        # tools do, i.e. while this request serves Research.
+        from keel.tools.outcomes._toolsets import research_served
+
+        return not research_served()
+    return not (kind in LISTED_SCREEN_CARDS and listed_screens_enabled())
+
 
 #: The card's title before a result names it — the head of the waiting and
 #: terminal states, the frame's `<title>` and `aria-label`. User-facing
@@ -176,11 +240,13 @@ LISTED_EXCLUDED_CARDS: frozenset[str] = frozenset({"preflight"})
 #: design and reached users on every strategy card that had no result to
 #: draw (Q-1883). A rendered card replaces it with the object's own name.
 CARD_TITLES: dict[str, str] = {
+    "screener": "Screen",
     "backtest": "Backtest",
     "strategy": "Strategy",
     "live": "Live strategy",
     "preflight": "Deploy check",
     "compare": "Comparison",
+    "study": "Study",
 }
 _CARD_TITLES = CARD_TITLES
 
@@ -199,6 +265,9 @@ _CARD_TITLES = CARD_TITLES
 # ≤ 64 characters each, and policy-clean: these strings ride the listed
 # profile's ``_meta`` and ``tests/test_policy_scan.py`` scans them.
 TOOL_INVOCATION_STRINGS: dict[str, tuple[str, str]] = {
+    "keel_screener_run": ("Running screen…", "Screen returned"),
+    "keel_screener_view": ("Reading screen…", "Screen returned"),
+    "keel_screener_view_set": ("Editing the screen view…", "Screen returned"),
     "keel_backtest_run": ("Running backtest…", "Backtest returned"),
     "keel_backtest_watch": ("Checking the run…", "Watch returned"),
     "keel_backtest_summarize": ("Reading the result…", "Result returned"),
@@ -209,6 +278,13 @@ TOOL_INVOCATION_STRINGS: dict[str, tuple[str, str]] = {
     "keel_strategy_diff": ("Comparing versions…", "Diff returned"),
     "keel_library_fork": ("Forking from the library…", "Fork returned"),
     "keel_live_monitor": ("Reading live state…", "Live view returned"),
+    "keel_paper_deploy": ("Starting the paper run…", "Paper run returned"),
+    "keel_paper_control": ("Changing the paper run…", "Paper run returned"),
+    "keel_research_plan": ("Planning study…", "Plan returned"),
+    # D-344 (8): outcome-neutral; a run whose work is all reused completes at once, and a refused one starts nothing.
+    "keel_research_run": ("Running study…", "Run returned"),
+    "keel_research_get": ("Reading the study…", "Study returned"),
+    "keel_research_view_set": ("Saving the study view…", "Study returned"),
 }
 
 #: The cap the hosts' tool row can show before it elides.
@@ -224,6 +300,12 @@ MAX_INVOCATION_STRING_CHARS = 64
 # injects its own note; nothing is added there. `preflight` is full-profile
 # only and is scanned under that profile's rules.
 WIDGET_DESCRIPTIONS: dict[str, str] = {
+    "screener": "A screen result: headline values, one line thumbnail, freshness and a link to the interactive view.",
+    # 13 §3.8 (WL-AG-11): the v2 card, as the user sees it.
+    "study": (
+        "A study card the user sees: its key chart with axes, the headline numbers with samples, "
+        "which of the user's bars were met, every other chart a tap away, and a link to the study."
+    ),
     "backtest": (
         "A card the user sees: the run's headline metrics, its window, the equity and "
         "drawdown curve, and a link to the tearsheet."
@@ -240,6 +322,24 @@ WIDGET_DESCRIPTIONS: dict[str, str] = {
     "preflight": (
         "A card the user sees: the deployment preview — the account, the sizing and the "
         "checks — before anything is confirmed."
+    ),
+}
+
+#: A tool whose card shows something other than its kind's description: the
+#: paper writes draw the live card's paper receipt, which is not a live
+#: strategy (S06 §3.5.2: "Live" never labels practice data).
+TOOL_WIDGET_DESCRIPTIONS: dict[str, str] = {
+    # D-344 (8), CONFORM-MCP F10: a plan draws one row and a run the run card, not the study card (13 §2.1).
+    "keel_research_plan": (
+        "A row the user sees: what the plan would run and reuse, and its count line."
+    ),
+    "keel_research_run": "A run card the user sees: the study's progress, then its result.",
+    "keel_paper_deploy": (
+        "A card the user sees: the simulated paper run, its state, its starting balance "
+        "and when it runs next."
+    ),
+    "keel_paper_control": (
+        "A card the user sees: the simulated paper run and the state this call left it in."
     ),
 }
 
@@ -326,12 +426,30 @@ def build_card_html(kind: str, *, paper_stamp: bool = False) -> str:
             _PAPER_STAMP_SLOT,
             "<script>\n      {{PAPER_JS}}\n    </script>\n    " + _PAPER_STAMP_SLOT,
         ).replace("{{PAPER_JS}}", _asset("card-live-paper.js"))
+    # R-031: listing is a later release. Existing listed resources retain
+    # their pre-Screeners bytes, including the comparison's local renderer.
+    # Full profile shares drawMulti; the screener candidate needs that path.
+    from keel.tools.outcomes._toolsets import is_listed_profile
+
+    listed_legacy = is_listed_profile() and kind not in ("screener", "study")
+    adapter = "host-adapter-listed.js" if listed_legacy else "host-adapter.js"
+    renderer = (
+        "card-compare-listed.js" if listed_legacy and kind == "compare" else f"card-{kind}.js"
+    )
+    # The screener's own styles (S1 palette, field, end labels) live apart from
+    # the shared card.css, so every other card, the listed connector's
+    # included, keeps its base-commit bytes.
+    css = _asset("card.css")
+    if kind == "screener":
+        css = css + "\n" + _asset("card-screener.css")
+    if kind == "study":
+        css = css + "\n" + _asset("card-study.css")
     return (
         template.replace("{{KIND}}", kind)
         .replace("{{TITLE}}", _CARD_TITLES[kind])
-        .replace("{{CSS}}", _asset("card.css"))
-        .replace("{{ADAPTER_JS}}", _asset("host-adapter.js"))
-        .replace("{{CARD_JS}}", _asset(f"card-{kind}.js"))
+        .replace("{{CSS}}", css)
+        .replace("{{ADAPTER_JS}}", _asset(adapter))
+        .replace("{{CARD_JS}}", _asset(renderer))
     )
 
 
@@ -417,12 +535,10 @@ def tool_ui_meta(tool_name: str) -> dict | None:
     excluded from the active profile (listed → no preflight; the owning
     tool isn't registered there anyway — this is the second lock).
     """
-    from keel.tools.outcomes._toolsets import is_listed_profile
-
     kind = CARD_TOOLS.get(tool_name)
     if kind is None:
         return None
-    if is_listed_profile() and kind in LISTED_EXCLUDED_CARDS:
+    if listed_card_excluded(kind):
         return None
     meta: dict = {
         # MCP Apps wire key (research/05 §1: `_meta.ui.csp` shorthand).
@@ -434,7 +550,7 @@ def tool_ui_meta(tool_name: str) -> dict | None:
     if invocation is not None:
         meta["openai/toolInvocation/invoking"] = invocation[0]
         meta["openai/toolInvocation/invoked"] = invocation[1]
-    description = WIDGET_DESCRIPTIONS.get(kind)
+    description = TOOL_WIDGET_DESCRIPTIONS.get(tool_name, WIDGET_DESCRIPTIONS.get(kind))
     if description is not None:
         meta["openai/widgetDescription"] = description
     return meta
@@ -449,11 +565,7 @@ def active_card_kinds() -> list[str]:
     any deployment that doesn't load ``live-write``.
     """
     from keel.tools.outcomes import OUTCOMES
-    from keel.tools.outcomes._toolsets import (
-        is_listed_profile,
-        is_tool_loaded,
-        load_toolsets,
-    )
+    from keel.tools.outcomes._toolsets import is_tool_loaded, load_toolsets
 
     toolsets = load_toolsets()
     kinds: list[str] = []
@@ -463,9 +575,15 @@ def active_card_kinds() -> list[str]:
         tool = OUTCOMES.get(tool_name)
         if tool is None:
             continue
-        if not is_tool_loaded(tool.toolset, toolsets, local_only=tool.local_only, name=tool.name):
+        if not is_tool_loaded(
+            tool.toolset,
+            toolsets,
+            local_only=tool.local_only,
+            name=tool.name,
+            cli_only=tool.cli_only,
+        ):
             continue
-        if is_listed_profile() and kind in LISTED_EXCLUDED_CARDS:
+        if listed_card_excluded(kind):
             continue
         kinds.append(kind)
     return kinds

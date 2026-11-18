@@ -116,8 +116,22 @@ APPEARS: dict[str, tuple[dict, str]] = {
         "verified run",
     ),
     "quota": ({"view": _VIEW_BT, "quota_notice": "3 of 50 backtests left"}, "3 of 50"),
+    # The paper/live timeframe heads-up (doc 07 §5, D-14).
+    "plan": (
+        {"view": _VIEW_BT, "floor_notice": "Note: paper and live on Free need 1h or slower."},
+        "need 1h or slower",
+    ),
     "error": ({"view": _VIEW_BT, "error_message": "worker died"}, "worker died"),
     "info": ({"view": _VIEW_BT, "info": "Submitted; not waiting."}, "Submitted"),
+    # keel_screener_view(include_view_source=true): the saved view's revision
+    # and source reach the text block, the only part claude.ai's model reads (Q-3634).
+    "view source": (
+        {
+            "view": _VIEW_BT,
+            "view_source": {"source": 'Page(title="x")', "revision": 2, "persisted": True},
+        },
+        "view revision 2",
+    ),
     "validation": (
         {
             "view": {"kind": "strategy", "markdown": "x"},
@@ -168,6 +182,14 @@ APPEARS: dict[str, tuple[dict, str]] = {
             "exposure": {"line": "Held positions on 6 of 25 bars · first position Sep 20, 2026"},
         },
         "Held positions on 6 of 25 bars · first position Sep 20, 2026",
+    ),
+    # R-003: which way the positions went, the app's one line.
+    "sides": (
+        {
+            "view": _VIEW_BT,
+            "sides": {"line": "12 positions: 0 long, 12 short · 0 flips"},
+        },
+        "12 positions: 0 long, 12 short · 0 flips",
     ),
     # Spec 07 §6: part of the run, keel-api's sentence + what a slice is.
     "slice": (
@@ -257,8 +279,10 @@ ABSENT: dict[str, dict] = {
     "good_result": {"view": _VIEW_BT, "good_result": None},
     "facts": {"view": {"kind": "strategy", "markdown": "x"}},
     "quota": {"view": _VIEW_BT, "quota": []},
+    "plan": {"view": _VIEW_BT},
     "error": {"view": _VIEW_BT},
     "info": {"view": _VIEW_BT},
+    "view source": {"view": _VIEW_BT},
     "validation": {
         "view": {"kind": "strategy", "markdown": "x"},
         "validation": {"errors": [], "warnings": []},
@@ -271,6 +295,8 @@ ABSENT: dict[str, dict] = {
     # A run from before the worker's stamp carries no exposure: no line.
     "costs": {"view": _VIEW_BT, "cost_model": None},
     "exposure": {"view": _VIEW_BT, "exposure": None},
+    # A run recorded before the side counts: no block, no line.
+    "sides": {"view": _VIEW_BT, "sides": None},
     # No start/end/capital asked: no slice block, no line.
     "slice": {"view": _VIEW_BT, "slice": {"summary": ""}},
     # No `periods` asked: no block (a block with no rows is no table either).
@@ -293,12 +319,12 @@ def _labels(lines: list[str]) -> list[str]:
 
 
 def test_the_catalogue_is_exercised_in_full() -> None:
-    """Non-vacuity: every listed label has both arms (21), and the full
+    """Non-vacuity: every listed label has both arms (24), and the full
     profile's one extra label is counted separately."""
     labels = [label for _, label, _ in _OPERATIONAL_FIELDS]
-    assert len(labels) == 21 == len(set(labels))
+    assert len(labels) == 24 == len(set(labels))
     assert set(APPEARS) == set(ABSENT) == set(labels)
-    assert [label for _, label, _ in _FULL_PROFILE_FIELDS] == ["deploy"]
+    assert [label for _, label, _ in _FULL_PROFILE_FIELDS] == ["deploy", "capital"]
 
 
 @pytest.mark.parametrize("label", sorted(APPEARS))
@@ -327,13 +353,13 @@ def test_no_line_is_evaluative(monkeypatch) -> None:
             for word in EVALUATIVE:
                 assert word not in text, (label, word, line)
             checked += 1
-    assert checked == 21
+    assert checked == 24
 
 
 def test_the_first_week_sentence_rides_the_quota_line_only(monkeypatch) -> None:
-    """connect-onboarding spec 01 §1.9: the first-week sentence is part of
-    the ONE `quota:` line (it rides `quota_notice`), never `next`, and the
-    line stays factual. The envelope is the real handler's, so the line is
+    """connect-onboarding spec 01 §1.9: the first-week clause is part of
+    the ONE `quota:` line (folded into `quota_notice`, Q-7601), never `next`,
+    and the line stays factual. The envelope is the real handler's, so the line is
     the one a host reads."""
     from unittest.mock import patch
 
@@ -367,9 +393,10 @@ def test_the_first_week_sentence_rides_the_quota_line_only(monkeypatch) -> None:
     envelope["next"] = "A run of this strategy from the last hour exists."
     lines = operational_lines(envelope)
     carrying = [line for line in lines if "first-week" in line]
+    fw = block["first_week"]
     assert carrying == [
-        "quota: 40 of 250 backtests left this week; they reset Tue 22 Sep 00:00 UTC. "
-        "40 of 200 first-week backtests left; they end Tue 13 Oct 15:02 UTC."
+        f"quota: {block['remaining']} of {block['limit']} backtests left "
+        f"({fw['remaining']} first-week extras until Tue 13 Oct); resets Tue 22 Sep."
     ], lines
     assert "next" in _labels(lines)  # non-vacuity: a `next` line was there to avoid
     for word in EVALUATIVE:

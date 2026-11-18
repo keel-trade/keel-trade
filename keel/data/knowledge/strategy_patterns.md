@@ -6,7 +6,7 @@ These are recognition aids, not templates. Novel strategies may not fit any patt
 
 **Forecast-Combine** — Multiple signals normalized, scaled to forecasts, combined with ForecastCombiner, then sized. Simple flow: ForecastCombiner → ForecastCapper → ForecastWeightNormalizer. Add EmpiricalFDM between combiner and capper for diversification benefit (optional, Level 2+), or use AnalyticalFDMCombiner to combine+FDM in one step. For production vol-targeted sizing, replace ForecastWeightNormalizer with ReturnVolatility + VolTargetWeightConverter chain (Level 3+).
 
-**Screen-Select** — Filter universe by signal, equal-weight survivors, hold for a calendar period: indicator → `TopNAssetSelector` → `EqualWeightAllocator` → `WeightCadence(duration=...)` → `FillNaN(fill_value=0.0)` (Path 3). A hybrid — screen, then entry/exit within the screened set — is in Paths.
+**Rank-and-Select** — Filter universe by signal, equal-weight survivors, hold for a calendar period: indicator → `TopNAssetSelector` → `EqualWeightAllocator` → `WeightCadence(duration=...)` → `FillNaN(fill_value=0.0)` (Path 3). A hybrid — screen, then entry/exit within the screened set — is in Paths.
 
 **Entry/Exit** — the position layer (Path 2). The most common user request. The bracket, from `TradeManager` down:
 
@@ -19,7 +19,7 @@ Store("entries") → TradeManager(entries="entries", prices="ohlcv")
 
 Readers: trade readers `TradeReturn()`, `TradePnL()`, `BarsHeld()`, `DrawdownFromPeak()` / `GiveBack()`, `MaxFavorable()`, `ReturnFromAverage()` / `ReturnSinceLastFill()`, `SoldFraction()` / `AddCount()` (state: read in a later stage), `AtEntry(slot=...)`; between-trade readers `BarsSinceExit()`, `EntryCount(window=...)`, `LossStreak(window=...)`, `RealizedPnL(window=...)`, `LastTradeReturn()`. Thresholds on returns are fractions: −0.05 is a 5% loss.
 
-Actions: `Exit()` closes the trade; `Reduce(fraction=...)` sells a fraction of the initial size; `ScaleIn(units=..., times=...)` adds once per rising edge (`on="every_bar"` for every bar); `AllowEntry()` gates the next entry and ANDs with the signal reset. Short forms expand to the same rules: `StopLoss(pct=0.05)`, `TakeProfit(pct=0.10)`, `TrailingStop(pct=0.08)`, `MaxHold(bars=48)`, `Cooldown(bars=4)`. A market exit is `[Load("x"), Exit()]`.
+Actions: `Exit()` closes the trade; `Reduce(fraction=...)` sells a fraction of the initial size; `ScaleIn(units=..., times=...)` adds once per rising edge (`on="every_bar"` for every bar); `AllowEntry()` gates the next entry and ANDs with the signal reset. Short forms expand to the same rules: `StopLoss(pct=0.05)`, `TakeProfit(pct=0.10)`, `TrailingStop(pct=0.08)`, `LevelStop(level=...)`, `LevelTakeProfit(level=...)`, `RiskRewardTarget(stop_level=..., r=2.0)`, `MaxHold(bars=48)`, `Cooldown(bars=4)`. A market exit is `[Load("x"), Exit()]`.
 
 Mean-reversion entry and exit from one signal:
 

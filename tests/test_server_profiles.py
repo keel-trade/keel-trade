@@ -71,14 +71,19 @@ def test_matrix_full_hosted(monkeypatch):
     monkeypatch.setenv("KEEL_SERVER_PROFILE", "full")
     monkeypatch.setenv("KEEL_EXECUTION_MODE", "hosted")
     monkeypatch.setenv("KEEL_TOOLSETS", ALL_TOOLSETS_ENV)
-    assert set(loaded_tool_names(OUTCOMES)) == set(OUTCOMES) - HOSTED_EXCLUDED
+    assert set(loaded_tool_names(OUTCOMES)) == set(OUTCOMES) - HOSTED_EXCLUDED - _cli_only()
+
+
+def _cli_only() -> set[str]:
+    """CLI commands with no MCP registration on any profile (screeners L13)."""
+    return {t.name for t in OUTCOMES.values() if t.cli_only}
 
 
 def test_matrix_full_local_unchanged(monkeypatch):
     monkeypatch.setenv("KEEL_SERVER_PROFILE", "full")
     monkeypatch.delenv("KEEL_EXECUTION_MODE", raising=False)
     monkeypatch.setenv("KEEL_TOOLSETS", ALL_TOOLSETS_ENV)
-    assert set(loaded_tool_names(OUTCOMES)) == set(OUTCOMES)
+    assert set(loaded_tool_names(OUTCOMES)) == set(OUTCOMES) - _cli_only()
 
 
 def test_matrix_listed_hosted(monkeypatch):
@@ -121,7 +126,9 @@ def test_default_profile_env_absent_behaves_exactly_as_before(monkeypatch):
     expected = {
         t.name
         for t in OUTCOMES.values()
-        if not t.local_only and (t.toolset in {"always", "read-only", "backtest", "share"})
+        if not t.local_only
+        and not t.cli_only
+        and (t.toolset in {"always", "read-only", "backtest", "share"})
     }
     assert visible == expected
 
@@ -319,7 +326,7 @@ def _registered_tools(monkeypatch, profile: str | None):
 
 def test_registration_matrix_end_to_end(monkeypatch):
     full = _registered_tools(monkeypatch, "full")
-    assert set(full) == set(OUTCOMES) - HOSTED_EXCLUDED
+    assert set(full) == set(OUTCOMES) - HOSTED_EXCLUDED - _cli_only()
     # Shared copy on full.
     assert full["keel_live_monitor"].description == OUTCOMES["keel_live_monitor"].paper_description
     assert (
@@ -395,9 +402,14 @@ def test_full_instructions_carry_the_paper_section_once_when_loaded(
     live = assemble.section("live").terse
     assert text.count(live) == 1
     assert text.index(live) < text.index(PAPER_ROW)
-    # Everything else is HEAD's: removing the one block gives HEAD's string.
+    # Everything else is HEAD's: removing the one block (and the SCREENS line
+    # the full profile carries since screeners L13) gives HEAD's string.
+    screens = assemble.section("screens").terse
+    assert text.count(screens) == 1
     head = load()["instructions"][key("full-hosted" if hosted else "full-local", False)]
-    assert text.replace("\n\n" + PAPER_ROW, "", 1) == head
+    assert (
+        text.replace("\n\n" + PAPER_ROW, "", 1).replace("\n\n" + screens, "", 1) == head
+    )
 
 
 def test_full_instructions_omit_the_paper_section_when_not_loaded(paper_sdk_released, monkeypatch):
@@ -479,12 +491,19 @@ def test_tools_local_default_counts_the_default_set(paper_sdk_released, monkeypa
     from keel.tools.outcomes._toolsets import _DEFAULT_TOOLSETS, is_tool_loaded
 
     numbers = _checker().compute_numbers()
-    expected = sum(1 for t in OUTCOMES.values() if is_tool_loaded(t.toolset, _DEFAULT_TOOLSETS))
+    expected = sum(
+        1
+        for t in OUTCOMES.values()
+        if is_tool_loaded(t.toolset, _DEFAULT_TOOLSETS, cli_only=t.cli_only)
+    )
     assert numbers["tools_local_default"] == expected
     paper = sum(1 for t in OUTCOMES.values() if t.toolset == "paper")
     assert paper == 2
-    assert numbers["tools_local_default"] == HELD_TOOLS_LOCAL_DEFAULT + 2
-    assert numbers["tools_registry"] == HELD_TOOLS_REGISTRY + 2
+    # + the two paper tools; + Research's 24 commands, 8 of them MCP tools (07 §2.2).
+    from tests._research_delta import RESEARCH_ADDITIONS, RESEARCH_MCP_ADDITIONS
+
+    assert numbers["tools_local_default"] == HELD_TOOLS_LOCAL_DEFAULT + 2 + len(RESEARCH_MCP_ADDITIONS)
+    assert numbers["tools_registry"] == HELD_TOOLS_REGISTRY + 2 + len(RESEARCH_ADDITIONS)
 
 
 def test_compute_numbers_holds_no_toolset_literal():
@@ -498,8 +517,10 @@ def test_compute_numbers_holds_no_toolset_literal():
 
 #: HEAD's numbers at the paper base (48 registered tools; the local default
 #: set loads every tool outside live-write).
-HELD_TOOLS_REGISTRY = 48
-HELD_TOOLS_LOCAL_DEFAULT = 45
+#: +1 each for keel_screener_describe (screeners fix batch, 2026-11-03).
+#: The local default then drops the five CLI-only screen commands (L13 §2b).
+HELD_TOOLS_REGISTRY = 67
+HELD_TOOLS_LOCAL_DEFAULT = 59
 
 
 def _checker_path():

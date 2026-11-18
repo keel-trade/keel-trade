@@ -145,11 +145,32 @@ class TestHTTPMethods:
 
     @respx.mock
     def test_delete(self, client):
-        respx.delete("https://api.test.io/v1/deployments/dep_1").mock(
-            return_value=httpx.Response(200, json={"stopped": True})
+        # keel-api's stop/delete routes answer 204 with no body (Q-3133); the
+        # former mock here (200 + JSON) was a shape the server never sends.
+        route = respx.delete("https://api.test.io/v1/deployments/dep_1").mock(
+            return_value=httpx.Response(204)
         )
-        result = client.delete("/v1/deployments/dep_1")
-        assert result["stopped"] is True
+        assert client.delete("/v1/deployments/dep_1") is None
+        assert route.called
+
+    @respx.mock
+    def test_204_on_a_post_returns_none(self, client):
+        route = respx.post("https://api.test.io/v1/paper/dep_1/stop").mock(
+            return_value=httpx.Response(204)
+        )
+        assert client.post("/v1/paper/dep_1/stop") is None
+        assert route.called
+
+    @respx.mock
+    def test_an_empty_200_is_still_unreadable(self, client):
+        # Control arm: only 204 is bodiless by definition. A 200 with no body
+        # is a truncated or proxied answer and stays an error (Q-2273 L3).
+        respx.delete("https://api.test.io/v1/deployments/dep_1").mock(
+            return_value=httpx.Response(200)
+        )
+        with pytest.raises(KeelError) as exc:
+            client.delete("/v1/deployments/dep_1")
+        assert exc.value.error_code == "server_error"
 
 
 class TestErrorTranslation:

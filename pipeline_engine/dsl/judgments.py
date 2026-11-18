@@ -89,7 +89,7 @@ EMIT_TERMS = (
     # live emission sites actually compose, so rows describe the REAL kwargs.
     "key",  # the Extract projection key (J-PROJ)
     "category",  # the step's registry category (transition advisory)
-    "output",  # transition_key(declared output)
+    "output",  # transition_key(synthesized output if type_relation, else declared) — Q-3307
     "prev-output",  # transition_key(previous output)
     "expected-outputs",  # the transition row's allowed output keys
     "extra-keys-sorted",  # composer dict-param keys minus branch names, sorted
@@ -232,10 +232,15 @@ EMIT_TEMPLATES: dict[str, str | dict[str, str]] = {
     # verbatim). The TS engine renders this string byte-for-byte
     # (engine/interpreter.ts transitionBinaryBridge) — pinned by
     # TRANSITION_OUTPUT_MISMATCH/reject_binary_clipped_to_long_only.
+    # Q-3307: the second clause names the typed flip for shorts, so a
+    # Scale(by=-1) on a 0/1 mask (the warning is correct there) points at
+    # the one sign flip that keeps the carrier.
     "transition-binary-bridge": (
         "For long/cash from a {{-1, 0, +1}} signal, ThresholdCross(upper=0.5, "
-        "mode='long_only') maps it to {{0, +1}} and stays BinarySignal; "
-        "'{step}' turns it into a SignalSeries here."
+        "mode='long_only') maps it to {{0, +1}} and stays BinarySignal; to "
+        "open shorts from a 0/1 condition, NegateTransform() flips it to "
+        "{{0, -1}} and stays BinarySignal; '{step}' turns it into a "
+        "SignalSeries here."
     ),
     # {range} is validation_shared.range_phrase() over the HARD bounds
     # (Q-2242): "in range [2, 100]" / "in range (0, 0.5]" when both bounds

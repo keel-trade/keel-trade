@@ -37,6 +37,7 @@ LICENSE
 README.md
 glama.json
 pyproject.toml
+server.json
 # ── SDK package code + bundled data ──────────────────────────────────────────
 keel/*.py
 keel/data/*.json
@@ -68,6 +69,11 @@ timeframes/*.py
 # ship a non-functional package. Per-extension, so a new data class still
 # reddens G1 loudly.
 pipeline_engine/dsl/fixtures/*.json
+# The screens corpus source (screeners L13): the second sectioned file the
+# vendored instruction builder (pipeline_engine/reference/system/assemble.py)
+# reads to assemble the MCP server instructions. Public text the server
+# already serves; exact path, so any other markdown there still reddens G1.
+pipeline_engine/reference/screens_core.md
 scripts/*.py
 scripts/icon.png
 scripts/manifest.template.json
@@ -105,9 +111,23 @@ tests/fixtures/payloads/*.json
 # commit. Published with the test that compares them; per-file-class, so a new
 # fixture class still reddens G1.
 tests/fixtures/listed_*_head.json
+# The first-week clause golden (Q-7601 fix round,
+# test_plan_limits_first_week_golden.py): staging-probe shapes, numbers and
+# dates only, no ids.
+tests/fixtures/plan_limits_first_week_golden.json
+# Gate S's golden transcripts for the research verbs (Research BUILD-PLAN §16; test_research_transcripts.py).
+tests/fixtures/research_transcripts.json
+# keel-api's recorded answers the research texts are read over (RI-615, test_research_view.py).
+tests/fixtures/research_server_shapes.json
 # The portfolio view's base-commit outputs on the full profile and the CLI
 # (paper-trading-v2 M2-sdk-portfolio-real), beside the listed ones above.
 tests/fixtures/portfolio_outputs_head.json
 # The full-profile instructions at the base commit (paper-trading-v2
 # M8-core-paper-row), pinning that the held paper row leaves them HEAD's.
 tests/fixtures/full_instructions_head.json
+
+# Frozen drawMulti behavior proof (Screeners spec 06).
+tests/fixtures/cards/c_drawmulti_pre_move.js
+# The pre-RI-602 study card (WL-CU-12): test_study_card_browser.py's seeded v1 parser, pinned so the seed
+# stays the old parser whatever the served card becomes. Exactly this file.
+tests/fixtures/cards/study_card_v1.js

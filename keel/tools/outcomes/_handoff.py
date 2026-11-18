@@ -52,16 +52,23 @@ from typing import Any
 
 from keel.errors import (
     FORBIDDEN_UPSELL_RE,
-    QUOTA_CAP_NO_RESET,
+    PLAN_FLOOR_CODES,
+    WEB_APP_SENTENCE,
     EntitlementError,
     KeelError,
-    assert_neutral_wall_text,
-    is_free_plan,
+    assert_plan_copy,
+    floor_change_line,
+    floor_headline,
+    floor_info,
+    floor_wall_lines,
+    limit_more_clause,
+    more_plan_names,
     quota_allowance_note,
     quota_headline,
     quota_is_concurrent_cap,
     quota_plans_line,
     quota_reset_text,
+    quota_suggestion,
     quota_wall_lines,
 )
 
@@ -74,6 +81,7 @@ __all__ = [
     "anon_signin_handoff",
     "deploy_web_handoff",
     "live_scope_handoff",
+    "maybe_floor_handoff",
     "maybe_quota_handoff",
     "mint_deploy_intent",
     "unlinked_account_handoff",
@@ -101,9 +109,10 @@ _DO_NOTHING_RE = re.compile(r"\bdo(ing)?\s+nothing\b", re.IGNORECASE)
 # include more backtests: Starter 500 a week, Trader unlimited." is exactly
 # what OpenAI rejected (Q-2080) and now fails this scan.
 #
-# A surface may still name the caller's OWN plan ("Current plan: Free"),
-# and the free-plan wall's one "Paid plans include more …" sentence is
-# admitted by `keel.errors.assert_neutral_wall_text(free_plan=True)` only.
+# Plan NAMES are not this regex's business (D-14): the caller's own plan and
+# the plans that include more reach copy only through `keel.errors`'
+# renderer, from served data; plan-limit copy is also held to
+# `keel.errors.assert_plan_copy` (pitch words).
 _FORBIDDEN_UPSELL_RE = FORBIDDEN_UPSELL_RE
 
 
@@ -442,17 +451,15 @@ def maybe_quota_handoff(
             },
         )
 
-    # D-12 (2026-09-28): the plan-limit wall states the caller's own limit
-    # and its reset, and stops. No `action_url`, no `docs_url`, no link on
-    # the card, no other plan's name or number — OpenAI rejected Keel v1.0.0
-    # while this wall named the other tiers and linked the billing tab,
-    # whose plan buttons go straight to Stripe Checkout (Q-2080).
-    free = is_free_plan(parsed)
+    # D-14 (2026-11-16): the wall states the caller's own numbers and reset,
+    # names the plans that include more of THIS limit (served names only),
+    # and says where plans are changed. No `action_url`, no `docs_url`, no
+    # link on the card, no other plan's number and no price (Q-2080).
 
     # ONE authoritative home for the numbers (Q-1806): `limit_details`. The
     # handoff carries no `input`, so the envelope's `example` is `{}` — and
-    # nothing here may point at it. The caller's own plan rides along; the
-    # server's `higher_plans` never reaches `parsed` (errors._quota_context).
+    # nothing here may point at it. The other plans ride as NAMES only
+    # (`more_plans`); keel-api's `higher_plans` never reaches `parsed`.
     limit_details: dict[str, Any] = {"unit": parsed.get("unit"), "unit_label": label}
     for key in (
         "kind",
@@ -465,19 +472,18 @@ def maybe_quota_handoff(
         "resets_at",
         "reset_epoch",
         "plan",
+        "plan_name",
+        "more_plans",
     ):
         if parsed.get(key) is not None:
             limit_details[key] = parsed[key]
 
     # The sentences the user hears — the SAME lines the 403 message is made
-    # of (`keel.errors.quota_wall_lines`, one computation owner). The
-    # headline reads the server's own `kind` (Q-1590: only the no-grant
-    # kinds may say the plan does not include the unit), and the compute
-    # edge says "not enough to start this", never "used all" (Q-1806).
+    # of (`keel.errors.quota_wall_lines`, one computation owner).
     talking_points = quota_wall_lines(parsed) + list(extra_points or ())
 
     # What the CARD draws (Q-1806): a calm plan-limit state, not a red error
-    # line — headline, reset, the free plan's one plan sentence, and what
+    # line — headline, reset (or how a slot frees), the plan line, and what
     # does not use the allowance. Human sentences only: every field here is
     # rendered as text by the host adapter, and none is a link.
     limit_view: dict[str, Any] = {"headline": quota_headline(parsed)}
@@ -490,36 +496,12 @@ def maybe_quota_handoff(
             limit_view[key] = value
 
     reason = f"A plan limit on {label} stopped this call."
+    suggestion = quota_suggestion(parsed)
     if quota_is_concurrent_cap(parsed):
-        # A limit on how many run at once has no reset to wait for (QA-W1).
-        # Still neutral (D-12, paper-trading-v2 R-59): the fact, no action and
-        # no slot-freeing point; that fact rides the tool description.
-        suggestion = (
-            f"Plan limit on {label}; the numbers are in `limit_details`. "
-            f"{QUOTA_CAP_NO_RESET}; neither a retry nor a new sign-in changes it."
-        )
-        verify_reason = (
-            "The same call, unchanged; it succeeds once this limit is no longer "
-            "reached. It does not reset on a clock."
-        )
+        verify_reason = "The same call, unchanged; it succeeds once a slot frees."
     else:
-        suggestion = (
-            f"Plan limit on {label}; the numbers are in `limit_details`. It lifts at "
-            "the reset — neither a retry nor a new sign-in changes it before then."
-        )
         verify_reason = "The same call, unchanged; it succeeds after the reset."
-    # Every text field of the wall passes the D-12 scan — not only the
-    # talking points — so a pitch cannot ride in through a field nobody
-    # thought to check (message, reason, suggestion, card, resume reason).
-    for text in (
-        str(e),
-        reason,
-        suggestion,
-        verify_reason,
-        *talking_points,
-        *limit_view.values(),
-    ):
-        assert_neutral_wall_text(text, free_plan=free)
+    _assert_wall_copy(str(e), reason, suggestion, verify_reason, talking_points, limit_view)
 
     return HandoffRequired(
         str(e),
@@ -536,10 +518,80 @@ def maybe_quota_handoff(
         limit_details=limit_details,
         limit_view=limit_view,
         suggestion=suggestion,
-        # A neutral wall proposes no action, so there is no do-nothing
+        # A plan-limit wall proposes no action, so there is no do-nothing
         # alternative to name (D-12 removed that line with the rest).
         require_do_nothing=False,
     )
+
+
+def _assert_wall_copy(*texts: Any) -> None:
+    """Every text field of a plan-limit wall passes the plan-copy scan — not
+    only the talking points — so a pitch cannot ride in through a field
+    nobody thought to check (message, reason, suggestion, card, resume)."""
+    for text in texts:
+        if isinstance(text, dict):
+            _assert_wall_copy(*text.values())
+        elif isinstance(text, list):
+            _assert_wall_copy(*text)
+        else:
+            assert_plan_copy(text)
+
+
+def maybe_floor_handoff(
+    e: KeelError, *, blocked_action: str, retry_call: dict[str, Any]
+) -> HandoffRequired | None:
+    """The paper/live timeframe floor refusal as a plan-limit handoff with a
+    card (doc 07 §5), or ``None`` for any other error.
+
+    ``detail`` keeps keel-api's machine half (``code``
+    ``SERVING_CLOCK_BELOW_PLAN_FLOOR``, ``floor``, ``requested``), so an agent
+    still branches on the code; the envelope's own code is ``handoff_required``
+    like every plan wall. The retry is the same call once the strategy's
+    ``target_timeframe`` is at the floor or slower.
+    """
+    detail = e.detail if isinstance(getattr(e, "detail", None), dict) else {}
+    if detail.get("code") not in PLAN_FLOOR_CODES or not isinstance(detail.get("floor"), str):
+        return None
+    info = floor_info(detail)
+    lines = floor_wall_lines(info)
+    limit_details: dict[str, Any] = {"unit": info["unit"], "kind": "floor"}
+    for key in ("floor", "requested", "plan", "plan_name"):
+        if info.get(key) is not None:
+            limit_details[key] = info[key]
+    names = more_plan_names(info)
+    if isinstance(info.get("higher_plans"), list) or "more_plans" in info:
+        limit_details["more_plans"] = names
+    more = limit_more_clause(info)
+    limit_view: dict[str, Any] = {
+        "headline": floor_headline(info),
+        "reset": floor_change_line(info, card=True),
+    }
+    if more:
+        limit_view["plans"] = f"{more} {WEB_APP_SENTENCE}"
+    reason = "A plan limit on the paper and live timeframe stopped this call."
+    suggestion = quota_suggestion(info)
+    verify_reason = (
+        f"The same call, once the strategy's `target_timeframe` is {info['floor']} or slower."
+    )
+    # The agent reads `message` (and the text block leads with it), so it
+    # names the DSL field, exactly as the talking points do (Q-7601 fix
+    # round). The card draws `limit_view`, whose `reset` keeps plain words.
+    message = " ".join(lines)
+    _assert_wall_copy(message, reason, suggestion, verify_reason, lines, limit_view)
+    handoff = HandoffRequired(
+        message,
+        blocked_action=blocked_action,
+        reason=reason,
+        action_url=None,
+        talking_points=lines,
+        resume={"verify_call": {**retry_call, "reason": verify_reason}},
+        limit_details=limit_details,
+        limit_view=limit_view,
+        suggestion=suggestion,
+        require_do_nothing=False,
+    )
+    handoff.detail = dict(detail)
+    return handoff
 
 
 def live_scope_handoff(

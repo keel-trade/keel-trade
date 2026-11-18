@@ -22,7 +22,7 @@ Safety). Running a strategy with real capital happens in the Keel web app.
 <!-- agent-surface:begin -->
 <!-- GENERATED from shared/agent-surface.json + LISTED_PROFILE_TOOLS — edit there, then run
      python packages/keel-trade/keel-sdk/scripts/check_surface_routing.py --write -->
-- **Hosted endpoint (default)** — `https://mcp.usekeel.io/mcp`: one endpoint, a 29-tool research/backtest/read surface, nothing to install. Paste the URL into Claude, ChatGPT or any remote-MCP client and sign in or sign up when prompted; Claude Code: `claude mcp add --transport http keel https://mcp.usekeel.io/mcp`; Codex: `codex mcp add keel --url https://mcp.usekeel.io/mcp`. The agent builds, tests and reads. When you want to run a strategy on your account, it hands it to the Keel app and you take it from there. Per-client steps: https://usekeel.io/agents
+- **Hosted endpoint (default)** — `https://mcp.usekeel.io/mcp`: one endpoint, a 33-tool research/backtest/read surface, nothing to install. Add Keel from its official listing in Claude (https://claude.ai/directory/connectors/keel) or ChatGPT (https://chatgpt.com/plugins/plugin_asdk_app_6abdbe58e6a481919a03773b4c124fe0); in Cursor, Windsurf or any remote-MCP client, paste the URL and sign in or sign up when prompted; Claude Code: `claude mcp add --transport http keel https://mcp.usekeel.io/mcp`; Codex: `codex mcp add keel --url https://mcp.usekeel.io/mcp`. The agent builds, tests and reads. When you want to run a strategy on your account, it hands it to the Keel app and you take it from there. Per-client steps: https://usekeel.io/agents
 <!-- agent-surface:end -->
 
 <!-- surface-routing:begin -->
@@ -30,7 +30,7 @@ Safety). Running a strategy with real capital happens in the Keel web app.
      python packages/keel-trade/keel-sdk/scripts/check_surface_routing.py --write -->
 | You are… | Default path (shown first) | Also works |
 | --- | --- | --- |
-| Using Claude/ChatGPT on web or phone | Hosted endpoint — paste the URL (directory one-click coming) | CLI + local MCP |
+| Using Claude/ChatGPT on web or phone | Official listing in Claude or ChatGPT (one click), or paste the hosted URL | CLI + local MCP |
 | Working in Claude Code / Cursor / terminal | Hosted endpoint — one command, or paste the URL | CLI + local MCP |
 | Running a strategy from the Keel app | Keel web app (connect an account, review sizing, start it there) | reads on every surface |
 | Trying a strategy forward without a connected exchange account | Paper run (simulated) — Keel web app, or `keel paper` on the CLI | in-app chat, local MCP |
@@ -217,6 +217,8 @@ Read-only:
 - `keel_strategy_history`
 - `keel_strategy_notes_read`
 - `keel_strategy_workspaces`
+- `keel_screener_list` (screens you own or follow, and listed community screens)
+- `keel_screener_view` (one screen's latest ranking, as a card)
 
 Research and backtest:
 
@@ -238,6 +240,8 @@ Research and backtest:
 - `keel_backtest_positions` (one run's positions, each entry to exit: a
   summary by default, one page per `asset` / `start`–`end` scope; CLI
   `keel backtest positions`, alias `keel backtest trades`)
+- `keel_screener_run` (run a screen now)
+- `keel_screener_view_set` (change a screen's saved view: show, colour, conditions)
 
 Sharing:
 

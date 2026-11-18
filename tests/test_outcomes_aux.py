@@ -14,14 +14,13 @@ from __future__ import annotations
 from unittest.mock import patch
 
 import pytest
-
-from keel.tools.outcomes._base import ToolContext
+from keel.tools.outcomes import OUTCOMES
 
 # Import for side-effect registration — same pattern as test_outcomes_backtest.
 from keel.tools.outcomes import accounts as _accounts_mod  # noqa: F401
-from keel.tools.outcomes import share_create as _share_mod  # noqa: F401
 from keel.tools.outcomes import audit as _audit_mod  # noqa: F401
-from keel.tools.outcomes import OUTCOMES
+from keel.tools.outcomes import share_create as _share_mod  # noqa: F401
+from keel.tools.outcomes._base import ToolContext
 
 
 # ─── shared fixtures ─────────────────────────────────────────────────────
@@ -102,6 +101,50 @@ def test_accounts_list_with_id_returns_detail(ctx):
     assert env["account"]["agent_address"] == "0xagent"
 
 
+@pytest.mark.parametrize("detail", [False, True])
+@pytest.mark.parametrize("nav", [None, "0", "-123.456789012345678901"])
+def test_accounts_preserve_independent_pm_values_and_unknowns(ctx, detail, nav):
+    """Public envelopes must not turn unknown into zero or capital into NAV."""
+    pm = {
+        "account_id": "acc_pm",
+        "as_of": "2026-10-16T00:00:00Z",
+        "observed_at": None,
+        "valid_until": None,
+        "reporting_nav": {
+            "basis_id": "pm_net_equity_usdc.v1",
+            "value": nav,
+            "quality": "unavailable" if nav is None else "qualified",
+            "reasons": ["source_unavailable"] if nav is None else [],
+        },
+        "eligible_capital": {
+            "basis_id": "pm_eligible_capital_usdc.v1",
+            "value": "42.001",
+            "quality": "qualified",
+            "reasons": [],
+        },
+        "available_capacity": {
+            "basis_id": "order_specific",
+            "value": None,
+            "quality": "unavailable",
+            "reasons": ["order_specific_capacity_required"],
+        },
+        "financing_status": "unavailable",
+    }
+    account = {"account_id": "acc_pm", "account_mode": "portfolio_margin", "pm": pm}
+    payload = account if detail else {"data": [account], "pagination": {"has_more": False}}
+    with patch("keel.client.KeelClient.get", return_value=payload):
+        result = (
+            OUTCOMES["keel_accounts_list"]
+            .handler({"account_id": "acc_pm"} if detail else {}, ctx)
+            .to_envelope()
+        )
+    actual = result["account"] if detail else result["accounts"][0]
+    assert actual["pm"] == pm
+    assert actual["pm"]["reporting_nav"]["value"] == nav
+    assert actual["pm"]["available_capacity"]["value"] is None
+    assert result["share_url"] is None
+
+
 # ─── keel_share_create ───────────────────────────────────────────────────
 
 
@@ -113,12 +156,13 @@ def test_share_create_strategy_returns_share_url(ctx):
         "include_source": False,
         "permission": "view",
         "expires_at": None,
+        # Q-2076: the create response carries the creator's code.
+        "referral_code": "ZACH42",
     }
-    me_payload = {"referral_code": "zach42"}
 
     def fake_get(path, **_):
-        if path == "/v1/me":
-            return me_payload
+        # Q-2076: no identity probe. /v1/me never carried a code, and a
+        # connector token cannot read /v1/referrals/code (no referral.read).
         raise AssertionError(f"unexpected GET {path}")
 
     with (
@@ -143,7 +187,7 @@ def test_share_create_strategy_returns_share_url(ctx):
     assert env["run_id"] == "shr_abc123"
     assert env["hero_url"] == "https://app.usekeel.io/share-links"
     # share_url IS populated for this tool — the one exception.
-    assert env["share_url"] == "https://usekeel.io/share/shr_abc123?ref=zach42"
+    assert env["share_url"] == "https://usekeel.io/share/shr_abc123?ref=ZACH42"
     assert env["share_id"] == "shr_abc123"
     assert env["share_type"] == "strategy"
     assert env["permission"] == "view"
@@ -161,8 +205,9 @@ def test_share_create_backtest_target_type_inferred(ctx):
     }
 
     def fake_get(path, **_):
-        # No referral code -> share_url shouldn't carry ?ref=
-        return {}
+        # An older keel-api: no referral_code on the create response, and an
+        # identity read that WOULD carry one must not be consulted (Q-2076).
+        return {"referral_code": "FROMME"}
 
     with (
         patch("keel.client.KeelClient.post", return_value=create_payload) as mock_post,

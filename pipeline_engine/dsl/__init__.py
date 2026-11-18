@@ -7,11 +7,24 @@ Quick Start:
 
 from pipeline_engine.dsl.emitter import graph_to_spec, spec_to_dsl, spec_to_graph
 from pipeline_engine.dsl.errors import format_error_summary, format_validation_errors
-from pipeline_engine.dsl.parser import DSLParseError, parse_strategy
-from pipeline_engine.dsl.validator import validate_strategy
+from pipeline_engine.dsl.parser import DSLParseError, parse_strategy, source_kind
+from pipeline_engine.dsl.spec import file_kind
+from pipeline_engine.dsl.validator import (
+    OutputsNotRunnable,
+    describe_outputs,
+    descriptors_from_blob,
+    is_run_ready,
+    validate_strategy,
+)
 
 
 __all__ = [
+    "source_kind",
+    "file_kind",
+    "describe_outputs",
+    "descriptors_from_blob",
+    "is_run_ready",
+    "OutputsNotRunnable",
     "DSLParseError",
     "ResolveError",
     "format_error_summary",

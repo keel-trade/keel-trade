@@ -1,0 +1,32 @@
+{
+  "home": {
+    "path": "/research",
+    "query": {}
+  },
+  "study": {
+    "path": "/research/{id}",
+    "query": {}
+  },
+  "new": {
+    "path": "/research/new",
+    "query": {}
+  },
+  "go": {
+    "path": "/research/go",
+    "query": {}
+  },
+  "curated": {
+    "path": "/research/{id}",
+    "query": {}
+  },
+  "project": {
+    "path": "/research/projects/{id}",
+    "query": {}
+  },
+  "dashboard_ask": {
+    "path": "/",
+    "query": {
+      "dest": "strategy"
+    }
+  }
+}

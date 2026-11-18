@@ -289,38 +289,166 @@ LISTED_PAPER_ANNOTATION_JUSTIFICATIONS: dict[str, AnnotationJustification] = {
 }
 
 
+# ── The listed screen tools (screeners L13; served only while
+# `listed_screens_enabled()` for the caller's host) ─────────────────────────
+#
+# Kept apart for the same reason as the paper rows: the base registry the
+# ChatGPT export reads is unchanged while the flag is off. A screen run is a
+# backtest-class job in the caller's workspace; a view save keeps every earlier
+# revision (`strategy.result_view_revisions`), so it is append-only, not
+# destructive; neither reaches anything public.
+
+LISTED_SCREEN_APPEND_ONLY: dict[str, str] = {
+    "keel_screener_run": "Each call creates a new screen run record; no run is edited or removed.",
+    "keel_screener_view_set": (
+        "Each save adds a new view revision; earlier revisions stay stored and can be "
+        "restored as a new revision."
+    ),
+}
+
+#: The listed screen tools whose ``destructiveHint`` is ``true``: none.
+LISTED_SCREEN_DESTRUCTIVE_TOOLS: frozenset[str] = frozenset()
+
+#: The listed screen tools whose ``openWorldHint`` is ``true``: none.
+LISTED_SCREEN_OPEN_WORLD_TOOLS: frozenset[str] = frozenset()
+
+LISTED_SCREEN_ANNOTATION_JUSTIFICATIONS: dict[str, AnnotationJustification] = {
+    "keel_screener_run": AnnotationJustification(
+        "Queues a new screen run, which is recorded in the caller's workspace.",
+        "Append-only: " + LISTED_SCREEN_APPEND_ONLY["keel_screener_run"],
+        "Computes on Keel's own market data inside the caller's workspace; places no "
+        "orders and publishes nothing.",
+    ),
+    "keel_screener_view": AnnotationJustification(
+        "Reads a finished screen run and, on request, its saved view; changes nothing.",
+        _NO_WRITE,
+        _OWN_WORKSPACE,
+    ),
+    "keel_screener_view_set": AnnotationJustification(
+        "Saves a new view revision for one of the caller's screens (a dry run saves nothing).",
+        "Append-only: " + LISTED_SCREEN_APPEND_ONLY["keel_screener_view_set"],
+        _OWN_WORKSPACE,
+    ),
+    "keel_screener_list": AnnotationJustification(
+        "Lists the caller's screens, the ones they follow, or Keel's curated screens; "
+        "changes nothing.",
+        _NO_WRITE,
+        "Reads the caller's own workspace and Keel's own curated list through Keel's API.",
+    ),
+}
+
+
+# ── The listed research tools (07 §5.3, RL-91; served only while the request
+# serves Research, `_toolsets.research_served()`, from the caller's /v1/me) ──
+#
+# Kept apart for the same reason as the paper and screen rows. A plan runs
+# nothing and saves no study (keel-api keeps the plan 24 hours under its
+# `plan_id` so a run runs exactly it: a quote the caller reads back, not saved
+# work); a run saves the study as a new study or a new version and adds new
+# runs. D-344 (3), CONFORM-MCP F4: 07 §4.3 replaces a never-run Draft head in
+# place when its edit is run, so the reason says so: that Draft holds no runs
+# and no results, and no version that ran, and no run, is edited or removed
+# (resume adds the next submission, an engine change plans version v+1). A read
+# changes nothing. All three take a `share_id`, so a study shared by link can
+# be read or run on the caller's own subjects.
+
+LISTED_RESEARCH_APPEND_ONLY: dict[str, str] = {
+    "keel_research_run": (
+        "Each call saves a new study or a new study version and adds new runs; a never-run "
+        "Draft it runs is saved in its place (it holds no runs or results), and no version "
+        "that ran and no run is edited or removed."
+    ),
+}
+
+#: The listed research tools whose ``destructiveHint`` is ``true``: none.
+LISTED_RESEARCH_DESTRUCTIVE_TOOLS: frozenset[str] = frozenset()
+
+#: The listed research tools whose ``openWorldHint`` is ``true``: none.
+LISTED_RESEARCH_OPEN_WORLD_TOOLS: frozenset[str] = frozenset()
+
+_RESEARCH_SCOPE = (
+    "Reads the caller's own studies, or a study shared by link, through Keel's API; "
+    "publishes nothing."
+)
+
+LISTED_RESEARCH_ANNOTATION_JUSTIFICATIONS: dict[str, AnnotationJustification] = {
+    "keel_research_plan": AnnotationJustification(
+        "Returns what a study would run, reuse and spend; runs nothing and saves no study. "
+        "Keel keeps the plan for 24 hours under its plan_id so a run runs exactly it: a quote "
+        "the caller reads back, not saved work.",
+        "Saves nothing to the caller's studies or strategies, so it can neither delete nor "
+        "overwrite.",
+        _RESEARCH_SCOPE,
+    ),
+    "keel_research_run": AnnotationJustification(
+        "Saves the study and starts its runs, which are recorded in the caller's workspace.",
+        "Append-only: " + LISTED_RESEARCH_APPEND_ONLY["keel_research_run"],
+        "Computes on Keel's own market data inside the caller's workspace; places no orders "
+        "and publishes nothing. With a share_id it copies the shared study's published "
+        "snapshot (never its author's source) into the caller's workspace, as a read of a "
+        "share does; unlike a strategy fork, no other organisation's source is taken.",
+    ),
+    "keel_research_get": AnnotationJustification(
+        "Reads a study's results, progress or chart rows, or lists the caller's studies; "
+        "changes nothing.",
+        _NO_WRITE,
+        _RESEARCH_SCOPE,
+    ),
+}
+
+
 def served_justifications() -> dict[str, AnnotationJustification]:
     """The rows for the listed surface this caller is served: the 29, plus the
-    paper rows while ``listed_paper_enabled()`` (read at call time)."""
-    from ._toolsets import listed_paper_enabled
+    paper, screen and research rows while each is served (read at call time)."""
+    from ._toolsets import listed_paper_enabled, listed_screens_enabled, research_served
 
+    rows = dict(LISTED_ANNOTATION_JUSTIFICATIONS)
     if listed_paper_enabled():
-        return {**LISTED_ANNOTATION_JUSTIFICATIONS, **LISTED_PAPER_ANNOTATION_JUSTIFICATIONS}
-    return dict(LISTED_ANNOTATION_JUSTIFICATIONS)
+        rows.update(LISTED_PAPER_ANNOTATION_JUSTIFICATIONS)
+    if listed_screens_enabled():
+        rows.update(LISTED_SCREEN_ANNOTATION_JUSTIFICATIONS)
+    if research_served():
+        rows.update(LISTED_RESEARCH_ANNOTATION_JUSTIFICATIONS)
+    return rows
 
 
 def served_append_only() -> dict[str, str]:
-    """:data:`APPEND_ONLY` for the served surface (paper rows when the flag is on)."""
-    from ._toolsets import listed_paper_enabled
+    """:data:`APPEND_ONLY` for the served surface (each family's rows while served)."""
+    from ._toolsets import listed_paper_enabled, listed_screens_enabled, research_served
 
+    rows = dict(APPEND_ONLY)
     if listed_paper_enabled():
-        return {**APPEND_ONLY, **LISTED_PAPER_APPEND_ONLY}
-    return dict(APPEND_ONLY)
+        rows.update(LISTED_PAPER_APPEND_ONLY)
+    if listed_screens_enabled():
+        rows.update(LISTED_SCREEN_APPEND_ONLY)
+    if research_served():
+        rows.update(LISTED_RESEARCH_APPEND_ONLY)
+    return rows
 
 
 def served_destructive_tools() -> frozenset[str]:
     """:data:`LISTED_DESTRUCTIVE_TOOLS` for the served surface."""
-    from ._toolsets import listed_paper_enabled
+    from ._toolsets import listed_paper_enabled, listed_screens_enabled, research_served
 
+    tools = LISTED_DESTRUCTIVE_TOOLS
     if listed_paper_enabled():
-        return LISTED_DESTRUCTIVE_TOOLS | LISTED_PAPER_DESTRUCTIVE_TOOLS
-    return LISTED_DESTRUCTIVE_TOOLS
+        tools = tools | LISTED_PAPER_DESTRUCTIVE_TOOLS
+    if listed_screens_enabled():
+        tools = tools | LISTED_SCREEN_DESTRUCTIVE_TOOLS
+    if research_served():
+        tools = tools | LISTED_RESEARCH_DESTRUCTIVE_TOOLS
+    return tools
 
 
 def served_open_world_tools() -> frozenset[str]:
     """:data:`LISTED_OPEN_WORLD_TOOLS` for the served surface."""
-    from ._toolsets import listed_paper_enabled
+    from ._toolsets import listed_paper_enabled, listed_screens_enabled, research_served
 
+    tools = LISTED_OPEN_WORLD_TOOLS
     if listed_paper_enabled():
-        return LISTED_OPEN_WORLD_TOOLS | LISTED_PAPER_OPEN_WORLD_TOOLS
-    return LISTED_OPEN_WORLD_TOOLS
+        tools = tools | LISTED_PAPER_OPEN_WORLD_TOOLS
+    if listed_screens_enabled():
+        tools = tools | LISTED_SCREEN_OPEN_WORLD_TOOLS
+    if research_served():
+        tools = tools | LISTED_RESEARCH_OPEN_WORLD_TOOLS
+    return tools

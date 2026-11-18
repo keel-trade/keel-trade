@@ -21,7 +21,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from keel.errors import KeelError
+from keel.api_path import seg
+from keel.errors import KeelError, NotFoundError
 
 from . import register
 from ._base import STRATEGY_NAME_FACT, OutcomeResult, OutcomeTool, ToolContext
@@ -69,6 +70,40 @@ def _entry_row(entry: dict) -> dict[str, Any]:
         "headline": _headline(entry.get("headline")),
         "default_variant_id": entry.get("default_variant_id"),
     }
+
+
+#: R-011: what an unknown Library slug's 404 tells the agent to do next. The
+#: generic not-found hint names strategies, commits and backtests, none of
+#: which fix a mistyped (or SEO-page) slug.
+UNKNOWN_ENTRY_SUGGESTION = (
+    "List the Library slugs with `keel_library_list`. For a strategy that is "
+    "not a Library entry, write it with `keel_strategy_compose`, save it, then "
+    "run `keel_backtest_run`."
+)
+
+
+def _library_not_found(err: NotFoundError) -> NotFoundError:
+    """The translated 404 with a Library-specific next step (R-011).
+
+    An ``unknown_variant`` 404 (a real entry, a mistyped setting) keeps the
+    variant guidance; every other 404 from these routes is an unknown entry.
+    The server's message and ``detail`` (``known_slugs``) pass through.
+    """
+    detail = err.detail if isinstance(err.detail, dict) else None
+    code = (detail or {}).get("code")
+    if code == "unknown_variant":
+        suggestion = (
+            "Pick a `variant_id` from `keel_library_get`'s variants, or omit it for the default."
+        )
+    else:
+        suggestion = UNKNOWN_ENTRY_SUGGESTION
+    out = NotFoundError(
+        str(err),
+        error_code=code if isinstance(code, str) else None,
+        suggestion=suggestion,
+    )
+    out.detail = detail
+    return out
 
 
 def _list_handler(args: dict, ctx: ToolContext) -> OutcomeResult:
@@ -119,7 +154,9 @@ def _get_handler(args: dict, ctx: ToolContext) -> OutcomeResult:
 
     client = ctx.get_client()
     try:
-        result = client.get(f"/v1/library/{slug}")
+        result = client.get(f"/v1/library/{seg(slug)}")
+    except NotFoundError as e:
+        raise _library_not_found(e) from e
     except KeelError:
         raise
     except Exception as e:  # noqa: BLE001
@@ -332,7 +369,9 @@ def _fork_handler(args: dict, ctx: ToolContext) -> OutcomeResult:
 
     client = ctx.get_client()
     try:
-        result = client.post(f"/v1/library/{slug}/fork", json=body)
+        result = client.post(f"/v1/library/{seg(slug)}/fork", json=body)
+    except NotFoundError as e:
+        raise _library_not_found(e) from e
     except KeelError:
         raise
     except Exception as e:  # noqa: BLE001
@@ -441,6 +480,7 @@ LIBRARY_FORK = register(
     OutcomeTool(
         name="keel_library_fork",
         required_action="strategy.create",
+        rate_tier="mutation",
         cli_path=("library", "fork"),
         toolset="backtest",
         # grounded-in: system/chat/collaboration.md §4 (iterate on a copy — the smallest

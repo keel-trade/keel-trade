@@ -1381,3 +1381,58 @@ def test_strategy_compose_description_leaves_the_skill_route_to_the_instructions
     assert "strategy-creation" not in desc
     # Non-vacuous: this is the compose description (its skeleton is present).
     assert "Declarations, then one Pipeline:" in desc
+
+
+def _status_with(monkeypatch, tmp_path, plan, grant=None, billing_error=None):
+    import keel.config as _config
+    from keel.tools.outcomes import OUTCOMES
+    from keel.tools.outcomes._base import ToolContext
+
+    cfg_file = tmp_path / "config.yaml"
+    cfg_file.write_text("api_key: dummy_test_key\napi_url: https://api.usekeel.io\n")
+    monkeypatch.setattr(_config, "CONFIG_FILE", cfg_file)
+    monkeypatch.delenv("KEEL_API_KEY", raising=False)
+    me = {"principal": {"id": "prn_a"}, "org": {"id": "org_a", "name": "A", "plan": plan}}
+    monkeypatch.setattr("keel.auth.get_identity", lambda: me)
+    paths: list[str] = []
+
+    def fake_get(self, path, **kw):
+        paths.append(path)
+        if path == "/v1/billing/subscription":
+            if billing_error:
+                raise billing_error
+            return {"plan": plan, "status": "trialing", "grant": grant}
+        return {"balances": []}
+
+    monkeypatch.setattr("keel.client.KeelClient.get", fake_get)
+    ctx = ToolContext(is_tty=False, app_url="https://app.usekeel.io")
+    return OUTCOMES["keel_account_status"].handler({}, ctx).to_envelope(), paths
+
+
+def test_account_status_names_an_active_plan_grant(monkeypatch, tmp_path):
+    """plan-grants spec 01 §7: the agent surface says a plan is granted, until when, then what."""
+    from keel.tools.outcomes._status_view import _header
+
+    grant = {"kind": "gift", "ends_at": 1777334400, "then_plan": "free"}  # 2026-04-28
+    env, paths = _status_with(monkeypatch, tmp_path, "starter", grant)
+    assert env["identity"]["plan_grant"] == {
+        "kind": "gift",
+        "free_until": "2026-04-28",
+        "then_plan": "free",
+    }
+    assert "/v1/billing/subscription" in paths
+    assert "starter plan (granted, free until 2026-04-28, then free)" in _header(
+        {"authenticated": True, "identity": env["identity"]}
+    )
+
+
+def test_account_status_free_org_never_asks_billing(monkeypatch, tmp_path):
+    env, paths = _status_with(monkeypatch, tmp_path, "free")
+    assert "plan_grant" not in env["identity"]
+    assert "/v1/billing/subscription" not in paths
+
+
+def test_account_status_billing_failure_never_becomes_an_identity_error(monkeypatch, tmp_path):
+    env, _ = _status_with(monkeypatch, tmp_path, "pro", billing_error=RuntimeError("down"))
+    assert "identity_error" not in env
+    assert env["identity"]["plan"] == "pro" and "plan_grant" not in env["identity"]

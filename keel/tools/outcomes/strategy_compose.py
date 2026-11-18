@@ -26,6 +26,7 @@ import re
 from pathlib import Path
 from typing import Any
 
+from keel.api_path import seg
 from keel.errors import (
     ConflictError,
     EntitlementError,
@@ -164,8 +165,30 @@ def _read_source(args: dict) -> str:
     )
 
 
+def _use_context(source: str, ctx: ToolContext, strategy_id: str | None):
+    """Read authorized pinned copies; the ordinary local validator still owns its verdict."""
+    from pipeline_engine.dsl import DSLParseError, parse_strategy
+    from pipeline_engine.dsl.use import collect_use_refs
+
+    try:
+        refs = collect_use_refs(parse_strategy(source))
+    except DSLParseError:
+        return None
+    if not refs:
+        return None
+    body = {"source": source}
+    if strategy_id:
+        body["strategy_id"] = strategy_id
+    return ctx.get_client().post("/v1/strategies/validate", json=body)
+
+
 def _try_local_validate(
-    source: str, *, pre_save: bool = False, base_lock: dict[str, int] | None = None
+    source: str,
+    *,
+    pre_save: bool = False,
+    base_lock: dict[str, int] | None = None,
+    use_context: dict | None = None,
+    consumer_id: str | None = None,
 ) -> dict[str, Any]:
     """Use libs/keel local validator. Returns
     {ok: bool, warnings: [], errors: []}.
@@ -185,16 +208,25 @@ def _try_local_validate(
         return {"ok": False, "warnings": [], "errors": [f"validator-unavailable: {e}"]}
     try:
         lock = None
+        use_args = (
+            {"expansions": use_context.get("uses", {}), "consumer_id": consumer_id}
+            if use_context is not None
+            else {}
+        )
         try:
-            lock = strategy_lock_generate(source=source).get("component_lock")
+            lock = strategy_lock_generate(
+                source=source,
+                **use_args,
+                **({"component_lock": base_lock} if use_context is not None else {}),
+            ).get("component_lock")
         except Exception:  # noqa: BLE001, S110 — lock generation optional; validation proceeds without it
             pass
         if lock and base_lock:
             lock = {name: base_lock.get(name, version) for name, version in lock.items()}
         result = (
-            strategy_validate(source=source, component_lock=lock, pre_save=pre_save)
+            strategy_validate(source=source, component_lock=lock, pre_save=pre_save, **use_args)
             if lock
-            else strategy_validate(source=source, pre_save=pre_save)
+            else strategy_validate(source=source, pre_save=pre_save, **use_args)
         )
         ok = bool(result.get("valid", False))
         return {
@@ -202,6 +234,13 @@ def _try_local_validate(
             "warnings": result.get("warnings", []) or [],
             "errors": result.get("errors", []) or [],
             "lock": lock,
+            "units": result.get("units") or [],
+            "info": (result.get("info") or [])
+            + [
+                issue
+                for issue in (use_context or {}).get("issues", [])
+                if issue.get("code") in {"USE_SOURCE_REMOVED", "USE_NEWER_VERSION"}
+            ],
         }
     except Exception as e:  # noqa: BLE001
         return {"ok": False, "warnings": [], "errors": [str(e)]}
@@ -472,7 +511,7 @@ def _saved_name(ctx: ToolContext, strategy_id: str | None) -> str | None:
     if not strategy_id:
         return None
     try:
-        row = ctx.get_client().get(f"/v1/strategies/{strategy_id}")
+        row = ctx.get_client().get(f"/v1/strategies/{seg(strategy_id)}")
     except Exception:  # noqa: BLE001 — a title never fails a dry run
         return None
     name = row.get("name") if isinstance(row, dict) else None
@@ -548,6 +587,9 @@ def _dry_run_view(
         source=source,
         size_override=size_override,
         object_id=strategy_id,
+        # A screen's outputs with their units (Q-3637): the validator's own
+        # sentences, already in this call's validation block.
+        units=validation.get("units"),
     )
 
 
@@ -576,7 +618,7 @@ def _head_version_stamp(client: Any, strategy_id: str) -> tuple[Any, Any]:
     the last save". Advisory in every direction.
     """
     try:
-        rows = client.get(f"/v1/strategies/{strategy_id}/versions", limit=1)
+        rows = client.get(f"/v1/strategies/{seg(strategy_id)}/versions", limit=1)
     except Exception:  # noqa: BLE001 — a hint never fails a save
         return None, None
     if isinstance(rows, dict):
@@ -639,6 +681,70 @@ def _no_backtest_next(client: Any, strategy_id: Any) -> str | None:
     if any(normalized_status(row) == "completed" for row in rows if isinstance(row, dict)):
         return None
     return "No backtest of this strategy has been run yet."
+
+
+def _is_screen(source: str | None) -> bool:
+    """Whether ``source`` is a screen: the file kind keel-api stores it as.
+
+    ``file_kind`` is the one owner (keel-api calls it on every save), so a
+    file with ``Outputs(...)`` is a screen here exactly when it is one there.
+    A source that does not parse is not a screen — the save that stored it
+    would have been refused first.
+    """
+    if not source:
+        return False
+    try:
+        from pipeline_engine.dsl.parser import parse_strategy
+        from pipeline_engine.dsl.spec import file_kind
+
+        return file_kind(parse_strategy(source)) == "screener"
+    except Exception:  # noqa: BLE001 — a hint never fails a save
+        return False
+
+
+def screen_not_run_line(strategy_id: Any) -> str:
+    """The `next` a saved screen carries (Q-3637), worded once.
+
+    A screen has no values until it runs, so its next step is the run — the
+    founder's claude.ai test read "No backtest of this strategy has been run
+    yet" here and then called `keel_screener_view` before any run existed.
+    The run call is named only where this surface serves screens (R-L4).
+    """
+    from ._toolsets import screens_served
+
+    line = "This version of the screen has not run yet, so it has no values to view"
+    if strategy_id and screens_served():
+        return f'{line}; keel_screener_run(strategy_id="{strategy_id}") runs it.'
+    return line + "."
+
+
+def _screen_not_run_next(
+    client: Any, strategy_id: Any, version: Any, *, unchanged: bool
+) -> str | None:
+    """`screen_not_run_line`, unless a completed run of this version exists.
+
+    A save that wrote a version wrote one nothing has run, so only an
+    unchanged save (HEAD kept) reads the screen's runs. A read that fails
+    says nothing — it cannot tell, the same rule `_no_backtest_next` keeps.
+    """
+    if not strategy_id:
+        return None
+    if unchanged:
+        try:
+            runs = client.get(f"/v1/screeners/{seg(strategy_id)}/runs", limit=10)
+        except Exception:  # noqa: BLE001 — a hint never fails a save
+            return None
+        if not isinstance(runs, list):
+            return None
+        done = {"completed", "completed_partial"}
+        if any(
+            isinstance(r, dict)
+            and str(r.get("status") or "").lower() in done
+            and (version is None or str(r.get("sequence")) == str(version))
+            for r in runs
+        ):
+            return None
+    return screen_not_run_line(strategy_id)
 
 
 def _persisted_change(before: str | None, after: str) -> Any:
@@ -710,7 +816,7 @@ def _stored_lock(client: Any, strategy_id: str) -> tuple[dict[str, int] | None, 
     Advisory like the HEAD reads below: a failed read sends no lock, which
     keel-api answers by evolving the stored lock itself — the same pins."""
     try:
-        strategy = client.get(f"/v1/strategies/{strategy_id}")
+        strategy = client.get(f"/v1/strategies/{seg(strategy_id)}")
     except Exception:  # noqa: BLE001 — advisory read; the save keeps the stored pins either way
         return None, None
     if not isinstance(strategy, dict):
@@ -748,7 +854,7 @@ def _requested_lock(args: dict) -> dict[str, int] | None:
 def _head_source(client: Any, strategy_id: str) -> tuple[str | None, Any]:
     """The stored HEAD source and its sequence number, best-effort."""
     try:
-        head = client.get(f"/v1/strategies/{strategy_id}/versions/HEAD/source")
+        head = client.get(f"/v1/strategies/{seg(strategy_id)}/versions/HEAD/source")
     except Exception:  # noqa: BLE001 — advisory read
         return None, None
     if not isinstance(head, dict):
@@ -809,9 +915,15 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
         {**(stored_lock or {}), **requested_lock} if requested_lock is not None else stored_lock
     )
 
-    # 1. Local validation always runs first. A dry run validates as the
-    # save it previews (pre_save): the save resolves a criteria universe.
-    validation = _try_local_validate(source, pre_save=dry_run, base_lock=base_lock)
+    # 1. Read authorized Use copies before ordinary local validation. A dry
+    # run validates as the save it previews (pre_save), which resolves a criteria universe.
+    use_context = _use_context(source, ctx, strategy_id)
+    use_validation_args = (
+        {"use_context": use_context, "consumer_id": strategy_id} if use_context is not None else {}
+    )
+    validation = _try_local_validate(
+        source, pre_save=dry_run, base_lock=base_lock, **use_validation_args
+    )
 
     # Per the system policy keel-api ships: validation is FEEDBACK, not a
     # gate. The web app editor (JS validator inline) + keel-api strategy
@@ -834,7 +946,11 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
         try:
             from keel.tools.remote import strategy_compile
 
-            compiled = strategy_compile(source=source, component_lock=validation.get("lock"))
+            compiled = strategy_compile(
+                source=source,
+                component_lock=validation.get("lock"),
+                **({"strategy_id": strategy_id} if use_context is not None and strategy_id else {}),
+            )
         except (UsageError, ValidationError) as e:
             # 400/422 — the compiler rejected the SOURCE. That is the
             # genuine compile verdict this field exists for.
@@ -862,6 +978,10 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
                 "ok": validation["ok"] and not validation["errors"],
                 "errors": validation["errors"],
                 "warnings": validation["warnings"],
+                **({"info": validation.get("info", [])} if use_context is not None else {}),
+                # A screen's output units, read back verbatim (L13 §2a.1);
+                # absent for a strategy, so its result is unchanged.
+                **({"units": validation["units"]} if validation.get("units") else {}),
             },
             "compiled": compiled_ok,
             "compile_error": compile_error,
@@ -1015,7 +1135,7 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
         payload["message"] = commit_message_for_save(args.get("message"), previous_source, source)
         # Update existing
         try:
-            result = client.patch(f"/v1/strategies/{strategy_id}", json=payload)
+            result = client.patch(f"/v1/strategies/{seg(strategy_id)}", json=payload)
         except EntitlementError as e:
             handoff = _maybe_compose_quota_handoff(e, retry_args=_retry_args(args, source))
             if handoff is not None:
@@ -1156,7 +1276,9 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
     stored_source = read_source(client, sid) if sid else None
     if stored_source and stored_source != source:
         validation = _try_local_validate(
-            stored_source, base_lock=result.get("component_lock") or stored_lock
+            stored_source,
+            base_lock=result.get("component_lock") or stored_lock,
+            **use_validation_args,
         )
     saved_source = stored_source or source
 
@@ -1170,6 +1292,8 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
             "ok": validation["ok"] and not validation["errors"],
             "errors": validation["errors"],
             "warnings": validation["warnings"],
+            **({"info": validation.get("info", [])} if use_context is not None else {}),
+            **({"units": validation["units"]} if validation.get("units") else {}),
         },
     }
     if requested_lock is not None and isinstance(result.get("component_lock"), dict):
@@ -1231,6 +1355,7 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
     # The moment the user has just made something is the moment an id
     # and a link say nothing (Q-1619): read the stored strategy back and
     # carry the view — with the change, when this save had a before.
+    screen = _is_screen(saved_source)
     if sid:
         view = view_for_strategy(
             client,
@@ -1243,7 +1368,18 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
             # Already in hand (read once above): the Code tab shows what the
             # save stored, bake included.
             source=saved_source,
+            # The verdict on that stored source (Q-7602): keel-api's read
+            # carries none, so without it the header said "valid" beside
+            # this response's own validation errors.
+            validation=body["validation"],
         )
+        if view is not None and screen:
+            # What the screen produces, in its units (Q-3637): the card and
+            # the text block name each output instead of a backtest line.
+            from ._strategy_view import with_outputs
+            from .strategy_get import screen_units
+
+            view = with_outputs(view, screen_units(client, sid, body["validation"].get("units")))
         if view is not None:
             # `present="receipt"` is the caller saying this save is an
             # intermediate step. `present="view"` (and the default) leave
@@ -1257,13 +1393,18 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
     # The one conditional `next` line (§2.7). A burst of saves is the
     # more urgent thing to say; "no backtest yet" is the next step.
     # An unchanged save wrote no version, so there is no rapid save to report.
-    next_line = (
-        None
-        if unchanged
-        else _rapid_save_next(previous_sequence, previous_created_at, body["version"])
-    )
-    if next_line is None:
-        next_line = _no_backtest_next(client, sid)
+    # A screen is run, never backtested (Q-3637), and a screen with no run
+    # has nothing to view, so its run line outranks the rapid-save line.
+    if screen:
+        next_line = _screen_not_run_next(client, sid, body["version"], unchanged=unchanged)
+    else:
+        next_line = (
+            None
+            if unchanged
+            else _rapid_save_next(previous_sequence, previous_created_at, body["version"])
+        )
+        if next_line is None:
+            next_line = _no_backtest_next(client, sid)
     if next_line:
         body["next"] = next_line
 
@@ -1283,10 +1424,10 @@ INPUT_SCHEMA: dict[str, Any] = {
         "source": {
             "type": "string",
             "description": (
-                "The strategy as Keel DSL text: declarations plus one Pipeline of named "
-                "components and their parameters, as in the example above. Keel validates it "
-                "and saves it to the user's Keel account; nothing runs on the user's machine. "
-                "Exactly one of `source` or `source_file` required."
+                "The strategy or screen as Keel DSL text: declarations plus one Pipeline of "
+                "named components and their parameters, as in the example above. Keel "
+                "validates it and saves it to the user's Keel account; nothing runs on the "
+                "user's machine. Exactly one of `source` or `source_file` required."
             ),
         },
         "source_file": {
@@ -1388,10 +1529,65 @@ LISTED_INPUT_SCHEMA: dict[str, Any] = listed_schema(
 )
 
 
+#: The description every profile shares (the listed base serves exactly this).
+_DESCRIPTION_BASE = (
+    "Save a strategy from Keel DSL source — new, or with `strategy_id` its next "
+    "version; components come from `keel_components_search` and "
+    "`keel_components_get_many`. `dry_run=true` validates and compiles without "
+    "saving. Each save of the source adds a new version to the strategy's history "
+    "and makes it the latest; nothing is deleted, and its earlier versions and "
+    "their backtests stay in its history.\n"
+    "\n"
+    "Declarations, then one Pipeline:\n"
+    "Globals(target_timeframe='1d')\n"
+    "Universe(mode='top_volume', top_n=30, market='perp')\n"
+    "Execution(rebalance='buffered', buffer_threshold=0.2, buffer_mode='relative', rebalance_method='to_edge')\n"
+    "Pipeline([\n"
+    "    PriceDataLoader(),\n"
+    "    ROC(period=20),\n"
+    "    ForecastScaler(avg_abs_target=10.0),\n"
+    "    ForecastCapper(limit=20.0),\n"
+    "    ForecastWeightNormalizer(target_leverage=1.0),\n"
+    "], name='my_strategy')\n"
+    "A forecast's sign is its "
+    "direction (positive long, negative short); polarity is trend-following by "
+    "default, and a mean-reversion signal is the inverted one. A `1d` bar closes "
+    "at 00:00 UTC; `bar_offset` moves that close, and with it every result.\n"
+    "\n"
+    "Unsupported Universe symbols are dropped and named in `universe.note`; "
+    "HIP-3 markets (e.g. `xyz:AAPL`) are not supported yet, coming soon."
+)
+
+#: The one paragraph that teaches a screen (screeners L13 §2a.1): the full
+#: profile always carries it; the listed profile only with the screens flag on.
+SCREEN_PARAGRAPH = (
+    "A screen is the same file with `Outputs(slots=[...])` in place of `Execution(...)`: "
+    'one to three outputs, each written by `Store("name")`, and no weights. Its result '
+    "states each output's unit. A saved screen has no values until `keel_screener_run` "
+    "runs it; its view (sort, top-N) is `keel_screener_view_set`."
+)
+
+#: The listed schema while the screens flag is on: the `source` copy names a screen.
+LISTED_SCREENS_INPUT_SCHEMA: dict[str, Any] = listed_schema(
+    "keel_strategy_compose",
+    INPUT_SCHEMA,
+    descriptions={
+        "source": (
+            "The strategy or screen as Keel DSL text: declarations plus one Pipeline of "
+            "named components and their parameters, as in the example above. Keel "
+            "validates it and saves it to the user's Keel account; nothing runs on the "
+            "user's machine."
+        ),
+        "name": LISTED_INPUT_SCHEMA["properties"]["name"]["description"],
+        "description": LISTED_INPUT_SCHEMA["properties"]["description"]["description"],
+    },
+)
+
 STRATEGY_COMPOSE = register(
     OutcomeTool(
         name="keel_strategy_compose",
         required_action="strategy.create",
+        rate_tier="mutation",
         cli_path=("strategy", "compose"),
         toolset="backtest",
         # grounded-in: system/chat/tool_usage.md:21-25 (compose only AFTER the
@@ -1403,33 +1599,11 @@ STRATEGY_COMPOSE = register(
         # strategy-creation skill + system/trading_domain.md:5,22-28 +
         # system/universe_selection.md (DEFAULTS).
         description=(
-            "Save a strategy from Keel DSL source — new, or with `strategy_id` its next "
-            "version; components come from `keel_components_search` and "
-            "`keel_components_get_many`. `dry_run=true` validates and compiles without "
-            "saving. Each save of the source adds a new version to the strategy's history "
-            "and makes it the latest; nothing is deleted, and its earlier versions and "
-            "their backtests stay in its history.\n"
-            "\n"
-            "Declarations, then one Pipeline:\n"
-            "Globals(target_timeframe='1d')\n"
-            "Universe(mode='top_volume', top_n=30, market='perp')\n"
-            "Execution(rebalance='buffered', buffer_threshold=0.2, buffer_mode='relative', rebalance_method='to_edge')\n"
-            "Pipeline([\n"
-            "    PriceDataLoader(),\n"
-            "    ROC(period=20),\n"
-            "    ForecastScaler(avg_abs_target=10.0),\n"
-            "    ForecastCapper(limit=20.0),\n"
-            "    ForecastWeightNormalizer(target_leverage=1.0),\n"
-            "], name='my_strategy')\n"
-            "A forecast's sign is its "
-            "direction (positive long, negative short); polarity is trend-following by "
-            "default, and a mean-reversion signal is the inverted one. A `1d` bar closes "
-            "at 00:00 UTC; `bar_offset` moves that close, and with it every result.\n"
-            "\n"
-            "Unsupported Universe symbols are dropped and named in `universe.note`; "
-            "HIP-3 markets (e.g. `xyz:AAPL`) are not supported yet, coming soon.\n"
-            "\n"
-            "A same-machine local checkout is written back (`workspace_sync`) unless it "
+            _DESCRIPTION_BASE
+            + "\n\n"
+            + SCREEN_PARAGRAPH
+            + "\n\n"
+            + "A same-machine local checkout is written back (`workspace_sync`) unless it "
             "has local edits; server HEAD is the source of truth."
         ),
         # Listed-profile copy (agent-surface-cleanup spec 01 §2.5, R-4): the
@@ -1438,33 +1612,13 @@ STRATEGY_COMPOSE = register(
         # reason for an override. The forecast-sizer, FixedWeightSizer and
         # branch-sizing sentences left when their validator rules were armed
         # (G-B; NORMALIZER_BEFORE_CONCAT at WARNING, Q-1869).
-        listed_description=(
-            "Save a strategy from Keel DSL source — new, or with `strategy_id` its next "
-            "version; components come from `keel_components_search` and "
-            "`keel_components_get_many`. `dry_run=true` validates and compiles without "
-            "saving. Each save of the source adds a new version to the strategy's history "
-            "and makes it the latest; nothing is deleted, and its earlier versions and "
-            "their backtests stay in its history.\n"
-            "\n"
-            "Declarations, then one Pipeline:\n"
-            "Globals(target_timeframe='1d')\n"
-            "Universe(mode='top_volume', top_n=30, market='perp')\n"
-            "Execution(rebalance='buffered', buffer_threshold=0.2, buffer_mode='relative', rebalance_method='to_edge')\n"
-            "Pipeline([\n"
-            "    PriceDataLoader(),\n"
-            "    ROC(period=20),\n"
-            "    ForecastScaler(avg_abs_target=10.0),\n"
-            "    ForecastCapper(limit=20.0),\n"
-            "    ForecastWeightNormalizer(target_leverage=1.0),\n"
-            "], name='my_strategy')\n"
-            "A forecast's sign is its "
-            "direction (positive long, negative short); polarity is trend-following by "
-            "default, and a mean-reversion signal is the inverted one. A `1d` bar closes "
-            "at 00:00 UTC; `bar_offset` moves that close, and with it every result.\n"
-            "\n"
-            "Unsupported Universe symbols are dropped and named in `universe.note`; "
-            "HIP-3 markets (e.g. `xyz:AAPL`) are not supported yet, coming soon."
-        ),
+        listed_description=_DESCRIPTION_BASE,
+        # The listed screens flag's copy (screeners L13): the base plus the one
+        # paragraph that teaches a screen; with the flag off the listed profile
+        # publishes `listed_description`, the base's bytes.
+        listed_screens_description=_DESCRIPTION_BASE + "\n\n" + SCREEN_PARAGRAPH,
+        listed_screens_title="Save Strategy or Screen",
+        listed_screens_input_schema=LISTED_SCREENS_INPUT_SCHEMA,
         input_schema=INPUT_SCHEMA,
         listed_input_schema=LISTED_INPUT_SCHEMA,
         annotations={

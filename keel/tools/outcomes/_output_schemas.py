@@ -29,7 +29,15 @@ from copy import deepcopy
 from typing import Any
 
 
-__all__ = ["LISTED_OUTPUT_OMISSIONS", "OUTPUT_SCHEMAS", "output_schema_for"]
+__all__ = [
+    "LISTED_OUTPUT_OMISSIONS",
+    "OUTPUT_SCHEMAS",
+    "RESEARCH_INPUT_SCHEMAS",
+    "RESEARCH_OUTPUT_SCHEMAS",
+    "RESEARCH_RECEIPT_TOOLS",
+    "STUDY_SCHEMA",
+    "output_schema_for",
+]
 
 
 def _nullable(kind: str) -> dict[str, Any]:
@@ -111,6 +119,8 @@ _BACKTEST_VIEW: dict[str, Any] = {
         "window_note": _STR,
         # How much of the window held positions (spec 07 §5, Q-1993's stamp).
         "exposure_line": _STR,
+        # Which way the positions went (R-003): the app's one line.
+        "sides_line": _STR,
         "url_line": _STR,
         "markdown": _STR,
         **_ELECTION,
@@ -309,6 +319,29 @@ _REALISM: dict[str, Any] = {
     },
 }
 
+#: The money the strategy needs to trade as backtested (design doc 14 §11):
+#: the run's capital guide, copied — never recomputed — plus its sentence.
+_CAPITAL_GUIDE: dict[str, Any] = {
+    "type": "object",
+    "description": (
+        "What this strategy needs (USD) to place its orders and track its backtest: "
+        "suggested_usd follows the backtest, closest_usd tracks it most closely, "
+        "minimum_usd is the least it runs from. basis 'backtest' sizes it from the "
+        "positions held at once; 'assets' from the asset count. `line` says it plainly. "
+        "Not on the listed profile."
+    ),
+    "properties": {
+        "basis": _STR,
+        "suggested_usd": _INT,
+        "closest_usd": _INT,
+        "minimum_usd": _INT,
+        "n_held": {"type": ["integer", "null"]},
+        "typical_weight": {"type": ["number", "null"]},
+        "universe_size": {"type": ["integer", "null"]},
+        "line": _STR,
+    },
+}
+
 #: The BTC hold reference's numbers (spec 03 §2.2) — never a metric of the run.
 _REFERENCE: dict[str, Any] = {
     "type": "object",
@@ -342,6 +375,25 @@ _EXPOSURE: dict[str, Any] = {
         "gross_max": {"type": "number"},
         "bars_net_long": _INT,
         "bars_net_short": _INT,
+        "line": _STR,
+    },
+}
+
+_SIDES: dict[str, Any] = {
+    "type": "object",
+    "description": (
+        "Positions by side: long and short counts (they sum to the position count; one "
+        "still open at the end counts on its side), flips (positions that ended by "
+        "switching direction on the same bar; each adds one to both sides), and each "
+        "side's P&L after fees and before carry, in account currency, with open positions "
+        "marked at the last price. Absent on runs recorded before these were stored."
+    ),
+    "properties": {
+        "positions_long": _INT,
+        "positions_short": _INT,
+        "flips": _INT,
+        "pnl_long": {"type": "number"},
+        "pnl_short": {"type": "number"},
         "line": _STR,
     },
 }
@@ -476,12 +528,15 @@ _BACKTEST_PROPS: dict[str, Any] = {
     "window_adjusted": _OBJ,
     "quota": _ARR,
     "quota_notice": _STR,
+    "floor_notice": _STR,
     "remaining": _OBJ,
     "good_result": _OBJ,
     "realism": _REALISM,
+    "capital_guide": _CAPITAL_GUIDE,
     "reference": _REFERENCE,
     "few_fills_note": _STR,
     "exposure": _EXPOSURE,
+    "sides": _SIDES,
     "cost_model": _COST_MODEL,
     "slice": _SLICE,
     "periods": _PERIODS,
@@ -646,11 +701,19 @@ def _envelope(props: dict[str, Any], summary: str) -> dict[str, Any]:
     the shared error set. Top-level `properties` are the declared list;
     `additionalProperties` stays open — while the probe keeps the card rows
     in `structuredContent` they ride as additional fields, and a schema that
-    rejects a real envelope is worse than none."""
+    rejects a real envelope is worse than none.
+
+    RI-588: a field both sets declare keeps the KIND's declaration (in the
+    shared set's position, so no other kind's schema moves). A study's
+    `quota_notice` is null on every submit without a notice, and the error
+    set's plain string silently replaced its `string | null`, so a strict
+    client refused every keel_research_run."""
+    properties = {**props, **_ERROR_PROPS}
+    properties.update({k: v for k, v in props.items() if k in _ERROR_PROPS})
     return {
         "type": "object",
         "description": summary,
-        "properties": {**props, **_ERROR_PROPS},
+        "properties": properties,
     }
 
 
@@ -663,8 +726,52 @@ _STRATEGY = _envelope(
     "A strategy result: `view` renders it; an error carries `code` and `message` instead.",
 )
 
+_SCREENER = _envelope(
+    {
+        **_BASE_PROPS,
+        "view": {
+            "type": "object",
+            "required": ["kind", "size", "markdown"],
+            "properties": {
+                "kind": {"const": "screener"},
+                "size": {"enum": ["receipt", "view"]},
+                "markdown": {"type": "string"},
+            },
+        },
+        **{
+            key: {"type": ["object", "null"]}
+            for key in (
+                "screener",
+                "run",
+                "in_flight",
+                "headline",
+                "manifest",
+                "latest_top",
+                "passing",
+                "copy",
+            )
+        },
+        "labels": {"type": ["array", "null"], "items": {"type": "object"}},
+        "actions": {"type": ["array", "null"], "items": {"type": "object"}},
+        # keel_screener_view(include_view_source=true): the saved view source,
+        # its revision and recent revisions (L13 §2a.3).
+        "view_source": {"type": ["object", "null"]},
+        # keel_screener_run: the backtest runs left after this one (Q-3634).
+        "remaining": _OBJ,
+        # The ranked output's range over every coin with a value (Q-3639).
+        "range": {"type": ["object", "null"]},
+        # keel_screener_view_set: the revision saved (the next
+        # `expected_revision`), the view check and the output units.
+        "revision": {"type": ["integer", "null"]},
+        "check": {"type": ["object", "null"]},
+        "units": {"type": ["array", "null"], "items": {"type": "object"}},
+    },
+    "A screen result selected by the API; view.markdown is also returned as text.",
+)
+
 #: kind → its declared schema (spec 02 §2.8).
 KIND_SCHEMAS: dict[str, dict[str, Any]] = {
+    "screener": _SCREENER,
     "backtest": _BACKTEST,
     "comparison": _envelope(
         _COMPARISON_PROPS,
@@ -679,6 +786,9 @@ KIND_SCHEMAS: dict[str, dict[str, Any]] = {
 
 #: Tool name → its declared output schema. Exactly the `VIEW_TOOLS`.
 OUTPUT_SCHEMAS: dict[str, dict[str, Any]] = {
+    "keel_screener_run": _SCREENER,
+    "keel_screener_view": _SCREENER,
+    "keel_screener_view_set": _SCREENER,
     "keel_backtest_run": _BACKTEST,
     "keel_backtest_watch": _BACKTEST,
     "keel_backtest_summarize": _BACKTEST,
@@ -694,6 +804,507 @@ OUTPUT_SCHEMAS: dict[str, dict[str, Any]] = {
 }
 
 
+# ---------------------------------------------------------------------------
+# Research (spec 07): the day-0 contract rows (BUILD-PLAN §3.10, §4.4)
+# ---------------------------------------------------------------------------
+#
+# The research tools' input and output schemas, checked in before the tools
+# themselves so the app, the fixtures and chat build against them. The tool
+# modules (`research_*.py`) take their PROPERTIES from here; when they register,
+# their names join `VIEW_TOOLS`, `OUTPUT_SCHEMAS` and `KIND_SCHEMAS["study"]`
+# beside `_channels.CHANNEL_MAP["study"]` (07 §3.3) in one change. keel-api's
+# `services/keel-api/src/schemas/research.py` is the route side of the same
+# contract; `tests/test_research_schemas.py` holds the two in step.
+
+_NULL_STR = _nullable("string")
+
+#: `view` with `kind: "study"` (07 §3.1); `markdown` is the text block.
+_STUDY_VIEW: dict[str, Any] = {
+    "type": "object",
+    # `markdown` is the text block (`content`); a study read drops it from
+    # structuredContent (07 §3.3: a duplicate, and AT-5's 8,000-byte budget).
+    "description": "One study, plan or brief; the text block carries it in words.",
+    "required": ["kind", "size"],
+    "properties": {
+        "kind": {"const": "study"},
+        # 13 §2.1 (WL-AG-10): the layout the card draws, set by the SDK for every tool and read.
+        "mode": {
+            "enum": ["plan", "run", "study", "list", "chart", "addresses", "project", "library"]
+        },
+        # `progress`: the run card's one fixed height (D-328 D5).
+        "size": {"enum": ["receipt", "view", "progress"]},
+        "markdown": _STR,
+        **_ELECTION,
+        "version": {"type": "integer", "minimum": 1},
+    },
+}
+
+#: The structured home of every research envelope (07 §3.1, §3.3's channel
+#: table, §4.1's plan, §3.5's data page, §4.7's brief). `headline` and
+#: `view.markdown` are not here: `card_summary` is the headline's one home
+#: and the text carries the rest (07 §3.3). `steps` is a list on a plan and
+#: `{total, by_status}` on a study read (RL-58).
+_STUDY_PROPS: dict[str, Any] = {
+    **_BASE_PROPS,
+    "view": _STUDY_VIEW,
+    # 07 §3.1
+    "study": {"type": "object"},
+    "footing": {"type": ["object", "null"]},
+    "counts": {"type": ["object", "null"]},
+    "stale": _ARR,
+    "links": _OBJ,
+    "draft": {"type": ["object", "null"]},
+    # RI-483: a study read's `base` (`{version, revision, evidence_hash}` of the read): what an edit of its source
+    # sends with keel_research_plan's edit form; null on a share read.
+    "base": {"type": ["object", "null"]},
+    "progress": {"type": ["object", "null"]},
+    "not_measured": _ARR,
+    "card_summary": {"type": ["object", "null"]},
+    # 07 §3.3: bounded by construction (RL-58)
+    "checks": {
+        "type": ["object", "null"],
+        "properties": {
+            "count": _INT,
+            "met": _INT,
+            "rows": {"type": "array", "maxItems": 5},
+        },
+    },
+    "steps": {"type": ["array", "object"]},
+    "views": {"type": ["array", "object"]},
+    "notes": {"type": ["array", "object"]},
+    "notes_total": _INT,
+    "saved": _NULL_STR,
+    # 06 §4.2, §4.9, §9: the study's Page, the viewer's run rights, the stored
+    # form (owner only) and the pinned subjects
+    "page": {"type": ["object", "null"]},
+    "can_run": _BOOL,
+    "can_retry": _BOOL,
+    # RI-588: a list on a plan; `{total}` on a study read, where the card
+    # reducer counts them (`_research_view`, 07 §3.3: the text names them).
+    "subjects": {"type": ["array", "object"], "properties": {"total": _INT}},
+    # 07 §4.3: the submit's quota (the `research_studies` unit only)
+    "quota": _ARR,
+    "quota_notice": _NULL_STR,
+    # 07 §4.1 / 04 §1.1: the plan
+    "plan_id": _STR,
+    "expires_at": _STR,
+    "class": {"enum": ["new_study", "new_version", "linked_study", "resume", "retry"]},
+    "writes": _STR,
+    "linked_reason": _NULL_STR,
+    "source": _NULL_STR,
+    "filled": _ARR,
+    "issues": _ARR,
+    "runs": _OBJ,
+    "addresses_carried": _ARR,
+    "addresses_changed": _ARR,
+    "addresses_moved": _ARR,
+    "estimate": _OBJ,
+    "allowance": _OBJ,
+    "run_allowed": _BOOL,
+    "limits": _ARR,
+    "locked": _ARR,
+    "versions_tried": {"type": ["object", "array"]},
+    "preview": _OBJ,
+    "words": _OBJ,
+    # 07 §3.5 / §4.5: one chart's rows, and a subject's addresses (§4.12)
+    "pagination": _OBJ,
+    # WL-SV-08 (13 §2.1, D8): a receipt's served line and a project's page; a plan's edit class (WL-SV-24).
+    "card_line": {"type": ["string", "null"]},
+    "link": {"type": ["string", "null"]},
+    "edit": {"type": ["object", "null"]},
+    "preview_delta": {"type": ["object", "array", "null"]},
+    # RI-588: a data page's facts; null on the brief (keel-api BriefResponse.facts: Json | None)
+    "facts": {"type": ["object", "null"]},
+    "subject": _STR,
+    "rows_total": _INT,
+    "by_reason": _OBJ,
+    # 07 §4.4 (no id) and §4.7: the study list and the brief
+    "studies": _ARR,
+    "studies_total": _INT,
+    "by_state": _OBJ,
+    "projects": _ARR,
+    "projects_total": _INT,
+    "families_total": _INT,
+    "set_aside": _ARR,
+    "set_aside_total": _INT,
+    "planned": _ARR,
+    "planned_total": _INT,
+    "paper_and_live": _ARR,
+    "paper_and_live_total": _INT,
+    # RI-592: the plan's paged children (07 §3.5), the add-plan's rows (04 §1.7,
+    # RI-385), a map data page's filling grid (D-158), the share read's Keel fact
+    "children": {"type": ["object", "null"]},
+    "added": {"type": ["array", "null"]},
+    "refused": {"type": ["array", "null"]},
+    "filling": {"type": ["object", "null"]},
+    "by_keel": _BOOL,
+    # RI-592: a project read (D-189's keel_research_get project_id, D-177's shape)
+    "project_id": _STR,
+    "name": _STR,
+    "question": _NULL_STR,
+    "archived": _BOOL,
+    # RI-593: `{total}` on MCP (the text names the items, as for subjects)
+    "items": {"type": ["array", "object"], "properties": {"total": _INT}},
+    "items_total": _INT,
+}
+
+STUDY_SCHEMA = _envelope(
+    _STUDY_PROPS,
+    "A research result selected by the API; view.markdown is also returned as text.",
+)
+
+#: The research view tools → their declared output schema (07 §2.2: plan,
+#: run, get, view_set and brief carry a view; note, cancel and make_signal
+#: answer in text).
+RESEARCH_OUTPUT_SCHEMAS: dict[str, dict[str, Any]] = {
+    "keel_research_plan": STUDY_SCHEMA,
+    "keel_research_run": STUDY_SCHEMA,
+    "keel_research_get": STUDY_SCHEMA,
+    "keel_research_view_set": STUDY_SCHEMA,
+    "keel_research_brief": STUDY_SCHEMA,
+}
+
+#: 07 §2.2's research tools whose mode is "text (receipt line)": note, cancel and make_signal. Their text block is
+#: the receipt the handler wrote and the served object rides as `structuredContent`, so a caller reads `ref`, `next`
+#: and `progress` as fields (RI-220; `_mcp_adapter.receipt_result`). They declare no output schema (07 §3.3 declares
+#: the five view tools'), and none is listed (§2.2), so no connector holds the `{"result": string}` wrapper for them.
+RESEARCH_RECEIPT_TOOLS = frozenset(
+    {"keel_research_note", "keel_research_cancel", "keel_research_make_signal"}
+)
+
+# The research view tools join the registry's kinds (07 §3.3): one schema
+# for the study kind, declared by each of the five view tools.
+KIND_SCHEMAS["study"] = STUDY_SCHEMA
+OUTPUT_SCHEMAS.update(RESEARCH_OUTPUT_SCHEMAS)
+
+_STUDY_ID = {"type": "string", "pattern": "^stu_", "x-cli-positional": True}
+_SUBJECT_CALLS = {"type": "array", "items": {"type": "string", "minLength": 1}}
+_DATE = {"type": "string", "format": "date"}
+
+#: 07 §4.1's eight plan forms, one flat object (the handler refuses a mixture).
+_PLAN_PROPS: dict[str, Any] = {
+    "template": {"enum": ["check", "signal", "compare", "map", "entries"]},
+    "subjects": {**_SUBJECT_CALLS, "minItems": 1, "maxItems": 50},
+    "days": {
+        "type": "object",
+        "properties": {"start": _DATE, "end": _DATE},
+        "additionalProperties": False,
+    },
+    "split": _DATE,
+    "coins": {"type": "string", "maxLength": 500},
+    # RI-138/RI-164 (06 §3.10, RL-74): the template form's Costs and run settings; left out, the template's own
+    # (4.5 bp a trade each side, no delay, 1x, no cap). The validator judges the ranges.
+    "costs": {
+        "oneOf": [
+            {
+                "type": "object",
+                "properties": {"fee": {"type": "number"}, "slippage": {"type": "number"}},
+                "required": ["fee", "slippage"],
+                "additionalProperties": False,
+            },
+            {"enum": ["none"]},
+        ]
+    },
+    # D-344 (1), 07 §8.4: the listed word is "exposure multiple", never "leverage"; the API field is still
+    # `leverage` (research_plan.plan_body maps it). No alias: no released connector or CLI ever took `leverage`
+    # (Research was never listed in prod), and PARAM_ALIASES' wire arms are for released renames.
+    "delay": {"type": "integer", "minimum": 0, "maximum": 3},
+    "exposure_multiple": {"type": "number", "exclusiveMinimum": 0},
+    "vol_cap": {"type": "number", "exclusiveMinimum": 0},
+    "axes": {**_SUBJECT_CALLS, "minItems": 1, "maxItems": 3},
+    "source": {"type": "string", "minLength": 1, "maxLength": 131072},
+    "study_id": _STUDY_ID,
+    # RI-482/RI-483 (07 §4.1's edit form, D-301): the read an edit's `source` was made on, copied from that read's
+    # `base` (keel_research_get serves it). A base that is not the head, or no base while a Draft is ahead of the
+    # version that ran, is refused RESEARCH_REVISION_CONFLICT; nothing is planned. keel-api's PlanBase is the shape.
+    "base": {
+        "type": "object",
+        "properties": {
+            "version": {"type": "integer", "minimum": 1},
+            "revision": {"type": "integer", "minimum": 1},
+            "evidence_hash": {"type": "string", "minLength": 1, "maxLength": 128},
+        },
+        "required": ["version", "revision", "evidence_hash"],
+        "additionalProperties": False,
+    },
+    "add": {**_SUBJECT_CALLS, "minItems": 1, "maxItems": 10},
+    "to": _STR,
+    "share_id": {"type": "string", "minLength": 23, "maxLength": 23},
+    "from_plan": {"type": "string", "pattern": "^pln_"},
+    "version": {"type": "integer", "minimum": 1},
+    "resume": _BOOL,
+    "retry": _BOOL,
+    # RI-451/RI-463 (07 §4.1's cell form, D-290): one map cell's full report, `study_id` + `cell`. `grid` the map's
+    # step id, `at` the cell's setting values (axis name to value), `subject` when the map has several. keel-api's
+    # CellForm is the closed shape; the planner judges the cell.
+    "cell": {
+        "type": "object",
+        "properties": {
+            "grid": {"type": "string", "minLength": 1, "maxLength": 64},
+            "at": {
+                "type": "object",
+                "maxProperties": 50,
+                "additionalProperties": {"type": ["boolean", "integer", "number", "string"]},
+            },
+            "subject": {"type": "string", "minLength": 1, "maxLength": 64},
+        },
+        "required": ["grid", "at"],
+        "additionalProperties": False,
+    },
+}
+
+_PRESENT = {"type": "string", "enum": ["receipt", "view"]}
+
+#: A3 #7 / WL-AG-16 (07 §8.5, R-25): one line per listed research parameter. The listed ceilings count tool
+#: descriptions only (test_description_shape, test_listed_screens), so these cost no listed budget; measured
+#: 2026-11-17. `_run`'s plan fields stay listed (removing one breaks a frozen connector, R-25) and say so.
+_PLAN_WORDS: dict[str, str] = {
+    "template": "The template form: which study to plan. Send it with subjects.",
+    "subjects": (
+        'Each a study/1 subject call, e.g. `Strategy("str_…@3")`, `Output("str_…@1", output="…")` or '
+        'a library ref such as `Output("keel/momentum_7d@1", output="momentum_7d")`; always pinned with @version. '
+        "One for check, map and entries; two to eight for compare."
+    ),
+    "days": 'The days to measure, `{"start": "YYYY-MM-DD", "end": "YYYY-MM-DD"}`; left out, the template\'s.',
+    "split": "A date that divides the days into before and after (YYYY-MM-DD).",
+    "coins": "A coin rule, e.g. `TopByVolume(30, days=30)`; left out, the subject's own coins.",
+    "costs": 'Fees and slippage a fill as fractions, `{"fee": 0.00045, "slippage": 0.00045}`, or "none".',
+    "delay": "Act this many bars late (0 to 3).",
+    "exposure_multiple": "The exposure multiple the backtest runs at (1 = as the strategy sizes it).",
+    "vol_cap": "A volatility cap on the book, as a fraction a year.",
+    "axes": (
+        "map only, 1 to 3 `SettingAxis(address, [values], name=…)` calls; copy each address from "
+        "keel_research_get(subject=…)."
+    ),
+    "source": "A whole study/1 document (the document form, or the edit form with study_id).",
+    "study_id": "The study an edit, add, cell or again form changes (stu_…).",
+    "base": "The read an edit's source came from, copied from that read's `base` (keel_research_get serves it).",
+    "add": 'The add form: subjects or references to add, e.g. `Output("str_…@1", output="…")`.',
+    "to": "With add: the step id whose against= list the reference joins.",
+    "share_id": "The from-share form: plan a shared study on your own subjects (send your subjects too).",
+    "from_plan": "Plan again from an expired or stale plan (pln_…).",
+    "version": (
+        "With resume or retry: the study version (default its newest). Alone with study_id: plan that "
+        "never-run Draft as it is saved."
+    ),
+    "resume": "With study_id: resume a stopped run of the study.",
+    "retry": "With study_id: retry only the runs that failed on Keel's side (free).",
+    "cell": 'One map cell\'s full report, `{"grid": step id, "at": {axis: value}}`, with study_id.',
+}
+_RUN_WORDS: dict[str, str] = {
+    "plan_id": "The plan to run, from keel_research_plan (pln_…). Send it alone.",
+    "max_runs": "A direct run's ceiling: the most runs it may start. Required without plan_id.",
+    "wait": "Wait briefly for the study before answering (default true).",
+    **{k: f"Direct run: {v[0].lower()}{v[1:]}" for k, v in _PLAN_WORDS.items()},
+    # D-341 (3): the draft form is the plan's only (a Draft's run is planned first, then run by its plan_id).
+    "version": "Direct run: with resume or retry, the study version (default its newest).",
+}
+_GET_WORDS: dict[str, str] = {
+    "study_id": "The study to read (stu_…). With no id at all, get lists the user's studies.",
+    "share_id": "A shared study's id (23 characters), to read the snapshot.",
+    "version": "A study version to read (default the newest that ran).",
+    "revision": "A presentation revision of that version.",
+    "view": "A chart's index or exact title: read that chart's rows (25 a page).",
+    "output": 'A step output to read rows of, e.g. "bars" or "costs.summary".',
+    "measures": "With view or output: only these measures (1 to 12).",
+    "where": 'With view or output: fix 1 to 4 axes, e.g. `{"lookback": 20}`.',
+    "sort": 'With view or output: `{"measure": …, "order": "asc" | "desc"}`.',
+    "subject": 'Read a subject\'s settable addresses, e.g. `Strategy("str_…@3")`; send it alone or with include.',
+    "include": 'With subject: "all" also lists addresses that cannot be set; with study_id: "source" adds its document.',
+    "project_id": "Read a project and its items (prj_…).",
+    "cursor": "The cursor a previous page named, to read the next page.",
+    "limit": "Rows a page (1 to 25).",
+}
+_PLAN_PAGING_WORDS: dict[str, str] = {
+    "cursor": "Pages the plan's list of the runs it would start (the cursor a previous plan named).",
+    "limit": "Children a page (1 to 25).",
+}
+
+
+def _described(props: dict[str, Any], words: dict[str, str]) -> dict[str, Any]:
+    """Each property with its one-line description, never mutating a shared fragment (``_STUDY_ID`` is shared)."""
+    missing = sorted(set(words) - set(props))
+    if missing:
+        raise KeyError(f"words for no property: {missing}")
+    return {k: ({**v, "description": words[k]} if k in words else v) for k, v in props.items()}
+
+
+#: The research MCP tools' input properties and required names (07 §4).
+#: Each tool module takes its PROPERTIES and REQUIRED from this table; the
+#: descriptions (listed copy, 07 §8.5) are the modules'.
+RESEARCH_INPUT_SCHEMAS: dict[str, dict[str, Any]] = {
+    "keel_research_plan": {
+        "type": "object",
+        "properties": {
+            **_PLAN_PROPS,
+            "cursor": _STR,
+            "limit": {"type": "integer", "minimum": 1, "maximum": 25},
+        },
+        "required": [],
+    },
+    "keel_research_run": {
+        "type": "object",
+        "properties": {
+            "plan_id": {"type": "string", "pattern": "^pln_", "x-cli-positional": True},
+            **_PLAN_PROPS,
+            "max_runs": {"type": "integer", "minimum": 0},
+            "wait": {"type": "boolean", "default": True},
+            "present": _PRESENT,
+        },
+        "required": [],
+    },
+    "keel_research_get": {
+        "type": "object",
+        "properties": {
+            "study_id": _STUDY_ID,
+            "share_id": {"type": "string", "minLength": 23, "maxLength": 23},
+            "version": {"type": "integer", "minimum": 1},
+            "revision": {"type": "integer", "minimum": 0},
+            "view": {"type": ["integer", "string"]},
+            "output": _STR,
+            "measures": {"type": "array", "items": _STR, "minItems": 1, "maxItems": 12},
+            "where": {"type": "object", "minProperties": 1, "maxProperties": 4},
+            "sort": {
+                "type": "object",
+                "properties": {"measure": _STR, "order": {"enum": ["asc", "desc"]}},
+                "required": ["measure", "order"],
+                "additionalProperties": False,
+            },
+            "subject": _STR,
+            "include": {"enum": ["settable", "all", "source"]},
+            # D-189 (07 §5: a read is read-scoped): a project's items by kind and name (D-177).
+            "project_id": {"type": "string", "pattern": "^prj_"},
+            # R-24 (WL-AG-08): Keel's library, so a hosted agent finds the refs a study names.
+            "library": {
+                "enum": ["signals", "benchmarks", "strategies", "market_states"],
+                "description": (
+                    "Lists Keel's library with each item's exact subject call, e.g. "
+                    '`Output("keel/momentum_7d@1", output="momentum_7d")`; send it with nothing else.'
+                ),
+            },
+            "cursor": _STR,
+            "limit": {"type": "integer", "minimum": 1, "maximum": 25},
+            "present": _PRESENT,
+        },
+        "required": [],
+    },
+    "keel_research_view_set": {
+        "type": "object",
+        "properties": {
+            "study_id": _STUDY_ID,
+            "source": {"type": "string", "minLength": 1, "maxLength": 131072},
+            "expected_revision": {"type": "integer", "minimum": 0},
+            "revert_to": {"type": "integer", "minimum": 0},
+            # D-191 (RI-169): the title or question alone, written by the server; keel-api's StudyTextSet.
+            "set": {
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string", "minLength": 1, "maxLength": 200},
+                    "question": {"type": ["string", "null"], "maxLength": 500},
+                },
+                "minProperties": 1,
+                "additionalProperties": False,
+            },
+            "dry_run": {"type": "boolean", "default": False},
+            "label": {"type": "string", "maxLength": 80},
+            "present": _PRESENT,
+        },
+        "required": ["study_id", "expected_revision"],
+    },
+    "keel_research_brief": {
+        "type": "object",
+        "properties": {
+            "project_id": {"type": "string", "pattern": "^prj_"},
+            "limit": {"type": "integer", "minimum": 1, "maximum": 50},
+            "cursor": _STR,
+        },
+        "required": [],
+    },
+    "keel_research_note": {
+        "type": "object",
+        "properties": {
+            "anchor": {"type": "string", "pattern": "^(stu|prj)_", "x-cli-positional": True},
+            "kind": {
+                "enum": [
+                    "hypothesis",
+                    "note",
+                    "decision",
+                    "set_aside",
+                    "restored",
+                    "agent_session",
+                ]
+            },
+            "body": {"type": "string", "minLength": 1, "maxLength": 8192},
+        },
+        "required": ["anchor", "kind", "body"],
+    },
+    "keel_research_cancel": {
+        "type": "object",
+        "properties": {
+            "run_set_id": {"type": "string", "pattern": "^rus_", "x-cli-positional": True},
+            "study_id": {"type": "string", "pattern": "^stu_"},
+            "version": {"type": "integer", "minimum": 1},
+        },
+        "required": [],
+    },
+    "keel_research_make_signal": {
+        "type": "object",
+        "properties": {
+            "study_id": _STUDY_ID,
+            "version": {"type": "integer", "minimum": 1},
+            "subject": {"type": "string", "minLength": 1},
+            "name": {"type": "string", "minLength": 1, "maxLength": 120},
+        },
+        "required": ["study_id", "version", "subject", "name"],
+    },
+}
+
+
+#: WL-AG-15: the other research tools' parameters, each a line on MCP (full profile) and in `keel research … --help`.
+_OTHER_WORDS: dict[str, dict[str, str]] = {
+    "keel_research_view_set": {
+        "study_id": "The study whose presentation changes (stu_…).",
+        "source": "The whole study/1 document with the new title, bars or charts (only those may change).",
+        "expected_revision": "The revision your read showed; a newer one is refused, nothing is overwritten.",
+        "revert_to": "A revision to go back to, instead of source.",
+        "set": 'Rename the study or change its question alone, `{"title": …}` or `{"question": …}` (null removes it).',
+        "dry_run": "Check the change without saving it.",
+        "label": "A short name for this revision.",
+    },
+    "keel_research_brief": {
+        "project_id": "Only this project's studies and notes (prj_…).",
+        "limit": "Studies a page (1 to 50, default 25).",
+        "cursor": "The cursor the previous brief named.",
+    },
+    "keel_research_note": {
+        "anchor": "The study or project the note is on (stu_… or prj_…).",
+        "kind": "hypothesis, decision, note or agent_session; set_aside and restored set a study aside or bring it back.",
+        "body": "The note, in your words (up to 8,192 characters).",
+    },
+    "keel_research_cancel": {
+        "run_set_id": "The run to stop (rus_…), from the study's read.",
+        "study_id": "Or the study (stu_…), with version.",
+        "version": "With study_id: the version whose run stops.",
+    },
+    "keel_research_make_signal": {
+        "study_id": "The study whose mix becomes a signal (stu_…).",
+        "version": "The study version the mix is read from.",
+        "subject": "The mix subject's key, as the study names it.",
+        "name": "The new signal's name.",
+    },
+}
+
+for _name, _words in (
+    ("keel_research_plan", {**_PLAN_WORDS, **_PLAN_PAGING_WORDS}),
+    ("keel_research_run", _RUN_WORDS),
+    ("keel_research_get", _GET_WORDS),
+    *_OTHER_WORDS.items(),
+):
+    RESEARCH_INPUT_SCHEMAS[_name] = {
+        **RESEARCH_INPUT_SCHEMAS[_name],
+        "properties": _described(RESEARCH_INPUT_SCHEMAS[_name]["properties"], _words),
+    }
+
 #: Top-level properties the LISTED profile's output schemas OMIT (Q-2080,
 #: 2026-10-01), per kind. Each is a field the hosted listed server never
 #: emits: `deploy` (the full-profile deploy line), `sync_note` and
@@ -706,11 +1317,21 @@ OUTPUT_SCHEMAS: dict[str, dict[str, Any]] = {
 #: declares it.
 LISTED_OUTPUT_OMISSIONS: dict[str, frozenset[str]] = {
     "backtest": frozenset(
-        {"deploy", "sync_note", "auto_pushed_commit_id", "live_readiness_blockers", "exit_code"}
+        {
+            "deploy",
+            "sync_note",
+            "auto_pushed_commit_id",
+            "live_readiness_blockers",
+            "exit_code",
+            # The funding amounts (design doc 14 §11) are for the full
+            # profile: the listed connector is for research and backtests.
+            "capital_guide",
+        }
     ),
     "strategy": frozenset({"sync_note", "live_readiness_blockers", "exit_code"}),
     "comparison": frozenset({"exit_code"}),
     "status": frozenset({"exit_code"}),
+    "study": frozenset({"exit_code"}),
 }
 
 

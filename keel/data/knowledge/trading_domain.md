@@ -12,12 +12,12 @@ Supported is not the same as advisable: the default is still `1d`, and the table
 
 **Session / time-of-day filters are the session family** — `SessionMask(timezone="America/New_York", open="09:30", close="16:00", days="weekdays")` restricts trading to custom hours (IANA zone, DST by the local clock, a bar belongs to the session containing its close); `SessionRangeHigh/Low`, `SessionVWAP`, `SessionCloseExit`, `SessionRelativeVolume` carry the same clock. All are close-triggered ("supported under bar-close semantics"); a 24/7 day anchor is `anchor="day"`. A resampler does not express a session.
 
-| Strategy type            | Default | Acceptable range | Rationale                                                                             |
-| ------------------------ | ------- | ---------------- | ------------------------------------------------------------------------------------- |
-| Trend / momentum         | 1d      | 8h–1d            | Trends develop over days/weeks. Shorter bars add noise without signal.                |
-| Mean reversion           | 1d      | 4h–1d            | Reversions happen faster than trends. Intraday MR (4h–8h) is reasonable if requested. |
-| Carry / funding          | 1d      | 1d only          | Funding rates are 8h events; daily aggregation is natural.                            |
-| Screen-select / rotation | 1d      | 1d only          | Rotation signals are multi-day by nature.                                             |
+| Strategy type              | Default | Acceptable range | Rationale                                                                             |
+| -------------------------- | ------- | ---------------- | ------------------------------------------------------------------------------------- |
+| Trend / momentum           | 1d      | 8h–1d            | Trends develop over days/weeks. Shorter bars add noise without signal.                |
+| Mean reversion             | 1d      | 4h–1d            | Reversions happen faster than trends. Intraday MR (4h–8h) is reasonable if requested. |
+| Carry / funding            | 1d      | 1d only          | Funding rates are 8h events; daily aggregation is natural.                            |
+| Rank-and-select / rotation | 1d      | 1d only          | Rotation signals are multi-day by nature.                                             |
 
 Timeframe and trade count move together:
 

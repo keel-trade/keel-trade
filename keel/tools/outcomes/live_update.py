@@ -230,6 +230,7 @@ LIVE_UPDATE = register(
     OutcomeTool(
         name="keel_live_update",
         required_action="runner.read",
+        rate_tier="live",
         cli_path=("live", "update"),
         toolset="live-write",
         # grounded-in: deploy-wizard-v2 specs/04-intents-for-all-flows.md §4

@@ -112,7 +112,9 @@ SERVED_DOCS = (
     "reasoning_principles",
     "regime_conditioning",
     "risk_management",
-    "screen_select_patterns",
+    "rank_select_patterns",
+    "screen_recipes",
+    "screener",
     "session_and_structure_patterns",
     "slots",
     "strategy_paths",
@@ -121,6 +123,7 @@ SERVED_DOCS = (
     "trading_domain",
     "types",
     "universe_selection",
+    "view_language",
 )
 
 #: Keel's in-app-only guidance (system/chat/ in the monorepo): never served.
@@ -145,7 +148,13 @@ def test_the_served_docs_are_exactly_the_pinned_shared_layer():
     from keel.errors import KeelError
     from keel.mcp.server import _bundled_knowledge_sections
 
-    docs = sorted(t for t in _index() if t not in RESERVED_TOPICS)
+    from keel.tools.outcomes._toolsets import RESEARCH_TOPICS
+
+    # Research's two topics live under libs/research, outside the engine's
+    # shared layer (07 §4.10, RL-28), and are pinned by test_research_data.
+    index = _index()
+    assert RESEARCH_TOPICS <= set(index)
+    docs = sorted(t for t in index if t not in RESERVED_TOPICS and t not in RESEARCH_TOPICS)
     assert docs == sorted(SERVED_DOCS)
     knowledge = set(_bundled_knowledge_sections())
     for topic in IN_APP_ONLY:

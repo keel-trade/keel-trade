@@ -66,9 +66,11 @@ monorepo = pytest.mark.skipif(
 )
 
 
-@pytest.fixture(scope="module")
-def surface() -> sf.ServedSurface:
-    return sf.listed_surface()
+@pytest.fixture(scope="module", params=[False, True], ids=["research-off", "research-on"])
+def surface(request) -> sf.ServedSurface:
+    """D-344 (1), CONFORM-MCP F2: every guard runs over the listed surface with Research served too; the three
+    listed research tools and the ``research`` / ``research_steps`` / ``step:`` topics were never scanned."""
+    return sf.listed_surface(research=request.param)
 
 
 @pytest.fixture(scope="module")
@@ -119,15 +121,18 @@ def test_g2_keel_help_serves_exactly_the_pinned_topics(surface):
     """# SEED: a chat/ file listed as `reference` in LAYERS.yaml (or any
     in-app file vendored) reappears here as an unexpected topic."""
     docs = surface.help_topics() - sf.HELP_NAMESPACES
-    unexpected = sorted(docs - SERVED_DOC_TOPICS)
-    missing = sorted(SERVED_DOC_TOPICS - docs)
+    pinned = SERVED_DOC_TOPICS | (sf.RESEARCH_DOC_TOPICS if surface.research else frozenset())
+    unexpected = sorted(docs - pinned)
+    missing = sorted(pinned - docs)
     assert not unexpected and not missing, (
         f"keel_help topics drifted from the pinned served set — in-app only but served: "
         f"{unexpected}; pinned but not served: {missing}"
     )
     # Non-vacuity: the pinned list is the whole Reference layer, and a shared
     # file (control) is present in it.
-    assert len(SERVED_DOC_TOPICS) == 31
+    screen_topics = {"screener", "view_language", "screen_recipes"}
+    assert screen_topics <= SERVED_DOC_TOPICS
+    assert len(SERVED_DOC_TOPICS - screen_topics) == 31
     assert "types" in docs and "operating_core" in docs
     assert not (SERVED_DOC_TOPICS & NOT_SERVED_TOPICS)
 
@@ -179,9 +184,20 @@ def _manifest_files() -> dict[str, str]:
 @monorepo
 def test_g2_vendored_corpus_is_exactly_the_shared_layer():
     files = _manifest_files()
-    shared = sorted(rel for rel, layer in files.items() if layer in ("reference", "sectioned"))
+    # The screens core is the instruction builder's input (vendored beside
+    # the builder, screeners L13), never a served topic.
+    shared = sorted(
+        rel
+        for rel, layer in files.items()
+        if layer in ("reference", "sectioned") and rel != "screens_core.md"
+    )
     expected = {_vendored_path_for(rel) for rel in shared}
+    # Research's help topics are bundled beside the layer from libs/research
+    # (07 §4.10; outside the engine roots, RL-28); test_research_data pins them.
+    research = {"reference/research.md", "reference/research_steps.md"}
     vendored = _vendored_relpaths()
+    assert research <= vendored
+    vendored = vendored - research
     assert vendored == expected, (
         f"vendored but not shared: {sorted(vendored - expected)}; "
         f"shared but not vendored: {sorted(expected - vendored)}"
@@ -204,7 +220,7 @@ def test_g2_served_topics_are_the_manifests_shared_layer():
     shared = {
         normalize_topic(Path(rel).stem)
         for rel, layer in files.items()
-        if layer in ("reference", "sectioned")
+        if layer in ("reference", "sectioned") and rel != "screens_core.md"
     }
     assert shared == SERVED_DOC_TOPICS, sorted(shared ^ SERVED_DOC_TOPICS)
     opinion = {rel for rel, layer in files.items() if layer == "opinion"}
@@ -337,7 +353,7 @@ def test_g5_every_pointer_resolves_to_a_served_topic(surface, payloads):
     for owner, text in _pointer_sources(surface, payloads) + _catalogue_items(surface):
         for p in extract_pointers(text):
             counted += 1
-            why = pointer_violation(p, corpus_stems=stems)
+            why = pointer_violation(p, corpus_stems=stems, research=surface.research)
             if why:
                 violations.append(f"{owner}: {why} — …{p.context.strip()[:120]}…")
     assert not violations, "pointers to topics this surface does not serve (R-L3):\n" + "\n".join(
@@ -412,9 +428,10 @@ def test_g6_served_text_names_only_tools_on_the_listed_surface(surface, payloads
         + "\n".join(sorted(set(violations)))
     )
     # Non-vacuity: the chat registry was read from code, and the listed
-    # surface is the 29-tool allow-list.
+    # surface is the 29-tool allow-list plus the 4 screen tools (flag on).
     assert len(sf.chat_tool_names()) >= 10, sorted(sf.chat_tool_names())
-    assert len(listed) == 29
+    # 33 listed tools; with Research served, plan, run and get join them (07 §5.3).
+    assert len(listed) == 33 + (3 if surface.research else 0)
 
 
 @monorepo
@@ -502,8 +519,10 @@ def test_g7_listed_skill_bodies_are_method_only(surface):
     assert not violations, "listed skills carry more than method:\n" + "\n".join(
         sorted(set(violations))
     )
-    # Non-vacuity: the 7 listed skills were rendered and read in full.
-    assert len(surface.prompts) == 7, sorted(surface.prompts)
+    # Non-vacuity: the 8 listed skills (7, plus screen-creation with the
+    # screens flag on) were rendered and read in full.
+    assert len(surface.prompts) == 8, sorted(surface.prompts)
+    assert "screen-creation" in surface.prompts
     assert not (set(surface.prompts) & LISTED_EXCLUDED_SKILLS)
     assert all(len(sentences(p["body"])) >= 20 for p in surface.prompts.values())
 

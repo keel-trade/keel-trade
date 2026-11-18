@@ -84,9 +84,11 @@ def _citation_violations(block: str, reference_root: Path, corpus_names: set[str
             if path in corpus_names:
                 out.append(f"{path}: cite the corpus file with its directory")
             continue
-        if not path.startswith(("system/", "patterns/")):
+        if not path.startswith(("system/", "patterns/", "reference/")):
             continue  # a spec or code path, not a corpus citation
-        target = reference_root / path
+        target = reference_root / (
+            path.removeprefix("reference/") if path.startswith("reference/") else path
+        )
         if not target.is_file():
             out.append(f"{path}: no such corpus file")
             continue

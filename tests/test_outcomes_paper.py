@@ -513,7 +513,9 @@ def test_live_control_description_touch_up_ships_released(monkeypatch, paper_sdk
 # exact-equality arm reds. Count: at least one talking point, and
 # limit_details carries the three numbers (unit, limit, current).
 
-_WALL_FORBIDDEN_RE = re.compile(r"keel_paper_control|\bstop|\bslot", re.IGNORECASE)
+#: The full-profile wall names no paper tool (R-59); its "stop one to free
+#: it" is the cap's own fact since D-14 (doc 07 §5).
+_WALL_FORBIDDEN_RE = re.compile(r"keel_paper_control", re.IGNORECASE)
 
 
 @pytest.fixture
@@ -586,8 +588,16 @@ def test_paper_quota_wall_is_the_neutral_plan_limit_wall(
     assert "action_url" not in envelope or envelope["action_url"] is None
     points = envelope["talking_points"]
     assert len(points) >= 1
-    # The exact-equality arm: the wall's lines and nothing else.
-    assert points == quota_wall_lines(_paper_wall_error().input)
+    # The exact-equality arm: the wall's lines plus the ask-first slot line
+    # (agents swapped running paper runs without asking; ledger Q-7605), and
+    # nothing else.
+    from keel.tools.outcomes._paper_strings import PAPER_WALL_SLOT_LINE
+
+    assert points == [
+        *quota_wall_lines(_paper_wall_error().input),
+        PAPER_WALL_SLOT_LINE.form(listed=False),
+    ]
+    assert "ask the user" in points[-1].lower()
     assert not [p for p in points if _WALL_FORBIDDEN_RE.search(p)]
     assert envelope["resume"]["verify_call"]["tool"] == "keel_paper_deploy"
     # The call's own arguments, as the adapter handed them to the handler
@@ -605,7 +615,7 @@ def test_paper_quota_wall_seed_control():
     from keel.errors import quota_wall_lines
 
     lines = quota_wall_lines(_paper_wall_error().input)
-    seeded = [*lines, "stopping a running paper run frees the slot"]
+    seeded = [*lines, "Stopping a paper run frees its slot (`keel_paper_control` `stop`)."]
     assert seeded != lines
     assert [p for p in seeded if _WALL_FORBIDDEN_RE.search(p)]
 
@@ -1185,7 +1195,10 @@ function run(env) {
   H.header({ name: "re-render", state: "paused" });
   return { chips: meta.kids, tiles: calls.tiles, states: calls.states, captions: calls.captions };
 }
-out.practice = run({ data: { status: "LIVE", venue: { capital_class: "practice" } } });
+// A run with history (two curve points, fills): the live renderer draws it;
+// one with none is the fragment's waiting state (tests/test_paper_card.py).
+const history = { curve: { points: [[1, 1], [2, 2]] }, stats: { total_trades: 3 } };
+out.practice = run({ data: { status: "LIVE", venue: { capital_class: "practice" } }, ...history });
 out.real = run({ data: { status: "LIVE", venue: { capital_class: "real" } } });
 console.log(JSON.stringify(out));
 """
@@ -1853,6 +1866,11 @@ def test_released_arm_holds_whole(paper_sdk_released, monkeypatch, tmp_path):
     from keel.tools.outcomes import OUTCOMES, get
     from keel.tools.outcomes._mcp_adapter import effective_description, effective_input_schema
 
+    from tests._research_delta import RESEARCH_ADDITIONS, RESEARCH_MCP_ADDITIONS
+    from tests._screeners_delta import SCREENER_ADDITIONS, SCREENER_MCP_ADDITIONS
+
+    assert len(SCREENER_ADDITIONS) == 19 and SCREENER_ADDITIONS <= set(OUTCOMES)
+    assert len(SCREENER_MCP_ADDITIONS) == 14
     held_numbers = {"tools_registry": 48, "tools_local_default": 45}
     assert sorted(n for n in OUTCOMES if "paper" in n) == [
         "keel_paper_control",
@@ -1860,7 +1878,14 @@ def test_released_arm_holds_whole(paper_sdk_released, monkeypatch, tmp_path):
     ]
     assert toolsets.PAPER_TOOLSET in toolsets._DEFAULT_TOOLSETS
     numbers = _surface_checker().compute_numbers()
-    assert {k: numbers[k] - v for k, v in held_numbers.items()} == {
+    # The registry counts every screen command; the local MCP default counts
+    # the 14 an MCP tools/list carries (L13: five are CLI-only).
+    # Research (07 §2.2) adds its 24 commands, 8 of them MCP tools.
+    screen_delta = {
+        "tools_registry": len(SCREENER_ADDITIONS) + len(RESEARCH_ADDITIONS),
+        "tools_local_default": len(SCREENER_MCP_ADDITIONS) + len(RESEARCH_MCP_ADDITIONS),
+    }
+    assert {k: numbers[k] - screen_delta[k] - v for k, v in held_numbers.items()} == {
         "tools_registry": 2,
         "tools_local_default": 2,
     }
@@ -1891,3 +1916,29 @@ def test_released_arm_holds_whole(paper_sdk_released, monkeypatch, tmp_path):
     assert "keel_paper_control" in effective_description(get("keel_live_control"))
     # The sixth, the deploy line, is test_the_released_deploy_line_offers_paper_after_the_live_link.
     assert len(touched) + 2 == 6  # four descriptions, the guard's paper arm, the deploy line
+
+
+def test_paper_descriptions_say_ask_before_stopping_a_run():
+    """Agents swapped a running paper run for a new one without asking far more
+    often than they hit the slot wall (prod, 2026-10-17..11-16), so every paper
+    description that says a stop frees a slot also says to ask the user first.
+    Control: the deploy description still says `update` keeps a run's record."""
+    from keel.tools.outcomes.paper_control import (
+        PAPER_CONTROL_DESCRIPTION,
+        PAPER_CONTROL_LISTED_DESCRIPTION,
+    )
+    from keel.tools.outcomes.paper_deploy import (
+        PAPER_DEPLOY_DESCRIPTION,
+        PAPER_DEPLOY_LISTED_DESCRIPTION,
+    )
+
+    texts = {
+        "deploy": PAPER_DEPLOY_DESCRIPTION,
+        "deploy_listed": PAPER_DEPLOY_LISTED_DESCRIPTION,
+        "control": PAPER_CONTROL_DESCRIPTION,
+        "control_listed": PAPER_CONTROL_LISTED_DESCRIPTION,
+    }
+    assert len(texts) == 4 and all(texts.values())  # non-vacuity
+    missing = [name for name, text in texts.items() if "ask the user" not in text]
+    assert not missing, missing
+    assert "`update` that run instead" in PAPER_DEPLOY_DESCRIPTION

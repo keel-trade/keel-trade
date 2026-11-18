@@ -17,13 +17,12 @@ and the claim discriminator runs before the quota builder:
    which is wrong for a simulated action (T1). On hosted, ``_translate_403``'s
    hosted arm already names neither a re-login nor live consent, so it stands.
 3. **Quota** — ``cap_exceeded`` with ``limit ≥ 1``: HEAD's neutral
-   ``maybe_quota_handoff`` wall (D-12). On the listed profile with the listed
-   flag on for the caller's host it gains one fact line,
-   ``_paper_strings.PAPER_WALL_SLOT_LINE`` ("Stopping a paper run frees its
-   slot (`keel_paper_control` `stop`)."): it names Keel's own tool, never a
-   plan, and passes the same D-12 scan (S10 §5; PT2-90 supersedes R-59's "no
-   slot-freeing point" for the listed form only). Everywhere else the wall is
-   HEAD's, byte for byte.
+   ``maybe_quota_handoff`` wall (D-12) plus one ask-first line,
+   ``_paper_strings.PAPER_WALL_SLOT_LINE``: on the full profile "Ask the user
+   which paper run to stop before stopping one; a stop ends its record." (no
+   tool named, R-59); on the listed profile, only with the listed flag on for
+   the caller's host, the form that names `keel_paper_control` `stop` (S10 §5,
+   PT2-90). Neither names a plan; both pass the D-12 scan.
 
 Off arm 1, a ``no_cap_grants`` or ``limit=0`` denial is relayed as the route's
 403 with no wall added. Every other 403 re-raises unchanged. A ``401`` never
@@ -111,11 +110,13 @@ def paper_wall(
 
 
 def _slot_points() -> list[str]:
-    """The listed paper wall's slot-freeing line, only where `keel_paper_control`
-    is served beside the paper tool that hit the wall (S10 §5)."""
+    """The paper wall's ask-first slot line: the full form on the full profile,
+    the listed form only where `keel_paper_control` is served beside the paper
+    tool that hit the wall (S10 §5)."""
     from ._toolsets import is_listed_profile, listed_paper_enabled
 
-    if not (is_listed_profile() and listed_paper_enabled()):
+    listed = is_listed_profile()
+    if listed and not listed_paper_enabled():
         return []
-    line = PAPER_WALL_SLOT_LINE.form(listed=True)
+    line = PAPER_WALL_SLOT_LINE.form(listed=listed)
     return [line] if line else []

@@ -1,0 +1,32 @@
+{
+  "_meta": {
+    "keel/card": {},
+    "ui": {
+      "resourceUri": "ui://keel/cards/study.html"
+    }
+  },
+  "content": [
+    {
+      "text": "Research is paused.\nValid input matching the tool's schema.\nView in Keel: https://app.usekeel.io/research/stu_000014\n\n{\"code\": \"RESEARCH_PAUSED\", \"message\": \"Research is paused.\", \"what_was_expected\": \"Valid input matching the tool's schema.\", \"example\": {}, \"suggested_next_action\": {\"tool\": null, \"args\": {}}, \"detail\": {\"code\": \"RESEARCH_PAUSED\", \"links\": {\"app\": \"https://app.usekeel.io/research/stu_000014\"}}, \"exit_code\": 3, \"retryable\": false}",
+      "type": "text"
+    }
+  ],
+  "structuredContent": {
+    "code": "RESEARCH_PAUSED",
+    "detail": {
+      "code": "RESEARCH_PAUSED",
+      "links": {
+        "app": "https://app.usekeel.io/research/stu_000014"
+      }
+    },
+    "example": {},
+    "exit_code": 3,
+    "message": "Research is paused.",
+    "retryable": false,
+    "suggested_next_action": {
+      "args": {},
+      "tool": null
+    },
+    "what_was_expected": "Valid input matching the tool's schema."
+  }
+}

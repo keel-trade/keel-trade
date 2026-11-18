@@ -1,0 +1,501 @@
+{
+  "_meta": {
+    "keel/card": {
+      "card_data": null,
+      "card_summary": {
+        "thumb": {
+          "facts": {
+            "enc": "b64",
+            "series": [
+              {
+                "c": 0,
+                "y": "666_36ts74u0puy1rt12jedXQSRGOXcTRSSLOQRFABDHKITVQQLLLKLOQZVY"
+              }
+            ],
+            "zero": 58
+          },
+          "family": "Lines",
+          "view_index": 1
+        }
+      },
+      "checks": {
+        "rows": [
+          {
+            "bar_default_words": "default ≥ 75th",
+            "looser": {
+              "bar": 0.375,
+              "bar_words": "your bar ≥ 38th",
+              "met": false
+            },
+            "stricter": {
+              "bar": 1.0,
+              "bar_words": "your bar ≥ 100th",
+              "met": false
+            }
+          },
+          {
+            "bar_default_words": "default ≥ 0.30",
+            "looser": {
+              "bar": 0.15,
+              "bar_words": "your bar ≥ 0.15",
+              "met": null
+            },
+            "stricter": {
+              "bar": 0.44999999999999996,
+              "bar_words": "your bar ≥ 0.45",
+              "met": null
+            }
+          },
+          {
+            "bar_default_words": "default ≥ 0.40",
+            "looser": {
+              "bar": 0.2,
+              "bar_words": "your bar ≥ 0.20",
+              "met": true
+            },
+            "stricter": {
+              "bar": 0.6000000000000001,
+              "bar_words": "your bar ≥ 0.60",
+              "met": false
+            }
+          },
+          {
+            "bar_default_words": "default ≥ 0.30",
+            "looser": {
+              "bar": 0.15,
+              "bar_words": "your bar ≥ 0.15",
+              "met": false
+            },
+            "stricter": {
+              "bar": 0.44999999999999996,
+              "bar_words": "your bar ≥ 0.45",
+              "met": false
+            }
+          },
+          {
+            "bar_default_words": "default ≥ 0.30",
+            "looser": {
+              "bar": 0.15,
+              "bar_words": "your bar ≥ 0.15",
+              "met": false
+            },
+            "stricter": {
+              "bar": 0.44999999999999996,
+              "bar_words": "your bar ≥ 0.45",
+              "met": false
+            }
+          }
+        ]
+      }
+    },
+    "ui": {
+      "resourceUri": "ui://keel/cards/study.html"
+    }
+  },
+  "content": [
+    {
+      "text": "card: where the host draws Keel cards, the user sees what follows as a card carrying its name, links and ids, so a reply can call it by name; the ids and links here serve tool calls and hosts without cards.\n\nCheck a strategy · Momentum rotation v3 · version 1 · Done · Oct 29 · 2 didn't finish\nUsed 0 of 400 studies; resets Dec 1. Planning, reading, saving, and runs that reuse everything or run nothing, do not count.\n1 of 9 bars met\nDays Mar 23, 2025 to Oct 29, 2026, split Apr 17, 2026 · 100 coins: the coins Momentum rotation trades · costs 9 bp a fill · data as of Oct 29, 2026\nMeasured with Backtest v1, CostStress v1, DelayStress v1, TopCoins v1, WithoutBestCoins v1, RandomBooks v1, RepickSettings v1, Neighbours v1, DeflatedSharpe v1, ResampledPaths v1, ReturnByCoin v1, MarketStates v1, CorrelationWithRunning v1.\nYour bars (9; met: 1):\n- Share of 150 random books below yours: 5th, no interval; sample not stated; your bar ≥ 75th; not met\n- Share of Sharpe after the split: not measured, interval withheld: Withheld: your setting's Sharpe is not positive, so a share of it has no meaning.; sample not stated; your bar ≥ 0.30; not measured\n- Nearby settings as a share of yours: 0.24, no interval; sample not stated; your bar ≥ 0.40; not met\n- Sharpe at twice the costs: −1.49, −2.99 to 0.04; against the base −1.20 to −0.93; sample not stated; your bar ≥ 0.30; not met\n- Sharpe a day late: −0.83, −2.30 to 0.69; against the base −1.20 to 0.41; sample not stated; your bar ≥ 0.30; not met\n- Sharpe on the top 30 coins: 0.86, −0.80 to 2.47; against the base −1.13 to 3.60; sample not stated; your bar ≥ 0.30; met\n- Sharpe without its best 5 coins: −1.13, −2.65 to 0.38; against the base −1.43 to 0.02; sample not stated; your bar ≥ 0.30; not met\n- Sharpe re-picking the settings every 30 days: −0.0084, no interval; sample not stated; your bar ≥ 0.30; not met\n- Sharpe discounted for versions tried: 0.18, no interval; sample not stated; your bar ≥ 0.50; not met\nDone · 24 of 26 runs finished\nRuns: 24 runs, 0 reused, 2 couldn't run on Keel's side · versions tried: unknown\nCharts (13): Your checks · Growth of 1 · Before and after the split · Sharpe as costs rise · Sharpe when trading late · Sharpe on the top coins · Sharpe without the best coins · 150 random books · A year ahead, resampled · Re-picking the settings · Where the return came from · Up and down markets · How it moves with what you run — keel_research_get(study_id=\"stu_000012\", view=0) reads the numbers behind any of them.\nMomentum rotation v3 has a newer version, v4. Plan it in the app: keel_app_link(id=\"stu_000012\")\nView in Keel: https://app.usekeel.io/research/stu_000012",
+      "type": "text"
+    }
+  ],
+  "structuredContent": {
+    "can_retry": true,
+    "can_run": true,
+    "card_summary": {
+      "footer": {
+        "runs_words": "24 runs",
+        "subject": "Momentum rotation"
+      },
+      "footing_line": "585 days · 100 coins · 9 bp a fill",
+      "headline": {
+        "chips": [],
+        "text": "1 of 9 bars met"
+      },
+      "kind_label": {
+        "key": "check",
+        "name": "Check a strategy",
+        "short": "Check"
+      },
+      "lead": "Meets 1 of 9 of your bars",
+      "maker": "you",
+      "maker_words": "by you",
+      "numbers": [
+        {
+          "label": "Sharpe (daily) over the window",
+          "measure": "sharpe",
+          "ref": "base.summary",
+          "sample": {
+            "days": 585,
+            "first_day": "2025-03-23",
+            "last_day": "2026-10-29"
+          },
+          "sample_words": "585 days",
+          "unit": "ratio",
+          "value": -0.43734292881405434,
+          "value_words": "−0.44"
+        },
+        {
+          "interval_words": "−2.99 to 0.04",
+          "label": "Sharpe at twice the costs",
+          "measure": "sharpe",
+          "ref": "costs",
+          "sample": {
+            "days": 585,
+            "first_day": "2025-03-23",
+            "last_day": "2026-10-29"
+          },
+          "sample_words": "585 days",
+          "unit": "ratio",
+          "value": -1.4905110283713174,
+          "value_words": "−1.49"
+        },
+        {
+          "label": "Share of random books below it",
+          "measure": "share_below",
+          "ref": "luck.summary",
+          "sample": {
+            "books": 150,
+            "first_day": "2025-03-23",
+            "last_day": "2026-10-29"
+          },
+          "sample_words": "150 books",
+          "unit": "rank",
+          "value": 0.04666666666666667,
+          "value_words": "5th"
+        },
+        {
+          "label": "Sharpe discounted for versions tried",
+          "measure": "deflated_sharpe",
+          "ref": "deflated",
+          "sample": {
+            "days": 585,
+            "first_day": "2025-03-23",
+            "last_day": "2026-10-29"
+          },
+          "sample_words": "585 days",
+          "unit": "probability",
+          "value": 0.18438052887077372,
+          "value_words": "0.18"
+        }
+      ],
+      "schema": "keel.research.card/2",
+      "state": "completed_partial",
+      "state_words": "Done · Oct 29 · 2 didn't finish",
+      "title": "Momentum rotation v3",
+      "top5": {
+        "kind": "checks",
+        "rows": [
+          {
+            "bar_words": "your bar ≥ 75th",
+            "label": "Share of 150 random books below yours",
+            "met": false,
+            "slot": 0,
+            "unit": "rank",
+            "value": 0.04666666666666667,
+            "value_words": "5th"
+          },
+          {
+            "bar_words": "your bar ≥ 0.30",
+            "label": "Share of Sharpe after the split",
+            "slot": 0,
+            "unit": "ratio",
+            "value_words": "not measured"
+          },
+          {
+            "bar_words": "your bar ≥ 0.40",
+            "label": "Nearby settings as a share of yours",
+            "met": false,
+            "unit": "ratio",
+            "value": 0.24085861053329147,
+            "value_words": "0.24"
+          },
+          {
+            "bar_words": "your bar ≥ 0.30",
+            "label": "Sharpe at twice the costs",
+            "met": false,
+            "slot": 0,
+            "unit": "ratio",
+            "value": -1.4905110283713174,
+            "value_words": "−1.49"
+          },
+          {
+            "bar_words": "your bar ≥ 0.30",
+            "label": "Sharpe a day late",
+            "met": false,
+            "slot": 0,
+            "unit": "ratio",
+            "value": -0.8269070748929542,
+            "value_words": "−0.83"
+          }
+        ],
+        "total": 9
+      },
+      "version": 1
+    },
+    "checks": {
+      "count": 9,
+      "met": 1,
+      "rows": [
+        {
+          "bar": 0.75,
+          "bar_index": 0,
+          "bar_words": "your bar ≥ 75th",
+          "label": "Share of 150 random books below yours",
+          "locked": false,
+          "measure": "share_below",
+          "met": false,
+          "op": ">=",
+          "ref": "luck.summary",
+          "result": "Momentum rotation",
+          "sample": {
+            "first_day": "2025-03-23",
+            "last_day": "2026-10-29"
+          },
+          "sample_line": "Mar 23, 2025 to Oct 29, 2026",
+          "unit": "rank",
+          "value": 0.04666666666666667,
+          "value_words": "5th"
+        },
+        {
+          "bar": 0.3,
+          "bar_index": 1,
+          "bar_words": "your bar ≥ 0.30",
+          "label": "Share of Sharpe after the split",
+          "locked": false,
+          "measure": "after_share",
+          "op": ">=",
+          "ref": "base.split",
+          "result": "Momentum rotation",
+          "sample": {
+            "first_day": "2025-03-23",
+            "last_day": "2026-10-29"
+          },
+          "sample_line": "Mar 23, 2025 to Oct 29, 2026",
+          "unit": "ratio",
+          "value_words": "not measured",
+          "withheld_reason": "Withheld: your setting's Sharpe is not positive, so a share of it has no meaning."
+        },
+        {
+          "bar": 0.4,
+          "bar_index": 2,
+          "bar_words": "your bar ≥ 0.40",
+          "label": "Nearby settings as a share of yours",
+          "locked": false,
+          "measure": "share_of_yours",
+          "met": false,
+          "op": ">=",
+          "ref": "nearby.summary",
+          "result": "subject",
+          "sample": {
+            "first_day": "2025-03-23",
+            "last_day": "2026-10-29"
+          },
+          "sample_line": "Mar 23, 2025 to Oct 29, 2026",
+          "unit": "ratio",
+          "value": 0.24085861053329147,
+          "value_words": "0.24"
+        },
+        {
+          "at": {
+            "cost_multiple": 2
+          },
+          "bar": 0.3,
+          "bar_index": 3,
+          "bar_words": "your bar ≥ 0.30",
+          "interval": {
+            "hi": 0.037857194494790594,
+            "level": 0.95,
+            "lo": -2.988021841023226,
+            "method": "paired_bootstrap"
+          },
+          "interval_words": "−2.99 to 0.04; against the base −1.20 to −0.93",
+          "label": "Sharpe at twice the costs",
+          "locked": false,
+          "measure": "sharpe",
+          "met": false,
+          "op": ">=",
+          "ref": "costs",
+          "result": "Momentum rotation",
+          "sample": {
+            "first_day": "2025-03-23",
+            "last_day": "2026-10-29"
+          },
+          "sample_line": "Mar 23, 2025 to Oct 29, 2026",
+          "unit": "ratio",
+          "value": -1.4905110283713174,
+          "value_words": "−1.49"
+        },
+        {
+          "at": {
+            "days_late": 1
+          },
+          "bar": 0.3,
+          "bar_index": 4,
+          "bar_words": "your bar ≥ 0.30",
+          "interval": {
+            "hi": 0.690034081514932,
+            "level": 0.95,
+            "lo": -2.2991493315209035,
+            "method": "paired_bootstrap"
+          },
+          "interval_words": "−2.30 to 0.69; against the base −1.20 to 0.41",
+          "label": "Sharpe a day late",
+          "locked": false,
+          "measure": "sharpe",
+          "met": false,
+          "op": ">=",
+          "ref": "late",
+          "result": "Momentum rotation",
+          "sample": {
+            "first_day": "2025-03-23",
+            "last_day": "2026-10-29"
+          },
+          "sample_line": "Mar 23, 2025 to Oct 29, 2026",
+          "unit": "ratio",
+          "value": -0.8269070748929542,
+          "value_words": "−0.83"
+        }
+      ]
+    },
+    "counts": {
+      "allowance": {
+        "study": "free",
+        "units": [
+          {
+            "limit": 400,
+            "resets_at": "2026-12-18",
+            "unit": "research_studies",
+            "used": 0
+          }
+        ]
+      },
+      "runs": {
+        "executed": 24,
+        "failed_content": 0,
+        "failed_platform": 2,
+        "planned": 26,
+        "reused": 0,
+        "words": "24 runs, 0 reused, 2 couldn't run on Keel's side"
+      },
+      "versions_tried": {
+        "added": 0,
+        "family": "",
+        "why": ""
+      }
+    },
+    "footing": {
+      "coins": {
+        "chosen": "The coins Momentum rotation trades",
+        "count": 100,
+        "names_sha256": "6892dc8e601171fcb382e7a0d253cf7c697378343e093731f8e5efcd580a72bd"
+      },
+      "costs": {
+        "fee": 0.00045,
+        "slippage": 0.00045
+      },
+      "data": "snap_6c1f0e8a2b9d4f37",
+      "days": {
+        "end": "2026-10-29",
+        "start": "2025-03-23"
+      },
+      "delay": 0,
+      "engine": "eng_000000000000000000000000000000000000000000000000000000000000",
+      "engine_words": "This version of the engine",
+      "leverage": 1.0,
+      "split": "2026-04-17",
+      "split_words": "Split on Apr 17, 2026: 390 days before, 195 after"
+    },
+    "hero_url": "https://app.usekeel.io/research/stu_000012",
+    "links": {
+      "app": "https://app.usekeel.io/research/stu_000012"
+    },
+    "locked": [],
+    "not_measured": [],
+    "notes": {
+      "notes_total": 0
+    },
+    "page": {
+      "default": 0,
+      "switch": [0, 1, 2]
+    },
+    "progress": {
+      "by_status": {
+        "completed": 24,
+        "failed": 2
+      },
+      "children": 26,
+      "done": 24,
+      "progress_seq": 0,
+      "receipt": "Done · 24 of 26 runs finished",
+      "stopped": "This run took longer than 30 s and was stopped; it is charged for the time it held. 2 runs didn't finish on our side; they can be retried in Keel",
+      "words": "Done · 24 of 26 runs finished"
+    },
+    "quota": [],
+    "stale": [
+      {
+        "kind": "newer_subject",
+        "offer": {
+          "plan": {
+            "base": {
+              "evidence_hash": "39d12a6a11826154a9f5ec9190144873b7f9ebad4ea9438c3debdaeff71bc893",
+              "revision": 1,
+              "version": 1
+            },
+            "study_id": "stu_000012"
+          },
+          "ref": "str_momrotpro00000000000000000@4"
+        },
+        "short": "v4 is out",
+        "words": "Momentum rotation v3 has a newer version, v4."
+      }
+    ],
+    "steps": {
+      "by_status": {
+        "completed_partial": 12,
+        "planned": 1
+      },
+      "total": 13
+    },
+    "study": {
+      "archived": false,
+      "can_delete": true,
+      "evidence_hash": "39d12a6a11826154a9f5ec9190144873b7f9ebad4ea9438c3debdaeff71bc893",
+      "kind_label": {
+        "key": "check",
+        "name": "Check a strategy",
+        "short": "Check"
+      },
+      "linked_to": [],
+      "linked_to_total": 0,
+      "presentation_hash": "a083fb140a6abdc66daa55e6701a2a316f92e62885bbbb140b14107904c36d28",
+      "question": "How does v3 do against costs, delay, luck and later data?",
+      "revision": 1,
+      "run_set_id": "rus_000012",
+      "set_aside": false,
+      "state": "completed_partial",
+      "study_id": "stu_000012",
+      "title": "Momentum rotation v3",
+      "version": 1
+    },
+    "subjects": {
+      "total": 1
+    },
+    "url_line": "View in Keel: https://app.usekeel.io/research/stu_000012",
+    "view": {
+      "at": "2026-11-17T00:00:15.000Z",
+      "kind": "study",
+      "mode": "run",
+      "object": "stu_000012",
+      "seq": 16,
+      "size": "progress",
+      "version": 1
+    },
+    "views": {
+      "total": 13
+    },
+    "words": {
+      "allowance": "Used 0 of 400 studies; resets Dec 1. Planning, reading, saving, and runs that reuse everything or run nothing, do not count.",
+      "stopped": "This run took longer than 30 s and was stopped; it is charged for the time it held. 2 runs didn't finish on our side; they can be retried in Keel"
+    }
+  }
+}

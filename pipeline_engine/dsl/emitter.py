@@ -5,6 +5,7 @@ This module bridges StrategyFile spec objects and the browser graph model.
 
 from __future__ import annotations
 
+import ast
 import hashlib
 from dataclasses import dataclass, field
 from typing import Any
@@ -30,6 +31,7 @@ from pipeline_engine.dsl.spec import (
     VariableAssignment,
     VariableRef,
     dollar_volume_floor_to_emit,
+    file_kind,
 )
 
 
@@ -169,6 +171,9 @@ class GraphBlock:
     slotValue: Any = None
     extractKey: str | None = None
     variableName: str | None = None
+    useRef: str | None = None
+    useOutput: str | None = None
+    useAs: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         data: dict[str, Any] = {"id": self.id, "type": self.type}
@@ -193,6 +198,10 @@ class GraphBlock:
             data["extractKey"] = self.extractKey
         if self.variableName is not None:
             data["variableName"] = self.variableName
+        for key in ("useRef", "useOutput", "useAs"):
+            value = getattr(self, key)
+            if value is not None:
+                data[key] = value
         return data
 
     @staticmethod
@@ -235,6 +244,9 @@ class GraphBlock:
             slotValue=data.get("slotValue"),
             extractKey=data.get("extractKey"),
             variableName=data.get("variableName"),
+            useRef=data.get("useRef"),
+            useOutput=data.get("useOutput"),
+            useAs=data.get("useAs"),
         )
 
 
@@ -359,6 +371,8 @@ class GraphModel:
     globals_: dict[str, Any] | None = None
     universe: dict[str, Any] | None = None
     execution: dict[str, Any] | None = None
+    outputs: list[str] | None = None
+    output_roles: dict[str, str] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         data: dict[str, Any] = {
@@ -376,6 +390,10 @@ class GraphModel:
             data["universe"] = self.universe
         if self.execution is not None:
             data["execution"] = self.execution
+        if self.outputs is not None:
+            data["outputs"] = list(self.outputs)
+        if self.output_roles is not None:
+            data["output_roles"] = dict(self.output_roles)
         return data
 
     @staticmethod
@@ -412,6 +430,17 @@ class GraphModel:
         globals_raw = data.get("globals")
         universe_raw = data.get("universe")
         execution_raw = data.get("execution")
+        outputs_raw = data.get("outputs")
+        roles_raw = data.get("output_roles")
+        if outputs_raw is not None and (
+            not isinstance(outputs_raw, list) or any(not isinstance(v, str) for v in outputs_raw)
+        ):
+            raise ValueError("Graph model 'outputs' must be a list of strings")
+        if roles_raw is not None and (
+            not isinstance(roles_raw, dict)
+            or any(not isinstance(k, str) or not isinstance(v, str) for k, v in roles_raw.items())
+        ):
+            raise ValueError("Graph model 'output_roles' must be a string-to-string object")
 
         return GraphModel(
             blocks=blocks,
@@ -422,6 +451,8 @@ class GraphModel:
             globals_=globals_raw if isinstance(globals_raw, dict) else None,
             universe=universe_raw if isinstance(universe_raw, dict) else None,
             execution=execution_raw if isinstance(execution_raw, dict) else None,
+            outputs=outputs_raw,
+            output_roles=roles_raw,
         )
 
 
@@ -631,6 +662,31 @@ def graph_to_spec(graph: GraphModel | dict[str, Any]) -> StrategyFile:
             explicit=frozenset(k for k in model.execution if k in EXECUTION_PARAM_META),
         )
 
+    outputs_spec = None
+    if model.outputs is not None:
+        from pipeline_engine.dsl.parser import DSLParseError, _catalog_fix, _parse_outputs_call
+
+        if model.execution is not None:
+            raise DSLParseError(
+                "Execution(...) and Outputs(...) cannot both appear: Execution makes a strategy, Outputs makes a screener",
+                code="DECLARATION_CONFLICT",
+                suggestion=_catalog_fix("DECLARATION_CONFLICT"),
+            )
+        text = "Outputs(slots=" + repr(model.outputs)
+        if model.output_roles is not None:
+            text += ", roles=" + repr(model.output_roles)
+        call = ast.parse(text + ")", mode="eval").body
+        outputs_spec = _parse_outputs_call(call)
+        outputs_spec.location = _loc("outputs", lc)
+    elif model.output_roles is not None:
+        from pipeline_engine.dsl.parser import DSLParseError, _catalog_fix
+
+        raise DSLParseError(
+            "Output roles require an Outputs declaration",
+            code="DECLARATION_ARG_SHAPE",
+            suggestion=_catalog_fix("DECLARATION_ARG_SHAPE"),
+        )
+
     return StrategyFile(
         metadata=dict(model.metadata) if model.metadata else {},
         factories=factories,
@@ -643,10 +699,15 @@ def graph_to_spec(graph: GraphModel | dict[str, Any]) -> StrategyFile:
         globals_=globals_spec,
         universe=universe_spec,
         execution=execution_spec,
+        outputs=outputs_spec,
     )
 
 
 def _graph_block_to_step(block: GraphBlock, context: str, counter: list[int] | None = None):
+    if block.type == "use":
+        from pipeline_engine.dsl.use import UseSpec
+
+        return UseSpec(block.useRef, block.useOutput, block.useAs, _loc(block.id, counter))
     if block.type == "component":
         if not block.component:
             raise ValueError(f"Graph block '{block.id}' missing component name")
@@ -709,6 +770,7 @@ def _graph_block_to_step(block: GraphBlock, context: str, counter: list[int] | N
 
 def spec_to_graph(spec: StrategyFile) -> GraphModel:
     """Convert StrategyFile to browser graph model."""
+    file_kind(spec)
     factories = []
     for factory in spec.factories:
         factories.append(
@@ -813,6 +875,10 @@ def spec_to_graph(spec: StrategyFile) -> GraphModel:
         globals_=globals_dict,
         universe=universe_dict,
         execution=execution_dict,
+        outputs=list(spec.outputs.slots) if spec.outputs is not None else None,
+        output_roles=dict(spec.outputs.roles)
+        if spec.outputs is not None and spec.outputs.roles is not None
+        else None,
     )
 
 
@@ -845,17 +911,37 @@ def _promote_to_factory_calls(blocks: list[GraphBlock], factory_names: set[str])
 
 
 def _steps_to_graph_blocks(steps, parent_id: str) -> list[GraphBlock]:
-    """Convert a list of spec steps to graph blocks, flattening nested PipelineSpecs."""
+    """Convert a list of spec steps to graph blocks, flattening nested PipelineSpecs.
+
+    The graph model has no grouping block, so a nested pipeline's steps are
+    spliced into the parent's list. Their ids are seeded with the nested
+    step's own path, ``{parent_id}:{idx}:pipeline`` (Q-7154): seeded with the
+    parent's id and the inner index, inner step ``j`` and outer step ``j`` of
+    the same type and label shared one id. Every block outside a nested
+    pipeline keeps its id. keel-app's ``dsl/parser.ts`` and keel-site's
+    ``parseDsl.ts`` do the same; ``fixtures/block_id_vectors.json`` holds the
+    three equal.
+    """
     blocks: list[GraphBlock] = []
     for idx, step in enumerate(steps):
         if isinstance(step, PipelineSpec):
-            blocks.extend(_steps_to_graph_blocks(step.steps, parent_id))
+            blocks.extend(_steps_to_graph_blocks(step.steps, f"{parent_id}:{idx}:pipeline"))
         else:
             blocks.append(_step_to_graph_block(step, parent_id, idx))
     return blocks
 
 
 def _step_to_graph_block(step, parent_id: str, index: int) -> GraphBlock:
+    from pipeline_engine.dsl.use import UseSpec
+
+    if isinstance(step, UseSpec):
+        return GraphBlock(
+            id=_block_id(parent_id, index, "use", step.ref),
+            type="use",
+            useRef=step.ref,
+            useOutput=step.output,
+            useAs=step.as_,
+        )
     if isinstance(step, ComponentRef):
         block_id = _block_id(parent_id, index, "component", step.name)
         return GraphBlock(
@@ -916,6 +1002,7 @@ def spec_to_dsl(spec: StrategyFile, registry: dict | None = None) -> str:
             omitted, the live ``COMPONENT_REGISTRY`` is used. Pass an empty
             dict to disable canonical numeric rendering (legacy behaviour).
     """
+    file_kind(spec)
     registry = _resolve_emitter_registry(registry)
     lines: list[str] = []
 
@@ -999,6 +1086,18 @@ def spec_to_dsl(spec: StrategyFile, registry: dict | None = None) -> str:
         lines.append(f"Execution({', '.join(exec_args)})")
         lines.append("")
 
+    if spec.outputs is not None:
+        output_args = [f"slots={_emit_value(spec.outputs.slots)}"]
+        if spec.outputs.roles is not None:
+            roles = {
+                name: spec.outputs.roles[name]
+                for name in spec.outputs.slots
+                if name in spec.outputs.roles
+            }
+            output_args.append(f"roles={_emit_value(roles)}")
+        lines.append(f"Outputs({', '.join(output_args)})")
+        lines.append("")
+
     for factory in spec.factories:
         params = []
         for param in factory.params:
@@ -1058,6 +1157,10 @@ def _emit_pipeline_expr(pipeline: PipelineSpec, indent: int, registry=None) -> l
 
 
 def _emit_step_expr(step, indent: int, registry=None) -> list[str]:
+    from pipeline_engine.dsl.use import UseSpec, format_use_call
+
+    if isinstance(step, UseSpec):
+        return [format_use_call(step)]
     if isinstance(step, ComponentRef):
         sig = registry.get(step.name) if registry else None
         return [_emit_call(step.name, step.params, sig=sig)]

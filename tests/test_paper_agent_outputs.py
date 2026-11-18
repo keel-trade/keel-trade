@@ -53,9 +53,11 @@ STATUS_BADGE_TS = sf.REPO_ROOT / "services" / "keel-app" / "src" / "lib" / "stat
 
 #: The raw deployment status a reader takes for real capital.
 _RAW_LIVE = re.compile(r"\bLIVE\b")
-#: R-59: the wall carries no slot-freeing point and names no paper tool.
-_WALL_ACTION_RE = re.compile(r"keel_paper_control|\bstop|\bslot|\bfree", re.IGNORECASE)
-_RESET_CLAIM_RE = re.compile(r"\breset\b(?! on a clock)", re.IGNORECASE)
+#: The full-profile wall names no paper tool (R-59). Since D-14 (doc 07 §5)
+#: it does say how a slot frees ("stop one to free it"), the cap's own fact.
+_WALL_ACTION_RE = re.compile(r"keel_paper_control", re.IGNORECASE)
+#: A claimed reset in any text (the card's `reset` KEY is its line's name).
+_RESET_CLAIM_RE = re.compile(r'\breset\b(?! on a clock)(?!": )', re.IGNORECASE)
 
 
 def _dump(value) -> str:
@@ -84,11 +86,12 @@ def test_w1_the_paper_cap_wall_says_it_does_not_reset(paper_sdk_released):
     env, suggestion = _paper_wall()
     assert env["limit_details"]["unit"] == "paper_strategies_max"  # non-vacuity
     blob = _dump({**env, "suggestion": suggestion})
-    assert "does not reset on a clock" in suggestion
-    assert "does not reset on a clock" in env["resume"]["verify_call"]["reason"]
-    # No claim of a reset anywhere on the envelope ("on a clock" denies one).
+    assert "before a slot frees" in suggestion
+    assert "once a slot frees" in env["resume"]["verify_call"]["reason"]
+    assert "stop one to free it" in env["talking_points"][0]
+    # No claim of a reset anywhere on the envelope.
     assert not _RESET_CLAIM_RE.findall(blob), _RESET_CLAIM_RE.findall(blob)
-    # Neutral (D-12, R-59): no action, no slot-freeing point, no destination.
+    # No paper tool named on the full profile (R-59), no destination.
     for text in (suggestion, env["resume"]["verify_call"]["reason"], *env["talking_points"]):
         assert not _WALL_ACTION_RE.search(text), text
     assert env.get("action_url") is None
@@ -98,7 +101,7 @@ def test_w1_the_403_suggestion_says_a_cap_does_not_reset():
     from keel.errors import translate_http_error
 
     err = translate_http_error(403, PAPER_CAP_403_BODY)
-    assert "does not reset on a clock" in err.suggestion
+    assert "before a slot frees" in err.suggestion
     assert "before the reset" not in err.suggestion
 
 
@@ -117,9 +120,9 @@ def test_w1_control_a_metered_wall_still_names_its_reset():
     assert env["resume"]["verify_call"]["reason"] == (
         "The same call, unchanged; it succeeds after the reset."
     )
-    assert "It lifts at the reset" in handoff.suggestion
+    assert "before the reset" in handoff.suggestion
     assert "before the reset" in err.suggestion
-    assert "does not reset on a clock" not in _dump(env) + handoff.suggestion + err.suggestion
+    assert "slot frees" not in _dump(env) + handoff.suggestion + err.suggestion
 
 
 # ── W2: paper statuses in keel-app's words ─────────────────────────────────

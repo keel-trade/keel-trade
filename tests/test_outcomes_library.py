@@ -429,3 +429,109 @@ def test_get_is_one_package_read_with_no_hold_line(_api_env):
     # it simply names no hold.
     assert env["library_facts"] and "Sharpe" in env["library_facts"]
     assert "BTC" not in env["library_facts"]
+
+
+# ─── R-011: an unknown slug's 404 names what to do next ─────────────────
+
+_UNKNOWN_ENTRY_404 = {
+    "detail": {
+        "detail": (
+            "'bollinger-bands' is a backtested strategy page, not a Library entry. "
+            "Use one of the listed Library slugs."
+        ),
+        "code": "unknown_library_entry",
+        "known_slugs": ["adx-trend-crypto", "ma-crossover-crypto"],
+        "is_backtested_page": True,
+    }
+}
+
+
+def _call_not_found(name: str, args: dict, route_method: str, path: str, body: dict):
+    from keel.errors import NotFoundError
+
+    getattr(respx, route_method)(f"{API}{path}").mock(return_value=Response(404, json=body))
+    with pytest.raises(NotFoundError) as info:
+        OUTCOMES[name].handler(args, ToolContext())
+    return info.value
+
+
+@respx.mock
+@pytest.mark.parametrize(
+    ("name", "method", "path"),
+    [
+        ("keel_library_fork", "post", "/v1/library/bollinger-bands/fork"),
+        ("keel_library_get", "get", "/v1/library/bollinger-bands"),
+    ],
+)
+def test_unknown_slug_carries_the_library_suggestion(_api_env, name, method, path):
+    """Before R-011 the fork's library hint sat behind `except KeelError:
+    raise`, so the agent got the generic strategies/commits/backtests hint.
+
+    SEED (2026-10-28, reverted): removing the `except NotFoundError` arm
+    from either handler reds that handler's case on the suggestion while the
+    message and detail assertions (errors.py) still hold."""
+    from keel.tools.outcomes.library import UNKNOWN_ENTRY_SUGGESTION
+
+    err = _call_not_found(name, {"slug": "bollinger-bands"}, method, path, _UNKNOWN_ENTRY_404)
+    env = err.to_envelope()
+    assert env["message"].startswith("'bollinger-bands' is a backtested strategy page")
+    assert env["detail"]["known_slugs"] == ["adx-trend-crypto", "ma-crossover-crypto"]
+    assert env["detail"]["is_backtested_page"] is True
+    assert "keel_library_list" in UNKNOWN_ENTRY_SUGGESTION
+    assert env["what_was_expected"] == UNKNOWN_ENTRY_SUGGESTION
+    assert env["code"] == "unknown_library_entry"
+
+
+@respx.mock
+def test_uncoded_404_from_an_older_server_still_gets_the_library_suggestion(_api_env):
+    from keel.tools.outcomes.library import UNKNOWN_ENTRY_SUGGESTION
+
+    err = _call_not_found(
+        "keel_library_fork",
+        {"slug": "nope"},
+        "post",
+        "/v1/library/nope/fork",
+        {"detail": "library entry not found: nope"},
+    )
+    assert err.error_code == "not_found"
+    assert err.suggestion == UNKNOWN_ENTRY_SUGGESTION
+
+
+@respx.mock
+def test_unknown_variant_404_keeps_variant_guidance(_api_env):
+    """Control: a real entry with a mistyped setting is not an unknown entry."""
+    from keel.tools.outcomes.library import UNKNOWN_ENTRY_SUGGESTION
+
+    err = _call_not_found(
+        "keel_library_fork",
+        {"slug": "ma-crossover-crypto", "variant_id": "typo"},
+        "post",
+        "/v1/library/ma-crossover-crypto/fork",
+        {
+            "detail": {
+                "detail": "No setting 'typo' exists for ma-crossover-crypto.",
+                "code": "unknown_variant",
+                "known_variant_ids": ["v1", "v2"],
+                "default_variant_id": "v1",
+            }
+        },
+    )
+    assert err.error_code == "unknown_variant"
+    assert err.suggestion != UNKNOWN_ENTRY_SUGGESTION
+    assert "variant_id" in err.suggestion
+    assert err.detail["known_variant_ids"] == ["v1", "v2"]
+
+
+@respx.mock
+def test_other_errors_pass_through_unchanged(_api_env):
+    """Control: only the 404 is rewritten; a 403 keeps its own translation."""
+    from keel.errors import KeelError, NotFoundError
+    from keel.tools.outcomes.library import UNKNOWN_ENTRY_SUGGESTION
+
+    respx.post(f"{API}/v1/library/ma-crossover-crypto/fork").mock(
+        return_value=Response(403, json={"detail": "Forbidden"})
+    )
+    with pytest.raises(KeelError) as info:
+        OUTCOMES["keel_library_fork"].handler({"slug": "ma-crossover-crypto"}, ToolContext())
+    assert not isinstance(info.value, NotFoundError)
+    assert info.value.suggestion != UNKNOWN_ENTRY_SUGGESTION

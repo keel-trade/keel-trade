@@ -239,3 +239,90 @@ def test_anon_session_share_links_still_work(monkeypatch):
     monkeypatch.setattr("keel.tools.outcomes._handoff._is_anon_session", lambda: True)
     result = _run({"id": "shr_01PUB"})
     assert result.hero_url == "https://usekeel.io/share/shr_01PUB"
+
+
+# ─── RI-238: a study id links to the study's page (07 §2.2, 06 P1) ──────
+# SEED (run 2026-11-14, reversed): drop `"study"` from `TARGET_KINDS` -> the
+# two profiles' MCP arms, the CLI arm, the every-prefix guard and the anon arm
+# red (5 failed, a KeyError before any check); the 19 others stay green.
+
+_STUDY = "stu_01HZXK3Y6N3V7Q9S2T4W8R5M1E"
+
+
+@pytest.mark.parametrize("profile", ["full", "listed"])
+def test_a_study_id_links_to_the_study_page_through_the_mcp_dispatch(monkeypatch, profile):
+    """Until RI-238 every `stu_` id answered internal_error ("Unexpected error
+    in keel_app_link: 'study'") on both profiles: `_ID_PREFIX_KINDS` routed it
+    to a kind `TARGET_KINDS` had no label for. The listed surface's one bridge
+    into a study (J10.3, J11.3) went through it."""
+    from keel.tools.outcomes._mcp_adapter import _make_handler
+
+    monkeypatch.delenv("KEEL_EXECUTION_MODE", raising=False)
+    monkeypatch.delenv("KEEL_APP_URL", raising=False)
+    monkeypatch.setenv("KEEL_SERVER_PROFILE", profile)
+    env = json.loads(_make_handler(TOOL, frozenset())(id=_STUDY))
+    assert "error" not in env and env.get("code") != "internal_error", env
+    assert env["hero_url"] == f"https://app.usekeel.io/research/{_STUDY}", env
+    assert env["share_url"] is None  # navigation, not publication
+
+
+def test_a_study_link_on_the_cli_and_the_handler(monkeypatch):
+    import click
+    from click.testing import CliRunner
+    from keel.tools.outcomes._cli_adapter import register_all as cli_register_all
+
+    result = _run({"id": _STUDY}, app_url="https://staging-app.tailf4d598.ts.net")
+    assert result.hero_url == f"https://staging-app.tailf4d598.ts.net/research/{_STUDY}"
+    assert result.extra["target_kind"] == "study_page"
+    root = click.Group("keel")
+    cli_register_all(root, OUTCOMES)
+    out = CliRunner().invoke(root, ["app", "open", _STUDY])
+    assert out.exit_code == 0, out.output
+    assert f"/research/{_STUDY}" in out.output and "internal_error" not in out.output
+
+
+def test_every_kind_an_id_routes_to_has_a_label_and_a_link():
+    """The class guard: an id prefix (or the share token) must never route to
+    a kind the label map or the URL builder lacks — the RI-238 shape."""
+    from keel.tools.outcomes import open_in_app as oia
+
+    routed = set(oia._ID_PREFIX_KINDS.values()) | {"share"}
+    assert len(routed) >= 6  # non-vacuity: strategy, backtest, result, live, share, study
+    assert routed <= set(oia.TARGET_KINDS), routed - set(oia.TARGET_KINDS)
+    for prefix, kind in oia._ID_PREFIX_KINDS.items():
+        target = prefix + "01HZXK3Y6N3V7Q9S2T4W8R5M1E"
+        assert oia.kind_for_id(target) == kind
+        result = _run({"id": target})
+        assert result.hero_url.startswith("https://") and target in result.hero_url, (
+            prefix,
+            result,
+        )
+        assert result.extra["target_kind"] == oia.TARGET_KINDS[kind]
+
+
+def test_anon_session_blocks_a_study_link(monkeypatch):
+    """A study is the org's: while anonymous it dead-ends like a strategy (CL-2)."""
+    monkeypatch.setattr("keel.tools.outcomes._handoff._is_anon_session", lambda: True)
+    with pytest.raises(KeelError) as exc:
+        _run({"id": _STUDY})
+    assert exc.value.error_code == "anon_no_app_link"
+
+
+def test_research_links_read_the_bundled_routes():
+    """07 §5.1 (RI-251): every research link is a route of research_link_routes.json, the byte copy of
+    libs/research/link_routes.json, never a path written here."""
+    from keel.tools.outcomes._research_commands import _study_link, research_url
+    from keel.tools.outcomes.open_in_app import research_link
+
+    app = "https://app.usekeel.io"
+    assert research_link("study", _STUDY, origin=app + "/") == f"{app}/research/{_STUDY}"
+    assert research_link("study", _STUDY, origin=app, query={"v": "map", "sel": ""}) == (
+        f"{app}/research/{_STUDY}?v=map"
+    )
+    assert research_url(ToolContext(app_url=app)) == f"{app}/research"
+    assert _study_link(f"{app}/research", {"study_id": _STUDY}) == f"{app}/research/{_STUDY}"
+    assert _study_link(f"{app}/research", {}) == f"{app}/research"
+    # a link already built for another study is not extended (it once became /research/stu_b/stu_a)
+    assert _study_link(f"{app}/research/stu_b", {"study_id": _STUDY}) == f"{app}/research/{_STUDY}"
+    with pytest.raises(ValueError):
+        research_link("study", origin=app)

@@ -262,6 +262,34 @@ out.strategy = await measure("strategy", strategy, {});
 // targets bind it, and a kind outside this scan is a kind those rules
 // do not cover.
 out.compare = await measure("compare", compare, {});
+// Full-profile screen card obeys the same DOM rules as every other kind.
+const screener = readFixture("c_screener.envelope.json");
+out.screener = await measure("screener", screener, {});
+out.screenerNarrow = await measure("screener", screener, { width: 390 });
+// Research's study card (13 §7.1): a REAL envelope (research.card_fixtures),
+// its card channel merged back over structuredContent as the adapter does,
+// so the card system's DOM rules cover it too. The invented
+// `c_study.envelope.json` (a `{"points": 64}` thumb no server writes) is gone.
+const studyResult = readFixture("study/study-chk_v3.json");
+const mergeCard = (into, extra) => {
+  for (const [k, v] of Object.entries(extra || {})) {
+    if (
+      v &&
+      typeof v === "object" &&
+      !Array.isArray(v) &&
+      into[k] &&
+      typeof into[k] === "object"
+    )
+      mergeCard(into[k], v);
+    else into[k] = v;
+  }
+  return into;
+};
+const study = mergeCard(
+  JSON.parse(JSON.stringify(studyResult.structuredContent)),
+  (studyResult._meta || {})["keel/card"],
+);
+out.study = await measure("study", study, {});
 
 // ── S-6: the historical-data line, where performance is drawn ─────────
 // A phone-width comparison and a light-theme result carry it too; a

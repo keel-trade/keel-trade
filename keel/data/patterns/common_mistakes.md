@@ -27,7 +27,7 @@ Path 1 (continuous forecast).
 **Right**: `ROC → TopNAssetSelector → EqualWeightAllocator → WeightCadence(duration="7d") → FillNaN(fill_value=0.0)`
 
 TopNAssetSelector selects assets but doesn't manage exits; WeightCadence holds
-the targets for the calendar period (the `screen_select_patterns` topic).
+the targets for the calendar period (the `rank_select_patterns` topic).
 
 ## M-16: Over-Indexing on One Pattern
 

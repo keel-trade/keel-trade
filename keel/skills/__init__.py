@@ -42,7 +42,6 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from functools import lru_cache
-from importlib import resources
 
 import yaml
 
@@ -117,6 +116,7 @@ class Skill:
 # and the MCP prompts registration. Order is the §11.2 canonical order.
 BUNDLED_SKILLS = (
     "strategy-creation",
+    "screen-creation",
     "strategy-fork-and-iterate",
     "backtest-and-analyze",
     "overfit-check",
@@ -127,22 +127,14 @@ BUNDLED_SKILLS = (
 )
 
 
-def _skills_dir():
-    """Return a Traversable pointing at the bundled skills directory."""
-    return resources.files("keel.skills")
-
-
 def _read_skill_file(name: str) -> str:
     """Read a bundled skill by name (`<name>/SKILL.md` — the portable
     Agent Skills layout, agent-distribution spec 02 R1)."""
-    ref = _skills_dir().joinpath(name).joinpath("SKILL.md")
-    try:
-        return ref.read_text()
-    except FileNotFoundError as exc:
-        available = list_skills()
-        raise FileNotFoundError(
-            f"Unknown skill '{name}'. Available: {sorted(available.keys())}"
-        ) from exc
+    from keel.data._bundled import SKILL_DIRS, read_bundled
+
+    # A key into the bundled listing, never a path (Q-3352): a skill name
+    # reaches here from `keel_help topic="skill:<name>"` and prompt names.
+    return read_bundled("keel.skills", "", name, layout=SKILL_DIRS, kind="skill")
 
 
 def _parse(raw: str, name: str) -> Skill:

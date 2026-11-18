@@ -47,9 +47,16 @@ const readFixture = (n) =>
   JSON.parse(fs.readFileSync(path.join(fixtureDir, n), "utf8"));
 
 /* The host. After `initialized` it sends `tool-input` (when the arm has
- * arguments), then — on the arm's own clock — `tool-cancelled` or the
- * `tool-result`. `toolName` rides `hostContext.toolInfo`, as the spec
- * defines it, only when the arm says the host sends one. */
+ * arguments), then `tool-cancelled` or the `tool-result` when the runner
+ * cues it (`window.__cue`), in order with the samples: a sample before the
+ * arm's `resultAt` is taken before the result is sent, however slowly the
+ * runner's pages load. (A host timer started at `initialized` ran on a
+ * clock the runner's instants do not share, so on a loaded CI runner the
+ * 100 ms between openaiBridge's 1400 sample and its 1500 result vanished
+ * and the "in flight" sample was taken of the finished card.) A cue sent
+ * before `initialized` waits for it. `toolName` rides
+ * `hostContext.toolInfo`, as the spec defines it, only when the arm says
+ * the host sends one. */
 function harness(card, o) {
   const inject =
     "window.__CARD__=" +
@@ -64,6 +71,14 @@ body{margin:0;padding:0}.frame{width:720px}iframe{border:0;width:100%;display:bl
 const O=window.__O__;
 const f=document.getElementById("c");
 function send(m){f.contentWindow.postMessage(m,"*");}
+let inited=false;const queued=[];
+function fire(n){
+ if(n==="cancel")send({jsonrpc:"2.0",
+   method:"ui/notifications/tool-cancelled",params:{reason:"user stopped"}});
+ else if(n==="result")send({jsonrpc:"2.0",
+   method:"ui/notifications/tool-result",
+   params:O.rawResult||{content:[{type:"text",text:JSON.stringify(O.result)}]}});}
+window.__cue=(n)=>{if(inited)fire(n);else queued.push(n);};
 window.addEventListener("message",(ev)=>{const m=ev.data;if(!m||m.jsonrpc!=="2.0")return;
  if(m.method==="ui/initialize"){
    const ctx={theme:"dark",displayMode:"inline",availableDisplayModes:["inline"],styles:{variables:{}}};
@@ -71,11 +86,7 @@ window.addEventListener("message",(ev)=>{const m=ev.data;if(!m||m.jsonrpc!=="2.0
    send({jsonrpc:"2.0",id:m.id,result:{protocolVersion:"2026-01-26",hostContext:ctx}});}
  else if(m.method==="ui/notifications/initialized"){
    if(O.input)send({jsonrpc:"2.0",method:"ui/notifications/tool-input",params:{arguments:O.input}});
-   if(O.cancelAt!=null)setTimeout(()=>send({jsonrpc:"2.0",
-     method:"ui/notifications/tool-cancelled",params:{reason:"user stopped"}}),O.cancelAt);
-   if(O.resultAt!=null)setTimeout(()=>send({jsonrpc:"2.0",
-     method:"ui/notifications/tool-result",
-     params:O.rawResult||{content:[{type:"text",text:JSON.stringify(O.result)}]}}),O.resultAt);}
+   inited=true;queued.splice(0).forEach(fire);}
  else if(m.method==="ui/notifications/size-changed"){
    f.style.height=m.params.height+"px";}});
 f.srcdoc=window.__CARD__;
@@ -149,7 +160,11 @@ const browser = await chromium.launch();
 /* Run one arm: sample the card at each instant in `at` (ms after the
  * page loads the card). A ChatGPT arm applies its `steps` — `[at, globals]`
  * — from inside the frame, each a globals update + the event, the way the
- * Apps SDK delivers them; `resultAt`/`result` is the one-step shorthand. */
+ * Apps SDK delivers them; `resultAt`/`result` is the one-step shorthand.
+ * The host's own `cancelAt`/`resultAt` (the arm's, or a ChatGPT arm's
+ * `bridge`) are cues on the same timeline, so every event an arm schedules
+ * before an instant has happened when that instant is sampled, and none
+ * scheduled after it has. */
 async function arm(kind, o, at) {
   const page = await browser.newPage({
     viewport: { width: 768, height: 1200 },
@@ -163,15 +178,24 @@ async function arm(kind, o, at) {
   const frame = () => page.frames().find((fr) => fr !== page.mainFrame());
   const t0 = Date.now();
   const samples = {};
-  const steps = o.openai
-    ? o.steps ||
-      (o.resultAt != null ? [[o.resultAt, { toolOutput: o.result }]] : [])
-    : [];
+  const host = o.openai ? o.bridge || {} : o;
+  const steps = [
+    ...(o.openai
+      ? o.steps ||
+        (o.resultAt != null ? [[o.resultAt, { toolOutput: o.result }]] : [])
+      : []),
+    ...(host.cancelAt != null ? [[host.cancelAt, { cue: "cancel" }]] : []),
+    ...(host.resultAt != null ? [[host.resultAt, { cue: "result" }]] : []),
+  ].sort((a, b) => a[0] - b[0]);
   let next = 0;
   for (const t of at) {
     while (next < steps.length && steps[next][0] < t) {
       const [when, globals] = steps[next++];
       await page.waitForTimeout(Math.max(0, when - (Date.now() - t0)));
+      if (globals.cue) {
+        await page.evaluate((n) => window.__cue(n), globals.cue);
+        continue;
+      }
       await frame().evaluate((g) => {
         Object.assign(window.openai, g);
         window.dispatchEvent(

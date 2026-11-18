@@ -30,6 +30,8 @@ from keel.tools.outcomes._handoff import (
     mint_deploy_intent,
 )
 
+from . import _plan_catalog as cat
+
 
 @pytest.fixture(autouse=True)
 def _bootstrap_outcomes():
@@ -594,8 +596,7 @@ def test_spent_grant_wall_states_the_truth_not_the_false_no_grants_sentence():
     env = _wall_envelope(SPENT_GRANT_403)
     _assert_valid_handoff_envelope(env, plan_wall=True)
     points = " ".join(env["talking_points"])
-    assert "Weekly backtests used — 50 of 50 on your plan." in points
-    assert "They reset Tue 22 Sep 00:00 UTC." in points
+    assert "Backtests: 50 of 50 used on this plan; resets Tue 22 Sep." in points
     assert "does not include" not in points and "doesn't include" not in points
     # Not vacuous: the numbers are the SERVED ones and the kind is the
     # spent-grant kind — neither moves if the renderer is wrong.
@@ -611,8 +612,8 @@ def test_no_grant_wall_is_the_only_one_that_says_the_plan_lacks_the_unit():
     env = _wall_envelope(NO_GRANT_403)
     _assert_valid_handoff_envelope(env, plan_wall=True)
     points = " ".join(env["talking_points"])
-    assert "Your plan does not include backtests." in points
-    assert "used —" not in points
+    assert "This plan doesn't include backtests." in points
+    assert " used " not in points
 
 
 def test_legacy_producer_vocabulary_no_longer_renders_the_false_sentence():
@@ -621,7 +622,7 @@ def test_legacy_producer_vocabulary_no_longer_renders_the_false_sentence():
     it was given — never to "your plan doesn't include it"."""
     env = _wall_envelope(LEGACY_NEED_HAVE_403)
     points = " ".join(env["talking_points"])
-    assert "Backtest runs — plan limit reached on your plan." in points
+    assert "Backtests: plan limit reached on this plan." in points
     assert "does not include" not in points and "doesn't include" not in points
 
 
@@ -662,8 +663,8 @@ def test_wall_envelope_carries_no_destination_on_any_host(monkeypatch):
 
 
 def test_talking_points_validator_rejects_a_pitch():
-    """D-11 restraint half, widened by D-12, in the ONE validator both
-    surfaces use.
+    """D-11 restraint half, widened by D-12 and kept by D-14 (prices, links,
+    the retired ladder), in the ONE validator both surfaces use.
 
     Seeded arms: a price, a capacity promise, a checkout pointer, and —
     since D-12 — the D-11 revision's own "Higher plans include more …"
@@ -693,47 +694,68 @@ def test_talking_points_validator_rejects_a_pitch():
             validate_talking_points([pitch, *honest[1:]])
 
 
-# ─── The neutral wall (D-12, 04 §4.1) and its calm card (Q-1806) ──────────
+# ─── The D-14 wall (doc 07 §4/§5) and its calm card (Q-1806) ──────────────
 #
 # The 2026-09-23 ChatGPT observation (Q-1806): at 50/50 the card rendered,
 # in red, a directive to the MODEL. The 2026-09-28 rejection (Q-2080): the
-# wall named the other tiers and drew a "See plans in Keel" button into the
-# billing tab. The wall now states the caller's own limit and reset; on the
-# free plan, that paid plans include more; and what does not use the
-# allowance — as text, with no link.
+# wall LISTED the other tiers with their limits and drew a "See plans in
+# Keel" button into the billing tab. The wall now states the caller's own
+# numbers and reset, NAMES the plans that include more (served names only,
+# computed here from plans.yaml), says where plans are changed, and what does
+# not use the allowance — as text, with no link.
 
-PATHS = [
-    {"plan": "starter", "limit": 500, "period": "weekly"},
-    {"plan": "trader", "unlimited": True},
-]
-SPENT_WITH_PATHS_403 = (
-    '{"title": "Forbidden", "status": 403, "detail": "Insufficient entitlements", '
-    '"code": "quota_exhausted", '
-    '"quota": {"kind": "insufficient", "unit": "backtest_runs", "label": "backtests", '
-    '"code": "quota_exhausted", "limit": 50, "used": 50, "remaining": 0, '
-    '"period": "weekly", "reset_epoch": 1790035200, "plan": "free", '
-    '"higher_plans": ' + json.dumps(PATHS) + "}}"
-)
-PAID_WITH_PATHS_403 = SPENT_WITH_PATHS_403.replace('"plan": "free"', '"plan": "starter"').replace(
-    '"limit": 50, "used": 50', '"limit": 500, "used": 500'
-)
-COMPUTE_EDGE_403 = (
-    '{"title": "Forbidden", "status": 403, "detail": "x", "code": "quota_exhausted", '
-    '"quota": {"kind": "insufficient", "unit": "backtest_compute_seconds", '
-    '"label": "backtest compute time", "code": "quota_exhausted", "limit": 1500, '
-    '"used": 1490, "remaining": 10, "period": "weekly", "reset_epoch": 1790035200, '
-    '"plan": "free", "higher_plans": [{"plan": "starter", "limit": 15000, '
-    '"period": "weekly"}, {"plan": "pro", "unlimited": true}]}}'
-)
 
+def _served_higher(plan: str, unit: str) -> list[dict]:
+    """keel-api's `higher_plans`: the catalog's names AND limits (D-10)."""
+    out = cat.higher_plans(plan, unit)
+    for entry in out:
+        entry["limit"] = int(cat._value(entry["plan"], entry["version"], unit))
+        entry["period"] = "30d"
+    return out
+
+
+def _wall_403(plan: str, limit: int, used: int, unit: str = "backtest_runs") -> str:
+    label = "backtests" if unit == "backtest_runs" else "backtest compute time"
+    quota = {
+        "kind": "insufficient",
+        "unit": unit,
+        "label": label,
+        "code": "quota_exhausted",
+        "limit": limit,
+        "used": used,
+        "remaining": limit - used,
+        "period": "30d",
+        "reset_epoch": 1790035200,
+        "plan": plan,
+        "plan_name": cat.display_name(plan),
+        "higher_plans": _served_higher(plan, unit),
+    }
+    return json.dumps(
+        {
+            "title": "Forbidden",
+            "status": 403,
+            "detail": "Insufficient entitlements",
+            "code": "quota_exhausted",
+            "quota": quota,
+        }
+    )
+
+
+SPENT_WITH_PATHS_403 = _wall_403("free", 50, 50)
+PAID_WITH_PATHS_403 = _wall_403("trader", 1000, 1000)
+TOP_PLAN_403 = _wall_403("pro", 4000, 4000)
+COMPUTE_EDGE_403 = _wall_403("free", 1500, 1490, unit="backtest_compute_seconds")
+
+_NOTE = "Composing, validating and reading existing results don't use this allowance."
 FREE_WALL = [
-    "Weekly backtests used — 50 of 50 on the Free plan. They reset Tue 22 Sep 00:00 UTC.",
-    "Plans are changed in the Keel web app.",
-    "Composing, validating and reading existing results don't use this allowance.",
+    "Backtests: 50 of 50 used on Free; resets Tue 22 Sep.",
+    "Trader and Pro include more. Plans are changed in the Keel web app.",
+    _NOTE,
 ]
 PAID_WALL = [
-    "Weekly backtests used — 500 of 500 on your plan. They reset Tue 22 Sep 00:00 UTC.",
-    "Composing, validating and reading existing results don't use this allowance.",
+    "Backtests: 1,000 of 1,000 used on Trader; resets Tue 22 Sep.",
+    "Pro includes more. Plans are changed in the Keel web app.",
+    _NOTE,
 ]
 
 #: Words that only make sense to the MODEL. None may reach text a person
@@ -783,8 +805,8 @@ def test_model_directed_guard_can_fail(monkeypatch):
     assert _model_directed_in_card(env) == [env["message"]]
 
 
-def test_free_wall_is_the_exact_d12_copy():
-    """04 §4.1 free plan, quote-level, on every carrier: the talking points
+def test_free_wall_is_the_exact_d14_copy():
+    """doc 07 §5 Free, quote-level, on every carrier: the talking points
     ARE the three lines, the message is them joined, and the card draws the
     same sentences (headline, reset, plans, note) with no link.
 
@@ -802,16 +824,25 @@ def test_free_wall_is_the_exact_d12_copy():
     view = env["limit_view"]
     assert set(view) == {"headline", "reset", "plans", "note"}, view
     assert view == {
-        "headline": "Weekly backtests used — 50 of 50 on the Free plan",
-        "reset": "They reset Tue 22 Sep 00:00 UTC.",
+        "headline": "Backtests: 50 of 50 used on Free",
+        "reset": "Resets Tue 22 Sep.",
         "plans": FREE_WALL[1],
         "note": FREE_WALL[2],
     }
     # ONE authoritative home for the numbers: limit_details. The empty
-    # `example` is never pointed at; the caller's own plan rides along.
+    # `example` is never pointed at; the caller's own plan and the NAMES of
+    # the plans that include more ride along, never their limits.
     assert env["example"] == {}
     assert env["limit_details"]["plan"] == "free"
+    assert env["limit_details"]["plan_name"] == "Free"
+    assert env["limit_details"]["more_plans"] == cat.names(
+        cat.higher_plans("free", "backtest_runs")
+    )
     assert "higher_plans" not in env["limit_details"]
+    assert env["what_was_expected"] == (
+        "Plan limit; don't retry before the reset. "
+        "Tell the user the numbers and which plans include more."
+    )
     assert "`example`" not in json.dumps(env)
     assert env["reason"] == "A plan limit on backtests stopped this call."
     assert env["resume"]["verify_call"]["reason"] == (
@@ -819,71 +850,80 @@ def test_free_wall_is_the_exact_d12_copy():
     )
 
 
-def test_paid_wall_carries_no_plan_sentence():
-    """04 §4.1 any paid plan (Q2): limit, reset and the allowance note —
-    no plan mention. Control arm for the test above: the same wall, one
-    field different (`plan`), and the plan sentence disappears."""
+def test_trader_wall_names_pro_and_the_top_plan_names_none():
+    """Founder Q2: Trader gets "Pro includes more."; Pro gets no plan line and
+    no "Plans are changed" (nowhere higher to go) — the control arm that
+    proves the line reacts to the served `higher_plans` and nothing else."""
     env = _wall_envelope(PAID_WITH_PATHS_403)
     _assert_valid_handoff_envelope(env, plan_wall=True)
     assert env["talking_points"] == PAID_WALL
     assert env["message"] == " ".join(PAID_WALL)
-    assert set(env["limit_view"]) == {"headline", "reset", "note"}
-    assert "Paid plans" not in json.dumps(env)
+    top = _wall_envelope(TOP_PLAN_403)
+    assert top["talking_points"] == [
+        "Backtests: 4,000 of 4,000 used on Pro; resets Tue 22 Sep.",
+        _NOTE,
+    ]
+    assert set(top["limit_view"]) == {"headline", "reset", "note"}
+    assert "Plans are changed" not in json.dumps(top)
+    assert (
+        top["what_was_expected"]
+        == "Plan limit; don't retry before the reset. Tell the user the numbers."
+    )
 
 
-def test_the_served_higher_plans_never_render():
-    """keel-api still serves `higher_plans` (D-10); the SDK renders none of
-    it (D-12). Seed the served number: nothing on the envelope moves, which
-    proves no sentence reads it. Non-vacuity: the seed changed the body."""
-    seeded = SPENT_WITH_PATHS_403.replace('"limit": 500', '"limit": 777')
+def test_the_served_higher_plans_numbers_never_render():
+    """keel-api serves `higher_plans` WITH limits (D-10); the SDK renders the
+    names and none of the numbers (founder Q1). Seed the served number:
+    nothing on the envelope moves, which proves no sentence reads it.
+    Non-vacuity: the seed changed the body."""
+    seeded = SPENT_WITH_PATHS_403.replace('"limit": 1000', '"limit": 777')
     assert seeded != SPENT_WITH_PATHS_403
     env = _wall_envelope(seeded)
     blob = json.dumps(env)
-    for token in ("777", "500", "Starter", "Trader", "starter", "trader", "unlimited"):
+    for token in ("777", "1000", "1,000", "4000", "4,000", "unlimited"):
         assert token not in blob, token
     assert env == _wall_envelope(SPENT_WITH_PATHS_403)
 
 
-def test_older_server_without_a_plan_gets_the_paid_shape():
-    """A server that named no plan gets no plan sentence — the free-plan
-    sentence is never guessed onto a wall."""
+def test_older_server_without_higher_plans_gets_no_plan_line():
+    """A server that named no plan and no `higher_plans` gets no plan line —
+    a more clause is never guessed onto a wall."""
     env = _wall_envelope(SPENT_GRANT_403)
     assert "plans" not in env["limit_view"]
     points = " ".join(env["talking_points"])
-    assert "Paid plans" not in points and "Free" not in points
+    assert "include more" not in points and "Free" not in points
 
 
 def test_compute_edge_wall_does_not_claim_all_used():
     env = _wall_envelope(COMPUTE_EDGE_403)
     points = env["talking_points"]
     assert points[0] == (
-        "Weekly backtest compute time — 10 s of 1,500 s left on the Free plan, "
-        "not enough to start this. They reset Tue 22 Sep 00:00 UTC."
+        "Backtest compute time: 10 s of 1,500 s left on Free, "
+        "not enough to start this; resets Tue 22 Sep."
     )
-    assert points[1] == "Plans are changed in the Keel web app."
+    assert points[1] == "Trader and Pro include more. Plans are changed in the Keel web app."
     joined = " ".join(points)
     assert "used 1,490" not in joined and "used all" not in joined.lower()
     assert env["limit_view"]["headline"] == (
-        "Weekly backtest compute time — 10 s of 1,500 s left on the Free plan, not enough "
-        "to start this"
+        "Backtest compute time: 10 s of 1,500 s left on Free, not enough to start this"
     )
-    assert "15,000" not in json.dumps(env) and "Pro" not in joined
+    assert "30,000" not in json.dumps(env) and "120,000" not in json.dumps(env)
 
 
 def test_every_wall_text_field_passes_the_d12_scan(monkeypatch):
     """The scan covers message, reason, suggestion, talking points and the
-    card — not only talking points. Seeded arm: the wall's plan sentence
-    renderer returns the D-11 revision's tier line; building the wall
-    raises (a programming error, never a string quietly shipped). Control:
-    the unseeded free wall builds (tests above)."""
+    card — not only talking points. Seeded arm: the wall's plan line
+    renderer returns a priced pitch; building the wall raises (a
+    programming error, never a string quietly shipped). Control: the
+    unseeded free wall builds (tests above)."""
     import keel.errors as errors
 
     monkeypatch.setattr(
         errors,
         "quota_plans_line",
-        lambda info: "Higher plans include more backtests: Starter 500 a week, Trader unlimited.",
+        lambda info: "Trader is $49 a month; upgrade now.",
     )
-    with pytest.raises(ValueError, match="forbidden plan/upsell language"):
+    with pytest.raises(ValueError, match="forbidden price/link/pitch language"):
         _wall_envelope(SPENT_WITH_PATHS_403)
 
 

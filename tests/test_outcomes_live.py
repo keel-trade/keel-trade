@@ -11,6 +11,7 @@ from unittest.mock import MagicMock, call
 
 import pytest
 import yaml
+from keel.config import KeelConfig
 from keel.errors import KeelError, ValidationError
 from keel.tools.outcomes import _bootstrap, get
 from keel.tools.outcomes._base import ToolContext
@@ -660,11 +661,14 @@ def test_live_monitor_overview_returns_metadata():
     assert [c.kwargs for c in client.get.call_args_list[1:]] == [
         {"headers": TELEMETRY},
         {"headers": TELEMETRY},
+        {"headers": TELEMETRY, "limit": 1},
     ]
     assert [c.args[0] for c in client.get.call_args_list] == [
         "/v1/deployments/dep_42",
         "/v1/deployments/dep_42/stats",
         "/v1/deployments/dep_42/equity",
+        # The newest run, for the overview's `last_run` sentence (doc 14 R5).
+        "/v1/deployments/dep_42/executions",
     ]
     env = result.to_envelope()
     assert env["run_id"] == "dep_42"
@@ -728,10 +732,18 @@ def test_live_monitor_overview_enrichment_is_best_effort():
 
     client = MagicMock()
     client.get.side_effect = _get
+    # A real client always carries a KeelConfig; a bare MagicMock would
+    # fabricate ``_config.api_url`` as a MagicMock, which the enrichment's
+    # performance-contract check (b76b7dde0e) cannot parse as a URL. This
+    # origin never selected the contract, so the read stays best-effort; the
+    # selected-origin arm (the error propagates) is pinned with a real
+    # KeelClient in test_account_performance.py.
+    client._config = KeelConfig(api_key="test", api_url="https://monitor-unselected.test")
     env = get("keel_live_monitor").handler({"deployment_id": "dep_42"}, _ctx(client)).to_envelope()
     assert env["data"]["status"] == "active"
     assert "stats" not in env
     assert "curve" not in env
+    assert client.get.call_count >= 3  # detail + stats + equity were all attempted
 
 
 def _assert_class_read_first(client) -> None:

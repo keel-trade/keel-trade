@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import ast
 import asyncio
+import json
 import re
 from contextlib import contextmanager
 from pathlib import Path
@@ -44,6 +45,8 @@ from keel.tools.outcomes import _paper_strings as paper_strings
 from keel.tools.outcomes._toolsets import (
     LISTED_PAPER_TOOLS,
     LISTED_PROFILE_TOOLS,
+    LISTED_RESEARCH_TOOLS,
+    LISTED_SCREEN_TOOLS,
     listed_profile_tools,
 )
 
@@ -236,7 +239,23 @@ _LISTED_STATE_SPECS: dict[str, tuple[str | None, str | None, bool]] = {
     "chatgpt_on-chatgpt": ("chatgpt", "chatgpt", True),
     "chatgpt_on-claude": ("chatgpt", "claude", False),
     "all_on-unknown": ("all", None, True),
+    # The listed screens flag (screeners L13): every arm also runs with screens
+    # on for every host, alone and beside paper, so the four screen tools, the
+    # screen card and the screen-creation prompt pass the same string rules.
+    "screens_on": (None, None, False),
+    "screens_on-paper_on": ("all", None, True),
+    # Research served (D-344 (1)): the listed surface while `research.enabled` is on for the request (the three
+    # research tools, their copy, the help topics they open, the instructions), alone and beside paper and screens.
+    "research_on": (None, None, False),
+    "research_on-paper_on-screens_on": ("all", None, True),
 }
+
+#: The states that also switch the listed screens flag on for every host.
+_SCREENS_ON_STATES = frozenset(
+    {"screens_on", "screens_on-paper_on", "research_on-paper_on-screens_on"}
+)
+#: The states that serve Research for the request (``research_served_context(True)``).
+_RESEARCH_ON_STATES = frozenset({"research_on", "research_on-paper_on-screens_on"})
 
 
 @contextmanager
@@ -249,8 +268,9 @@ def listed_flag_state(paper: bool, state: str | None = None):
     instead (FDR-10): the SDK is released whenever any host is switched on,
     and the caller's host key is bound for the enclosed build."""
     import os
+    from contextlib import ExitStack
 
-    from keel.tools.outcomes._toolsets import listed_host_context
+    from keel.tools.outcomes._toolsets import research_served_context
 
     if state is None:
         state = "flag_on" if paper else "flag_off"
@@ -261,6 +281,7 @@ def listed_flag_state(paper: bool, state: str | None = None):
         "KEEL_TOOLSETS",
         "KEEL_LISTED_PAPER",
         "KEEL_LISTED_PAPER_HOSTS",
+        "KEEL_LISTED_SCREENS_HOSTS",
     )
     saved = {k: os.environ.get(k) for k in keys}
     os.environ["KEEL_SERVER_PROFILE"] = "listed"
@@ -268,18 +289,15 @@ def listed_flag_state(paper: bool, state: str | None = None):
     os.environ.pop("KEEL_TOOLSETS", None)
     os.environ.pop("KEEL_LISTED_PAPER", None)
     os.environ.pop("KEEL_LISTED_PAPER_HOSTS", None)
+    os.environ.pop("KEEL_LISTED_SCREENS_HOSTS", None)
+    if state in _SCREENS_ON_STATES:
+        os.environ["KEEL_LISTED_SCREENS_HOSTS"] = "all"
     try:
-        if hosts is not None:
-            from tests._paper_sdk import paper_sdk_release
-
-            with paper_sdk_release(), listed_host_context(host):
-                if hosts == "legacy":
-                    os.environ["KEEL_LISTED_PAPER"] = "1"
-                else:
-                    os.environ["KEEL_LISTED_PAPER_HOSTS"] = hosts
-                yield
-        else:
-            yield
+        stack = ExitStack()
+        if state in _RESEARCH_ON_STATES:
+            stack.enter_context(research_served_context(True))
+        with stack:
+            yield from _listed_hosts(hosts, host)
     finally:
         for k, v in saved.items():
             if v is None:
@@ -288,12 +306,33 @@ def listed_flag_state(paper: bool, state: str | None = None):
                 os.environ[k] = v
 
 
+def _listed_hosts(hosts, host):
+    """The per-host paper switch of a state (FDR-10): the held paper SDK released while any host is on."""
+    import os
+
+    from keel.tools.outcomes._toolsets import listed_host_context
+
+    if hosts is not None:
+        from tests._paper_sdk import paper_sdk_release
+
+        with paper_sdk_release(), listed_host_context(host):
+            if hosts == "legacy":
+                os.environ["KEEL_LISTED_PAPER"] = "1"
+            else:
+                os.environ["KEEL_LISTED_PAPER_HOSTS"] = hosts
+            yield
+    else:
+        yield
+
+
 class ListedSurface(tuple):
     """(tools_json, instructions, prompt_names), plus the flag state it was
     built in: `paper`, the registry then (`registry`) and the listed set the
     server then served by `listed_profile_tools()` (`listed_tools`)."""
 
     paper: bool
+    screens: bool
+    research: bool
     registry: frozenset
     listed_tools: frozenset
 
@@ -331,6 +370,8 @@ def listed_surface(request):
         ]
         surface = ListedSurface((tools_json, server.instructions or "", {p.name for p in prompts}))
         surface.paper = paper
+        surface.screens = request.param in _SCREENS_ON_STATES
+        surface.research = request.param in _RESEARCH_ON_STATES
         surface.registry = frozenset(OUTCOMES)
         surface.listed_tools = listed_profile_tools()
     return surface
@@ -356,7 +397,12 @@ def test_listed_surface_is_exactly_the_allow_list(listed_surface):
         f"listed surface drifted — unexpected: {sorted(names - allowed)}, "
         f"missing: {sorted(allowed - names)}"
     )
-    assert len(names) == 29 + len(LISTED_PAPER_TOOLS) * int(listed_surface.paper)
+    assert len(names) == (
+        29
+        + len(LISTED_PAPER_TOOLS) * int(listed_surface.paper)
+        + len(LISTED_SCREEN_TOOLS) * int(listed_surface.screens)
+        + len(LISTED_RESEARCH_TOOLS) * int(listed_surface.research)
+    )
     # Both simulated paper tools ride the flag together (S10 §3, PT2-90);
     # no live tool is ever added (PT2-27, EXPLICITLY_EXCLUDED_TOOLS).
     assert (names >= LISTED_PAPER_TOOLS) is listed_surface.paper
@@ -525,7 +571,12 @@ def test_a_listed_paper_tool_says_it_is_simulated(listed_surface):
     assert not violations, "\n".join(violations)
     # Count: no paper tool among the 29 off, exactly the two simulated paper
     # tools among the 31 on (S10 §3).
-    assert len(tools_json) == 29 + len(LISTED_PAPER_TOOLS) * int(listed_surface.paper)
+    assert len(tools_json) == (
+        29
+        + len(LISTED_PAPER_TOOLS) * int(listed_surface.paper)
+        + len(LISTED_SCREEN_TOOLS) * int(listed_surface.screens)
+        + len(LISTED_RESEARCH_TOOLS) * int(listed_surface.research)
+    )
     assert paper == (sorted(LISTED_PAPER_TOOLS) if listed_surface.paper else [])
 
 
@@ -583,7 +634,12 @@ def test_no_forbidden_verbs_in_titles_descriptions_or_instructions(listed_surfac
     )
     assert not violations, "\n".join(violations)
     # Count (AC-06-6): every served tool's description was scanned.
-    assert len(tools_json) == 29 + len(LISTED_PAPER_TOOLS) * int(paper)
+    assert len(tools_json) == (
+        29
+        + len(LISTED_PAPER_TOOLS) * int(paper)
+        + len(LISTED_SCREEN_TOOLS) * int(listed_surface.screens)
+        + len(LISTED_RESEARCH_TOOLS) * int(listed_surface.research)
+    )
 
 
 def test_output_schema_copy_passes_the_string_rules(listed_surface):
@@ -975,7 +1031,10 @@ def test_listed_descriptions_are_descriptive_not_imperative(listed_surface):
     assert (
         len(tools_json)
         == len(listed_surface.listed_tools)
-        == 29 + len(LISTED_PAPER_TOOLS) * int(listed_surface.paper)
+        == 29
+        + len(LISTED_PAPER_TOOLS) * int(listed_surface.paper)
+        + len(LISTED_SCREEN_TOOLS) * int(listed_surface.screens)
+        + len(LISTED_RESEARCH_TOOLS) * int(listed_surface.research)
     )
     assert all(len(t["description"]) >= 200 for t in tools_json)
     assert len(_result_level_copy()) == 6
@@ -1347,6 +1406,17 @@ def test_nested_parameter_copy_passes_the_string_rules(listed_surface):
     assert nested == 3, nested
 
 
+#: The research tools' nested parameters while Research is served (D-344 (1)): pinned like the base set.
+NESTED_RESEARCH_PARAM_NAMES = frozenset(
+    f"keel_research_{tool}.{path}"
+    for tool in ("plan", "run")
+    for path in (
+        "base.evidence_hash", "base.revision", "base.version", "cell.at", "cell.grid", "cell.subject",
+        "costs.fee", "costs.slippage", "days.end", "days.start",
+    )
+) | {"keel_research_get.sort.measure", "keel_research_get.sort.order"}  # fmt: skip
+
+
 def test_nested_parameter_names_carry_no_money_semantics(listed_surface):
     """G4: every NESTED property name's segments pass FORBIDDEN_PARAM_TOKENS,
     and the nested population is exactly the target set (re-pin it when a
@@ -1362,7 +1432,10 @@ def test_nested_parameter_names_carry_no_money_semantics(listed_surface):
                 if bad:
                     violations.append(f"{t['name']}.{path}: forbidden name token(s) {bad}")
     assert not violations, "\n".join(violations)
-    assert names == NESTED_PARAM_NAMES_AFTER_SPEC_03, sorted(names)
+    want = NESTED_PARAM_NAMES_AFTER_SPEC_03 | (
+        NESTED_RESEARCH_PARAM_NAMES if listed_surface.research else frozenset()
+    )
+    assert names == want, sorted(names ^ want)
 
 
 # ── G5: the served keel_account_status payload ──────────────────────────────────
@@ -1526,15 +1599,25 @@ def test_status_payload_local_passes_the_string_rules(monkeypatch, tmp_path):
 # card's "See plans in Keel" (host-adapter.js renderPlanLimit), the
 # costs_and_fees "Trader or Pro" paragraph and platform-operations' canary.
 #
-# The ONE allowed sentence (04 §4.1, D-12 Q1's recorded fallback, Q-2268) —
-# "Plans are changed in the Keel web app." — is allowed only in the FREE
-# plan's wall, sentence-exact; the paid wall is the control arm that must
-# not carry it.
+# D-14 (2026-11-16, doc 07 §7) replaced D-12's "no plan names" arms (the
+# `plans? include more` ban, PLAN_NAME_RE's comparisons, the one allowed
+# free-wall sentence) with what is actually forbidden: prices, links to
+# pricing/billing/checkout, pitch words — and a plan NAME anywhere but the
+# renderer's own-plan and more clauses, or naming a plan the server did not
+# serve as one that includes more (`sf.plan_name_violations`). Static copy
+# names no paid plan at all (§6.1).
 
 
 @pytest.fixture(scope="module")
 def g4_surface():
     return sf.listed_surface()
+
+
+@pytest.fixture(scope="module")
+def g4_research_surface():
+    """The listed surface as a caller with Research served reads it (doc 07
+    §7: research is in the listed scans)."""
+    return sf.listed_surface(research=True)
 
 
 @pytest.fixture(scope="module")
@@ -1556,9 +1639,19 @@ def _g4_hits(owner: str, text: str, scope: str) -> list[str]:
     return [f"{owner}: {fam} {m!r}" for fam, m in sf.family_hits(text, scope=scope)]
 
 
-def test_g4_served_bodies_carry_no_commerce_or_live_money(g4_surface):
+def test_g4_research_surface_is_wider_than_the_base(g4_surface, g4_research_surface):
+    """Non-vacuity for the research arms: Research served adds served copy."""
+    base_tools = {t["name"] for t in g4_surface.tools}
+    research_tools = {t["name"] for t in g4_research_surface.tools}
+    wider_docs = set(g4_research_surface.help_docs) > set(g4_surface.help_docs)
+    assert wider_docs or research_tools > base_tools
+
+
+@pytest.mark.parametrize("surface_name", ["g4_surface", "g4_research_surface"])
+def test_g4_served_bodies_carry_no_commerce_or_live_money(surface_name, request):
     """# SEED (standing at base): costs_and_fees' "moving to Trader or Pro"
     and platform-operations' "minimal-capital canary" red here."""
+    g4_surface = request.getfixturevalue(surface_name)
     violations: list[str] = []
     bodies = 0
     for topic, body in sorted(g4_surface.help_docs.items()):
@@ -1578,7 +1671,9 @@ def test_g4_served_bodies_carry_no_commerce_or_live_money(g4_surface):
     assert bodies >= 35, bodies
 
 
-def test_g4_prompts_carry_no_commerce_or_live_money(g4_surface):
+@pytest.mark.parametrize("surface_name", ["g4_surface", "g4_research_surface"])
+def test_g4_prompts_carry_no_commerce_or_live_money(surface_name, request):
+    g4_surface = request.getfixturevalue(surface_name)
     violations: list[str] = []
     for name, prompt in sorted(g4_surface.prompts.items()):
         violations += _g4_hits(f"prompt:{name}.description", prompt["description"], "strict")
@@ -1586,7 +1681,8 @@ def test_g4_prompts_carry_no_commerce_or_live_money(g4_surface):
     assert not violations, "listed prompts carry commerce / live-money copy:\n" + "\n".join(
         violations
     )
-    assert len(g4_surface.prompts) == 7
+    # 7, plus screen-creation: the layer guards read the flag-on surface (L13).
+    assert len(g4_surface.prompts) >= 8
 
 
 def _schema_keys(node) -> list[str]:
@@ -1598,8 +1694,10 @@ def _schema_keys(node) -> list[str]:
     return []
 
 
-def test_g4_tools_list_copy_and_keys_carry_no_commerce_or_live_money(g4_surface):
+@pytest.mark.parametrize("surface_name", ["g4_surface", "g4_research_surface"])
+def test_g4_tools_list_copy_and_keys_carry_no_commerce_or_live_money(surface_name, request):
     """Descriptions, every schema string and every schema property NAME."""
+    g4_surface = request.getfixturevalue(surface_name)
     violations = _g4_hits(
         "instructions",
         g4_surface.instructions.replace(LISTED_BOUNDARY_SENTENCE, ""),
@@ -1619,12 +1717,38 @@ def test_g4_tools_list_copy_and_keys_carry_no_commerce_or_live_money(g4_surface)
     assert keys >= 29, keys
 
 
+def _plan_names_in(payload: sf.Payload) -> list[str]:
+    """D-14 §7: plan names only in the generated clauses, only as served. A
+    string that IS the own plan's name or one served name (the `plan_name`
+    and `more_plans` values) is that field, not copy."""
+    allowed = {payload.own_plan, *payload.more_plans} - {None}
+    out: list[str] = []
+    for text in payload.strings():
+        if text in allowed:
+            continue
+        out += [
+            f"payload:{payload.name}: {v}"
+            for v in sf.plan_name_violations(text, own=payload.own_plan, more=payload.more_plans)
+        ]
+    return out
+
+
+#: Successful full-profile paper results: their run notes name the live
+#: step by design (paper-trading-v2 S06 §3.2.5), so only the plan-copy and
+#: plan-name rules read them; every listed or error payload gets all of G4.
+_FULL_PROFILE_SUCCESS = frozenset({"paper_last_slot"})
+
+
 def _payload_violations(payload: sf.Payload) -> list[str]:
     violations: list[str] = []
     for text in payload.strings():
-        if payload.name == "free_wall":
-            text = sf.ALLOWED_FREE_WALL_SENTENCE_RE.sub("", text)
-        violations += _g4_hits(f"payload:{payload.name}", text, "strict")
+        violations += [
+            v
+            for v in _g4_hits(f"payload:{payload.name}", text, "strict")
+            if " plan-name " not in v  # plan names: `_plan_names_in` below
+            and not (payload.name in _FULL_PROFILE_SUCCESS and " live-money " in v)
+        ]
+    violations += _plan_names_in(payload)
     for key in payload.keys():
         if COMMERCE_KEY_RE.search(key):
             violations.append(f"payload:{payload.name}: commerce key {key!r}")
@@ -1650,11 +1774,18 @@ def test_g4_runtime_payloads_carry_no_commerce_or_live_money(g4_payloads):
     assert {
         "free_wall",
         "paid_wall",
+        "top_wall",
         "plan_status_free",
         "plan_status_paid",
+        "plan_status_full",
         "critical_run",
+        "floor_run",
         "status",
         "paper_wall",
+        "paper_last_slot",
+        "paper_floor_free",
+        "paper_floor_paid",
+        "screen_private_wall",
     } <= set(g4_payloads)
     assert g4_payloads["paper_wall"].structured.get("blocked_action") == "paper_deploy"
 
@@ -1664,71 +1795,364 @@ def test_g4_runtime_payloads_carry_no_commerce_or_live_money(g4_payloads):
 PLAN_PAYLOADS = (
     "free_wall",
     "paid_wall",
+    "top_wall",
     "paper_wall",
+    "paper_floor_free",
+    "paper_floor_paid",
+    "screen_private_wall",
     "plan_status_free",
     "plan_status_paid",
+    "plan_status_full",
     "plan_status_first_week",
+    "plan_status_30d",
+    "paid_wall_30d",
 )
 
 
-def test_g4_plan_payloads_carry_no_url_and_no_upsell(g4_payloads):
-    """Walls and keel_plan_usage: no Keel URL anywhere; the handoff's own
-    upsell rule (`_FORBIDDEN_UPSELL_RE`: prices, "monthly", "upgrade", …)
-    over every string — the one allowed sentence removed first, free wall
-    only. The critical-tier run keeps its backtest links; its quota notice
-    and quota line are held to the upsell rule."""
+def _upsell_hits(text: str) -> list[str]:
+    """The plan-copy rule (`keel.errors.assert_plan_copy`'s two patterns)."""
+    from keel.errors import PITCH_WORDS_RE
     from keel.tools.outcomes._handoff import _FORBIDDEN_UPSELL_RE
 
-    allowed = re.compile(r"Plans are changed in the Keel web app\.")
+    return [m.group(0) for r in (_FORBIDDEN_UPSELL_RE, PITCH_WORDS_RE) for m in r.finditer(text)]
+
+
+def test_g4_plan_payloads_carry_no_url_and_no_upsell(g4_payloads):
+    """Walls and keel_plan_usage: no Keel URL anywhere; the plan-copy rule
+    (prices, "monthly", "upgrade", pitch words, …) over every string. The
+    runs keep their backtest links; their notices and `quota:`/`plan:`
+    lines are held to the rule."""
     violations: list[str] = []
     for name in PLAN_PAYLOADS:
         for text in g4_payloads[name].strings():
-            if name == "free_wall":
-                text = allowed.sub("", text)
             violations += [f"{name}: Keel URL {u}" for u in sf.KEEL_URL_RE.findall(text)]
-            violations += [
-                f"{name}: upsell {m.group(0)!r}" for m in _FORBIDDEN_UPSELL_RE.finditer(text)
-            ]
-    run = g4_payloads["critical_run"]
-    notice = [run.structured.get("quota_notice") or ""]
-    notice += [line for line in run.text.splitlines() if line.startswith("quota:")]
-    for text in notice:
-        violations += [f"critical_run: Keel URL {u}" for u in sf.KEEL_URL_RE.findall(text)]
-        violations += [
-            f"critical_run: upsell {m.group(0)!r}" for m in _FORBIDDEN_UPSELL_RE.finditer(text)
-        ]
+            violations += [f"{name}: upsell {m!r}" for m in _upsell_hits(text)]
+    for name, key in (
+        ("critical_run", "quota_notice"),
+        ("floor_run", "floor_notice"),
+        ("paper_last_slot", "quota_notice"),
+    ):
+        run = g4_payloads[name]
+        notice = [run.structured.get(key) or ""]
+        notice += [ln for ln in run.text.splitlines() if ln.startswith(("quota:", "plan:"))]
+        for text in notice:
+            violations += [f"{name}: Keel URL {u}" for u in sf.KEEL_URL_RE.findall(text)]
+            violations += [f"{name}: upsell {m!r}" for m in _upsell_hits(text)]
     assert not violations, "plan payloads carry links or upsell copy:\n" + "\n".join(
         sorted(set(violations))
     )
-    # Non-vacuity: both walls are plan-limit handoffs (the real 403 path),
-    # and the critical run carries its notice.
+    # Non-vacuity: the walls are plan-limit handoffs (the real 403 path), and
+    # the runs carry their notices.
     for name in sf.WALL_FIXTURES:
         assert g4_payloads[name].structured.get("code") == "handoff_required", name
-    assert notice[0].startswith("4 of 50 backtests left this week"), notice
+    assert (
+        g4_payloads["critical_run"]
+        .structured["quota_notice"]
+        .startswith("4 of 50 backtests left; resets Mon 28 Sep.")
+    )
+    assert g4_payloads["floor_run"].structured["floor_notice"].startswith("Note: paper and live")
+
+
+# ─── The timeframe-floor refusal (plan change spec 01 §C10/§C11, §L7) ────
+#
+# The one new plan gate's refusal reaches an agent through keel_paper_deploy
+# (and the local live tools) as keel-api's 422. It is a plan limit, so it is
+# held to the same D-12 scans as every wall: both payloads (the current Free
+# plan's 1h floor and a paid plan's 15min floor) ride PLAN_PAYLOADS and the
+# G4 runtime scan above. Built through the REAL keel_paper_deploy path with
+# only keel-api's 422 stubbed (sf.paper_floor_payload).
+
+
+def _plan_payload_violations(payload: sf.Payload) -> list[str]:
+    """The scans a plan payload answers to: G4's families, the plan-name
+    rule, the plan-copy rule, and no Keel URL (the PLAN_PAYLOADS test)."""
+    violations = _payload_violations(payload)
+    for text in payload.strings():
+        violations += [f"Keel URL {u}" for u in sf.KEEL_URL_RE.findall(text)]
+        violations += [f"upsell {m!r}" for m in _upsell_hits(text)]
+    return violations
+
+
+@pytest.mark.parametrize(
+    ("name", "floor", "requested"),
+    [("paper_floor_free", "1h", "15min"), ("paper_floor_paid", "15min", "5min")],
+)
+def test_floor_refusal_is_a_plan_limit_handoff_with_structured_facts(
+    g4_payloads, name, floor, requested
+):
+    """doc 07 §5: each floor payload is the REAL refusal turned into the
+    plan-limit handoff with a card — keel-api's code still on `detail`, the
+    floor wall as the message, the plans that run faster named and their
+    floors never — and it passes every plan scan."""
+    payload = g4_payloads[name]
+    assert payload.is_error, name
+    body = payload.structured
+    assert body["code"] == "handoff_required", body
+    assert body["detail"]["code"] == "SERVING_CLOCK_BELOW_PLAN_FLOOR", body
+    assert body["detail"]["floor"] == floor and body["detail"]["requested"] == requested
+    own = payload.own_plan
+    assert body["message"].startswith(f"Paper and live on {own} need {floor} or slower"), body
+    # The agent-facing message names the DSL field, as the talking points do;
+    # only the card's `limit_view` keeps plain words (Q-7601 fix round).
+    assert f"Change `target_timeframe` to {floor} or slower." in body["message"], body
+    assert body["message"] == " ".join(body["talking_points"]), body
+    assert body["limit_view"]["reset"] == f"Change the strategy's timeframe to {floor} or slower."
+    assert set(body["limit_view"]) >= {"headline", "reset", "plans"}, body["limit_view"]
+    assert body["limit_details"]["more_plans"] == list(payload.more_plans)
+    assert payload.more_plans, "non-vacuity: a v2 plan below Pro has faster plans"
+    blob = json.dumps(body).lower()
+    named = re.findall(r"\b(?:upgrade\w*|plan_id|authority|higher_plans)\b", blob)
+    assert named == [], (name, named)
+    for other in ("15min", "5min"):
+        if other not in (floor, requested):
+            assert f'"{other}"' not in blob, (name, other)
+    assert _plan_payload_violations(payload) == [], name
+
+
+def test_floor_refusal_scan_reds_on_a_pitch_and_on_an_unserved_plan():
+    """Proof the floor arm can fail (built through the same real paper-deploy
+    path): a server sentence carrying "upgrade" never reaches the payload
+    (the SDK renders the wall), so the seed is the RENDERER — a pitch in the
+    change line is refused at build (the call errors, never a string
+    shipped); and a payload claiming fewer served plans than its clause
+    names reds the plan-name rule. Control: the unseeded payload."""
+    import keel.errors as errors
+
+    pitched = sf.paper_floor_payload(
+        "1h", "15min", message="This plan is limited; upgrade now to run faster ones."
+    )
+    assert "upgrade" not in json.dumps(pitched.structured), "server words are not the wall"
+    real = errors.floor_change_line
+    errors.floor_change_line = lambda info, card=False: real(info, card=card) + " Upgrade now."
+    try:
+        refused = sf.paper_floor_payload("1h", "15min")
+    finally:
+        errors.floor_change_line = real
+    assert refused.is_error and refused.structured.get("code") != "handoff_required", refused
+    control = sf.paper_floor_payload("1h", "15min")
+    control.own_plan, control.more_plans = "Free", ("Trader", "Pro")
+    assert _plan_payload_violations(control) == []
+    control.more_plans = ("Pro",)
+    assert any("more clause" in h for h in _plan_payload_violations(control))
+
+
+# ─── The 30-day cycle's words (plan change spec 01 §C5/§C11) ─────────────
+
+#: The 30-day payloads and the phrase each must render (non-vacuity).
+_PERIOD_30D_TEXT = {
+    "plan_status_30d": "Backtests: 21 of 25 left; resets Sun 29 Nov.",
+    "critical_run_30d": "4 of 25 backtests left; resets Sun 29 Nov.",
+    "paid_wall_30d": "Backtests: 1,000 of 1,000 used on Trader; resets Sun 29 Nov.",
+}
+
+
+def _period_30d_violations(payload: sf.Payload) -> list[str]:
+    """A plan payload's scans; for the run, G4 over the whole payload and the
+    upsell/URL rule over its quota notice only (the run keeps its backtest
+    links, exactly as `critical_run` does above)."""
+    if payload.name != "critical_run_30d":
+        return _plan_payload_violations(payload)
+
+    violations = _payload_violations(payload)
+    notice = [payload.structured.get("quota_notice") or ""]
+    notice += [line for line in payload.text.splitlines() if line.startswith("quota:")]
+    for text in notice:
+        violations += [f"Keel URL {u}" for u in sf.KEEL_URL_RE.findall(text)]
+        violations += [f"upsell {m!r}" for m in _upsell_hits(text)]
+    return violations
+
+
+def test_30d_words_pass_d12(g4_payloads):
+    """The one new period wording rides the real plan-usage, run-notice and
+    wall paths and passes every D-12 scan; the wall's headline has no period
+    adjective (no "Monthly …", which the scan refuses)."""
+    for name, phrase in _PERIOD_30D_TEXT.items():
+        payload = g4_payloads[name]
+        assert phrase in payload.text, (name, payload.text[:400])
+        assert _period_30d_violations(payload) == [], name
+        assert not re.search(r"\bmonth", payload.text, re.IGNORECASE), name
+
+
+def test_30d_scan_reds_on_monthly_wording(monkeypatch):
+    """Proof the 30-day guard can fail: "monthly" in the one reset-date
+    renderer (`errors.format_reset_date`, which every plan line reads) never
+    reaches a host. Rebuilt through the same real paths, each payload is
+    either refused by the runtime plan-copy check (`assert_plan_copy` fails
+    the call) or reds the scans — and the sentence the control renders
+    (test_30d_words_pass_d12) is gone."""
+    import keel.errors as errors
+    from keel.tools.outcomes import plan_status
+
+    def monthly(when):
+        return f"{when.day} {when:%b} (monthly)"
+
+    monkeypatch.setattr(errors, "format_reset_date", monthly)
+    monkeypatch.setattr(plan_status, "format_reset_date", monthly)
+    seeded = sf.period_30d_payloads()
+    for name in ("plan_status_30d", "critical_run_30d"):
+        payload = seeded[name]
+        refused = payload.is_error and payload.structured.get("code") == "internal_error"
+        hits = _period_30d_violations(payload)
+        assert refused or any("monthly" in h.lower() for h in hits), (name, hits)
+        assert _PERIOD_30D_TEXT[name] not in payload.text, name
 
 
 def _wall_sentences(payload: sf.Payload) -> list[str]:
     return [s for text in payload.strings() for s in sf.sentences(text)]
 
 
-def test_g4_the_one_allowed_sentence_is_on_the_free_wall_only(g4_payloads):
-    """Control arm for the exemption: the free wall states it (04 §4.1),
-    the paid wall and every other payload do not."""
-    free = _wall_sentences(g4_payloads["free_wall"])
-    assert any(sf.ALLOWED_FREE_WALL_SENTENCE_RE.match(s) for s in free), (
-        "the free-plan wall must say: 'Plans are changed in the Keel web app.' (04 §4.1, "
-        "D-12 fallback)"
+def test_g4_plan_names_appear_only_in_the_generated_clauses(g4_payloads):
+    """D-14 §7: across every runtime payload, a plan name appears only in the
+    own-plan or more clause, and the more clause names exactly the plans the
+    server said include more. The top plan's wall has no clause at all.
+
+    Non-vacuity: the free wall DOES name plans (from the catalog), and the
+    scan sees the clause it allows."""
+    violations = [v for p in g4_payloads.values() for v in _plan_names_in(p)]
+    assert not violations, "plan names outside the generated clauses:\n" + "\n".join(violations)
+    free = g4_payloads["free_wall"]
+    assert free.more_plans and all(n in free.text for n in free.more_plans), free.text
+    top = g4_payloads["top_wall"]
+    assert top.more_plans == ()
+    assert "include" not in top.text and "Plans are changed" not in top.text
+
+
+def test_g4_plan_name_rule_can_fail():
+    """SEEDED arms (doc 07 §7): "Starter" on a Trader wall; a plan named in
+    passing; a more clause on the Pro wall. CONTROL: the Free and Trader
+    walls' real lines and the plan-usage opening pass."""
+    from . import _plan_catalog as cat
+
+    trader_more = tuple(cat.names(cat.higher_plans("trader", "backtest_runs")))
+    free_more = tuple(cat.names(cat.higher_plans("free", "backtest_runs")))
+    trader_wall = "Backtests: 1,000 of 1,000 used on Trader; resets Mon 28 Sep."
+    seeds = {
+        "Starter on a Trader wall": (
+            trader_wall + " Starter and Pro include more.",
+            "Trader",
+            trader_more,
+        ),
+        "named in passing": (trader_wall + " Starter is also a plan.", "Trader", trader_more),
+        "clause on a Pro wall": (
+            "Backtests: 4,000 of 4,000 used on Pro; resets Mon 28 Sep. Trader includes more.",
+            "Pro",
+            (),
+        ),
+    }
+    for what, (text, own, more) in seeds.items():
+        assert sf.plan_name_violations(text, own=own, more=more), what
+    web = "Plans are changed in the Keel web app."
+    controls = (
+        (
+            f"Backtests: 25 of 25 used on Free; resets Mon 28 Sep. Trader and Pro include more. {web}",
+            "Free",
+            free_more,
+        ),
+        (f"{trader_wall} Pro includes more. {web}", "Trader", trader_more),
+        (
+            "Plan: Free. Trader and Pro include more; plans are changed in the Keel web app.",
+            "Free",
+            free_more,
+        ),
     )
-    for name, payload in g4_payloads.items():
-        if name == "free_wall":
+    for text, own, more in controls:
+        assert sf.plan_name_violations(text, own=own, more=more) == [], text
+
+
+def test_every_v2_limit_kind_has_a_wall_notice_and_plan_usage_fixture(g4_payloads):
+    """doc 07 §7: each limit kind the renderer knows has its wall, near-limit
+    notice (a feature has none, §5 "—") and plan-usage fixture, and each
+    fixture says that kind's sentence. Non-vacuity: every kind, every slot.
+
+    SEED (run 2026-11-16): delete the "floor" row from `sf.KIND_FIXTURES` —
+    this reds on the kind set; restore it, then drop `floor_run` from the
+    payload builder — this reds on the missing fixture."""
+    from keel.errors import LIMIT_KINDS
+
+    assert set(sf.KIND_FIXTURES) == set(LIMIT_KINDS), sorted(sf.KIND_FIXTURES)
+    checked = 0
+    for kind, slots in sf.KIND_FIXTURES.items():
+        assert set(slots) == {"wall", "notice", "plan_usage"}, kind
+        for slot, entry in slots.items():
+            if entry is None:
+                assert (kind, slot) == ("feature", "notice"), (kind, slot)
+                continue
+            name, sentence = entry
+            assert name in g4_payloads, (kind, slot, name)
+            assert sentence in g4_payloads[name].text, (kind, slot, g4_payloads[name].text[:400])
+            checked += 1
+    assert checked == 11
+
+
+def test_every_plans_yaml_unit_a_tool_can_hit_has_a_renderer_row():
+    """doc 07 §6.1: a unit an agent tool can hit has a `LIMIT_UNITS` row, and
+    the row's kind agrees with plans.yaml's `type` (cap → cap, consumable →
+    consumable, boolean → feature, setting → floor). A unit no agent tool can
+    meet is named below with the reason, so a NEW unit reds until it has a
+    row or a reason.
+
+    SEED (run 2026-11-16): delete the `paper_strategies_max` row — this reds;
+    flip `research_studies` to CAP — this reds on the kind."""
+    from keel.errors import CAP, CONSUMABLE, FEATURE, FLOOR, LIMIT_UNITS
+
+    from . import _plan_catalog as cat
+
+    not_on_agent_surface = {
+        "ai_messages": "the in-app chat's allowance; no agent tool spends it",
+        "eval_runs": "live evaluation, metered server-side",
+        "eval_compute_seconds": "live evaluation, metered server-side",
+        "screen_refresh_seconds": "silent refresh budget (Q-7063), never a wall",
+        "symbols_max": "a universe bound refused as validation, not a plan wall",
+        "strategies_max": "unlimited on every v2 plan",
+        "screener_retention_days": "a retention setting, never a refusal",
+    }
+    type_to_kind = {"cap": CAP, "consumable": CONSUMABLE, "boolean": FEATURE, "setting": FLOOR}
+    missing, disagree, checked = [], [], 0
+    for unit, decl in cat.units().items():
+        utype = decl.get("type")
+        if unit in not_on_agent_surface or decl.get("silent"):
             continue
-        leaked = [
-            s
-            for text in payload.strings()
-            for s in [text]
-            if "plans are changed in the keel web app" in s.lower()
-        ]
-        assert not leaked, f"{name} carries the free-wall-only sentence: {leaked[0][:160]}"
+        if utype == "setting" and unit != "screener_refresh_min_minutes":
+            continue  # research settings bound a study's shape, never a plan wall
+        if utype == "boolean" and not unit.startswith("feature:research"):
+            continue  # platform features no agent tool is refused on
+        row = LIMIT_UNITS.get(unit)
+        if row is None:
+            missing.append(unit)
+            continue
+        checked += 1
+        if type_to_kind.get(utype) != row.kind:
+            disagree.append((unit, utype, row.kind))
+    assert not missing, f"units an agent tool can hit with no LIMIT_UNITS row: {missing}"
+    assert not disagree, f"rows whose kind disagrees with plans.yaml: {disagree}"
+    assert checked >= 15, checked
+    # The floor is not a unit: it is every catalog plan's attr.
+    assert LIMIT_UNITS["paper_live_clock_floor"].kind == FLOOR
+    assert all(cat.floor_of(p) for p, _ in cat.paid_rows())
+
+
+def test_limit_unit_labels_match_the_served_label_table():
+    """The table's labels are `platform_auth.quota.UNIT_LABELS`, read from its
+    source (the SDK venv has no platform_auth), so a server that sends no
+    label reads the same noun keel-api would."""
+    import ast
+
+    from keel.errors import LIMIT_UNITS
+
+    from . import _plan_catalog as cat
+
+    tree = ast.parse((cat.REPO_ROOT / "libs" / "platform_auth" / "quota.py").read_text())
+    labels = next(
+        ast.literal_eval(node.value)
+        for node in ast.walk(tree)
+        if isinstance(node, ast.AnnAssign) and getattr(node.target, "id", "") == "UNIT_LABELS"
+    )
+    compared = 0
+    for unit, row in LIMIT_UNITS.items():
+        if unit in labels:
+            assert row.label == labels[unit], (unit, row.label, labels[unit])
+            compared += 1
+    assert compared >= 15, compared
 
 
 def test_g4_plan_limit_card_draws_no_link_and_no_plan_copy():
@@ -1768,10 +2192,11 @@ def test_g4_family_control_arms():
     ):
         assert sf.family_hits(retired, scope="strict"), retired
     for kept in (
-        "Weekly backtests used — 50 of 50 on the Free plan. They reset Mon 29 Sep 00:00 UTC.",
+        "Backtests: 50 of 50 used on Free; resets Mon 29 Sep.",
         "Composing, validating and reading existing results don't use this allowance.",
-        "4 of 50 backtests left this week; they reset Mon 29 Sep 00:00 UTC.",
+        "4 of 50 backtests left; resets Mon 29 Sep.",
         "Read-only monitoring of the strategies running on the caller's account.",
+        "Plans are changed in the Keel web app.",
     ):
         assert not sf.family_hits(kept, scope="strict"), kept
     # Body scope: DSL vocabulary is not commerce; neither is backtest capital.
@@ -1779,23 +2204,18 @@ def test_g4_family_control_arms():
     assert not sf.family_hits('"Skip anything under $10M/24h" is a threshold', scope="body")
     assert not sf.family_hits("a local checkout writes through", scope="body")
     assert not sf.family_hits("its last week on $3,000 of capital", scope="strict")
-    assert not sf.family_hits("signed in as Ada · Trader plan", scope="strict")
     assert sf.family_hits("Starter is $29/month", scope="strict")
     assert sf.family_hits("the real upgrade path when they are near a wall", scope="body")
-    assert sf.ALLOWED_FREE_WALL_SENTENCE_RE.match("Plans are changed in the Keel web app.")
-    assert not sf.ALLOWED_FREE_WALL_SENTENCE_RE.match(
-        "Paid plans include more backtests; plans are changed in the Keel web app."
-    )
-    assert not sf.ALLOWED_FREE_WALL_SENTENCE_RE.match(
-        "Paid plans include more backtests: Starter 500 a week."
-    )
+    # Static copy names no paid plan (§6.1): a description naming one reds.
+    assert sf.family_hits("Trader and Pro include more.", scope="strict")
+    assert not sf.family_hits("a trader's pro-rata fee", scope="strict")
 
 
 # ─── The expiry-urgency family (connect-onboarding spec 01 §1.9) ─────────
 #
 # A first-week allowance is the one time-limited number an agent surface
-# states, and it is stated as a fact: "154 of 200 first-week backtests left;
-# they end Tue 13 Oct 15:02 UTC." The family below is how that sentence could
+# states, and it is stated as a fact folded into the backtests line:
+# "(154 first-week extras until Tue 13 Oct)" (Q-7601 fix round). The family below is how that sentence could
 # drift into a push — and it is refused by every guard that reads agent copy:
 # the runtime emit guard (`assert_neutral_wall_text`), the talking-point
 # validator (`validate_talking_points`) and the G4 strict scan
@@ -1814,26 +2234,27 @@ def _urgency_seeds() -> tuple[str, ...]:
         approved + " Don't lose them.",
         approved + " Use them before Tuesday.",
         approved + " You are running out.",
-        "154 of 200 first-week backtests left; the allowance EXPIRES SOON.",
+        "Backtests: 246 of 250 left (154 first-week extras; the allowance EXPIRES SOON).",
     )
 
 
-#: Words the first-week copy never uses (spec 01 §1.9).
+#: Words the first-week copy never uses (spec 01 §1.9). "extras" (the
+#: Q-7601 fix round's own noun, "N first-week extras until <date>") is a
+#: different token from the banned "extra" and is deliberately allowed.
 FIRST_WEEK_BANNED_RE = re.compile(r"\b(?:bonus|extra|trial|upgrade)\b|then 50", re.IGNORECASE)
 
 
 def _every_guard_refuses(text: str) -> list[str]:
     """The guards that did NOT refuse ``text`` (empty means all refused)."""
-    from keel.errors import assert_neutral_wall_text
+    from keel.errors import assert_plan_copy
     from keel.tools.outcomes._handoff import validate_talking_points
 
     missed: list[str] = []
-    for free_plan in (True, False):
-        try:
-            assert_neutral_wall_text(text, free_plan=free_plan)
-            missed.append(f"assert_neutral_wall_text(free_plan={free_plan})")
-        except ValueError:
-            pass
+    try:
+        assert_plan_copy(text)
+        missed.append("assert_plan_copy")
+    except ValueError:
+        pass
     try:
         validate_talking_points([text], require_do_nothing=False)
         missed.append("validate_talking_points")
@@ -1850,7 +2271,7 @@ def test_expiry_urgency_is_refused_by_every_guard():
 
     SEEDS (run 2026-10-06, each reverted by reversing the edit):
     * drop the family from `keel.errors.FORBIDDEN_UPSELL_RE` — this reds
-      naming `assert_neutral_wall_text` and `validate_talking_points` for
+      naming `assert_plan_copy` and `validate_talking_points` for
       all six seeds, and test_outcomes_plan_status'
       `test_an_urgent_first_week_sentence_fails_the_call` reds with it;
     * disable the strict-scope urgency family in `sf.family_hits` — this
@@ -1866,15 +2287,60 @@ def test_expiry_urgency_is_refused_by_every_guard():
 def test_the_approved_first_week_sentence_passes_every_guard():
     """CONTROL arm: the approved sentence passes every guard the seeds fail,
     and carries none of the banned words."""
-    from keel.errors import assert_neutral_wall_text
+    from keel.errors import assert_plan_copy
     from keel.tools.outcomes._handoff import validate_talking_points
 
     text = sf.FIRST_WEEK_SENTENCE
-    for free_plan in (True, False):
-        assert assert_neutral_wall_text(text, free_plan=free_plan) == text
+    assert assert_plan_copy(text) == text
     assert validate_talking_points([text], require_do_nothing=False) == [text]
     assert sf.family_hits(text, scope="strict") == []
     assert not FIRST_WEEK_BANNED_RE.search(text)
+
+
+#: The both-pots form (plan change spec 01 §C6) as the v2 Free line folds it
+#: (Q-7601 fix round): the first-week part's own count and end DATE, no
+#: window phrase and no "then" pot (both stay in the structured block). It
+#: keeps the approved vocabulary and states no other plan, price or push.
+BOTH_POTS_SENTENCE = "65 of 75 backtests left (40 first-week extras until Fri 6 Nov)."
+
+
+def test_the_both_pots_sentence_is_rendered_and_passes_every_guard():
+    """CONTROL arm for the both-pots form: the renderer produces exactly it
+    from a served block, and it passes every guard the urgency seeds fail."""
+    from keel.errors import assert_plan_copy, render_quota_sentence
+    from keel.tools.outcomes._handoff import validate_talking_points
+
+    served = {
+        "unit": "backtest_runs",
+        "label": "backtests",
+        "limit": 75,
+        "remaining": 65,
+        "first_week": {
+            "granted": 50,
+            "remaining": 40,
+            "ends_at": "2026-11-06T14:00:00Z",
+            "then_remaining": 25,
+            "then_limit": 25,
+        },
+    }
+    text = render_quota_sentence(served)
+    assert text == BOTH_POTS_SENTENCE
+    assert assert_plan_copy(text) == text
+    assert validate_talking_points([text], require_do_nothing=False) == [text]
+    assert sf.family_hits(text, scope="strict") == []
+    assert not FIRST_WEEK_BANNED_RE.search(text)
+
+
+def test_expiry_urgency_on_the_both_pots_sentence_is_refused():
+    """SEEDED arm: each urgency phrase appended to the both-pots sentence
+    fails every guard (the same family, so a longer sentence is no gap)."""
+    seeds = (
+        BOTH_POTS_SENTENCE[:-1] + "; use them before they expire.",
+        BOTH_POTS_SENTENCE + " Don't lose them.",
+        BOTH_POTS_SENTENCE + " You are running out.",
+    )
+    failures = {seed: missed for seed in seeds if (missed := _every_guard_refuses(seed))}
+    assert not failures, f"urgency copy slipped past: {failures}"
 
 
 def test_g4_first_week_payloads_carry_the_sentence_and_nothing_else(g4_payloads):
@@ -1882,11 +2348,14 @@ def test_g4_first_week_payloads_carry_the_sentence_and_nothing_else(g4_payloads)
     there (non-vacuity for every G4 arm that scans them), and no banned word
     or urgency phrase rides anywhere in the payload."""
     plan = g4_payloads["plan_status_first_week"]
-    assert sf.FIRST_WEEK_SENTENCE in plan.structured["talking_points"], plan.structured
+    assert any(
+        p.startswith("Backtests: ") and p.endswith(f" {sf.FIRST_WEEK_CLAUSE}.")
+        for p in plan.structured["talking_points"]
+    ), plan.structured
     run = g4_payloads["critical_run_first_week"]
     assert run.structured["quota_notice"] == (
-        "4 of 50 backtests left this week; they reset Mon 28 Sep 00:00 UTC. "
-        + sf.FIRST_WEEK_SENTENCE
+        "4 of 50 backtests left (4 first-week extras until Tue 13 Oct); resets Mon 28 Sep. "
+        "Trader and Pro include more."
     ), run.structured.get("quota_notice")
     for payload in (plan, run):
         for text in payload.strings():
@@ -2271,3 +2740,127 @@ def test_paper_sourcing_arm_control_arms(tmp_path):
                 path.unlink()
     # And the honest package is green again once the seeds are gone.
     assert _sourcing_violations(pkg, declared, rows)[0] == []
+
+
+# ── The study card's source guards (research spec 13 §7.1, §7.3; WL-CU-10) ──
+#
+# The study card draws served words only: it formats no number (no second
+# rendering of a number the server already worded, D-328 D9) and carries no
+# English of its own (every label comes from `card_data.copy` or the adapter).
+# And every domain field it reads is one the served contract declares, so a
+# renamed or invented field cannot draw nothing in silence.
+#
+# Seeded reds (run 2026-11-17, reversed by reversing the edit): `toFixed(` in
+# card-study.js reds the formatting arm; a literal "Open the study" reds the
+# English arm; `summary.value_wordz` reds the contract arm. Controls: the
+# file as built is green on all three, and each arm asserts its population.
+
+_WIDGET_ASSETS = Path(__file__).resolve().parents[1] / "keel" / "widgets" / "assets"
+_CARD_CONTRACT = Path(__file__).resolve().parents[4] / "libs" / "research" / "fixtures" / "card_v2"
+
+#: Number formatting a card must never do (the server words every number).
+_NUMBER_FORMATTING = re.compile(
+    r"\.toFixed\(|\.toPrecision\(|\.toLocaleString\(|Intl\.NumberFormat|\.toExponential\("
+)
+#: Literals that are not the card's English: the SVG namespace, KeyboardEvent
+#: key names, served family identifiers and the wordmark the adapter also draws.
+_STUDY_CARD_LITERALS_ALLOWED = frozenset(
+    {"http://www.w3.org/2000/svg", "Home", "End", "Escape", "Enter", "Checks", "Keel"}
+)
+#: Envelope fields outside card_summary/card_data the card reads (07 §3.1, 13
+#: §2.1, §2.6, §5): the SDK's link fields, the plan's run gate, a run's
+#: progress time words, the plan and receipt card line, a refusal's card words.
+_STUDY_ENVELOPE_FIELDS = frozenset(
+    {
+        "card_summary",
+        "card_data",
+        "hero_url",
+        "share_url",
+        "run_allowed",
+        "time_words",
+        "card_line",
+        "card_words",
+    }
+)
+
+
+def _study_card_code() -> str:
+    src = (_WIDGET_ASSETS / "card-study.js").read_text(encoding="utf-8")
+    src = re.sub(r"/\*.*?\*/", "", src, flags=re.S)
+    src = re.sub(r"(?m)^\s*//[^\n]*", "", src)
+    # Developer messages on the console are not drawn.
+    return re.sub(r"console\.error\(\s*\"[^\"]*\"", "console.error(", src)
+
+
+def _english_literals(code: str) -> tuple[list[str], int]:
+    literals = re.findall(r'"((?:[^"\\\n]|\\.)*)"', code)
+    english = [
+        lit
+        for lit in literals
+        if lit not in _STUDY_CARD_LITERALS_ALLOWED
+        and (
+            re.search(r"\b[A-Z][a-z]{2,}\b", lit)
+            or (len(re.findall(r"\b[a-z]{2,}\b", lit)) >= 3 and "-" not in lit and "_" not in lit)
+        )
+    ]
+    return english, len(literals)
+
+
+def _contract_names() -> set[str]:
+    names: set[str] = set()
+
+    def walk(node: object) -> None:
+        if isinstance(node, dict):
+            for key, value in node.items():
+                if key == "properties" and isinstance(value, dict):
+                    names.update(value)
+                walk(value)
+        elif isinstance(node, list):
+            for item in node:
+                walk(item)
+
+    walk(json.loads((_CARD_CONTRACT / "schema.json").read_text(encoding="utf-8")))
+    example = json.loads((_CARD_CONTRACT / "card_data.example.json").read_text("utf-8"))
+    names.update(example["copy"])  # copy is a served word map; its keys are the contract's
+    return names
+
+
+def test_the_study_card_formats_no_number():
+    code = _study_card_code()
+    assert "decodeThumb" in code and "chartBlock" in code  # not vacuous: the real card
+    assert not _NUMBER_FORMATTING.findall(code)
+
+
+def test_the_study_card_carries_no_english():
+    english, scanned = _english_literals(_study_card_code())
+    assert scanned > 200, scanned  # not vacuous: the card's literals were read
+    assert english == []
+
+
+def test_the_english_rule_reds_on_a_label():
+    english, _ = _english_literals('var a = "Open the study in Keel"; var b = "st-line st-ref";')
+    assert english == ["Open the study in Keel"]
+
+
+def test_every_field_the_study_card_reads_is_in_the_served_contract():
+    code = _study_card_code()
+    read = set(re.findall(r"\.([a-z][a-z0-9]*_[a-z0-9_]+)\b", code))
+    assert len(read) >= 20, sorted(read)  # not vacuous: the card's snake_case reads
+    unknown = read - _contract_names() - _STUDY_ENVELOPE_FIELDS
+    assert unknown == set(), sorted(unknown)
+
+
+@pytest.mark.parametrize("profile", ["listed", "full"])
+def test_the_served_study_card_html_passes_the_string_rules(monkeypatch, profile):
+    """13 §7.4 (WL-CU-14): the study card's served HTML (the adapter, card.css, card-study.css and card-study.js
+    as one resource) carries no forbidden term on the listed profile (while Research is served there) or the full
+    one. Seeded red (2026-11-17, reversed): a literal "deploy" in a card-study.js comment reds both arms; control:
+    the card as built."""
+    from keel.tools.outcomes._toolsets import research_served_context
+    from keel.widgets import build_card_html
+
+    monkeypatch.setenv("KEEL_SERVER_PROFILE", profile)
+    with research_served_context(True):
+        html = build_card_html("study")
+    assert "card-body" in html and len(html) > 100_000  # not vacuous: the whole served card
+    assert _text_violations(f"ui://keel/cards/study.html[{profile}]", "html", html) == []

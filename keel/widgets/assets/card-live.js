@@ -461,6 +461,107 @@
     return t;
   }
 
+  function canonicalPerformance(value) {
+    return value && value.contract_version === "account_performance.v1";
+  }
+
+  function measured(body, report, history) {
+    var p = report.perps_performance || {};
+    function metric(value, quality, percent) {
+      if (value == null) return F.text("Unavailable · " + quality);
+      return F.text(value + (percent ? "%" : " USDC") + " · " + quality);
+    }
+    body.appendChild(
+      H.tiles(
+        [
+          ["Main perps profit", metric(p.pnl, p.quality, false)],
+          ["Main perps return", metric(p.return_pct, p.return_quality, true)],
+          [
+            report.scope.kind === "portfolio"
+              ? "Portfolio NAV return"
+              : "Account NAV return",
+            metric(
+              report.return_quality === "valuation_linked"
+                ? report.exact_twr_pct
+                : report.estimated_return_pct,
+              report.return_quality,
+              true,
+            ),
+          ],
+        ],
+        { inline: 3 },
+      ),
+    );
+    body.appendChild(
+      H.el("p", "note", "Measured results · " + report.performance_quality),
+    );
+    var points = history.points || [];
+    // Draw only server-provided NAV returns. Unknown points split the path;
+    // neither the quote nor a baseline can supply missing performance.
+    var values = points
+      .filter(function (p) {
+        return (
+          p.validity === "complete" &&
+          p.return_pct != null &&
+          Number.isFinite(Number(p.return_pct)) &&
+          Number.isFinite(Date.parse(p.observed_at))
+        );
+      })
+      .map(function (p) {
+        return Number(p.return_pct);
+      });
+    if (!values.length) {
+      body.appendChild(
+        H.el("p", "note", "No measured history is currently available."),
+      );
+      return;
+    }
+    var lo = Math.min.apply(null, values),
+      hi = Math.max.apply(null, values);
+    var commands = [],
+      connected = false,
+      previousSegment = null;
+    var times = points
+      .map(function (p) {
+        return Date.parse(p.observed_at);
+      })
+      .filter(Number.isFinite);
+    var start = Math.min.apply(null, times),
+      end = Math.max.apply(null, times);
+    points.forEach(function (p) {
+      if (p.segment_id !== previousSegment) connected = false;
+      previousSegment = p.segment_id;
+      if (
+        p.validity !== "complete" ||
+        p.return_pct == null ||
+        !Number.isFinite(Number(p.return_pct)) ||
+        !Number.isFinite(Date.parse(p.observed_at))
+      ) {
+        connected = false;
+        return;
+      }
+      var x =
+        10 + (580 * (Date.parse(p.observed_at) - start)) / (end - start || 1);
+      var y = 110 - (100 * (Number(p.return_pct) - lo)) / (hi - lo || 1);
+      commands.push((connected ? "L" : "M") + x + " " + y);
+      connected = true;
+    });
+    var chart = svg("svg", {
+      viewBox: "0 0 600 130",
+      role: "img",
+      "aria-label": "Measured NAV return; unknown intervals are gaps",
+    });
+    chart.appendChild(
+      svg("path", {
+        d: commands.join(" "),
+        fill: "none",
+        stroke: "currentColor",
+        "stroke-width": 2,
+      }),
+    );
+    body.appendChild(chart);
+  }
+
   // ── Renderer ──────────────────────────────────────────────────────
   var lastEnv = null;
   var lastMode = null;
@@ -496,7 +597,19 @@
     });
 
     var entries;
-    if (view === "overview") {
+    var report = canonicalPerformance(data)
+      ? data
+      : canonicalPerformance(stats)
+        ? stats
+        : null;
+    if (report) {
+      // A correction replaces the entire report on render, including old curves.
+      measured(
+        body,
+        report,
+        canonicalPerformance(env.curve) ? env.curve : report,
+      );
+    } else if (view === "overview") {
       var s = stats || {};
       entries = [
         ["Net P&L", F.money(stats ? s.net_pnl : data.total_pnl)],
@@ -645,6 +758,11 @@
           H.el("p", "note", "Nothing to show for this view yet."),
         );
       }
+    }
+
+    if (canonicalPerformance(env.paper)) {
+      body.appendChild(H.el("p", "note", env.paper_label || "Paper results"));
+      measured(body, env.paper, env.paper);
     }
 
     // The receipt line: what state these numbers are, and how old.

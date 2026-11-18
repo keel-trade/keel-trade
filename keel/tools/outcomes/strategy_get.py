@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from keel.api_path import seg
 from keel.errors import KeelError, NotFoundError
 
 from . import register
@@ -28,7 +29,7 @@ def read_source(client: Any, strategy_id: str, version: str = "HEAD") -> str | N
     simply built without it. Never raises into a caller that already wrote.
     """
     try:
-        payload = client.get(f"/v1/strategies/{strategy_id}/versions/{version}/source")
+        payload = client.get(f"/v1/strategies/{seg(strategy_id)}/versions/{seg(version)}/source")
     except Exception:  # noqa: BLE001 — a render nicety never fails a tool call
         return None
     if not isinstance(payload, dict):
@@ -37,17 +38,57 @@ def read_source(client: Any, strategy_id: str, version: str = "HEAD") -> str | N
     return text if isinstance(text, str) and text.strip() else None
 
 
-def _read_version_payload(client: Any, strategy_id: str, version: str) -> dict | None:
-    """keel-api's `{source, sequence_number, commit_id, ...}` for one
-    version, best-effort (a render nicety, like `read_source`)."""
+def _is_head(version: Any) -> bool:
+    return str(version).upper() == "HEAD"
+
+
+def _version_read_params(version: str) -> dict[str, str]:
+    """The version read's query: a non-HEAD version also asks for ITS OWN
+    validation verdict (Q-7610), which keel-api judges at that commit's lock.
+    HEAD's verdict rides the `include=graph` GET already (Q-7605), so a HEAD
+    read asks for nothing more."""
+    return {} if _is_head(version) else {"include": "validation"}
+
+
+def _read_version(client: Any, strategy_id: str, version: str) -> tuple[dict | None, str | None]:
+    """keel-api's `{source, sequence_number, commit_id, ...}` for `version`,
+    as `(payload, None)`, or `(None, why it was not read)`.
+
+    HEAD is best-effort: its view stands on the strategy GET, so a source
+    that will not read costs the Code tab only. A non-HEAD version is the
+    subject of the answer, so it is never silently replaced (Q-7657:
+    `version="v1"` 404'd here and the view drew HEAD under the request):
+    a ref that names no version raises `NotFoundError`, as
+    `keel_strategy_diff` and `keel_strategy_restore` let keel-api's 404
+    through; any other failure returns the reason, and the caller draws no
+    view and says the version was not read.
+    """
     try:
-        payload = client.get(f"/v1/strategies/{strategy_id}/versions/{version}/source")
-    except Exception:  # noqa: BLE001 — a render nicety never fails a tool call
-        return None
+        payload = client.get(
+            f"/v1/strategies/{seg(strategy_id)}/versions/{seg(version)}/source",
+            **_version_read_params(version),
+        )
+    except NotFoundError as e:
+        if _is_head(version):
+            return None, str(e)
+        err = NotFoundError(
+            f"Version {version!r} of strategy {strategy_id} could not be read: {e}",
+            suggestion=(
+                f"{tool_ref('keel_strategy_get')} with `include_versions=true` lists this "
+                "strategy's versions; pass one as `version` (`v3`, `3`, a tag or a commit id)."
+            ),
+        )
+        err.recovery_tool = "keel_strategy_get"
+        err.recovery_tool_args = {"strategy_id": strategy_id, "include_versions": True}
+        raise err from e
+    except Exception as e:  # noqa: BLE001 — a failed read is reported, never raised past the metadata
+        return None, str(e) or type(e).__name__
     if not isinstance(payload, dict):
-        return None
+        return None, "the version read returned no payload"
     text = payload.get("source")
-    return payload if isinstance(text, str) and text.strip() else None
+    if not (isinstance(text, str) and text.strip()):
+        return None, "the version read returned no source"
+    return payload, None
 
 
 def _graph_for_source(source: Any) -> dict | None:
@@ -74,10 +115,11 @@ def _version_view_inputs(
 
     `version` at HEAD (or resolving to HEAD's sequence) is the server's graph
     and row, unchanged. Any other version is described WHOLLY as that version
-    (ChatGPT R4 #1: `version=1` returned v1's source inside a view labelled v4
-    drawing HEAD's structure and evidence): its own graph, its own sequence,
-    no HEAD-only fields (status, validation, the latest run), and HEAD
-    returned apart.
+    (ChatGPT R4 #1: `version=1` returned v1's source inside a view labelled
+    v4 drawing HEAD's structure and evidence): its own graph, its own sequence,
+    no HEAD-only fields (status, the latest run), and HEAD returned apart. Its
+    verdict is its OWN, from the version read (`include=validation`, Q-7610):
+    HEAD's would judge the wrong source, and none at all reads "valid".
     """
     row = meta if isinstance(meta, dict) else {}
     head = row.get("current_sequence")
@@ -95,7 +137,37 @@ def _version_view_inputs(
         if row.get(key) is not None
     }
     view_meta["current_sequence"] = requested
+    validation = payload.get("validation") if isinstance(payload, dict) else None
+    if isinstance(validation, dict):
+        view_meta["validation"] = validation
     return _graph_for_source(source_text), view_meta, head
+
+
+def screen_units(client: Any, strategy_id: Any, fallback: Any = None) -> Any:
+    """The saved screen's output units, as keel-api states them.
+
+    ``GET /v1/screeners/{id}/views`` answers ``units`` from the STORED
+    commit's descriptors (the screens-in-chat contract, item 3), each row
+    with the saved view's column ``label`` (Q-3638); the local validator's
+    ``validation.units`` is the same derivation over the same source
+    (``pipeline_engine.units``), so a caller that holds it passes it as
+    ``fallback`` for when that read fails or carries no ``units`` — two
+    equivalent sources, never a guess. Read by compose's save and by
+    ``keel_strategy_get`` on a screen (Q-3639).
+    """
+    try:
+        views = client.get(f"/v1/screeners/{seg(strategy_id)}/views")
+    except Exception:  # noqa: BLE001 — a render nicety never fails a tool call
+        return fallback
+    units = views.get("units") if isinstance(views, dict) else None
+    if isinstance(units, list) and any(isinstance(u, dict) for u in units):
+        return units
+    return fallback
+
+
+def _is_screen(graph: Any) -> bool:
+    """A screen's graph carries its `Outputs(...)` slots; a strategy's none."""
+    return isinstance(graph, dict) and bool(graph.get("outputs"))
 
 
 #: Completed runs the evidence choice reads (newest first by queue time).
@@ -183,6 +255,7 @@ def view_for_strategy(
     diff: Any = None,
     from_version: Any = None,
     source: Any = None,
+    validation: dict | None = None,
 ) -> dict | None:
     """Read one strategy's server-derived graph and build its `view`.
 
@@ -193,16 +266,25 @@ def view_for_strategy(
     construction: a read that fails, or a source the server could not
     parse, returns None and the caller's envelope is unchanged — the
     write already succeeded and a rendering must never undo it.
+
+    `validation` is a caller's own verdict on the stored source (compose's
+    `validation` block). keel-api's GET serves none, and `validation_block`
+    reads an absent verdict as valid, so a saved compose whose source
+    carries an error read "valid" in its header beside that error (Q-7602).
+    Given, it replaces whatever the read carried; the other callers (fork,
+    library fork, restore) hold no verdict and pass none.
     """
     from ._strategy_view import build_view, change_from_diff
     from .open_in_app import app_url_for
 
     try:
-        meta = client.get(f"/v1/strategies/{strategy_id}", include="graph")
+        meta = client.get(f"/v1/strategies/{seg(strategy_id)}", include="graph")
     except Exception:  # noqa: BLE001 — a render nicety never fails a tool call
         return None
     if not isinstance(meta, dict):
         return None
+    if isinstance(validation, dict):
+        meta = {**meta, "validation": validation}
     graph = meta.get("graph")
     change = (
         change_from_diff(
@@ -265,7 +347,7 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
         # (Q-1505, D2.2 render-only: the server derives, the card
         # draws). Best-effort on the server side: a source that will
         # not parse comes back without `graph`, never as an error.
-        meta = client.get(f"/v1/strategies/{strategy_id}", include="graph")
+        meta = client.get(f"/v1/strategies/{seg(strategy_id)}", include="graph")
     except NotFoundError:
         raise NotFoundError(
             f"Strategy not found: {strategy_id}",
@@ -283,23 +365,27 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
 
     if include_versions:
         try:
-            versions = client.get(f"/v1/strategies/{strategy_id}/versions")
+            versions = client.get(f"/v1/strategies/{seg(strategy_id)}/versions")
             body["versions"] = _listed_versions(versions) if listed else versions
         except KeelError as e:
             body["versions_error"] = str(e)
 
-    source_text: str | None = None
-    version_payload: dict | None = None
-    if include_source:
-        try:
-            src = client.get(f"/v1/strategies/{strategy_id}/versions/{version}/source")
-            body["source"] = pick(src, LISTED_SOURCE_FIELDS) if listed else src
-            body["version"] = version
-            if isinstance(src, dict) and isinstance(src.get("source"), str):
-                source_text = src["source"]
-                version_payload = src
-        except KeelError as e:
-            body["source_error"] = str(e)
+    # ONE read of the version serves `include_source`, the view and the
+    # Code tab. A non-HEAD ref that names no version raises here (Q-7657).
+    version_payload, version_unread = _read_version(client, strategy_id, version)
+    source_text: str | None = version_payload.get("source") if version_payload else None
+    if include_source and version_payload is not None:
+        body["source"] = pick(version_payload, LISTED_SOURCE_FIELDS) if listed else version_payload
+        body["version"] = version
+    elif version_unread is not None and (include_source or not _is_head(version)):
+        body["source_error"] = (
+            version_unread
+            if _is_head(version)
+            # Said in the result, because the view is absent: HEAD's is never
+            # drawn under a request for another version.
+            else f"Version {version!r} was not read ({version_unread}), so no view of it is "
+            "shown; HEAD's is not shown in its place."
+        )
 
     body["resource_uri"] = f"keel://strategy/{strategy_id}/source"
     if include_ownership_hint:
@@ -317,27 +403,30 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
     # simply carries no view rather than failing the read.
     from ._strategy_view import build_view
 
-    # The Code tab renders the strategy's own source, so the view carries it.
-    # Reuse what `include_source` already fetched; only pay for a second read
-    # when the caller did not ask for the source itself.
-    if source_text is None:
-        version_payload = _read_version_payload(client, strategy_id, version)
-        source_text = version_payload.get("source") if version_payload else None
-    graph, view_meta, head = _version_view_inputs(meta, version, version_payload, source_text)
     runs = _list_runs(client, strategy_id)
     # The strategy's newest runs, every status (Q-2269): the run ids
     # `keel_backtest_summarize`, `keel_backtest_compare` and
     # `keel_share_create` take, so "my latest backtest" resolves from here.
     body["recent_runs"] = recent_runs(runs)
-    evidence = _representative_evidence(runs, view_meta)
-    view = build_view(
-        graph,
-        view_meta,
-        url=hero_url,
-        source=source_text,
-        evidence=evidence,
-        head_version=head,
-    )
+    view = None
+    if version_payload is None and not _is_head(version):
+        # The requested version was not read: no view, and HEAD apart.
+        head = meta.get("current_sequence") if isinstance(meta, dict) else None
+    else:
+        # The Code tab renders the strategy's own source, so the view carries it.
+        graph, view_meta, head = _version_view_inputs(meta, version, version_payload, source_text)
+        evidence = _representative_evidence(runs, view_meta)
+        view = build_view(
+            graph,
+            view_meta,
+            url=hero_url,
+            source=source_text,
+            evidence=evidence,
+            head_version=head,
+            # A screen names its outputs in their units and view labels, as
+            # compose's save does (Q-3639); a strategy makes no extra read.
+            units=screen_units(client, strategy_id) if _is_screen(graph) else None,
+        )
     if view is not None:
         body["view"] = view
     if head is not None:

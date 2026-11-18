@@ -67,15 +67,39 @@ def effective_description(tool: OutcomeTool) -> str:
         # The listed surface moves only with the listed flag (S06 §3.4.2),
         # never with the SDK release.
         from . import _toolsets
+        from ._base import LISTED_RESEARCH_COPY
 
+        if tool.name in LISTED_RESEARCH_COPY and _toolsets.research_served():
+            # 00 §H14 (D-20): the trimmed Screens copy rides Research only.
+            return LISTED_RESEARCH_COPY[tool.name]
+        if tool.listed_screens_description is not None and _toolsets.listed_screens_enabled():
+            return tool.listed_screens_description
         if tool.listed_paper_description is not None and _toolsets.listed_paper_enabled():
             return tool.listed_paper_description
         return tool.listed_description if tool.listed_description is not None else tool.description
     from . import _toolsets
 
+    if tool.name == "keel_app_link" and _toolsets.research_served_bound() is True:
+        # D-358: the full profile's Research wording rides a request that bound Research as served; unbound (the
+        # CLI, a local server, the core-flow arm) the description is the pre-Research text byte for byte.
+        from .open_in_app import RESEARCH_DESCRIPTION
+
+        return RESEARCH_DESCRIPTION
     if _toolsets.PAPER_SDK_RELEASED and tool.paper_description is not None:
         return tool.paper_description
     return tool.description
+
+
+def listed_description_for(tool: OutcomeTool, *, research_served: bool) -> str:
+    """The description ``tool`` publishes with Research served or not (H14).
+
+    The hosted server builds its tools once, so its per-caller listing
+    (``services/mcp-server`` ``on_list_tools``) swaps each H14 tool's text
+    for the caller's state through this one function."""
+    from ._toolsets import research_served_context
+
+    with research_served_context(research_served):
+        return effective_description(tool)
 
 
 def effective_input_schema(tool: OutcomeTool) -> dict:
@@ -91,6 +115,8 @@ def effective_input_schema(tool: OutcomeTool) -> dict:
         # The listed surface moves only with the listed flag (S06 §3.4.2).
         from . import _toolsets
 
+        if tool.listed_screens_input_schema is not None and _toolsets.listed_screens_enabled():
+            return tool.listed_screens_input_schema
         if tool.listed_paper_input_schema is not None and _toolsets.listed_paper_enabled():
             return tool.listed_paper_input_schema
         return (
@@ -130,8 +156,13 @@ def ignored_arguments(tool: OutcomeTool) -> frozenset[str]:
 
 def effective_annotations(tool: OutcomeTool) -> dict:
     """Annotations for the active server profile (title may be vetted)."""
-    if is_listed_profile() and tool.listed_title is not None:
-        return {**tool.annotations, "title": tool.listed_title}
+    if is_listed_profile():
+        from . import _toolsets
+
+        if tool.listed_screens_title is not None and _toolsets.listed_screens_enabled():
+            return {**tool.annotations, "title": tool.listed_screens_title}
+        if tool.listed_title is not None:
+            return {**tool.annotations, "title": tool.listed_title}
     return tool.annotations
 
 
@@ -259,25 +290,29 @@ def _make_handler(tool: OutcomeTool, toolsets: frozenset[str]):
                     f"(known: {', '.join(sorted(known_props)) or '(none)'})"
                 )
             return json.dumps(
-                envelope_error(
-                    code="usage_error",
-                    message=f"Invalid arguments to {tool.name}: " + "; ".join(problems) + ".",
-                    what_was_expected=(
-                        f"An arguments object matching the tool's inputSchema "
-                        f"(required={sorted(schema_required)}, "
-                        f"known={sorted(known_props)})."
-                    ),
-                    example={
-                        k: schema_props[k].get("description", "") for k in sorted(known_props)
-                    },
-                    suggested_next_action={
-                        "tool": tool.name,
-                        "args": {k: None for k in missing_required},
-                        "reason": (
-                            f"Re-call `{tool.name}` with the named arguments above. "
-                            f"Drop any unknown arg names; pass the required ones."
+                _research_usage_link(
+                    envelope_error(
+                        code="usage_error",
+                        message=f"Invalid arguments to {tool.name}: " + "; ".join(problems) + ".",
+                        what_was_expected=(
+                            f"An arguments object matching the tool's inputSchema "
+                            f"(required={sorted(schema_required)}, "
+                            f"known={sorted(known_props)})."
                         ),
-                    },
+                        example={
+                            k: schema_props[k].get("description", "") for k in sorted(known_props)
+                        },
+                        suggested_next_action={
+                            "tool": tool.name,
+                            "args": {k: None for k in missing_required},
+                            "reason": (
+                                f"Re-call `{tool.name}` with the named arguments above. "
+                                f"Drop any unknown arg names; pass the required ones."
+                            ),
+                        },
+                    ),
+                    tool.name,
+                    args,
                 ),
                 default=str,
             )
@@ -381,6 +416,8 @@ _OPERATIONAL_FIELDS: tuple[tuple[str, str, str], ...] = (
     # How much of that window held positions (spec 07 §5, Q-1993's stamp):
     # the app's one line, so a mostly-warm-up window reads as one.
     ("exposure", "exposure", DATA),
+    # Which way the positions went (R-003): long / short, flips, P&L by side.
+    ("sides", "sides", DATA),
     # Part of the run the caller asked for (`keel_backtest_summarize`
     # start/end/capital, spec 07 §6): keel-api's sentence + what a slice is.
     ("slice", "slice", DATA),
@@ -406,6 +443,8 @@ _OPERATIONAL_FIELDS: tuple[tuple[str, str, str], ...] = (
     # A library entry's verified facts (Q-1843).
     ("library_facts", "facts", DATA),
     ("quota_notice", "quota", DATA),
+    # The paper/live timeframe heads-up on a run (doc 07 §5, D-14).
+    ("floor_notice", "plan", DATA),
     ("error_message", "error", DATA),
     ("info", "info", DATA),
     ("validation", "validation", DATA),
@@ -420,11 +459,23 @@ _OPERATIONAL_FIELDS: tuple[tuple[str, str, str], ...] = (
     # model nothing but this text block, so a requested source reached the
     # model on no such host. Last, because it is the long one.
     ("source", "source", DATA),
+    # A screen's saved view source and revision (`keel_screener_view(
+    # include_view_source=true)`, Q-3634): the same reason as `source` — it
+    # rode only in structuredContent, so claude.ai's agent edited the view
+    # blind and guessed `expected_revision=0`. A never-run screen's refusal
+    # carries it too (`detail.view_source`).
+    ("view_source", "view source", DATA),
 )
 
 #: Full-profile only (never emitted on listed; counted separately by G4):
-#: the deploy-intent link a good result carries on the CLI/local surface.
-_FULL_PROFILE_FIELDS: tuple[tuple[str, str, str], ...] = (("deploy", "deploy", DATA),)
+#: the deploy-intent link a good result carries on the CLI/local surface,
+#: and the capital guide's amounts.
+_FULL_PROFILE_FIELDS: tuple[tuple[str, str, str], ...] = (
+    ("deploy", "deploy", DATA),
+    # What it needs to trade as backtested (design doc 14 §11): the capital
+    # guide's three amounts, said plainly. Never on listed (research only).
+    ("capital_guide", "capital", DATA),
+)
 
 #: Issues named on the validation line before it says "+N more". The
 #: line is for the model's next move, not a full report — `validation`
@@ -495,18 +546,21 @@ def _validation_line(validation: Any) -> str | None:
         return None
     errors = [i for i in (validation.get("errors") or []) if i]
     warnings = [i for i in (validation.get("warnings") or []) if i]
-    if not errors and not warnings:
+    info = [i for i in (validation.get("info") or []) if i]
+    if not errors and not warnings and not info:
         return None
     counts = []
     if errors:
         counts.append(f"{len(errors)} error" + ("" if len(errors) == 1 else "s"))
     if warnings:
         counts.append(f"{len(warnings)} warning" + ("" if len(warnings) == 1 else "s"))
+    if info:
+        counts.append(f"{len(info)} notice" + ("" if len(info) == 1 else "s"))
     # Errors, then the position-layer upgrade, then every other warning
     # (04-R23): the upgrade stays inside the first five named issues. A
     # stable sort, so the server's order holds within each group.
     warnings = sorted(warnings, key=_issue_rank)
-    rendered = [line for line in (_issue_line(i) for i in errors + warnings) if line]
+    rendered = [line for line in (_issue_line(i) for i in errors + warnings + info) if line]
     shown = rendered[:_MAX_VALIDATION_ISSUES]
     remainder = len(rendered) - len(shown)
     if remainder > 0:
@@ -619,8 +673,8 @@ def _render_field(field: str, envelope: dict) -> str | None:
             return "; ".join(line for line in lines if line) or None
         return reference_line(envelope.get("reference"), comparison=kind == "comparison")
     if field == "realism":
-        return realism_line(envelope.get("realism"))
-    if field in ("exposure", "cost_model"):
+        return realism_line(envelope.get("realism"), envelope.get("capital_guide"))
+    if field in ("exposure", "sides", "cost_model", "capital_guide"):
         block = envelope.get(field)
         line = block.get("line") if isinstance(block, dict) else None
         return line if isinstance(line, str) and line else None
@@ -644,9 +698,19 @@ def _render_field(field: str, envelope: dict) -> str | None:
 
         return deprecations_line(validation.get("deprecations"))
     if field == "source":
+        if _view_kind(envelope) == "study":
+            # RI-241 (07 §3.2 rules 9-10): a research envelope's `source` is the stored study form (up to 131,072
+            # bytes; the owner's read, a plan's own) or a note's surface name, never the strategy DSL this line
+            # draws, so a research tool's text never appends it (it is the editor's, not the model's).
+            return None
         from ._strategy_view import requested_source_text
 
         return requested_source_text(envelope.get("source"), version=envelope.get("version"))
+    if field == "view_source":
+        from ._screener_view import view_source_text
+
+        detail = envelope.get("detail") if isinstance(envelope.get("detail"), dict) else {}
+        return view_source_text(envelope.get("view_source") or detail.get("view_source"))
     value = envelope.get(field)
     if isinstance(value, str) and value.strip():
         return value.strip()
@@ -711,6 +775,38 @@ DRAFT_CHECK_LINE = (
     "row (name · Draft check · revising or ready); what follows is detail for "
     "the next edit."
 )
+
+
+def _research_usage_link(envelope: dict, tool_name: str, args: Any) -> dict:
+    """``_research_commands.usage_refusal``: a research tool's argument refusal with its app link (RI-286); any
+    other tool's envelope unchanged."""
+    if not tool_name.startswith("keel_research_"):
+        return envelope
+    from ._research_commands import usage_refusal
+
+    return usage_refusal(envelope, tool_name, args)
+
+
+def _research_refusal_text(envelope: dict, lines: list[str]) -> str | None:
+    """``_research_commands.refusal_text``: a research refusal's text, or
+    ``None`` for an envelope that carries no research link (RI-237)."""
+    from ._research_commands import refusal_text
+
+    return refusal_text(envelope, lines)
+
+
+def _error_json_after_lines(envelope: dict, envelope_json: str, lines: list[str]) -> str:
+    """The error envelope as the text block's last part, without a view source
+    its `view source:` line already printed (Q-3634) — the same source twice,
+    once fenced and once JSON-escaped, is the bulk the text must not carry.
+    Every other field stays byte for byte."""
+    detail = envelope.get("detail")
+    if not any(line.startswith("view source: ") for line in lines):
+        return envelope_json
+    if not isinstance(detail, dict) or "view_source" not in detail:
+        return envelope_json
+    trimmed = {**envelope, "detail": {k: v for k, v in detail.items() if k != "view_source"}}
+    return json.dumps(trimmed, default=str)
 
 
 def _is_dry_run(envelope: dict) -> bool:
@@ -797,10 +893,26 @@ def view_tool_result(envelope_json: str, tool_name: str | None = None) -> Any:
         # the `error:` and `quota:` data), then the envelope itself — so
         # claude.ai, which reads only this block, loses no field (R4).
         lines = operational_lines(envelope)
-        text = str(envelope.get("message") or "").strip()
-        if lines:
-            text += "\n\n" + "\n".join(lines)
-        text += "\n\n" + envelope_json
+        # A research tool's refusal (RI-237; research spec 07 §3.2 rules 9 and
+        # 11): its words, these lines and its next call, then "View in Keel:
+        # {url}" last, with no envelope appended (it stays whole in
+        # structuredContent). Any other error, or a research error with no
+        # link, keeps the text below byte for byte.
+        research = (
+            _research_refusal_text(envelope, lines)
+            if (tool_name or "").startswith("keel_research_")
+            else None
+        )
+        if research is not None:
+            # D-344 (2), CONFORM-MCP F3: the envelope follows, as on every other tool, so claude.ai (which reads
+            # only this block) keeps the code, the fix and the near misses; the words lead and the link stays
+            # with them.
+            text = research + "\n\n" + _error_json_after_lines(envelope, envelope_json, lines)
+        else:
+            text = str(envelope.get("message") or "").strip()
+            if lines:
+                text += "\n\n" + "\n".join(lines)
+            text += "\n\n" + _error_json_after_lines(envelope, envelope_json, lines)
         if card_meta_move():
             meta[CARD_META_KEY] = {}
         return ToolResult(
@@ -880,6 +992,18 @@ def _reading_renderers() -> dict[str, Any]:
     return READING_RENDERERS
 
 
+def _screen_markdown(envelope: dict) -> str | None:
+    """A screen tool's compact lines (`_screener_commands.lines_result`): every
+    screen tool that has markdown sends it as its one text block, never the
+    JSON route response (Q-3634 — the curated list's JSON carried every
+    screen's thumbnail series). The lines carry the ids the next call takes."""
+    view = envelope.get("view")
+    if not isinstance(view, dict) or view.get("kind") != "screener":
+        return None
+    markdown = view.get("markdown")
+    return markdown if isinstance(markdown, str) and markdown.strip() else None
+
+
 def text_only_result(envelope_json: str, tool_name: str) -> Any:
     """A non-view tool's result under the probe arm (R5): ONE text block and
     no `structuredContent` — reading material as markdown, state as JSON."""
@@ -887,7 +1011,11 @@ def text_only_result(envelope_json: str, tool_name: str) -> Any:
     from mcp.types import TextContent
 
     text = envelope_json
-    renderer = _reading_renderers().get(tool_name)
+    renderer = (
+        _screen_markdown
+        if tool_name.startswith("keel_screener_")
+        else _reading_renderers().get(tool_name)
+    )
     if renderer is not None:
         try:
             envelope = json.loads(envelope_json)
@@ -898,6 +1026,51 @@ def text_only_result(envelope_json: str, tool_name: str) -> Any:
             if isinstance(rendered, str) and rendered.strip():
                 text = rendered
     return ToolResult(content=[TextContent(type="text", text=text)])
+
+
+def receipt_result(envelope_json: str, tool_name: str | None = None) -> Any:
+    """A research receipt tool's result (07 §2.2 "text (receipt line)": note,
+    cancel and make_signal; RI-220).
+
+    The text block is the receipt the handler wrote (`view.markdown`: 07 §4.8's
+    and §4.11's words and their next call), then the operational lines; the
+    served object rides as `structuredContent`, less the markdown the text
+    carries, so `ref`, `next` and `progress` are fields a caller reads. Before
+    this, FastMCP wrapped the envelope as `{"result": "<JSON string>"}` and
+    the text block was that JSON. One shape in every flag state.
+
+    Two catalogue lines are left out: `next`, because the receipt already
+    names its next call (keel-api's `next` for a new signal is that same add
+    call), and `source`, because a research envelope's `source` is the surface
+    that wrote it (07 §4.8: `mcp_full`, `cli`, …), never the DSL that line
+    draws. An error envelope, or a result that is not one, is
+    `view_tool_result`'s (the whole envelope structured, Q-1785), told the
+    tool so a research refusal's text ends with its app link (RI-237).
+    """
+    from fastmcp.tools import ToolResult
+    from mcp.types import TextContent
+
+    try:
+        envelope = json.loads(envelope_json)
+    except (TypeError, ValueError):
+        envelope = None
+    if not isinstance(envelope, dict):
+        return view_tool_result(envelope_json)
+    if is_error_envelope(envelope):
+        return view_tool_result(envelope_json, tool_name)
+    view = envelope.get("view") if isinstance(envelope.get("view"), dict) else {}
+    markdown = view.get("markdown")
+    structured = {k: v for k, v in envelope.items() if k != "view"}
+    if view:
+        structured["view"] = {k: v for k, v in view.items() if k != "markdown"}
+    if not isinstance(markdown, str) or not markdown.strip():
+        return ToolResult(
+            content=[TextContent(type="text", text=envelope_json)],
+            structured_content=structured,
+        )
+    lines = operational_lines({k: v for k, v in envelope.items() if k not in ("next", "source")})
+    text = markdown.rstrip() + ("\n\n" + "\n".join(lines) if lines else "")
+    return ToolResult(content=[TextContent(type="text", text=text)], structured_content=structured)
 
 
 def live_result(envelope_json: str, tool_name: str) -> Any:
@@ -947,9 +1120,18 @@ def registration_mode(tool_name: str) -> str:
       schema (the 12 view tools; `keel_account_status` only under the non-view arm);
     * ``status_wrapped`` — `keel_account_status` while the non-view arm is off;
     * ``live`` — `keel_live_monitor` under the card-meta arm;
+    * ``receipt`` — 07 §2.2's three research text tools in every flag state:
+      the receipt as text, the served object as `structuredContent`, no
+      declared schema (RI-220);
     * ``text`` — every other tool under the non-view arm (R5);
     * ``legacy`` — today's `-> str` (FastMCP's `{"result": string}` wrapper).
     """
+    from ._output_schemas import RESEARCH_RECEIPT_TOOLS
+
+    if tool_name == "keel_screener_passing":
+        return "text"
+    if tool_name in RESEARCH_RECEIPT_TOOLS:
+        return "receipt"
     if tool_name == "keel_account_status" and not nonview_text_only():
         return "status_wrapped"
     if tool_name in VIEW_TOOLS:
@@ -978,6 +1160,8 @@ def result_for_mode(mode: str, envelope_json: str, tool_name: str) -> Any:
         result = live_result(envelope_json, tool_name)
     elif mode == "text":
         result = text_only_result(envelope_json, tool_name)
+    elif mode == "receipt":
+        result = receipt_result(envelope_json, tool_name)
     else:
         result = envelope_json
     return _flag_error(result, envelope_json)
@@ -1208,7 +1392,12 @@ def _wrap_fastmcp_validation_errors(tool_obj: Any, outcome: OutcomeTool) -> None
             # audited ALLOW with no outcome and counted as a success.
             # Outside a hosted request `record_outcome` is a no-op.
             record_outcome(is_error=True)
-            envelope_json = json.dumps(_validation_error_envelope(outcome, e), default=str)
+            envelope_json = json.dumps(
+                _research_usage_link(
+                    _validation_error_envelope(outcome, e), outcome.name, arguments
+                ),
+                default=str,
+            )
             # The same channel rule as every other result this tool returns:
             # a view tool's error rides as structuredContent (Q-1785) and its
             # declared schema (Q-1788) cannot take a bare string; a text-only
@@ -1253,6 +1442,17 @@ def _json_type_to_py(schema: dict) -> str:
     return "str"
 
 
+def registration_order(outcomes: dict[str, OutcomeTool]) -> list[OutcomeTool]:
+    """The order tools are registered (and so listed) in: every tool as before,
+    then Research's last (07 §5.3, AT-26: power-user tools come last). The
+    relative order of every other tool is untouched, so a listing with Research
+    not served is the frozen head byte for byte."""
+    tools = list(outcomes.values())
+    return [t for t in tools if not t.name.startswith("keel_research_")] + [
+        t for t in tools if t.name.startswith("keel_research_")
+    ]
+
+
 def register_all(mcp_server: Any, outcomes: dict[str, OutcomeTool]) -> None:
     """Attach every outcome tool to the MCP server, filtered by KEEL_TOOLSETS.
 
@@ -1268,8 +1468,14 @@ def register_all(mcp_server: Any, outcomes: dict[str, OutcomeTool]) -> None:
     from ._output_schemas import output_schema_for
 
     toolsets = load_toolsets()
-    for tool in outcomes.values():
-        if not is_tool_loaded(tool.toolset, toolsets, local_only=tool.local_only, name=tool.name):
+    for tool in registration_order(outcomes):
+        if not is_tool_loaded(
+            tool.toolset,
+            toolsets,
+            local_only=tool.local_only,
+            name=tool.name,
+            cli_only=tool.cli_only,
+        ):
             continue
         fn = _make_param_synthesized_handler(tool, toolsets)
         raw_annotations = effective_annotations(tool)
@@ -1283,12 +1489,14 @@ def register_all(mcp_server: Any, outcomes: dict[str, OutcomeTool]) -> None:
         # publishes NO schema (R5); a legacy tool — and the live monitor in
         # either flag state (R-25: the card-meta arm must not change its
         # shape) — keeps FastMCP's inferred `{"result": <string>}` wrapper.
+        # A research receipt tool publishes none either: its object is the
+        # served one (07 §3.3, RI-220).
         mode = registration_mode(tool.name)
         declared = output_schema_for(tool.name) if mode == "view" else None
         schema_kw: dict[str, Any] = {}
         if declared is not None:
             schema_kw["output_schema"] = declared
-        elif mode == "text":
+        elif mode in ("text", "receipt"):
             schema_kw["output_schema"] = None
         tool_obj = FunctionTool.from_function(
             fn,
@@ -1312,5 +1520,7 @@ def loaded_tool_names(outcomes: dict[str, OutcomeTool]) -> list[str]:
     return sorted(
         t.name
         for t in outcomes.values()
-        if is_tool_loaded(t.toolset, toolsets, local_only=t.local_only, name=t.name)
+        if is_tool_loaded(
+            t.toolset, toolsets, local_only=t.local_only, name=t.name, cli_only=t.cli_only
+        )
     )

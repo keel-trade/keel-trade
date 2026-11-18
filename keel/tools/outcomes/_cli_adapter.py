@@ -72,24 +72,27 @@ def _cli_description(tool: OutcomeTool) -> str:
     return tool.description
 
 
+def positional_arg_of(tool: OutcomeTool) -> str | None:
+    """The property the CLI takes as its positional argument (at most one): the first required string that looks
+    like an id, else any property explicitly marked ``x-cli-positional: true``."""
+    schema = _cli_input_schema(tool)
+    properties: dict = schema.get("properties", {})
+    for prop in schema.get("required", []):
+        if _is_id_arg(prop, properties.get(prop, {})):
+            return prop
+    for prop, schema_prop in properties.items():
+        if schema_prop.get("x-cli-positional") is True:
+            return prop
+    return None
+
+
 def _build_click_command(tool: OutcomeTool) -> click.Command:
     schema = _cli_input_schema(tool)
     properties: dict = schema.get("properties", {})
     required: list[str] = list(schema.get("required", []))
 
     # Decide which property becomes a positional arg (at most one).
-    # Prefer the first required string that looks like an id; fall back
-    # to any property explicitly marked `x-cli-positional: true`.
-    positional_arg: str | None = None
-    for prop in required:
-        if _is_id_arg(prop, properties.get(prop, {})):
-            positional_arg = prop
-            break
-    if positional_arg is None:
-        for prop, schema_prop in properties.items():
-            if schema_prop.get("x-cli-positional") is True:
-                positional_arg = prop
-                break
+    positional_arg = positional_arg_of(tool)
     array_props = [p for p, s in properties.items() if s.get("type") == "array"]
     # A renamed parameter's old flag (`_toolsets.PARAM_ALIASES`, Q-2267):
     # registered hidden, typed as the new property, and rewritten to the new
@@ -161,7 +164,8 @@ def _build_click_command(tool: OutcomeTool) -> click.Command:
         try:
             result = tool.handler(args, tool_ctx)
         except KeelError as e:
-            emit_error(e, _output_fmt(fmt))
+            if not _emit_research_refusal(tool, e, fmt):
+                emit_error(e, _output_fmt(fmt))
             raise click.exceptions.Exit(e.exit_code)
         except Exception as e:  # noqa: BLE001
             emit_error(
@@ -220,7 +224,16 @@ def _build_click_command(tool: OutcomeTool) -> click.Command:
 
     # Last leaf name is the verb.
     leaf = tool.cli_path[-1].replace("_", "-")
-    cmd = click.command(name=leaf, help=_one_line_help(_cli_description(tool)))(cmd)
+    from .research_cli import RESEARCH_CLI_HELP
+
+    said, examples = RESEARCH_CLI_HELP.get(tool.cli_path, (None, ()))
+    # "\b" keeps Click from rewrapping the examples (a command must read as one line to be copied).
+    epilog = "\b\nExamples:\n" + "\n".join(f"  {e}" for e in examples) if examples else None
+    cmd = click.command(
+        name=leaf,
+        help=said or _one_line_help(_cli_description(tool)),
+        epilog=epilog,
+    )(cmd)
     return cmd
 
 
@@ -379,6 +392,25 @@ def _one_line_help(description: str) -> str:
     return first_sentence
 
 
+def _emit_research_refusal(tool: OutcomeTool, err: KeelError, fmt: str) -> bool:
+    """RI-251 (07 §3.4; COST-SDK residual 5): in human output a research refusal prints as its MCP text does (the
+    served words, the next call as a ``keel`` command, ``View in Keel`` last;
+    ``_research_commands.cli_refusal_text``) on stderr. False for any other tool, any structured format (the
+    envelope stays byte for byte) and any error that is not a research refusal."""
+    if not (_is_human_format(fmt) and tool.name.startswith("keel_research_")):
+        return False
+    from ._research_commands import cli_refusal_text
+
+    text = cli_refusal_text(err.to_envelope())
+    if text is None:
+        return False
+    import sys
+
+    sys.stderr.write(text + "\n")
+    sys.stderr.flush()
+    return True
+
+
 def _is_human_format(fmt: str) -> bool:
     return fmt in {"human", "table"}
 
@@ -488,6 +520,17 @@ def _render(result: OutcomeResult, fmt: str) -> None:
         if isinstance(markdown, str) and markdown.strip() and view.get("kind") == KIND_COMPARISON:
             _render_comparison(envelope, markdown)
             return
+        if isinstance(markdown, str) and markdown.strip() and view.get("kind") == "screener":
+            click.echo(markdown.rstrip())
+            return
+        if isinstance(markdown, str) and markdown.strip() and view.get("kind") == "study":
+            # WL-AG-14 (A3 #5): a research answer on a terminal is its text, with each next call as the `keel`
+            # command that makes it; its last line is already "View in Keel". The envelope printed field by field
+            # after it (plan source, steps, all 25 children) was 120+ lines of JSON; `--format json` keeps it.
+            from ._research_commands import cli_text
+
+            click.echo(cli_text(markdown).rstrip())
+            return
         if isinstance(markdown, str) and markdown.strip():
             click.echo(markdown.rstrip())
             click.echo()
@@ -554,6 +597,9 @@ _GROUP_HELP: dict[tuple[str, ...], str] = {
     ("deployments",): "List the deployments in your org (ids, accounts, status).",
     ("paper",): "Start and control paper (simulated) runs; no real orders are placed.",
     ("components",): "Search the component catalog and inspect schemas.",
+    ("signals",): "Find signals: Keel's library signals and your own (an alias of blocks search).",
+    # D-344 (9), CONFORM-MCP F17: the group's line in `keel --help`.
+    ("research",): "Plan, run and read studies of a strategy or signal you already have.",
     ("accounts",): "Read Hyperliquid trading accounts attached to your org.",
     ("share",): "Publish strategies and backtests at public usekeel.io/share URLs.",
     ("audit",): "Inspect agent / tool call history.",
@@ -582,6 +628,13 @@ _CLI_VERB_ALIASES: dict[tuple[str, ...], tuple[str, ...]] = {
     ("backtest", "positions"): ("trades",),
 }
 
+#: A command under another group, with arguments preset: ``{alias path: (target path, preset args)}``. 07 A1 and
+#: §2.2: ``keel signals search`` is ``keel blocks search --role signal``, a CLI alias, not a registry entry (one search
+#: over outputs, not two). A3 A1: ``keel signals`` was "No such command".
+_CLI_PRESET_ALIASES: dict[tuple[str, ...], tuple[tuple[str, ...], dict]] = {
+    ("signals", "search"): (("blocks", "search"), {"role": "signal"}),
+}
+
 
 def register_all(parent: click.Group, outcomes: dict[str, OutcomeTool]) -> None:
     """Attach every outcome tool as a CLI command under `parent`.
@@ -603,6 +656,37 @@ def register_all(parent: click.Group, outcomes: dict[str, OutcomeTool]) -> None:
         aliases = _CLI_VERB_ALIASES.get(tool.cli_path, ())
         for alias_name in aliases:
             group.add_command(cmd, name=alias_name)
+    by_path = {tool.cli_path: tool for tool in outcomes.values() if not tool.mcp_only}
+    for path, (target, preset) in _CLI_PRESET_ALIASES.items():
+        tool = by_path.get(target)
+        if tool is None:
+            continue
+        group = _ensure_group(parent, path[:-1], group_cache)
+        group.add_command(_preset_command(tool, path[-1], preset))
+
+
+def _preset_command(tool: OutcomeTool, name: str, preset: dict) -> click.Command:
+    """An existing command under another group with some arguments preset (``_CLI_PRESET_ALIASES``): the same
+    callback, each preset applied when the caller did not send that argument."""
+    cmd = _build_click_command(tool)
+    callback = cmd.callback
+    assert callback is not None
+
+    def preset_callback(**kwargs):
+        for key, value in preset.items():
+            if kwargs.get(key) is None:
+                kwargs[key] = value
+        return callback(**kwargs)
+
+    target = " ".join(tool.cli_path)
+    flags = " ".join(f"--{k.replace('_', '-')} {v}" for k, v in preset.items())
+    return click.Command(
+        name=name,
+        params=cmd.params,
+        callback=preset_callback,
+        help=f"`keel {target} {flags}`: {cmd.help or ''}".strip(),
+        short_help=f"`keel {target} {flags}`.",
+    )
 
 
 def _ensure_group(

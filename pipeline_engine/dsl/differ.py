@@ -28,6 +28,8 @@ from pipeline_engine.dsl.spec import (
     VariableRef,
 )
 
+from .use import UseSpec
+
 
 def diff_strategies(
     *,
@@ -193,6 +195,14 @@ def _flatten_steps(
                     "path": path,
                     "component": "Extract",
                     "params": {"key": step.key},
+                }
+            )
+        elif isinstance(step, UseSpec):
+            flat.append(
+                {
+                    "path": path,
+                    "component": "Use",
+                    "params": {"ref": step.ref, "output": step.output, "as_": step.as_},
                 }
             )
         elif isinstance(step, FactoryCallSpec):

@@ -18,8 +18,9 @@ Quick Start:
 from __future__ import annotations
 
 import logging
+import math
 import re
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from typing import Annotated, Any, Literal, Union, get_args, get_origin
 
 from pipeline_engine.base.registry import is_compatible  # noqa: F401 — re-export
@@ -613,6 +614,122 @@ class TypeFlowEntry:
         return out
 
 
+@dataclass(frozen=True)
+class OutputDescriptor:
+    """Static output contract embedded in a screener's fingerprinted blob.
+
+    The commit's slice metadata and the worker's observed ranges live outside
+    this object. A descriptor can describe an invalid output (shape=None);
+    run-readiness is checked by the validator's descriptor accessor.
+    """
+
+    name: str
+    value_type: str
+    shape: Literal["panel", "single"] | None
+    domain: dict[str, list[float]] | None
+    domain_source: Literal["walk", "refinement", "none"]
+    tier: Literal["hard", "soft"] | None
+    clock_source: Literal["walk", "exec"] | None
+    clock: dict[str, Any] | None
+    bounded: bool
+    discrete: bool
+    role: str
+    role_source: Literal["inferred", "declared"]
+    unit: str
+    unit_source: Literal["declared", "derived", "unknown"]
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return the complete JSON shape, including explicit nulls."""
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, value: dict[str, Any]) -> OutputDescriptor:
+        """Read the complete contract; missing or unknown fields are errors."""
+        from pipeline_engine.dsl.spec import OUTPUT_ROLES, output_name_problems
+        from pipeline_engine.units import UNIT_KEYS
+
+        result = cls(**value)
+        if not isinstance(result.name, str) or output_name_problems([result.name]):
+            raise ValueError("Invalid output name")
+        if not isinstance(result.value_type, str) or not result.value_type:
+            raise ValueError("Invalid output value_type")
+        if result.shape not in ("panel", "single", None):
+            raise ValueError("Invalid output shape")
+        if result.role not in OUTPUT_ROLES or result.role_source not in ("inferred", "declared"):
+            raise ValueError("Invalid output role")
+        if result.unit not in UNIT_KEYS or result.unit_source not in (
+            "declared",
+            "derived",
+            "unknown",
+        ):
+            raise ValueError("Invalid output unit")
+        if result.domain_source not in ("walk", "refinement", "none") or result.tier not in (
+            "hard",
+            "soft",
+            None,
+        ):
+            raise ValueError("Invalid domain provenance")
+        if result.domain is None:
+            if result.domain_source != "none" or result.tier is not None:
+                raise ValueError("Absent domain must have none provenance and null tier")
+        else:
+            if (
+                result.domain_source == "none"
+                or result.tier is None
+                or not isinstance(result.domain, dict)
+            ):
+                raise ValueError("Known domain requires provenance and tier")
+            if set(result.domain) not in ({"set"}, {"interval"}):
+                raise ValueError("Invalid output domain")
+            vals = next(iter(result.domain.values()))
+            if (
+                not isinstance(vals, list)
+                or not vals
+                or any(
+                    isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v)
+                    for v in vals
+                )
+            ):
+                raise ValueError("Domain values must be finite numbers")
+            if "interval" in result.domain and (len(vals) != 2 or vals[0] > vals[1]):
+                raise ValueError("Invalid domain interval")
+            if "set" in result.domain and vals != sorted(set(vals)):
+                raise ValueError("Domain set must be sorted and unique")
+        if type(result.bounded) is not bool or result.bounded != (result.domain is not None):
+            raise ValueError("bounded must reflect the domain")
+        if type(result.discrete) is not bool or result.discrete != (
+            result.domain is not None and "set" in result.domain
+        ):
+            raise ValueError("discrete must reflect the domain")
+        if result.clock_source not in ("walk", "exec", None):
+            raise ValueError("Invalid clock provenance")
+        if result.clock is None:
+            if result.clock_source is not None:
+                raise ValueError("Absent clock must have null provenance")
+        else:
+            if (
+                result.clock_source is None
+                or not isinstance(result.clock, dict)
+                or set(result.clock) != {"timeframe", "offset", "period_minutes", "offset_minutes"}
+            ):
+                raise ValueError("Invalid output clock")
+            period, offset = result.clock["period_minutes"], result.clock["offset_minutes"]
+            if (
+                type(period) is not int
+                or type(offset) is not int
+                or period <= 0
+                or not 0 <= offset < period
+            ):
+                raise ValueError("Invalid output clock period/offset")
+            if result.clock["timeframe"] != MINUTES_TO_TOKEN.get(
+                period, f"{period}min"
+            ) or result.clock["offset"] != (
+                None if offset == 0 else MINUTES_TO_TOKEN.get(offset, f"{offset}min")
+            ):
+                raise ValueError("Output clock tokens disagree with minutes")
+        return result
+
+
 @dataclass
 class ValidationResult:
     """Aggregated validation result with structured issues."""
@@ -624,6 +741,16 @@ class ValidationResult:
     type_flow: list[TypeFlowEntry] = field(default_factory=list)
     slot_types: dict[str, type] = field(default_factory=dict)
     pipeline_summary: str = ""
+    outputs: list[OutputDescriptor] = field(default_factory=list)
+    units: list[dict[str, str]] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        from pipeline_engine.units import unit_words
+
+        self.units = [
+            {"output": d.name, "unit": d.unit, "sentence": unit_words(d.name, d.unit)}
+            for d in self.outputs
+        ]
 
     def all_issues(self) -> list[ValidationIssue]:
         """Errors, then warnings, then info — flat list for serialization.
@@ -1497,6 +1624,7 @@ def asset_select_outside_universe(symbols: Any, resolved: Any) -> list[str]:
 
 
 __all__ = [
+    "OutputDescriptor",
     "asset_select_outside_universe",
     "TypeFlowEntry",
     "ValidationIssue",

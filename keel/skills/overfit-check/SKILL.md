@@ -34,7 +34,7 @@ and its window. State the baseline Sharpe / return / max DD before probing.
 
 ## Step 2 — Agree the out-of-sample windows
 
-The probe takes several runs — one backtest of the plan's weekly allowance
+The probe takes several runs — one backtest of the plan's backtest allowance
 each, plus wall-clock time. Before starting, say how many runs it needs and
 which windows, and start once the user agrees; they may drop or pick
 windows. Windows the user named are used as given. When the user asks for a

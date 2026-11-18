@@ -17,6 +17,7 @@ from typing import Any
 from fastmcp import FastMCP
 from mcp.types import Icon
 
+from keel.api_path import seg
 from keel.mcp._branding import (
     KEEL_ICON_256_DATA_URI,
     KEEL_ICON_256_SIZES,
@@ -27,6 +28,37 @@ from keel.mcp._branding import (
     KEEL_WEBSITE_URL,
 )
 from pipeline_engine.reference.system import assemble as _assemble
+
+
+def _plain_errors(fn):
+    """A ``keel://`` resource's failure as ONE plain sentence (Q-3352).
+
+    fastmcp sends any exception that is not its own as
+    ``Error reading resource '<uri>': {e}`` — for an ``OSError`` that ``{e}``
+    is an absolute server path. Tools already convert every failure to an
+    envelope (`_mcp_adapter`, Q-2273 L3); resources had no such layer. Here a
+    ``KeelError`` keeps its user-facing message, and anything else is logged
+    for the operator and reaches the client as one sentence with no
+    internals.
+    """
+    import functools
+    import logging
+
+    from fastmcp.exceptions import ResourceError
+
+    from keel.errors import KeelError
+
+    @functools.wraps(fn)
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        try:
+            return fn(*args, **kwargs)
+        except KeelError as e:
+            raise ResourceError(str(e)) from None
+        except Exception:
+            logging.getLogger(__name__).exception("Resource %s failed", fn.__name__)
+            raise ResourceError("Keel could not read this resource.") from None
+
+    return wrapper
 
 
 class KeelMCP(FastMCP):
@@ -133,6 +165,7 @@ def create_server() -> FastMCP:
     # reachable (offline / unauth).
 
     @mcp.resource("keel://components/catalog")
+    @_plain_errors
     def components_catalog() -> str:
         """Live component catalog — fetched from /v1/components, with
         bundled fallback when the API isn't reachable."""
@@ -151,17 +184,20 @@ def create_server() -> FastMCP:
             return json.dumps(strategy_components_dump(), default=str)
 
     @mcp.resource("keel://components/{name}/schema")
+    @_plain_errors
     def component_schema(name: str) -> str:
         """One component's full param schema + type graph + examples.
 
         Fetched live from /v1/components/{name}. Bundled fallback below
-        when the API isn't reachable."""
+        when the API isn't reachable. A name that is not one path segment
+        is refused before either (Q-3352)."""
+        path = f"/v1/components/{seg(name)}"
         try:
             from keel.client import KeelClient
 
             client = KeelClient()
             try:
-                return json.dumps(client.get_public(f"/v1/components/{name}"), default=str)
+                return json.dumps(client.get_public(path), default=str)
             finally:
                 client.close()
         except Exception:  # noqa: BLE001 — API unavailable → fall back to bundled local component detail
@@ -170,6 +206,7 @@ def create_server() -> FastMCP:
             return json.dumps(strategy_component_detail(name), default=str)
 
     @mcp.resource("keel://strategy/{strategy_id}/source")
+    @_plain_errors
     def strategy_source(strategy_id: str) -> str:
         """DSL source at a strategy's HEAD version."""
         from keel.client import KeelClient
@@ -177,31 +214,33 @@ def create_server() -> FastMCP:
         client = KeelClient()
         try:
             return json.dumps(
-                client.get(f"/v1/strategies/{strategy_id}/versions/HEAD/source"),
+                client.get(f"/v1/strategies/{seg(strategy_id)}/versions/HEAD/source"),
                 default=str,
             )
         finally:
             client.close()
 
     @mcp.resource("keel://strategy/{strategy_id}/lockfile")
+    @_plain_errors
     def strategy_lockfile(strategy_id: str) -> str:
         """Compiled lockfile (versioned components + params) for a strategy."""
         from keel.client import KeelClient
 
         client = KeelClient()
         try:
-            return json.dumps(client.get(f"/v1/strategies/{strategy_id}/lock"), default=str)
+            return json.dumps(client.get(f"/v1/strategies/{seg(strategy_id)}/lock"), default=str)
         finally:
             client.close()
 
     @mcp.resource("keel://backtest/{backtest_id}/results")
+    @_plain_errors
     def backtest_results(backtest_id: str) -> str:
         """Backtest results envelope (metrics + time series + attribution)."""
         from keel.client import KeelClient
 
         client = KeelClient()
         try:
-            return json.dumps(client.get(f"/v1/backtests/{backtest_id}/results"), default=str)
+            return json.dumps(client.get(f"/v1/backtests/{seg(backtest_id)}/results"), default=str)
         finally:
             client.close()
 
@@ -259,7 +298,7 @@ def create_server() -> FastMCP:
 
             if backtest_id and status == "completed":
                 try:
-                    out["results"] = client.get(f"/v1/backtests/{backtest_id}/results")
+                    out["results"] = client.get(f"/v1/backtests/{seg(backtest_id)}/results")
                     out["results_available"] = True
                 except KeelError as e:
                     out["results_error"] = e.to_dict()
@@ -278,21 +317,25 @@ def create_server() -> FastMCP:
             client.close()
 
     @mcp.resource("keel://backtest/latest")
+    @_plain_errors
     def latest_backtest() -> str:
         """Latest backtest in the current org, with exact result URI if available."""
         return json.dumps(_latest_backtest_payload(), default=str)
 
     @mcp.resource("keel://strategy/{strategy_id}/backtest/latest")
+    @_plain_errors
     def latest_strategy_backtest(strategy_id: str) -> str:
         """Latest backtest for one strategy, with exact result URI if available."""
         return json.dumps(_latest_backtest_payload(strategy_id), default=str)
 
     @mcp.resource("keel://ownership/strategy/{strategy_id}")
+    @_plain_errors
     def strategy_ownership(strategy_id: str) -> str:
         """First-session ownership projection for one strategy."""
         return ownership_resource_payload(strategy_id)
 
     @mcp.resource("keel://dsl/reference/{topic}")
+    @_plain_errors
     def dsl_reference_resource(topic: str) -> str:
         """DSL reference doc by topic (phases, types, slots, composition,
         normalization, best_practices). Served from the bundled data: the
@@ -303,6 +346,7 @@ def create_server() -> FastMCP:
         return json.dumps(dsl_reference(topic=topic), default=str)
 
     @mcp.resource("keel://knowledge/{section}")
+    @_plain_errors
     def knowledge_resource(section: str) -> str:
         """Bundled system-knowledge section — a direct fetch of one
         section without invoking a full skill. Raises FileNotFoundError
@@ -326,17 +370,23 @@ def create_server() -> FastMCP:
         _register_local_context_resources(mcp)
 
     @mcp.resource("keel://context/strategy/{strategy_id}")
+    @_plain_errors
     def strategy_context_resource(strategy_id: str) -> str:
         """Per-strategy context — wraps `keel_strategy_notes_read` so
         agents can browse memory as a resource. Returns the most recent
         notes."""
         from keel.client import KeelClient
+        from keel.errors import KeelError
 
+        # A value that is not an id is refused, not answered as "no notes"
+        # (Q-3352); a Keel error keeps its soft shape; anything else is
+        # `_plain_errors`' one sentence, never the exception's text.
+        path = f"/v1/strategies/{seg(strategy_id)}/memory"
         client = KeelClient()
         try:
-            payload = client.get(f"/v1/strategies/{strategy_id}/memory", limit=10)
+            payload = client.get(path, limit=10)
             return json.dumps(payload, default=str)
-        except Exception as e:  # noqa: BLE001
+        except KeelError as e:
             return json.dumps(
                 {"strategy_id": strategy_id, "notes": [], "error": str(e)},
                 default=str,
@@ -384,9 +434,11 @@ def create_server() -> FastMCP:
 # `profiles: [full]` in the corpus and never reach the listed string.
 
 
-def _listed_instructions(paper_listed: bool) -> str:
+def _listed_instructions(paper_listed: bool, screens_listed: bool = False) -> str:
     """The listed profile's instructions, assembled from the corpus."""
-    return _assemble.instructions("listed", paper_listed=paper_listed)
+    return _assemble.instructions(
+        "listed", paper_listed=paper_listed, screens_listed=screens_listed
+    )
 
 
 def listed_instructions() -> str:
@@ -395,9 +447,9 @@ def listed_instructions() -> str:
     build both states. With the flag off they are the base commit's; on, the
     amended boundary sentence and the paper row replace their flag-off forms.
     An invalid ``KEEL_LISTED_PAPER`` raises here, at server creation."""
-    from keel.tools.outcomes._toolsets import listed_paper_enabled
+    from keel.tools.outcomes._toolsets import listed_paper_enabled, listed_screens_enabled
 
-    return _listed_instructions(listed_paper_enabled())
+    return _listed_instructions(listed_paper_enabled(), listed_screens_enabled())
 
 
 def _full_instructions(
@@ -485,6 +537,7 @@ def _register_local_context_resources(mcp: "FastMCP") -> None:
     see :func:`serves_local_filesystem_context`)."""
 
     @mcp.resource("keel://context/user")
+    @_plain_errors
     def user_context_resource() -> str:
         """Global user context (`~/.keel/context.md`) — preferences,
         default universe, custom prompt fragments. Read on session
@@ -494,6 +547,7 @@ def _register_local_context_resources(mcp: "FastMCP") -> None:
         return _local_context_payload(read_user_context())
 
     @mcp.resource("keel://context/project")
+    @_plain_errors
     def project_context_resource() -> str:
         """Project-level context (`<cwd>/keel.md` or the `## Keel` block
         in `CLAUDE.md`) — repo-specific preferences (per spec §9.1)."""
@@ -537,6 +591,21 @@ def ownership_resource_payload(strategy_id: str) -> str:
 # guide workflows whose tools are not registered on that profile.
 LISTED_EXCLUDED_SKILLS: frozenset[str] = frozenset({"deploy-and-monitor"})
 
+#: Skills the listed screens flag admits (screeners L13): served on listed
+#: only while ``listed_screens_enabled()``; always on the full profile.
+LISTED_SCREEN_SKILLS: frozenset[str] = frozenset({"screen-creation"})
+
+
+def listed_excluded_skills() -> frozenset[str]:
+    """The skills the listed profile withholds from the CURRENT caller:
+    :data:`LISTED_EXCLUDED_SKILLS`, plus :data:`LISTED_SCREEN_SKILLS` while
+    the screens flag is off for them (read at call time)."""
+    from keel.tools.outcomes._toolsets import listed_screens_enabled
+
+    if listed_screens_enabled():
+        return LISTED_EXCLUDED_SKILLS
+    return LISTED_EXCLUDED_SKILLS | LISTED_SCREEN_SKILLS
+
 
 def _register_skill_prompts(mcp: "FastMCP") -> None:
     """Register each bundled skill as an MCP prompt.
@@ -562,7 +631,7 @@ def _register_skill_prompts(mcp: "FastMCP") -> None:
 
     for name in BUNDLED_SKILLS:
         sk = skills_map[name]
-        if is_listed_profile() and name in LISTED_EXCLUDED_SKILLS:
+        if is_listed_profile() and name in listed_excluded_skills():
             # The listed registration exposes no deploy workflow —
             # its guidance would route to tools absent from the
             # surface (spec 01 R3, research/08).

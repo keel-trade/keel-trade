@@ -43,8 +43,8 @@ Direction: long-only (`ThresholdCross(mode='long_only')`) is the usual form for 
 
 Trigger words for adds and partials (`ScaleIn` / `Reduce`): 'DCA', 'dollar cost average', 'pyramid', 'add to position', 'scale in', 'scale out', 'ladder', 'laddered entries', 'partial exit', 'accumulate', 'buy more if it drops further', 'multiple entry levels', 'average down', 'average in'. Use them only when the user describes adds or partials.
 
-**Path 3 — Screen-Select-Allocate**:
-Data → Indicator → `TopNAssetSelector(n=…)` → `EqualWeightAllocator()` → `WeightCadence(duration='7d')` → `FillNaN(fill_value=0.0)` → WeightSeries. Selects the top N assets by rank, equal-weights them, and holds the targets for the calendar period (the cadence is the hold and the exit); FillNaN makes a masked-out asset an explicit 0.0. Best for rotation strategies — the `screen_select_patterns` topic has the validated example.
+**Path 3 — Rank-Select-Allocate**:
+Data → Indicator → `TopNAssetSelector(n=…)` → `EqualWeightAllocator()` → `WeightCadence(duration='7d')` → `FillNaN(fill_value=0.0)` → WeightSeries. Selects the top N assets by rank, equal-weights them, and holds the targets for the calendar period (the cadence is the hold and the exit); FillNaN makes a masked-out asset an explicit 0.0. Best for rotation strategies — the `rank_select_patterns` topic has the validated example.
 
 **Hybrid: Screen → Entry/Exit**: Narrow the universe with TopNAssetSelector or cross-sectional ranking, then apply entry/exit logic on the selected assets. Use TopNAssetSelector to produce a mask → ApplyMask on the signal, then ThresholdCross for entry/exit within the screened set.
 

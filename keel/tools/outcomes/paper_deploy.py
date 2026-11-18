@@ -39,6 +39,7 @@ from ._paper_strings import (
     DEPLOY_SERVER_ERROR_SUGGESTION,
     LADDER_LINE,
 )
+from .backtest_run import served_quota_fields
 from .open_in_app import app_url_for
 
 
@@ -109,6 +110,17 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
             raise handoff from e
         raise
     except KeelError as e:
+        # The paper/live timeframe floor (doc 07 §5, D-14): a plan limit, so
+        # the plan-limit handoff with a card, not a validation error.
+        from ._handoff import maybe_floor_handoff
+
+        floor = maybe_floor_handoff(
+            e,
+            blocked_action="paper_deploy",
+            retry_call={"tool": "keel_paper_deploy", "args": dict(args)},
+        )
+        if floor is not None:
+            raise floor from e
         # A 5xx may have started the run (no idempotency key): the read-back
         # is the run list on this profile, never a blind resend (S10 review F3).
         from ._paper_guard import paper_server_error
@@ -151,8 +163,22 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
     remaining = response.get("remaining")
     if remaining:
         extra["remaining"] = remaining
+    # Taking the LAST slot (doc 07 §5): keel-api sends the paper cap's quota
+    # block at the exhausted tier, and the run says so — "Last paper slot in
+    # use (1 of 1). Trader and Pro run more." — the same renderer and
+    # projection as a backtest's notice.
+    # keel-api sends that block as one object (null otherwise).
+    extra.update(served_quota_fields(response.get("quota")))
     extra["disclosures"] = disclosures
     extra["run_notes"] = _run_notes(disclosures)
+    # The card's receipt (Q-7603): name, clock, next run, starting balance,
+    # from the route's own row. Card-only: under the card-meta arm it leaves
+    # the text block for `_meta["keel/card"]`.
+    from ._paper_card import paper_card_block
+
+    extra["render"] = paper_card_block(
+        response, state=extra["status"], simulated_capital=extra["simulated_capital"]
+    )
     return OutcomeResult(run_id=deployment_id, hero_url=url, share_url=None, extra=extra)
 
 
@@ -195,12 +221,13 @@ PAPER_DEPLOY_DESCRIPTION = (
     "Start a paper-trading run of a saved strategy: fills are simulated at live "
     "Hyperliquid prices under Keel's published fill model, no real orders are placed "
     "and no funds are at risk. It completes here, in band, without a confirmation step, "
-    "and needs no exchange account, wallet or live opt-in. Each plan runs a set number "
-    "of paper runs at once (free plans one); `keel_plan_usage` shows this plan's paper "
-    "slots. Going live is a separate human step in the Keel web app; `keel_live_deploy` "
+    "and needs no exchange account, wallet or live opt-in. Plans limit how many run at "
+    "once and the fastest timeframe; see `keel_plan_usage`. Going live is a separate human step in the Keel web app; `keel_live_deploy` "
     "returns that handoff. The response carries the auto-pause disclosures; manage the "
-    "run with `keel_paper_control` (stopping a paper run frees its slot) and watch it "
-    "with `keel_live_monitor`. On a timeout, read `keel_deployments_list` with "
+    "run with `keel_paper_control` and watch it with `keel_live_monitor`. When every slot "
+    "is in use, ask the user which run to stop before stopping one: a stop ends its "
+    "record. For a newer version of a running strategy, `update` that run instead, which "
+    "keeps its record. On a timeout, read `keel_deployments_list` with "
     "`capital_class=practice` before calling again: a second call starts a second run "
     "and takes (or is refused) another slot."
 )
@@ -213,11 +240,12 @@ PAPER_DEPLOY_LISTED_DESCRIPTION = (
     "Starts a paper-trading run of a saved strategy: fills are simulated at live "
     "Hyperliquid prices under Keel's published fill model, no real orders are placed "
     "and no real capital is at risk. The run starts here without a confirmation step "
-    "and needs no exchange account. Each plan has a number of concurrent paper runs; "
-    "`keel_plan_usage` reports this plan's. Running it with real capital is a step you "
+    "and needs no exchange account. Plans limit how many run at once and the fastest "
+    "timeframe; see `keel_plan_usage`. Running it with real capital is a step you "
     "take in the Keel web app. The response carries the auto-pause rules; "
     "`keel_live_monitor` reads the run, and `keel_paper_control` pauses, updates or stops "
-    "it; stopping frees its slot. Each call starts another run; after a timeout "
+    "it; stopping frees its slot, so ask the user which one first. Each call starts "
+    "another run; after a timeout "
     "`keel_live_monitor` shows whether one started."
 )
 
@@ -226,6 +254,7 @@ PAPER_DEPLOY = register(
     OutcomeTool(
         name="keel_paper_deploy",
         required_action="backtest.create",
+        rate_tier="backtest",
         cli_path=("paper", "deploy"),
         toolset="paper",
         # grounded-in: system/operating_core.md:116-125 (the `live` section:

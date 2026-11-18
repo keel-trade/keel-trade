@@ -20,6 +20,7 @@ from __future__ import annotations
 import time
 from typing import Any
 
+from keel.api_path import seg
 from keel.errors import KeelError, NotFoundError
 
 from . import register
@@ -71,7 +72,7 @@ def _read_handler(args: dict, ctx: ToolContext) -> OutcomeResult:
     last_updated: str | None = None
     summary: str | None = None
     try:
-        payload = client.get(f"/v1/strategies/{strategy_id}/memory", limit=limit)
+        payload = client.get(f"/v1/strategies/{seg(strategy_id)}/memory", limit=limit)
         # The /memory endpoint isn't strictly PaginatedResponse-shaped
         # (it carries last_updated + summary alongside the list) but the
         # list itself follows the same `data` convention against the
@@ -204,7 +205,7 @@ def _write_handler(args: dict, ctx: ToolContext) -> OutcomeResult:
     client = ctx.get_client()
     try:
         result = client.post(
-            f"/v1/strategies/{strategy_id}/memory",
+            f"/v1/strategies/{seg(strategy_id)}/memory",
             json={"note": note, "role": role},
         )
     except NotFoundError:
@@ -276,6 +277,7 @@ STRATEGY_MEMORY_WRITE = register(
     OutcomeTool(
         name="keel_strategy_notes_add",
         required_action="strategy.update",
+        rate_tier="mutation",
         cli_path=("strategy", "memory-write"),
         toolset="backtest",
         # grounded-in: system/chat/collaboration.md §5 (Explain the Why — record the

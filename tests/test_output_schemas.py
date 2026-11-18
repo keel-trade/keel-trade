@@ -103,7 +103,19 @@ def test_every_listed_tool_publishes_an_output_schema() -> None:
     assert not missing, f"listed tools with no outputSchema: {missing}"
     view = [t for t in tools if t.name in VIEW_TOOLS]
     # Every view tool is on the listed surface (restore joined, spec 03 §2.4).
-    assert len(view) == len(VIEW_TOOLS & LISTED_PROFILE_TOOLS) == len(VIEW_TOOLS)
+    assert len(view) == len(VIEW_TOOLS & LISTED_PROFILE_TOOLS)
+    assert VIEW_TOOLS - LISTED_PROFILE_TOOLS == {
+        "keel_screener_run",
+        "keel_screener_view",
+        "keel_screener_view_set",
+        # Research's five view tools (07 §2.2): plan, run and get are listed
+        # only while Research is served; view_set and brief never.
+        "keel_research_plan",
+        "keel_research_run",
+        "keel_research_get",
+        "keel_research_view_set",
+        "keel_research_brief",
+    }
     from keel.tools.outcomes._output_schemas import LISTED_OUTPUT_OMISSIONS
 
     omitted = set().union(*LISTED_OUTPUT_OMISSIONS.values())
@@ -130,30 +142,82 @@ def test_every_listed_tool_publishes_an_output_schema() -> None:
 def test_every_view_tool_error_validates_through_the_real_server() -> None:
     """Both real error paths — the handler's missing-argument envelope and
     FastMCP's argument-validation wrapper — return the envelope as
-    structuredContent (Q-1785) and it matches the declared schema."""
-    from keel.mcp.server import create_server
+    structuredContent (Q-1785) and it matches the declared schema.
 
-    async def go() -> int:
+    Two text contracts (RI-270). A research tool's refusal that carries its
+    app link (``detail.links.app``) follows research 07 §3.2 rules 9 and 11
+    (RI-237, 7a0f35ef66): its words, what a recovery needs, its next call when
+    it has one, then ``View in Keel: {url}``, and then (D-344 (2), CONFORM-MCP
+    F3: claude.ai reads only the text block) the envelope, as every tool.
+    Every other error leads with the message and ends in the whole envelope
+    (spec 02 §2.2, R-27). RI-286: a research tool's argument refusals (the
+    adapter's missing-argument pre-flight and FastMCP's argument validation)
+    carry the link too, so every research error here takes the research arm."""
+    # SEED (RI-270): in `_mcp_adapter.view_tool_result` make `research` always
+    # None (the RI-237 branch off): the research arm reds on its first tool.
+    # SEED: in `_research_commands.refusal_text` append `json.dumps(envelope)`
+    # before the last line: the research arm's line check reds.
+    # SEED (RI-286): `_mcp_adapter._research_usage_link` returning the envelope
+    # unchanged: the arms count and the research set red (view_set and every
+    # unknown-argument call fall back to the envelope arm).
+    from keel.mcp.server import create_server
+    from keel.tools.outcomes._mcp_adapter import operational_lines
+    from keel.tools.outcomes._research_commands import recovery_lines
+    from keel.tools.outcomes._research_view import next_call
+
+    async def go() -> tuple[int, set[str], int]:
         server = create_server()
-        seen = 0
+        seen = arms = 0
+        research: set[str] = set()
         for name in sorted(VIEW_TOOLS - {"keel_account_status"}):
             for args in ({}, {"zz_not_a_param": 1}):
                 result = await server.call_tool(name, args)
                 envelope = result.structured_content or {}
                 if "code" not in envelope:
                     continue  # no required argument: `{}` is a real call
-                # The text block leads with the human message and ends in
-                # the whole envelope (spec 02 §2.2, R-27).
                 text = result.content[0].text
                 assert text.startswith(envelope["message"]), (name, args)
-                assert json.loads(text[text.index("\n{") + 1 :]) == envelope, (name, args)
+                link = ((envelope.get("detail") or {}).get("links") or {}).get("app")
+                if name.startswith("keel_research_") and link:
+                    # The words, the operational lines, the next call (when
+                    # the refusal names one), then "View in Keel: {url}".
+                    action = envelope.get("suggested_next_action") or {}
+                    expected = [
+                        envelope["message"],
+                        *operational_lines(envelope),
+                        *recovery_lines(envelope),
+                    ]
+                    if action.get("tool"):
+                        call = next_call(action["tool"], action.get("args") or {}, app_url=link)
+                        reason = str(action.get("reason") or "").strip()
+                        expected.append(f"{reason} {call}" if reason else call)
+                    words, _, appended = text.partition("\n\n{")
+                    assert words.split("\n") == [*expected, f"View in Keel: {link}"], (name, args, text)
+                    assert json.loads("{" + appended) == envelope, (name, args)
+                    research.add(name)
+                    arms += 1
+                else:
+                    assert not name.startswith("keel_research_"), (name, args, text)  # RI-286
+                    # The text block leads with the human message and ends in
+                    # the whole envelope (spec 02 §2.2, R-27).
+                    assert json.loads(text[text.index("\n{") + 1 :]) == envelope, (name, args)
                 _validate(name, envelope)
                 seen += 1
-        return seen
+        return seen, research, arms
 
-    seen = asyncio.run(go())
+    seen, research, arms = asyncio.run(go())
     # Every tool reached the unknown-argument path at least.
     assert seen >= len(VIEW_TOOLS) - 1, seen  # every view tool but status (no required arg)
+    # Non-vacuity: the research arm ran on all five research view tools, for
+    # both the missing-argument and the unknown-argument call (RI-286).
+    assert research == {
+        "keel_research_brief",
+        "keel_research_get",
+        "keel_research_plan",
+        "keel_research_run",
+        "keel_research_view_set",
+    }, research
+    assert arms == 2 * len(research), arms
 
 
 def test_real_backtest_envelopes_validate() -> None:

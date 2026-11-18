@@ -1,0 +1,683 @@
+{
+  "_meta": {
+    "keel/card": {
+      "card_data": {
+        "charts": [
+          {
+            "chart": {
+              "enc": "b64x2",
+              "family": "Curve",
+              "kind": "line",
+              "legend": null,
+              "marks": [],
+              "more_words": null,
+              "note_words": null,
+              "read": {
+                "band": [
+                  "−0.028 to 0.011|−0.038 to 0.011|−0.046 to 0.012|−0.059 to 0.017|−0.076 to 0.029|not measured to not measured|not measured to not measured"
+                ],
+                "bins": null,
+                "cells": null,
+                "ring_words": null,
+                "sel": null,
+                "sel_rows": null,
+                "withheld": {
+                  "5": "15 separate 10-day stretches; an interval needs at least 20.",
+                  "6": "11 separate 14-day stretches; an interval needs at least 20."
+                },
+                "x": "1|2|3|5|7|10|14",
+                "y": ["−0.009|−0.013|−0.017|−0.021|−0.023|−0.028|−0.036"]
+              },
+              "series": [
+                {
+                  "c": 0,
+                  "hi": "1E1H1r4c__....",
+                  "lo": "c3XCR-KbAA....",
+                  "name": "(no longer available)",
+                  "ref": false,
+                  "y": "o9mEj1hbgAc4YQ"
+                }
+              ],
+              "title": "Ranking skill, 1 to 14 days ahead",
+              "x": {
+                "label": "Days ahead",
+                "n": 7,
+                "pos": "AAE7J2TsdisT__",
+                "ticks": [
+                  {
+                    "at": 0,
+                    "w": "1"
+                  },
+                  {
+                    "at": 315,
+                    "w": "2"
+                  },
+                  {
+                    "at": 630,
+                    "w": "3"
+                  },
+                  {
+                    "at": 1890,
+                    "w": "7"
+                  },
+                  {
+                    "at": 2835,
+                    "w": "10"
+                  },
+                  {
+                    "at": 4095,
+                    "w": "14"
+                  }
+                ]
+              },
+              "y": {
+                "label": "Rank IC",
+                "n": null,
+                "pos": null,
+                "ticks": [
+                  {
+                    "at": 1007,
+                    "w": "−0.050"
+                  },
+                  {
+                    "at": 2957,
+                    "w": "0.000"
+                  }
+                ]
+              }
+            },
+            "family": "Curve",
+            "form": "chart",
+            "index": 1,
+            "lead": null,
+            "state_words": null,
+            "thumb": null,
+            "title": "Ranking skill, 1 to 14 days ahead",
+            "v": "Ranking%20skill%2C%201%20to%2014%20days%20ahead"
+          },
+          {
+            "chart": null,
+            "family": "River",
+            "form": "title",
+            "index": 2,
+            "lead": null,
+            "state_words": null,
+            "thumb": null,
+            "title": "Which led, and when",
+            "v": "Which%20led%2C%20and%20when"
+          },
+          {
+            "chart": {
+              "columns": [
+                {
+                  "w": "Result"
+                },
+                {
+                  "w": "Measure"
+                },
+                {
+                  "w": "Value"
+                }
+              ],
+              "enc": "b64x2",
+              "family": "Table",
+              "kind": "table",
+              "legend": null,
+              "marks": [],
+              "more_words": "143 more rows",
+              "note_words": null,
+              "read": null,
+              "rows": [
+                ["(no longer available)", "first_day", "not measured"],
+                ["(no longer available 2)", "first_day", "not measured"],
+                ["(no longer available 3)", "first_day", "not measured"],
+                ["(no longer available 4)", "first_day", "not measured"],
+                ["(no longer available 5)", "first_day", "not measured"],
+                ["(no longer available 6)", "first_day", "not measured"],
+                ["(no longer available 7)", "first_day", "not measured"],
+                [
+                  "Mix of (no longer available), (no longer available), (no longer available)",
+                  "first_day",
+                  "not measured"
+                ],
+                [
+                  "Skill-weighted mix of (no longer available), (no longer available), (no longer available)",
+                  "first_day",
+                  "not measured"
+                ],
+                ["(no longer available)", "last_day", "not measured"]
+              ],
+              "series": [],
+              "title": "Side by side",
+              "x": null,
+              "y": null
+            },
+            "family": "Table",
+            "form": "chart",
+            "index": 3,
+            "lead": null,
+            "state_words": null,
+            "thumb": null,
+            "title": "Side by side",
+            "v": "Side%20by%20side"
+          },
+          {
+            "chart": null,
+            "family": "Bars",
+            "form": "title",
+            "index": 4,
+            "lead": null,
+            "state_words": null,
+            "thumb": null,
+            "title": "What each adds beyond the others",
+            "v": "What%20each%20adds%20beyond%20the%20others"
+          },
+          {
+            "chart": {
+              "enc": "b64x2",
+              "family": "Lines",
+              "kind": "line",
+              "legend": null,
+              "marks": [],
+              "more_words": null,
+              "note_words": "Jun 12, 2026 to Oct 29, 2026 · showing 58 of 140 days",
+              "read": {
+                "band": null,
+                "bins": null,
+                "cells": null,
+                "ring_words": null,
+                "sel": null,
+                "sel_rows": null,
+                "withheld": null,
+                "x": "Jun 12, 2026|Jun 14, 2026|Jun 17, 2026|Jun 19, 2026|Jun 22, 2026|Jun 24, 2026|Jun 27, 2026|Jun 29, 2026|Jul 2, 2026|Jul 4, 2026|Jul 6, 2026|Jul 9, 2026|Jul 11, 2026|Jul 14, 2026|Jul 16, 2026|Jul 19, 2026|Jul 21, 2026|Jul 23, 2026|Jul 26, 2026|Jul 28, 2026|Jul 31, 2026|Aug 2, 2026|Aug 5, 2026|Aug 7, 2026|Aug 10, 2026|Aug 12, 2026|Aug 14, 2026|Aug 17, 2026|Aug 19, 2026|Aug 22, 2026|Aug 24, 2026|Aug 27, 2026|Aug 29, 2026|Aug 31, 2026|Sep 3, 2026|Sep 5, 2026|Sep 8, 2026|Sep 10, 2026|Sep 13, 2026|Sep 15, 2026|Sep 18, 2026|Sep 20, 2026|Sep 22, 2026|Sep 25, 2026|Sep 27, 2026|Sep 30, 2026|Oct 2, 2026|Oct 5, 2026|Oct 7, 2026|Oct 9, 2026|Oct 12, 2026|Oct 14, 2026|Oct 17, 2026|Oct 19, 2026|Oct 22, 2026|Oct 24, 2026|Oct 27, 2026|Oct 29, 2026",
+                "y": [
+                  "1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00"
+                ]
+              },
+              "series": [
+                {
+                  "c": 0,
+                  "hi": null,
+                  "lo": null,
+                  "name": "mom7,mom30",
+                  "ref": false,
+                  "y": "f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_"
+                }
+              ],
+              "title": "How they move together over time",
+              "x": {
+                "label": "Day",
+                "n": 58,
+                "pos": "AAA7CTDOEnFiG6H1JNKILDMbNWOvPqRCR9S4UQVLWkXeY3ZybKcFdAeYfTgshni_j6k1mNnIohpbq0rvtHuCu9wVxQypzk08132y4K5F6d7Y8x9s_E__",
+                "ticks": [
+                  {
+                    "at": 0,
+                    "w": "Jun 2026"
+                  },
+                  {
+                    "at": 795,
+                    "w": "Jul 2026"
+                  },
+                  {
+                    "at": 1650,
+                    "w": "Aug 2026"
+                  },
+                  {
+                    "at": 2445,
+                    "w": "Sep 2026"
+                  },
+                  {
+                    "at": 3300,
+                    "w": "Oct 2026"
+                  }
+                ]
+              },
+              "y": {
+                "label": "Correlation",
+                "n": null,
+                "pos": null,
+                "ticks": [
+                  {
+                    "at": 2047,
+                    "w": "1.00"
+                  }
+                ]
+              }
+            },
+            "family": "Lines",
+            "form": "chart",
+            "index": 5,
+            "lead": null,
+            "state_words": null,
+            "thumb": null,
+            "title": "How they move together over time",
+            "v": "How%20they%20move%20together%20over%20time"
+          },
+          {
+            "chart": {
+              "enc": "b64x2",
+              "family": "Curve",
+              "kind": "line",
+              "legend": null,
+              "marks": [],
+              "more_words": null,
+              "note_words": null,
+              "read": {
+                "band": null,
+                "bins": null,
+                "cells": null,
+                "ring_words": null,
+                "sel": null,
+                "sel_rows": null,
+                "withheld": null,
+                "x": "1",
+                "y": ["−0.009", "−0.009"]
+              },
+              "series": [
+                {
+                  "c": 1,
+                  "hi": null,
+                  "lo": null,
+                  "name": "Mix of (no longer available), (no longer available), (no longer available)",
+                  "ref": false,
+                  "y": "f_"
+                },
+                {
+                  "c": 2,
+                  "hi": null,
+                  "lo": null,
+                  "name": "Skill-weighted mix of (no longer available), (no longer available), (no longer available)",
+                  "ref": false,
+                  "y": "f_"
+                }
+              ],
+              "title": "Your mix against its parts",
+              "x": {
+                "label": "Days ahead",
+                "n": 1,
+                "pos": null,
+                "ticks": [
+                  {
+                    "at": 2047,
+                    "w": "1"
+                  }
+                ]
+              },
+              "y": {
+                "label": "Rank IC",
+                "n": null,
+                "pos": null,
+                "ticks": [
+                  {
+                    "at": 2047,
+                    "w": "−0.009"
+                  }
+                ]
+              }
+            },
+            "family": "Curve",
+            "form": "chart",
+            "index": 6,
+            "lead": null,
+            "state_words": null,
+            "thumb": null,
+            "title": "Your mix against its parts",
+            "v": "Your%20mix%20against%20its%20parts"
+          }
+        ],
+        "checks": null,
+        "chips": [],
+        "copy": {
+          "charts": "Charts",
+          "failed_cell": "Didn't finish",
+          "full_chart_in_keel": "Open in Keel for the full chart",
+          "highest": "Highest",
+          "hint_pointer": "Hover or tap the chart for values",
+          "hint_touch": "Tap the chart for values",
+          "locked": "not included in this account's plan",
+          "lowest": "Lowest",
+          "met": "met",
+          "more_charts": "+2 more charts",
+          "not_measured": "not measured",
+          "not_met": "not met",
+          "not_run": "Not run yet",
+          "not_valid": "Not a valid setting",
+          "numbers": "The numbers",
+          "open_bar": "Open this bar in Keel",
+          "open_chart": "Open this chart in Keel",
+          "open_setting": "Open this setting in Keel",
+          "points_in_keel": "Open in Keel to read each point",
+          "steps": "Steps",
+          "yours": "Yours"
+        },
+        "focus": null,
+        "head_words": null,
+        "key": {
+          "cols": 6,
+          "d": "-----gg----ggg---gggg--ggggg-ggggggg",
+          "enc": "b64x2",
+          "family": "Heatmap",
+          "kind": "heat",
+          "legend": {
+            "hi": "1.000",
+            "lo": "1.000",
+            "ramp": "div"
+          },
+          "marks": [],
+          "more_words": null,
+          "note_words": null,
+          "outline": null,
+          "read": {
+            "band": null,
+            "bins": null,
+            "cells": "not measured|not measured|not measured|not measured|not measured|1.000|1.000|not measured|not measured|not measured|not measured|1.000|1.000|1.000|not measured|not measured|not measured|1.000|1.000|1.000|1.000|not measured|not measured|1.000|1.000|1.000|1.000|1.000|not measured|1.000|1.000|1.000|1.000|1.000|1.000|1.000",
+            "ring_words": null,
+            "sel": "result:%28no%20longer%20available%202%29|result:%28no%20longer%20available%203%29|result:%28no%20longer%20available%204%29|result:%28no%20longer%20available%205%29|result:%28no%20longer%20available%206%29|result:%28no%20longer%20available%29",
+            "sel_rows": "result_b:%28no%20longer%20available%202%29|result_b:%28no%20longer%20available%203%29|result_b:%28no%20longer%20available%204%29|result_b:%28no%20longer%20available%205%29|result_b:%28no%20longer%20available%206%29|result_b:%28no%20longer%20available%207%29",
+            "withheld": null,
+            "x": "(no longer available 2)|(no longer available 3)|(no longer available 4)|(no longer available 5)|(no longer available 6)|(no longer available)",
+            "y": [
+              "(no longer available 2)|(no longer available 3)|(no longer available 4)|(no longer available 5)|(no longer available 6)|(no longer available 7)"
+            ]
+          },
+          "ring": null,
+          "rows": 6,
+          "series": [],
+          "title": "How alike they are",
+          "values_in_cells": true,
+          "x": {
+            "label": "Result",
+            "n": 6,
+            "pos": null,
+            "ticks": [
+              {
+                "at": 341,
+                "w": "(no longer available 2)"
+              },
+              {
+                "at": 1024,
+                "w": "(no longer available 3)"
+              },
+              {
+                "at": 1706,
+                "w": "(no longer available 4)"
+              },
+              {
+                "at": 2389,
+                "w": "(no longer available 5)"
+              },
+              {
+                "at": 3071,
+                "w": "(no longer available 6)"
+              },
+              {
+                "at": 3754,
+                "w": "(no longer available)"
+              }
+            ]
+          },
+          "y": {
+            "label": "Compared with",
+            "n": 6,
+            "pos": null,
+            "ticks": [
+              {
+                "at": 341,
+                "w": "(no longer available 2)"
+              },
+              {
+                "at": 1024,
+                "w": "(no longer available 3)"
+              },
+              {
+                "at": 1706,
+                "w": "(no longer available 4)"
+              },
+              {
+                "at": 2389,
+                "w": "(no longer available 5)"
+              },
+              {
+                "at": 3071,
+                "w": "(no longer available 6)"
+              },
+              {
+                "at": 3754,
+                "w": "(no longer available 7)"
+              }
+            ]
+          }
+        },
+        "key_v": "How%20alike%20they%20are",
+        "links": {
+          "chart": "https://app.usekeel.io/research/stu_000003?v={v}",
+          "select": "https://app.usekeel.io/research/stu_000003?v={v}&sel={sel}",
+          "study": "https://app.usekeel.io/research/stu_000003"
+        },
+        "method_line": "Measured with Correlations v1, RankIC v1",
+        "more_charts_total": 2,
+        "more_words": null,
+        "notes": {
+          "draft": null,
+          "linked": null,
+          "not_measured": [],
+          "saved": null,
+          "stale": []
+        },
+        "rows": null,
+        "schema": "keel.research.card-data/2",
+        "steps": [],
+        "top": {
+          "lines": [
+            "Highest: Result (no longer available) · Compared with (no longer available 2) at 1.000",
+            "Lowest: Result (no longer available) · Compared with (no longer available 2) at 1.000"
+          ]
+        }
+      },
+      "card_summary": {
+        "thumb": {
+          "facts": {
+            "c": 6,
+            "d": "-----ff----fff---ffff--fffff-fffffff",
+            "r": 6,
+            "ramp": "div"
+          },
+          "family": "Heatmap",
+          "view_index": 0
+        }
+      }
+    },
+    "ui": {
+      "resourceUri": "ui://keel/cards/study.html"
+    }
+  },
+  "content": [
+    {
+      "text": "card: where the host draws Keel cards, the user sees what follows as a card carrying its name, links and ids, so a reply can call it by name; the ids and links here serve tool calls and hosts without cards.\n\nCompare · Signals, side by side · version 1 · Done · Oct 29\nUsed 0 of 400 studies; resets Dec 1. Planning, reading, saving, and runs that reuse everything or run nothing, do not count.\nEffective number of different results, all: 1.00\nDays May 4, 2026 to Oct 30, 2026 · 60 coins: top 60 by 30-day volume, picked Oct 31, kept fixed · no costs · data as of Oct 30, 2026\nMeasured with Ranks v1, SameFooting v1, RankIC v1, ICOverTime v1, Correlations v1, PairOverTime v1, WhatsLeft v1, SignalMix v1.\nIn short:\n- Effective number of different results, all: 1.00, no interval; sample not stated\n- How well it ranks, next day, (no longer available): −0.009, −0.028 to 0.011; 168 days · 168 effective days · 60 coins\nRuns: 0 runs, 0 reused, none failed · versions tried: unknown\nCharts (7): How alike they are · Ranking skill, 1 to 14 days ahead · Which led, and when · Side by side · What each adds beyond the others · How they move together over time · Your mix against its parts — keel_research_get(study_id=\"stu_000003\", view=0) reads the numbers behind any of them.\nView in Keel: https://app.usekeel.io/research/stu_000003",
+      "type": "text"
+    }
+  ],
+  "structuredContent": {
+    "base": {
+      "evidence_hash": "cd1429c22ebcc002ef26ef01a5bdcca966e838b47b6238284d40eb80dc9cafbc",
+      "revision": 1,
+      "version": 1
+    },
+    "can_retry": false,
+    "can_run": true,
+    "card_summary": {
+      "footer": {
+        "runs_words": "no new runs",
+        "subject": "(no longer available) vs (no longer available 2) and 7 more"
+      },
+      "footing_line": "179 days · 60 coins · no costs · some numbers use fewer days or coins",
+      "headline": {
+        "chips": [],
+        "text": "Effective number of different results, all: 1.00"
+      },
+      "kind_label": {
+        "key": "compare",
+        "name": "Compare",
+        "short": "Compare"
+      },
+      "lead": "Effective number of different results, all 1.00",
+      "maker": "you",
+      "maker_words": "by you",
+      "numbers": [
+        {
+          "label": "Effective number of different results, all",
+          "measure": "effective_number",
+          "ref": "alike.summary",
+          "sample": {
+            "coins_max": 60.0,
+            "coins_median": 60.0,
+            "coins_min": 60.0,
+            "coverage": 1.0,
+            "first_day": "2026-05-04",
+            "last_day": "2026-10-29"
+          },
+          "unit": "ratio",
+          "value": 1.0,
+          "value_words": "1.00"
+        },
+        {
+          "interval_words": "−0.028 to 0.011",
+          "label": "How well it ranks, next day, (no longer available)",
+          "measure": "ic",
+          "ref": "skill",
+          "sample": {
+            "coins": 60,
+            "coins_max": 60.0,
+            "coins_median": 60.0,
+            "coins_min": 60.0,
+            "coverage": 1.0,
+            "days": 168,
+            "effective_days": 168.0,
+            "excluded": {
+              "no_forward_price": 60
+            },
+            "first_day": "2026-05-04",
+            "last_day": "2026-10-29"
+          },
+          "sample_words": "168 days · 168 effective days · 60 coins",
+          "unit": "score",
+          "value": -0.008612511411900134,
+          "value_words": "−0.009"
+        }
+      ],
+      "schema": "keel.research.card/2",
+      "state": "completed",
+      "state_words": "Done · Oct 29",
+      "title": "Signals, side by side",
+      "top5": {
+        "kind": "checks",
+        "rows": [],
+        "total": 0
+      },
+      "version": 1
+    },
+    "counts": {
+      "allowance": {
+        "study": "free",
+        "units": [
+          {
+            "limit": 400,
+            "resets_at": "2026-12-18",
+            "unit": "research_studies",
+            "used": 0
+          }
+        ]
+      },
+      "runs": {
+        "executed": 0,
+        "failed_content": 0,
+        "failed_platform": 0,
+        "planned": 0,
+        "reused": 0,
+        "words": "0 runs, 0 reused, none failed"
+      },
+      "versions_tried": {
+        "added": 0,
+        "family": "",
+        "why": ""
+      }
+    },
+    "footing": {
+      "coins": {
+        "chosen": "Top 60 by 30-day volume, picked Oct 31, kept fixed",
+        "count": 60,
+        "names_sha256": "038394ed76754d6837a48cc1438cbc6a3b24c9f21f0b7227896ec43e7b0e960c"
+      },
+      "costs": "none",
+      "data": "snap_6c1f0e8a2b9d4f37",
+      "days": {
+        "end": "2026-10-30",
+        "start": "2026-05-04"
+      },
+      "delay": 0,
+      "engine": "eng_000000000000000000000000000000000000000000000000000000000000",
+      "engine_words": "This version of the engine",
+      "leverage": 1.0
+    },
+    "hero_url": "https://app.usekeel.io/research/stu_000003",
+    "links": {
+      "app": "https://app.usekeel.io/research/stu_000003"
+    },
+    "locked": [],
+    "not_measured": [],
+    "notes": {
+      "notes_total": 0
+    },
+    "page": {
+      "default": 0,
+      "switch": [0, 1, 2, 3]
+    },
+    "stale": [],
+    "steps": {
+      "by_status": {
+        "completed": 8
+      },
+      "total": 8
+    },
+    "study": {
+      "archived": false,
+      "can_delete": true,
+      "evidence_hash": "cd1429c22ebcc002ef26ef01a5bdcca966e838b47b6238284d40eb80dc9cafbc",
+      "kind_label": {
+        "key": "compare",
+        "name": "Compare",
+        "short": "Compare"
+      },
+      "linked_to": [],
+      "linked_to_total": 0,
+      "presentation_hash": "3f1db119ddf5dd3a5c47a06ac1d3d5e53e94e1a7efe8b88c624db8c8abdfcd0a",
+      "question": "Which of these rank coins alike, which add something of their own, and is a mix better than the best one?",
+      "revision": 1,
+      "run_set_id": "rus_000003",
+      "set_aside": false,
+      "state": "completed",
+      "study_id": "stu_000003",
+      "title": "Signals, side by side",
+      "version": 1
+    },
+    "subjects": {
+      "total": 9
+    },
+    "url_line": "View in Keel: https://app.usekeel.io/research/stu_000003",
+    "view": {
+      "at": "2026-11-17T00:00:05.000Z",
+      "kind": "study",
+      "mode": "study",
+      "object": "stu_000003",
+      "seq": 6,
+      "size": "view",
+      "version": 1
+    },
+    "views": {
+      "total": 7
+    },
+    "words": {
+      "allowance": "Used 0 of 400 studies; resets Dec 1. Planning, reading, saving, and runs that reuse everything or run nothing, do not count."
+    }
+  }
+}

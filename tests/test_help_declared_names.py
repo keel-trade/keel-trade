@@ -68,12 +68,15 @@ HANDLER = OUTCOMES["keel_help"].handler
 # What the three pattern docs declare that their file names do not say.
 DECLARED = {
     "entry_exit": "entry_exit_patterns",
-    "screen_select": "screen_select_patterns",
+    "screen_select": "rank_select_patterns",
     "session_and_structure": "session_and_structure_patterns",
 }
 
 # What a knowledge doc declares with `<!-- topic: x -->` (Q-2504 follow-up B).
 DECLARED_TOPICS = {
+    # L13: the strategy pattern's old slug, kept after the rename so a frozen
+    # catalog or an old transcript still resolves it.
+    "screen_select_patterns": "rank_select_patterns",
     "universe": "universe_selection",
     # Q-2581: the trader phrases for a price-level stop and an R target.
     "structure_stop": "entry_exit_patterns",
@@ -87,6 +90,13 @@ DECLARED_TOPICS = {
     # `position_manager` is the PHASE CATEGORY (no component carries the
     # name); the doc that teaches that layer in full owns it.
     "position_manager": "entry_exit_patterns",
+    # Q-3637 (claude.ai screens test, 2026-11-05): an agent asked for
+    # `screener_view` to learn the view syntax and got not_found. The screen's
+    # view is the view language; the screen itself is the screener reference.
+    "screener_view": "view_language",
+    "screen_view": "view_language",
+    "screens": "screener",
+    "screen": "screener",
 }
 
 _CITATION = re.compile(r"`([A-Za-z0-9_\-]+)` (?:pattern|topic|reference)s?\b")

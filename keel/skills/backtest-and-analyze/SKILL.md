@@ -49,7 +49,7 @@ references:
   tool applies the strategy clock's default window and the receipt names the
   window it used.
 - More than one run planned (a grid, several windows)? Each run uses one
-  backtest of the plan's weekly allowance; say how many runs the batch needs
+  backtest of the plan's backtest allowance; say how many runs the batch needs
   before starting, and let the user scope it.
 
 ## Step 2 — Run and wait

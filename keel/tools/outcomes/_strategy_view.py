@@ -45,13 +45,16 @@ from ._declarations import count_declarations, declaration_rows
 
 __all__ = [
     "KIND_STRATEGY",
+    "OUTPUT_UNIT_WORDS",
     "VIEW_TOOLS",
     "build_parse_error_view",
     "build_view",
     "change_from_diff",
     "count_blocks",
     "choose_size",
+    "outputs_block",
     "resize_view",
+    "with_outputs",
 ]
 
 
@@ -66,6 +69,10 @@ __all__ = [
 #: model must read is lost to `structuredContent`.
 VIEW_TOOLS = frozenset(
     {
+        "keel_screener_run",
+        "keel_screener_view",
+        # A saved view edit answers with the screen it now shows (Q-3639).
+        "keel_screener_view_set",
         "keel_strategy_get",
         "keel_strategy_compose",
         "keel_strategy_fork",
@@ -81,6 +88,13 @@ VIEW_TOOLS = frozenset(
         # tool with no card — 12 markdown view tools in all.
         "keel_strategy_restore",
         "keel_account_status",
+        # Research (07 §2.2): plan and brief are markdown only; run, get and
+        # view_set draw the study card.
+        "keel_research_plan",
+        "keel_research_run",
+        "keel_research_get",
+        "keel_research_view_set",
+        "keel_research_brief",
     }
 )
 
@@ -330,6 +344,116 @@ def universe_block(universe: Any) -> dict | None:
     return {"label": label, "total": total, "symbols": listed}
 
 
+#: An output unit in the words a screen's own pages use (Q-3637), keyed by
+#: `pipeline_engine.units` token. The SDK twin of `libs/screeners/copy.py`
+#: `UNIT_DISPLAY_WORDS`, pinned to it by `tests/test_strategy_view_screen.py`;
+#: `unknown` carries no words at all (founder 2026-11-04: no "unknown" unit
+#: label anywhere), so such an output reads by its name alone.
+OUTPUT_UNIT_WORDS: dict[str, str] = {
+    "percent": "%",
+    "fraction": "%",
+    "rate_per_hour": "% an hour",
+    "rate_per_year": "% a year",
+    "price": "price",
+    "notional": "quote units",
+    "count": "count",
+    "score": "score (no unit)",
+    "rank": "percentile rank",
+    "flag": "flag",
+}
+
+
+def outputs_block(graph: Any, units: Any = None) -> list[dict] | None:
+    """What a SCREEN produces: one row per declared output, in declared order.
+
+    A screen is the file whose graph carries `outputs` (the emitter writes
+    `Outputs(slots=[...])` there; a strategy's graph has none), so this is
+    None for every strategy and the strategy view is unchanged. `units` is
+    the validator's `[{output, unit, sentence}]` — compose's
+    `validation.units` or keel-api's `GET /v1/screeners/{id}/views` `units`,
+    the same derivation — and is optional: without it a row is the name
+    alone, never a guessed unit.
+
+    A `/views` row also carries `label`, the saved view's column label
+    (Q-3638): a row then reads by that label (`label`), and its unit words
+    ride only when the label does not already say them (Q-3639). The local
+    validator has no view, so a dry run reads by the raw name.
+    """
+    names = graph.get("outputs") if isinstance(graph, dict) else None
+    if not isinstance(names, list) or not names:
+        return None
+    by_name = {
+        str(u.get("output")): u
+        for u in (units if isinstance(units, list) else [])
+        if isinstance(u, dict) and u.get("output")
+    }
+    rows: list[dict] = []
+    from ._screener_view import unit_stated
+
+    for name in names:
+        row: dict[str, Any] = {"name": str(name)}
+        unit = by_name.get(str(name), {})
+        label = unit.get("label").strip() if isinstance(unit.get("label"), str) else ""
+        if label and label != str(name):
+            row["label"] = label
+        if isinstance(unit.get("unit"), str) and unit["unit"]:
+            row["unit"] = unit["unit"]
+            words = OUTPUT_UNIT_WORDS.get(unit["unit"])
+            if words and not unit_stated(row.get("label"), unit["unit"], words):
+                row["words"] = words
+        if isinstance(unit.get("sentence"), str) and unit["sentence"]:
+            row["sentence"] = unit["sentence"]
+        rows.append(row)
+    return rows
+
+
+def _outputs_text(outputs: list[dict]) -> str:
+    """`funding_now (% a year), ret_1d (%)` — the card's rows as one line,
+    each by its view label when it has one (`Funding now, a year; 1-day
+    return (%)`): a label with a comma in it joins with semicolons, so the
+    list still reads as its rows."""
+    shown = [
+        f"{o.get('label') or o['name']} ({o['words']})"
+        if o.get("words")
+        else str(o.get("label") or o["name"])
+        for o in outputs
+    ]
+    return ("; " if any("," in str(o.get("label") or "") for o in outputs) else ", ").join(shown)
+
+
+def _screen_lines(view: dict) -> list[str]:
+    """A screen's `outputs` line and, when the validator's sentences are in
+    hand, its `units` line — the scale a threshold is written in, which a
+    model on a host that hides `structuredContent` has nowhere else."""
+    outputs = view.get("outputs")
+    if not isinstance(outputs, list) or not outputs:
+        return []
+    lines = [f"outputs   {_outputs_text(outputs)}"]
+    sentences = [o["sentence"] for o in outputs if o.get("sentence")]
+    if sentences:
+        lines.append(f"units     {'; '.join(sentences)}")
+    return lines
+
+
+def with_outputs(view: Any, units: Any) -> Any:
+    """A built view's screen rows, re-read with `units`, markdown re-rendered.
+
+    The save path's twin of `build_view(units=)`: a persisted compose reads
+    its view back through `strategy_get.view_for_strategy`, which owns the
+    graph fetch and knows no units. A strategy view (no outputs) comes back
+    untouched.
+    """
+    if not isinstance(view, dict):
+        return view
+    rows = outputs_block(view.get("structure"), units)
+    if rows is None:
+        return view
+    out = dict(view)
+    out["outputs"] = rows
+    out["markdown"] = render_markdown(out, out.get("structure"))
+    return out
+
+
 def execution_block(execution: Any) -> dict | None:
     """`{label, params}` — `Buffered 0.4`, `On change`, else `Execution`."""
     if not isinstance(execution, dict):
@@ -552,6 +676,15 @@ def status_text_for(metadata: Any) -> str | None:
     if word:
         return word
     return f"Updated {when}" if when else None
+
+
+#: The line a view without evidence says, by keel-api's `backtest_state`
+#: (R-009). "No backtest yet." is the card's own words; `backtested` with no
+#: evidence says nothing (the runs are not this view's to explain).
+NO_EVIDENCE_LINES: dict[str, str] = {
+    "never_backtested": "No backtest yet.",
+    "attempted": "No completed backtest yet.",
+}
 
 
 def evidence_from_metadata(metadata: Any) -> dict | None:
@@ -1082,6 +1215,7 @@ def _header_lines(view: dict) -> list[str]:
     universe = header.get("universe")
     if universe and universe.get("label"):
         lines.append(f"universe  {universe['label']}")
+    lines.extend(_screen_lines(view))
     execution = header.get("execution")
     if execution and execution.get("label"):
         lines.append(f"execution {execution['label']}")
@@ -1291,11 +1425,22 @@ def _receipt_markdown(view: dict, graph: Any) -> str:
     create / fork / save the caller asked to present as a receipt. A
     receipt WITH a change keeps the existing change rendering, which is
     already one line per hunk.
+
+    A dry run also says what the draft would hold (Q-3637): the universe
+    label the card's chip draws, the one fact the model cannot read off the
+    source it just wrote; a screen adds its outputs and their units, which a
+    host that hides `structuredContent` showed it nowhere. A strategy's
+    SAVED receipt stays one line.
     """
-    if str(view.get("status") or "").upper() == "PREVIEW":
+    preview = str(view.get("status") or "").upper() == "PREVIEW"
+    if preview:
         lines = [_preview_receipt_line(view, graph)]
     else:
         lines = _header_lines(view)[:1]
+    universe = (view.get("header") or {}).get("universe")
+    if (preview or view.get("outputs")) and universe and universe.get("label"):
+        lines.append(f"universe  {universe['label']}")
+    lines.extend(_screen_lines(view))
     if view.get("url_line"):
         lines.append(str(view["url_line"]))
     return "\n".join(lines).rstrip() + "\n"
@@ -1333,6 +1478,9 @@ def render_markdown(
     if evidence:
         lines.append("")
         lines.append(_evidence_line(evidence, head_version=view.get("version")))
+    elif view.get("evidence_note"):
+        lines.append("")
+        lines.append(str(view["evidence_note"]))
     if view.get("url_line"):
         lines.append("")
         lines.append(str(view["url_line"]))
@@ -1582,6 +1730,7 @@ def build_view(
     size_override: str | None = None,
     object_id: str | None = None,
     head_version: Any = None,
+    units: Any = None,
 ) -> dict | None:
     """The `view` block for one strategy, or None without a graph.
 
@@ -1603,6 +1752,11 @@ def build_view(
     `object_id` is the supersession election key's subject when the
     caller knows it and the metadata row does not (a dry run against an
     existing strategy is the case that matters).
+
+    A SCREEN (its graph carries `outputs`) gets `view.outputs` — what it
+    produces, with each output's unit when the caller hands the validator's
+    `units` — and never a backtest note: a screen is run, not backtested
+    (Q-3637). A strategy's view is unchanged.
     """
     if not isinstance(graph, dict) or not _blocks(graph):
         return None
@@ -1653,6 +1807,11 @@ def build_view(
     }
     if previous_version is not None:
         view["previous_version"] = previous_version
+    outputs = outputs_block(graph, units)
+    if outputs is not None:
+        view["outputs"] = outputs
+    elif not evidence and meta.get("backtest_state") in NO_EVIDENCE_LINES:
+        view["evidence_note"] = NO_EVIDENCE_LINES[meta["backtest_state"]]
     if head_version is not None and _version_number(head_version) != shown:
         view["head_version"] = head_version
     if marks:

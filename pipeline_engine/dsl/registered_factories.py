@@ -189,6 +189,8 @@ def expand_registered_factories(
         globals_=strategy.globals_,
         universe=strategy.universe,
         execution=strategy.execution,
+        outputs=strategy.outputs,
+        uses=strategy.uses,
     )
 
 

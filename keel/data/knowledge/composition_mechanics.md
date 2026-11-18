@@ -105,3 +105,5 @@ A market value enters a rule with `Load('slot')` and keeps its full-history mean
    ```
 
 5. **Write DSL from the chain**: each level of the graph becomes pipeline steps. Parallel groups become `{}` blocks. Store points become `Store('name')`. TradeManager reads its slots directly — no Load needed before it (Composition Mechanics).
+
+- Each `Use(ref, output="name")` invocation receives its own internal slot namespace. The final output store is removed and the output becomes the step value. A load without its producer is refused. Consumer component pins apply inside the expansion; detach retains identical compiled behavior and cuts only the reference.

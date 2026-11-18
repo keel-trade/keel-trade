@@ -27,7 +27,7 @@ references:
     why: "the position layer: readers, actions, defaults and the canonical stop/target/trail/partial/DCA/gate examples"
   - step: 1
     topic: strategy_patterns
-    why: "pattern snippets when the thesis names one: entry/exit, screen-select, pairs, beta hedge, DCA, regime"
+    why: "pattern snippets when the thesis names one: entry/exit, rank-and-select, pairs, beta hedge, DCA, regime"
   - step: 1
     topic: trading_domain
     why: "the timeframe floor and the per-strategy timeframe table, carry and oscillator polarity, required component pairs, complexity ladder, the entry/exit sizer table"
@@ -70,7 +70,7 @@ dry-run, reading each issue's fix → save → backtest when the user wants one
 ## Step 1 — Read the thesis; settle three decisions before any tool call
 
 1. **Path.** Continuous forecast (Path 1), discrete entry/exit (Path 2),
-   screen-select (Path 3), direct allocation (Path 4). "buy when / sell when /
+   rank-and-select (Path 3), direct allocation (Path 4). "buy when / sell when /
    entry / exit / crosses" → discrete; "rank / weight / tilt / score /
    forecast" → continuous. Architecture ambiguity → ask ONE question.
 2. **Universe — choose the asset set.** Assets the user named →
@@ -197,7 +197,7 @@ then go edit → `keel_strategy_push`, which keeps the same history.
 
 ## Step 7 — Backtest when the user wants one, then reason about the result
 
-A backtest uses one run of the plan's weekly allowance: run it when the user
+A backtest uses one run of the plan's backtest allowance: run it when the user
 asked how the strategy performs, or agrees to a run.
 `keel_backtest_run(strategy_id=<id>)` with no dates runs the strategy clock's
 default window and cost model; pass a window only when the user named one.
@@ -221,7 +221,7 @@ fix over curve-fitting one bad window; the next change is one small edit
   `WeightCadence(duration=…)` → `FillNaN(fill_value=0.0)`: the selection feeds
   the allocator directly, the cadence is the hold and the exit, and `FillNaN`
   keeps the terminal weights dense (`NONDENSE_TERMINAL_WEIGHTS` otherwise) —
-  the `screen_select_patterns` topic has the validated example. A
+  the `rank_select_patterns` topic has the validated example. A
   `TradeManager`'s rules sit between it and the sizer.
 - Start simple: normalization, vol standardization and FDM are follow-ups,
   not defaults, for a single-signal build.

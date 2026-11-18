@@ -1,0 +1,5 @@
+{
+  "screener": { "path": "/strategies/{id}/edit", "query": { "pane": "view" } },
+  "result": { "path": "/screener-runs/{id}", "query": {} },
+  "actions": { "path": "/strategies/{id}/edit", "query": { "pane": "view" } }
+}

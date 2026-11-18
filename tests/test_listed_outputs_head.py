@@ -198,7 +198,10 @@ def test_the_boundary_owners_and_counts_are_heads():
         "strategies that are running are managed in the Keel web app"
     )
     assert _text_violations("probe", "text", "paper trading"), "an allowance applies off"
-    assert _load_checker().compute_numbers()["tool_count"] == 29
+    # HEAD's 29, plus the 4 screen tools once prod serves screens to every host.
+    checker = _load_checker()
+    screens = 4 if checker.prod_listed_screens_all_hosts() else 0
+    assert checker.compute_numbers()["tool_count"] == 29 + screens
 
 
 def _load_checker():

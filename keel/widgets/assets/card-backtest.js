@@ -709,6 +709,11 @@
     // Absent on runs before the worker stamped it — nothing is drawn.
     if (v && typeof v.exposure_line === "string" && v.exposure_line)
       body.appendChild(H.el("p", "note", v.exposure_line));
+    // Which way the positions went (R-003): the app's line, "12 positions:
+    // 0 long, 12 short · 0 flips · long P&L $0.00, short P&L +$412.10".
+    // Absent on runs recorded before the counts were stored.
+    if (v && typeof v.sides_line === "string" && v.sides_line)
+      body.appendChild(H.el("p", "note", v.sides_line));
     // What the counts are when the run's era left one unrecorded — the
     // server's sentence (Q-2122, spec 01 §6.2); a count it did not record
     // draws "—" in its tile.

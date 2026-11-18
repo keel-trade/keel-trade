@@ -1,0 +1,1226 @@
+{
+  "_meta": {
+    "keel/card": {
+      "card_data": {
+        "charts": [
+          {
+            "chart": {
+              "enc": "b64x2",
+              "family": "Lines",
+              "kind": "line",
+              "legend": null,
+              "marks": [],
+              "more_words": null,
+              "note_words": "Apr 2, 2025 to Oct 27, 2026 · showing 59 of 574 days",
+              "read": {
+                "band": null,
+                "bins": null,
+                "cells": null,
+                "ring_words": null,
+                "sel": null,
+                "sel_rows": null,
+                "withheld": null,
+                "x": "Apr 2, 2025|Apr 3, 2025|Apr 14, 2025|Apr 17, 2025|Apr 25, 2025|Apr 29, 2025|May 7, 2025|May 17, 2025|May 19, 2025|May 30, 2025|Jun 11, 2025|Jun 23, 2025|Jul 5, 2025|Jul 16, 2025|Jul 28, 2025|Aug 9, 2025|Aug 20, 2025|Sep 1, 2025|Sep 13, 2025|Sep 24, 2025|Oct 6, 2025|Oct 18, 2025|Oct 29, 2025|Nov 10, 2025|Nov 22, 2025|Dec 4, 2025|Dec 10, 2025|Dec 15, 2025|Dec 27, 2025|Jan 8, 2026|Jan 19, 2026|Jan 31, 2026|Feb 12, 2026|Feb 23, 2026|Mar 7, 2026|Mar 19, 2026|Mar 31, 2026|Apr 11, 2026|Apr 23, 2026|May 5, 2026|May 16, 2026|May 28, 2026|Jun 9, 2026|Jun 20, 2026|Jun 22, 2026|Jul 2, 2026|Jul 14, 2026|Jul 25, 2026|Aug 6, 2026|Aug 18, 2026|Aug 23, 2026|Aug 30, 2026|Sep 10, 2026|Sep 22, 2026|Oct 4, 2026|Oct 14, 2026|Oct 15, 2026|Oct 26, 2026|Oct 27, 2026",
+                "y": [
+                  "1.00×|1.00×|0.99×|0.99×|1.00×|0.98×|1.01×|1.03×|1.03×|1.06×|1.03×|1.04×|1.02×|1.01×|1.05×|1.07×|1.07×|1.05×|1.05×|1.09×|1.07×|1.06×|1.07×|1.09×|1.13×|1.13×|1.15×|1.16×|1.23×|1.22×|1.25×|1.24×|1.28×|1.28×|1.26×|1.30×|1.32×|1.35×|1.38×|1.35×|1.38×|1.37×|1.41×|1.44×|1.43×|1.49×|1.48×|1.53×|1.53×|1.60×|1.65×|1.67×|1.66×|1.60×|1.69×|1.69×|1.71×|1.76×|1.75×",
+                  "0.99×|0.99×|1.01×|1.00×|1.01×|1.00×|1.05×|1.02×|1.04×|1.03×|1.03×|1.02×|1.04×|1.08×|1.10×|1.06×|1.06×|1.06×|1.07×|1.09×|1.13×|1.13×|1.16×|1.18×|1.20×|1.25×|1.27×|1.25×|1.35×|1.33×|1.28×|1.29×|1.26×|1.30×|1.29×|1.30×|1.31×|1.29×|1.31×|1.31×|1.26×|1.27×|1.32×|1.35×|1.36×|1.38×|1.42×|1.46×|1.42×|1.45×|1.50×|1.47×|1.47×|1.47×|1.45×|1.42×|1.42×|1.42×|1.42×",
+                  "0.99×|0.99×|0.95×|0.94×|0.96×|0.97×|0.96×|0.96×|0.97×|0.97×|0.99×|1.03×|1.00×|0.99×|0.99×|1.01×|1.03×|1.03×|1.03×|1.05×|1.08×|1.11×|1.12×|1.13×|1.17×|1.19×|1.20×|1.20×|1.24×|1.23×|1.24×|1.25×|1.22×|1.21×|1.22×|1.20×|1.25×|1.26×|1.27×|1.27×|1.23×|1.23×|1.24×|1.28×|1.26×|1.26×|1.29×|1.28×|1.22×|1.25×|1.25×|1.28×|1.28×|1.27×|1.26×|1.32×|1.31×|1.34×|1.36×",
+                  "1.00×|1.01×|0.98×|0.97×|0.97×|0.97×|0.95×|0.91×|0.93×|0.96×|0.95×|0.99×|1.01×|1.00×|1.02×|1.01×|0.99×|1.02×|1.03×|1.04×|1.04×|1.03×|1.03×|1.06×|1.10×|1.12×|1.12×|1.10×|1.14×|1.17×|1.18×|1.18×|1.15×|1.18×|1.18×|1.19×|1.24×|1.28×|1.26×|1.28×|1.30×|1.31×|1.29×|1.30×|1.32×|1.33×|1.31×|1.33×|1.37×|1.39×|1.40×|1.39×|1.41×|1.43×|1.45×|1.48×|1.48×|1.44×|1.45×",
+                  "1.01×|1.00×|1.02×|1.02×|0.99×|0.99×|1.01×|1.02×|1.01×|1.01×|1.02×|1.00×|1.00×|1.00×|1.01×|1.04×|1.07×|1.06×|1.05×|1.01×|1.03×|1.03×|1.00×|1.03×|1.04×|1.01×|0.97×|0.99×|1.01×|1.03×|1.02×|1.00×|1.05×|1.09×|1.16×|1.16×|1.21×|1.23×|1.25×|1.27×|1.26×|1.30×|1.34×|1.43×|1.44×|1.39×|1.40×|1.35×|1.31×|1.29×|1.29×|1.25×|1.26×|1.26×|1.33×|1.30×|1.30×|1.30×|1.29×"
+                ]
+              },
+              "series": [
+                {
+                  "c": 1,
+                  "hi": null,
+                  "lo": null,
+                  "name": "1",
+                  "ref": false,
+                  "y": "G-GvGLFuGgFTHiJOI6LMJQJlH-HwKOMdMOKfKvNoMaLGMLNoQVQgSETGYLXmZxZLbxbhaQdTfKhVjHg6jIihldn8nRr5q6umu10C325I4Mz66Y6l8G___c"
+                },
+                {
+                  "c": 2,
+                  "hi": null,
+                  "lo": null,
+                  "name": "2",
+                  "ref": false,
+                  "y": "GbGVHPG9HUG8KoIeJsIvJKIIJ6MpOoLtLtLSL5N3QYQvTDUIViZ-a7ZwhdfmbzdBaHdJczdFeccnd6eLadbYfOhch1jbmkpnmloesRqAqRqBo-mTmQmSmV"
+                },
+                {
+                  "c": 3,
+                  "hi": null,
+                  "lo": null,
+                  "name": "3",
+                  "ref": false,
+                  "y": "GAGTDAClDrEgDzDtElEQGLJSGwF5GMHSJCJCJEK3NMPOP6QhT9VGVxV0Y7YeYpaAXcWlXTWIZgaZbNbGX4YRYkcAaraOdBcMXkZmZSbqb-a-abeyd5gchk"
+                },
+                {
+                  "c": 4,
+                  "hi": null,
+                  "lo": null,
+                  "name": "4",
+                  "ref": false,
+                  "y": "GmHNFGEiEbEgDLAABVDeCtF0HyHHIRHYGIISJHJjJtJKJGLROOP9P0ODRfTWUdUXR5UvURU7ZMbnaZcKdfeHcwdxekfod9gCikkNk3kgl5nDosq-q9oOoX"
+                },
+                {
+                  "c": 5,
+                  "hi": null,
+                  "lo": null,
+                  "name": "5",
+                  "ref": false,
+                  "y": "HUHAIRILGUF4HxISHXHSH9HJGwGuHrJ-MQLQKlHyI0JDG2I1JeHmEcF7HoJIIlGqKRN3SqTFWTYBZRazaQdVgnnEoPkXkphQeDc5c5ZjaFaNfedWdedGc9"
+                }
+              ],
+              "title": "Each fifth over time",
+              "x": {
+                "label": "Day",
+                "n": 59,
+                "pos": "AAAHBWBrCkDBD6FCFQGfH0JKKgLuNEOaPpQ-SUTjU4WOXdYzaIbecJcteCfYgnh9jSkhl3nMoipxrHsctrvBwWxlxzy70R1f214L4u5g6v8F9b-i-p_4__",
+                "ticks": [
+                  {
+                    "at": 0,
+                    "w": "Apr 2025"
+                  },
+                  {
+                    "at": 672,
+                    "w": "Jul 2025"
+                  },
+                  {
+                    "at": 1587,
+                    "w": "Nov 2025"
+                  },
+                  {
+                    "at": 2508,
+                    "w": "Mar 2026"
+                  },
+                  {
+                    "at": 3345,
+                    "w": "Jul 2026"
+                  },
+                  {
+                    "at": 4095,
+                    "w": "Oct 2026"
+                  }
+                ]
+              },
+              "y": {
+                "label": "Growth of 1",
+                "n": null,
+                "pos": null,
+                "ticks": [
+                  {
+                    "at": 437,
+                    "w": "1.00×"
+                  },
+                  {
+                    "at": 1641,
+                    "w": "1.25×"
+                  },
+                  {
+                    "at": 2845,
+                    "w": "1.50×"
+                  },
+                  {
+                    "at": 4049,
+                    "w": "1.75×"
+                  }
+                ]
+              }
+            },
+            "family": "Lines",
+            "form": "chart",
+            "index": 1,
+            "lead": null,
+            "state_words": null,
+            "thumb": null,
+            "title": "Each fifth over time",
+            "v": "Each%20fifth%20over%20time"
+          },
+          {
+            "chart": {
+              "enc": "b64x2",
+              "family": "Lines",
+              "kind": "line",
+              "legend": null,
+              "marks": [
+                {
+                  "at": 2521,
+                  "kind": "hline",
+                  "w": null
+                }
+              ],
+              "more_words": null,
+              "note_words": "May 16, 2025 to Oct 28, 2026 · showing 60 of 531 days",
+              "read": {
+                "band": null,
+                "bins": null,
+                "cells": null,
+                "ring_words": null,
+                "sel": null,
+                "sel_rows": null,
+                "withheld": null,
+                "x": "May 16, 2025|May 25, 2025|Jun 4, 2025|Jun 13, 2025|Jun 22, 2025|Jul 1, 2025|Jul 11, 2025|Jul 20, 2025|Jul 29, 2025|Aug 8, 2025|Aug 17, 2025|Aug 26, 2025|Sep 5, 2025|Sep 14, 2025|Sep 23, 2025|Oct 2, 2025|Oct 12, 2025|Oct 21, 2025|Oct 30, 2025|Nov 9, 2025|Nov 18, 2025|Nov 27, 2025|Dec 7, 2025|Dec 16, 2025|Dec 25, 2025|Jan 3, 2026|Jan 13, 2026|Jan 22, 2026|Jan 31, 2026|Feb 10, 2026|Feb 19, 2026|Feb 28, 2026|Mar 10, 2026|Mar 19, 2026|Mar 28, 2026|Apr 2, 2026|Apr 6, 2026|Apr 16, 2026|Apr 25, 2026|May 4, 2026|May 14, 2026|May 23, 2026|Jun 1, 2026|Jun 11, 2026|Jun 20, 2026|Jun 29, 2026|Jul 8, 2026|Jul 18, 2026|Jul 27, 2026|Aug 5, 2026|Aug 15, 2026|Aug 22, 2026|Aug 24, 2026|Sep 2, 2026|Sep 12, 2026|Sep 21, 2026|Sep 30, 2026|Oct 9, 2026|Oct 19, 2026|Oct 28, 2026",
+                "y": [
+                  "−0.010|−0.010|−0.015|−0.015|−0.007|−0.008|0.004|0.000|−0.002|0.003|−0.002|0.003|0.001|0.000|−0.004|−0.005|−0.006|−0.009|−0.015|−0.010|−0.010|−0.006|−0.023|−0.033|−0.035|−0.024|−0.013|−0.025|−0.026|−0.008|0.007|0.018|0.008|0.007|0.016|0.028|0.022|0.025|0.021|0.009|0.017|0.017|0.009|0.003|0.012|−0.001|−0.005|−0.013|−0.027|−0.023|−0.036|−0.045|−0.040|−0.028|−0.029|−0.012|−0.008|−0.004|−0.001|0.002"
+                ]
+              },
+              "series": [
+                {
+                  "c": 0,
+                  "hi": null,
+                  "lo": null,
+                  "name": null,
+                  "ref": false,
+                  "y": "eLeuagaCg1guq5nYlzp6l_qNoSnJkDjMiHfoaJepe7hyTVKoIMSJcERnQ1f_tT22u4tT11__7A9m5zvU2U2zvdqUx0moi_byPZTTH-AAD1OfNscagwjsm6ow"
+                }
+              ],
+              "title": "Ranking skill through time",
+              "x": {
+                "label": "Day",
+                "n": 60,
+                "pos": "AABGCTDYEeFjGxH2I8KJLPMUNhOnPsQyR_TFUKVYWdXjYwZ1a7cBdOeTfZgmhsixj-lEmKmwnPocpiqnr1s6uAvNwTxYyezr0w123D354J5O6c7h8n9s-5__",
+                "ticks": [
+                  {
+                    "at": 0,
+                    "w": "May 2025"
+                  },
+                  {
+                    "at": 865,
+                    "w": "Sep 2025"
+                  },
+                  {
+                    "at": 1723,
+                    "w": "Dec 2025"
+                  },
+                  {
+                    "at": 2480,
+                    "w": "Apr 2026"
+                  },
+                  {
+                    "at": 3307,
+                    "w": "Jul 2026"
+                  },
+                  {
+                    "at": 4095,
+                    "w": "Oct 2026"
+                  }
+                ]
+              },
+              "y": {
+                "label": "Rank IC, rolling",
+                "n": null,
+                "pos": null,
+                "ticks": [
+                  {
+                    "at": 262,
+                    "w": "−0.040"
+                  },
+                  {
+                    "at": 1391,
+                    "w": "−0.020"
+                  },
+                  {
+                    "at": 2521,
+                    "w": "0.000"
+                  },
+                  {
+                    "at": 3650,
+                    "w": "0.020"
+                  }
+                ]
+              }
+            },
+            "family": "Lines",
+            "form": "chart",
+            "index": 2,
+            "lead": null,
+            "state_words": null,
+            "thumb": null,
+            "title": "Ranking skill through time",
+            "v": "Ranking%20skill%20through%20time"
+          },
+          {
+            "chart": {
+              "enc": "b64x2",
+              "family": "Bars",
+              "kind": "bars",
+              "legend": null,
+              "marks": [],
+              "more_words": null,
+              "note_words": null,
+              "read": {
+                "band": null,
+                "bins": null,
+                "cells": null,
+                "ring_words": null,
+                "sel": "quantile:1|quantile:2|quantile:3|quantile:4|quantile:5",
+                "sel_rows": null,
+                "withheld": null,
+                "x": "1|2|3|4|5",
+                "y": [
+                  "0.1% (< 0.1% to 0.2%)|0.1% (> −0.1% to 0.1%)|0.1% (> −0.1% to 0.1%)|0.1% (< 0.1% to 0.1%)|< 0.1% (> −0.1% to 0.1%)"
+                ]
+              },
+              "series": [
+                {
+                  "c": 0,
+                  "hi": "__33vsx7yO",
+                  "lo": "XtFkIENlAA",
+                  "name": null,
+                  "ref": false,
+                  "y": "r2eub4fwZH"
+                }
+              ],
+              "title": "Next-day return by fifth",
+              "x": {
+                "label": "Fifth",
+                "n": 5,
+                "pos": null,
+                "ticks": [
+                  {
+                    "at": 410,
+                    "w": "1"
+                  },
+                  {
+                    "at": 1228,
+                    "w": "2"
+                  },
+                  {
+                    "at": 2048,
+                    "w": "3"
+                  },
+                  {
+                    "at": 2866,
+                    "w": "4"
+                  },
+                  {
+                    "at": 3686,
+                    "w": "5"
+                  }
+                ]
+              },
+              "y": {
+                "label": "Mean return",
+                "n": null,
+                "pos": null,
+                "ticks": [
+                  {
+                    "at": 526,
+                    "w": "0.0%"
+                  },
+                  {
+                    "at": 1664,
+                    "w": "0.1%"
+                  },
+                  {
+                    "at": 2802,
+                    "w": "0.1%"
+                  },
+                  {
+                    "at": 3941,
+                    "w": "0.1%"
+                  }
+                ]
+              },
+              "zero": 526
+            },
+            "family": "Bars",
+            "form": "chart",
+            "index": 3,
+            "lead": null,
+            "state_words": null,
+            "thumb": null,
+            "title": "Next-day return by fifth",
+            "v": "Next-day%20return%20by%20fifth"
+          },
+          {
+            "chart": {
+              "enc": "b64x2",
+              "family": "Bars",
+              "kind": "bars",
+              "legend": null,
+              "marks": [],
+              "more_words": null,
+              "note_words": null,
+              "read": {
+                "band": null,
+                "bins": null,
+                "cells": null,
+                "ring_words": null,
+                "sel": "time:2025-04-01T00%3A00%3A00|time:2025-05-01T00%3A00%3A00|time:2025-06-01T00%3A00%3A00|time:2025-07-01T00%3A00%3A00|time:2025-08-01T00%3A00%3A00|time:2025-09-01T00%3A00%3A00|time:2025-10-01T00%3A00%3A00|time:2025-11-01T00%3A00%3A00|time:2025-12-01T00%3A00%3A00|time:2026-01-01T00%3A00%3A00|time:2026-02-01T00%3A00%3A00|time:2026-03-01T00%3A00%3A00|time:2026-04-01T00%3A00%3A00|time:2026-05-01T00%3A00%3A00|time:2026-06-01T00%3A00%3A00|time:2026-07-01T00%3A00%3A00|time:2026-08-01T00%3A00%3A00|time:2026-09-01T00%3A00%3A00|time:2026-10-01T00%3A00%3A00",
+                "sel_rows": null,
+                "withheld": null,
+                "x": "Apr 1, 2025|May 1, 2025|Jun 1, 2025|Jul 1, 2025|Aug 1, 2025|Sep 1, 2025|Oct 1, 2025|Nov 1, 2025|Dec 1, 2025|Jan 1, 2026|Feb 1, 2026|Mar 1, 2026|Apr 1, 2026|May 1, 2026|Jun 1, 2026|Jul 1, 2026|Aug 1, 2026|Sep 1, 2026|Oct 1, 2026",
+                "y": [
+                  "0.006|−0.027|0.006|−0.005|0.013|−0.025|−0.008|−0.006|−0.042|−0.010|0.043|0.007|0.014|0.012|−0.013|−0.041|−0.038|0.024|−0.016"
+                ]
+              },
+              "series": [
+                {
+                  "c": 0,
+                  "hi": null,
+                  "lo": null,
+                  "name": null,
+                  "ref": false,
+                  "y": "kjLckZcbqDM8ZxbkAAYw__lLqiomWIAzDmyGTy"
+                }
+              ],
+              "title": "Each month",
+              "x": {
+                "label": "Day",
+                "n": 19,
+                "pos": null,
+                "ticks": [
+                  {
+                    "at": 108,
+                    "w": "Apr 2025"
+                  },
+                  {
+                    "at": 970,
+                    "w": "Aug 2025"
+                  },
+                  {
+                    "at": 1616,
+                    "w": "Nov 2025"
+                  },
+                  {
+                    "at": 2479,
+                    "w": "Mar 2026"
+                  },
+                  {
+                    "at": 3125,
+                    "w": "Jun 2026"
+                  },
+                  {
+                    "at": 3987,
+                    "w": "Oct 2026"
+                  }
+                ]
+              },
+              "y": {
+                "label": "Rank IC",
+                "n": null,
+                "pos": null,
+                "ticks": [
+                  {
+                    "at": 840,
+                    "w": "−0.025"
+                  },
+                  {
+                    "at": 2044,
+                    "w": "0.000"
+                  },
+                  {
+                    "at": 3249,
+                    "w": "0.025"
+                  }
+                ]
+              },
+              "zero": 2044
+            },
+            "family": "Bars",
+            "form": "chart",
+            "index": 4,
+            "lead": null,
+            "state_words": null,
+            "thumb": null,
+            "title": "Each month",
+            "v": "Each%20month"
+          },
+          {
+            "chart": {
+              "bins": "DdHyHyQbPkTBbrqY4N3W__usm6g3WfGDGD",
+              "enc": "b64x2",
+              "family": "Distribution",
+              "kind": "dist",
+              "legend": null,
+              "marker": {
+                "at": 979,
+                "w": "(no longer available) −0.006"
+              },
+              "marks": [],
+              "more_words": null,
+              "note_words": null,
+              "overlays": [],
+              "read": {
+                "band": null,
+                "bins": "−0.011 to −0.010: 4|−0.010 to −0.008: 9|−0.008 to −0.007: 9|−0.007 to −0.006: 19|−0.006 to −0.005: 18|−0.005 to −0.004: 22|−0.004 to −0.002: 32|−0.002 to −0.001: 49|−0.001 to 0.000: 65|0.000 to 0.001: 64|0.001 to 0.002: 74|0.002 to 0.004: 54|0.004 to 0.005: 45|0.005 to 0.006: 38|0.006 to 0.007: 26|0.007 to 0.008: 7|0.008 to 0.010: 7",
+                "cells": null,
+                "ring_words": null,
+                "sel": null,
+                "sel_rows": null,
+                "withheld": null,
+                "x": null,
+                "y": []
+              },
+              "series": [],
+              "title": "Against chance",
+              "x": {
+                "label": "Rank IC",
+                "n": 17,
+                "pos": null,
+                "ticks": [
+                  {
+                    "at": 160,
+                    "w": "−0.010"
+                  },
+                  {
+                    "at": 2157,
+                    "w": "0.000"
+                  }
+                ]
+              },
+              "y": null
+            },
+            "family": "Distribution",
+            "form": "chart",
+            "index": 5,
+            "lead": null,
+            "state_words": null,
+            "thumb": null,
+            "title": "Against chance",
+            "v": "Against%20chance"
+          },
+          {
+            "chart": {
+              "cols": 1,
+              "d": "ggg",
+              "enc": "b64x2",
+              "family": "Heatmap",
+              "kind": "heat",
+              "legend": {
+                "hi": "1.000",
+                "lo": "1.000",
+                "ramp": "div"
+              },
+              "marks": [],
+              "more_words": null,
+              "note_words": null,
+              "outline": null,
+              "read": {
+                "band": null,
+                "bins": null,
+                "cells": "1.000|1.000|1.000",
+                "ring_words": null,
+                "sel": "result:%28no%20longer%20available%29",
+                "sel_rows": "result_b:%28no%20longer%20available%202%29|result_b:%28no%20longer%20available%203%29|result_b:%28no%20longer%20available%204%29",
+                "withheld": null,
+                "x": "(no longer available)",
+                "y": [
+                  "(no longer available 2)|(no longer available 3)|(no longer available 4)"
+                ]
+              },
+              "ring": null,
+              "rows": 3,
+              "series": [],
+              "title": "Overlap with Keel's signals",
+              "values_in_cells": true,
+              "x": {
+                "label": "Result",
+                "n": 1,
+                "pos": null,
+                "ticks": [
+                  {
+                    "at": 2048,
+                    "w": "(no longer available)"
+                  }
+                ]
+              },
+              "y": {
+                "label": "Compared with",
+                "n": 3,
+                "pos": null,
+                "ticks": [
+                  {
+                    "at": 682,
+                    "w": "(no longer available 2)"
+                  },
+                  {
+                    "at": 2048,
+                    "w": "(no longer available 3)"
+                  },
+                  {
+                    "at": 3412,
+                    "w": "(no longer available 4)"
+                  }
+                ]
+              }
+            },
+            "family": "Heatmap",
+            "form": "chart",
+            "index": 6,
+            "lead": null,
+            "state_words": null,
+            "thumb": null,
+            "title": "Overlap with Keel's signals",
+            "v": "Overlap%20with%20Keel%27s%20signals"
+          },
+          {
+            "chart": {
+              "enc": "b64x2",
+              "family": "Lines",
+              "kind": "line",
+              "legend": null,
+              "marks": [],
+              "more_words": null,
+              "note_words": "Mar 23, 2025 to Oct 28, 2026 · showing 60 of 585 days",
+              "read": {
+                "band": null,
+                "bins": null,
+                "cells": null,
+                "ring_words": null,
+                "sel": null,
+                "sel_rows": null,
+                "withheld": null,
+                "x": "Mar 23, 2025|Apr 2, 2025|Apr 12, 2025|Apr 23, 2025|May 3, 2025|May 13, 2025|May 18, 2025|May 23, 2025|Jun 3, 2025|Jun 13, 2025|Jun 23, 2025|Jul 3, 2025|Jul 14, 2025|Jul 24, 2025|Aug 3, 2025|Aug 13, 2025|Aug 24, 2025|Sep 3, 2025|Sep 13, 2025|Sep 23, 2025|Oct 4, 2025|Oct 14, 2025|Oct 24, 2025|Nov 3, 2025|Nov 14, 2025|Nov 24, 2025|Dec 4, 2025|Dec 14, 2025|Dec 25, 2025|Jan 4, 2026|Jan 14, 2026|Jan 24, 2026|Feb 4, 2026|Feb 14, 2026|Feb 24, 2026|Mar 6, 2026|Mar 17, 2026|Mar 27, 2026|Apr 6, 2026|Apr 16, 2026|Apr 27, 2026|May 7, 2026|May 17, 2026|May 27, 2026|Jun 7, 2026|Jun 17, 2026|Jun 27, 2026|Jul 7, 2026|Jul 18, 2026|Jul 28, 2026|Aug 7, 2026|Aug 17, 2026|Aug 28, 2026|Sep 7, 2026|Sep 17, 2026|Sep 27, 2026|Oct 8, 2026|Oct 10, 2026|Oct 18, 2026|Oct 28, 2026",
+                "y": [
+                  "not measured|not measured|30.0%|25.0%|30.0%|35.0%|5.0%|25.0%|35.0%|30.0%|15.0%|25.0%|40.0%|30.0%|30.0%|20.0%|20.0%|25.0%|35.0%|35.0%|40.0%|15.0%|25.0%|25.0%|25.0%|35.0%|30.0%|25.0%|25.0%|40.0%|40.0%|35.0%|40.0%|35.0%|20.0%|25.0%|20.0%|20.0%|20.0%|20.0%|20.0%|30.0%|25.0%|25.0%|25.0%|30.0%|25.0%|15.0%|40.0%|30.0%|30.0%|20.0%|35.0%|30.0%|30.0%|25.0%|20.0%|50.0%|10.0%|35.0%"
+                ]
+              },
+              "series": [
+                {
+                  "c": 0,
+                  "hi": null,
+                  "lo": null,
+                  "name": null,
+                  "ref": false,
+                  "y": "....jjccjjqqAAccqqjjOOccxxjjjjVVVVccqqqqxxOOccccccqqjjccccxxxxqqxxqqVVccVVVVVVVVVVjjccccccjjccOOxxjjjjVVqqjjjjccVV__HHqq"
+                }
+              ],
+              "title": "How much the top fifth changes",
+              "x": {
+                "label": "Day",
+                "n": 60,
+                "pos": "AABGCMDZEfFmGJGsH5I_KFLLMYNeOlPrQ4R-TEUKVXWdXkYqZ3a9cDdJeWfcgjhpi2j8lCmInVobpiqor1s7uBvHwUxayhzn00163A4G5T6Z7g8m9z-B-5__",
+                "ticks": [
+                  {
+                    "at": 0,
+                    "w": "Mar 2025"
+                  },
+                  {
+                    "at": 792,
+                    "w": "Jul 2025"
+                  },
+                  {
+                    "at": 1655,
+                    "w": "Nov 2025"
+                  },
+                  {
+                    "at": 2440,
+                    "w": "Mar 2026"
+                  },
+                  {
+                    "at": 3303,
+                    "w": "Jul 2026"
+                  },
+                  {
+                    "at": 4095,
+                    "w": "Oct 2026"
+                  }
+                ]
+              },
+              "y": {
+                "label": "Top turnover",
+                "n": null,
+                "pos": null,
+                "ticks": [
+                  {
+                    "at": 1365,
+                    "w": "20.0%"
+                  },
+                  {
+                    "at": 3185,
+                    "w": "40.0%"
+                  }
+                ]
+              }
+            },
+            "family": "Lines",
+            "form": "chart",
+            "index": 7,
+            "lead": null,
+            "state_words": null,
+            "thumb": null,
+            "title": "How much the top fifth changes",
+            "v": "How%20much%20the%20top%20fifth%20changes"
+          },
+          {
+            "chart": null,
+            "family": "Bars",
+            "form": "title",
+            "index": 8,
+            "lead": null,
+            "state_words": null,
+            "thumb": null,
+            "title": "What it adds beyond Keel's signals",
+            "v": "What%20it%20adds%20beyond%20Keel%27s%20signals"
+          },
+          {
+            "chart": {
+              "columns": [
+                {
+                  "w": "Result"
+                },
+                {
+                  "w": "Coin"
+                },
+                {
+                  "w": "Score"
+                },
+                {
+                  "w": "Rank"
+                },
+                {
+                  "w": "Group"
+                }
+              ],
+              "enc": "b64x2",
+              "family": "Table",
+              "kind": "table",
+              "legend": null,
+              "marks": [],
+              "more_words": null,
+              "note_words": null,
+              "read": null,
+              "rows": [],
+              "series": [],
+              "title": "Today's ranking",
+              "x": null,
+              "y": null
+            },
+            "family": "Table",
+            "form": "chart",
+            "index": 9,
+            "lead": null,
+            "state_words": null,
+            "thumb": null,
+            "title": "Today's ranking",
+            "v": "Today%27s%20ranking"
+          },
+          {
+            "chart": {
+              "enc": "b64x2",
+              "family": "Bars",
+              "kind": "bars",
+              "legend": null,
+              "marks": [],
+              "more_words": null,
+              "note_words": null,
+              "read": {
+                "band": null,
+                "bins": null,
+                "cells": null,
+                "ring_words": null,
+                "sel": "horizon:1|horizon:5|horizon:10",
+                "sel_rows": null,
+                "withheld": null,
+                "x": "1|5|10",
+                "y": ["−0.007|−0.009|−0.004"]
+              },
+              "series": [
+                {
+                  "c": 0,
+                  "hi": null,
+                  "lo": null,
+                  "name": null,
+                  "ref": false,
+                  "y": "LoAAhO"
+                }
+              ],
+              "title": "Ranking skill before and after the split",
+              "x": {
+                "label": "Days ahead",
+                "n": 3,
+                "pos": null,
+                "ticks": [
+                  {
+                    "at": 682,
+                    "w": "1"
+                  },
+                  {
+                    "at": 2048,
+                    "w": "5"
+                  },
+                  {
+                    "at": 3412,
+                    "w": "10"
+                  }
+                ]
+              },
+              "y": {
+                "label": "Difference",
+                "n": null,
+                "pos": null,
+                "ticks": [
+                  {
+                    "at": 730,
+                    "w": "−0.007"
+                  },
+                  {
+                    "at": 1852,
+                    "w": "−0.005"
+                  },
+                  {
+                    "at": 2973,
+                    "w": "−0.003"
+                  },
+                  {
+                    "at": 4095,
+                    "w": "0.000"
+                  }
+                ]
+              },
+              "zero": 4095
+            },
+            "family": "Bars",
+            "form": "chart",
+            "index": 10,
+            "lead": null,
+            "state_words": null,
+            "thumb": null,
+            "title": "Ranking skill before and after the split",
+            "v": "Ranking%20skill%20before%20and%20after%20the%20split"
+          }
+        ],
+        "checks": null,
+        "chips": [],
+        "copy": {
+          "charts": "Charts",
+          "failed_cell": "Didn't finish",
+          "full_chart_in_keel": "Open in Keel for the full chart",
+          "highest": "Highest",
+          "hint_pointer": "Hover or tap the chart for values",
+          "hint_touch": "Tap the chart for values",
+          "locked": "not included in this account's plan",
+          "lowest": "Lowest",
+          "met": "met",
+          "more_charts": "+6 more charts",
+          "not_measured": "not measured",
+          "not_met": "not met",
+          "not_run": "Not run yet",
+          "not_valid": "Not a valid setting",
+          "numbers": "The numbers",
+          "open_bar": "Open this bar in Keel",
+          "open_chart": "Open this chart in Keel",
+          "open_setting": "Open this setting in Keel",
+          "points_in_keel": "Open in Keel to read each point",
+          "steps": "Steps",
+          "yours": "Yours"
+        },
+        "focus": null,
+        "head_words": null,
+        "key": {
+          "enc": "b64x2",
+          "family": "Curve",
+          "kind": "line",
+          "legend": null,
+          "marks": [
+            {
+              "at": 3771,
+              "kind": "hline",
+              "w": null
+            }
+          ],
+          "more_words": null,
+          "note_words": null,
+          "read": {
+            "band": [
+              "−0.017 to 0.005|−0.024 to 0.003|−0.030 to 0.003|−0.035 to 0.001|−0.041 to −0.005|−0.050 to −0.011|−0.057 to −0.014|−0.055 to −0.014|not measured to not measured"
+            ],
+            "bins": null,
+            "cells": null,
+            "ring_words": null,
+            "sel": null,
+            "sel_rows": null,
+            "withheld": {
+              "8": "18 separate 30-day stretches; an interval needs at least 20."
+            },
+            "x": "1|2|3|5|7|10|14|20|30",
+            "y": [
+              "−0.006|−0.010|−0.013|−0.017|−0.023|−0.030|−0.035|−0.034|−0.024"
+            ]
+          },
+          "series": [
+            {
+              "c": 0,
+              "hi": "__-S-M7z1sv8sLsQ..",
+              "lo": "pkiCcMWHPyGvAAB5..",
+              "name": null,
+              "ref": false,
+              "y": "0ywKtMo9ivbWWFXFhb"
+            }
+          ],
+          "title": "How well it ranks, 1 to 30 days ahead",
+          "x": {
+            "label": "Days ahead",
+            "n": 9,
+            "pos": "AACNEaI1NPT3csp7__",
+            "ticks": [
+              {
+                "at": 0,
+                "w": "1"
+              },
+              {
+                "at": 282,
+                "w": "3"
+              },
+              {
+                "at": 565,
+                "w": "5"
+              },
+              {
+                "at": 1271,
+                "w": "10"
+              },
+              {
+                "at": 1836,
+                "w": "14"
+              },
+              {
+                "at": 4095,
+                "w": "30"
+              }
+            ]
+          },
+          "y": {
+            "label": "Rank IC",
+            "n": null,
+            "pos": null,
+            "ticks": [
+              {
+                "at": 1105,
+                "w": "−0.040"
+              },
+              {
+                "at": 2438,
+                "w": "−0.020"
+              },
+              {
+                "at": 3771,
+                "w": "0.000"
+              }
+            ]
+          }
+        },
+        "key_v": "How%20well%20it%20ranks%2C%201%20to%2030%20days%20ahead",
+        "links": {
+          "chart": "https://app.usekeel.io/research/stu_000002?v={v}",
+          "select": "https://app.usekeel.io/research/stu_000002?v={v}&sel={sel}",
+          "study": "https://app.usekeel.io/research/stu_000002"
+        },
+        "method_line": "Measured with RankIC v1, Fifths v1, TurnoverCoverage v1",
+        "more_charts_total": 6,
+        "more_words": null,
+        "notes": {
+          "draft": null,
+          "linked": null,
+          "not_measured": [],
+          "saved": null,
+          "stale": []
+        },
+        "rows": null,
+        "schema": "keel.research.card-data/2",
+        "steps": [],
+        "top": null
+      },
+      "card_summary": {
+        "thumb": {
+          "facts": {
+            "enc": "b64",
+            "series": [
+              {
+                "c": 0,
+                "hi": "_9971vrss",
+                "lo": "picWQHACC",
+                "y": "0vsoibWXh"
+              }
+            ],
+            "zero": 58
+          },
+          "family": "Curve",
+          "view_index": 0
+        }
+      }
+    },
+    "ui": {
+      "resourceUri": "ui://keel/cards/study.html"
+    }
+  },
+  "content": [
+    {
+      "text": "card: where the host draws Keel cards, the user sees what follows as a card carrying its name, links and ids, so a reply can call it by name; the ids and links here serve tool calls and hosts without cards.\n\nStudy a signal · Low volatility · version 1 · Done · Oct 29\nUsed 0 of 400 studies; resets Dec 1. Planning, reading, saving, and runs that reuse everything or run nothing, do not count.\nHow well it ranks, next day: −0.006 (t -1.2)\nDays Mar 23, 2025 to Oct 29, 2026, split Apr 17, 2026 · 100 coins: top 100 by 30-day volume, picked Mar 23, 2025, kept fixed · no costs · data as of Oct 29, 2026\nMeasured with Ranks v1, RankIC v1, Fifths v1, SplitCompare v1, DateShuffle v1, ICOverTime v1, TurnoverCoverage v1, Overlap v1, WhatsLeft v1, TodaysRanking v1.\nIn short:\n- How well it ranks, next day: −0.006, −0.017 to 0.005; 574 days · 574 effective days · 100 coins\n- How well it ranks, 7 days ahead: −0.023, −0.041 to −0.005; 568 days · 81 effective days · 100 coins\n- Top fifth minus bottom fifth: −0.1%, −0.1% to < 0.1%; 574 days · 574 effective days · 100 coins\n- Top group turnover a day: 25.6%, no interval; 575 days\nRuns: 0 runs, 0 reused, none failed · versions tried: unknown\nCharts (11): How well it ranks, 1 to 30 days ahead · Each fifth over time · Ranking skill through time · Next-day return by fifth · Each month · Against chance · Overlap with Keel's signals · How much the top fifth changes · What it adds beyond Keel's signals · Today's ranking · Ranking skill before and after the split — keel_research_get(study_id=\"stu_000002\", view=0) reads the numbers behind any of them.\nView in Keel: https://app.usekeel.io/research/stu_000002",
+      "type": "text"
+    }
+  ],
+  "structuredContent": {
+    "base": {
+      "evidence_hash": "704153a8fe6ba77af57db0ce504b434f62fca139e3e5da600df2975a51e64ddc",
+      "revision": 1,
+      "version": 1
+    },
+    "can_retry": false,
+    "can_run": true,
+    "card_summary": {
+      "footer": {
+        "runs_words": "no new runs",
+        "subject": "(no longer available)"
+      },
+      "footing_line": "585 days · 100 coins · no costs · some numbers use fewer days or coins",
+      "headline": {
+        "chips": [],
+        "text": "How well it ranks, next day: −0.006 (t -1.2)"
+      },
+      "kind_label": {
+        "key": "signal",
+        "name": "Study a signal",
+        "short": "Signal study"
+      },
+      "lead": "How well it ranks, next day −0.006",
+      "maker": "you",
+      "maker_words": "by you",
+      "numbers": [
+        {
+          "interval_words": "−0.017 to 0.005",
+          "label": "How well it ranks, next day",
+          "measure": "ic",
+          "ref": "ic",
+          "sample": {
+            "coins": 100,
+            "coins_max": 100.0,
+            "coins_median": 100.0,
+            "coins_min": 100.0,
+            "coverage": 1.0,
+            "days": 574,
+            "effective_days": 574.0,
+            "excluded": {
+              "no_forward_price": 100
+            },
+            "first_day": "2025-03-23",
+            "last_day": "2026-10-28"
+          },
+          "sample_words": "574 days · 574 effective days · 100 coins",
+          "unit": "score",
+          "value": -0.0058985062269293126,
+          "value_words": "−0.006"
+        },
+        {
+          "interval_words": "−0.041 to −0.005",
+          "label": "How well it ranks, 7 days ahead",
+          "measure": "ic",
+          "ref": "ic",
+          "sample": {
+            "coins": 100,
+            "coins_max": 100.0,
+            "coins_median": 100.0,
+            "coins_min": 100.0,
+            "coverage": 1.0,
+            "days": 568,
+            "effective_days": 81.0,
+            "excluded": {
+              "no_forward_price": 100
+            },
+            "first_day": "2025-03-23",
+            "last_day": "2026-10-28"
+          },
+          "sample_words": "568 days · 81 effective days · 100 coins",
+          "unit": "score",
+          "value": -0.023225068985771816,
+          "value_words": "−0.023"
+        },
+        {
+          "interval_words": "−0.1% to < 0.1%",
+          "label": "Top fifth minus bottom fifth",
+          "measure": "spread",
+          "ref": "fifths.spread",
+          "sample": {
+            "coins": 100,
+            "coins_max": 100.0,
+            "coins_median": 100.0,
+            "coins_min": 100.0,
+            "coverage": 1.0,
+            "days": 574,
+            "effective_days": 574.0,
+            "excluded": {
+              "no_forward_price": 100
+            },
+            "first_day": "2025-03-23",
+            "last_day": "2026-10-28"
+          },
+          "sample_words": "574 days · 574 effective days · 100 coins",
+          "unit": "fraction",
+          "value": -0.0005266452128607545,
+          "value_words": "−0.1%"
+        },
+        {
+          "label": "Top group turnover a day",
+          "measure": "top_turnover",
+          "ref": "turnover.summary",
+          "sample": {
+            "coins_max": 100.0,
+            "coins_median": 100.0,
+            "coins_min": 100.0,
+            "coverage": 1.0,
+            "days": 575,
+            "first_day": "2025-03-23",
+            "last_day": "2026-10-28"
+          },
+          "sample_words": "575 days",
+          "unit": "fraction",
+          "value": 0.25601045296167246,
+          "value_words": "25.6%"
+        }
+      ],
+      "schema": "keel.research.card/2",
+      "state": "completed",
+      "state_words": "Done · Oct 29",
+      "title": "Low volatility",
+      "top5": {
+        "kind": "horizons",
+        "rows": [
+          {
+            "label": "1 day ahead",
+            "slot": 0,
+            "unit": "score",
+            "value": -0.0058985062269293126,
+            "value_words": "−0.006"
+          },
+          {
+            "label": "2 days ahead",
+            "slot": 0,
+            "unit": "score",
+            "value": -0.01033100168655609,
+            "value_words": "−0.010"
+          },
+          {
+            "label": "3 days ahead",
+            "slot": 0,
+            "unit": "score",
+            "value": -0.013179164070253178,
+            "value_words": "−0.013"
+          },
+          {
+            "label": "5 days ahead",
+            "slot": 0,
+            "unit": "score",
+            "value": -0.017248756454592826,
+            "value_words": "−0.017"
+          },
+          {
+            "label": "7 days ahead",
+            "slot": 0,
+            "unit": "score",
+            "value": -0.023225068985771816,
+            "value_words": "−0.023"
+          }
+        ],
+        "total": 9
+      },
+      "version": 1
+    },
+    "counts": {
+      "allowance": {
+        "study": "free",
+        "units": [
+          {
+            "limit": 400,
+            "resets_at": "2026-12-18",
+            "unit": "research_studies",
+            "used": 0
+          }
+        ]
+      },
+      "runs": {
+        "executed": 0,
+        "failed_content": 0,
+        "failed_platform": 0,
+        "planned": 0,
+        "reused": 0,
+        "words": "0 runs, 0 reused, none failed"
+      },
+      "versions_tried": {
+        "added": 0,
+        "family": "",
+        "why": ""
+      }
+    },
+    "footing": {
+      "coins": {
+        "chosen": "Top 100 by 30-day volume, picked Mar 23, 2025, kept fixed",
+        "count": 100,
+        "names_sha256": "6892dc8e601171fcb382e7a0d253cf7c697378343e093731f8e5efcd580a72bd"
+      },
+      "costs": "none",
+      "data": "snap_6c1f0e8a2b9d4f37",
+      "days": {
+        "end": "2026-10-29",
+        "start": "2025-03-23"
+      },
+      "delay": 0,
+      "engine": "eng_000000000000000000000000000000000000000000000000000000000000",
+      "engine_words": "This version of the engine",
+      "leverage": 1.0,
+      "split": "2026-04-17",
+      "split_words": "Split on Apr 17, 2026: 390 days before, 195 after"
+    },
+    "hero_url": "https://app.usekeel.io/research/stu_000002",
+    "links": {
+      "app": "https://app.usekeel.io/research/stu_000002"
+    },
+    "locked": [],
+    "not_measured": [],
+    "notes": {
+      "notes_total": 0
+    },
+    "page": {
+      "default": 0,
+      "switch": [0, 1, 2]
+    },
+    "stale": [],
+    "steps": {
+      "by_status": {
+        "completed": 10
+      },
+      "total": 10
+    },
+    "study": {
+      "archived": false,
+      "can_delete": true,
+      "evidence_hash": "704153a8fe6ba77af57db0ce504b434f62fca139e3e5da600df2975a51e64ddc",
+      "kind_label": {
+        "key": "signal",
+        "name": "Study a signal",
+        "short": "Signal study"
+      },
+      "linked_to": [],
+      "linked_to_total": 0,
+      "presentation_hash": "8671a61f8db0bf524fc34cac65e6a8474e47371974d80518df89111d112d1e49",
+      "question": "Does it rank next-day returns, for how long, and is it steady?",
+      "revision": 1,
+      "run_set_id": "rus_000002",
+      "set_aside": false,
+      "state": "completed",
+      "study_id": "stu_000002",
+      "title": "Low volatility",
+      "version": 1
+    },
+    "subjects": {
+      "total": 1
+    },
+    "url_line": "View in Keel: https://app.usekeel.io/research/stu_000002",
+    "view": {
+      "at": "2026-11-17T00:00:04.000Z",
+      "kind": "study",
+      "mode": "study",
+      "object": "stu_000002",
+      "seq": 5,
+      "size": "view",
+      "version": 1
+    },
+    "views": {
+      "total": 11
+    },
+    "words": {
+      "allowance": "Used 0 of 400 studies; resets Dec 1. Planning, reading, saving, and runs that reuse everything or run nothing, do not count."
+    }
+  }
+}

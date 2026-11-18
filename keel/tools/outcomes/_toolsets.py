@@ -76,6 +76,36 @@ def default_toolsets() -> frozenset[str]:
 
 
 _DEFAULT_TOOLSETS = default_toolsets()
+
+#: Toolsets in the order every surface lists them.
+TOOLSET_ORDER: tuple[str, ...] = (
+    "always",
+    "read-only",
+    "backtest",
+    "share",
+    "live-read",
+    PAPER_TOOLSET,
+    "live-write",
+)
+
+
+def live_write_opt_in() -> str:
+    """The ``KEEL_TOOLSETS`` value that adds ``live-write`` to the default set.
+
+    ``KEEL_TOOLSETS`` REPLACES the default set, so a hint that types the set
+    drops whatever joins the default later: until Q-3095 every hint typed the
+    pre-paper set and following it unloaded the paper tools. Every surface
+    that prints the opt-in reads it here (``status``'s live route, the
+    generated tool references, the AGENTS.md inventory heading; the two
+    hand-written docs are pinned to it by ``tests/test_live_write_opt_in.py``).
+    """
+    wanted = default_toolsets() | {"live-write"}
+    unknown = wanted - set(TOOLSET_ORDER)
+    if unknown:
+        raise ValueError(f"toolset(s) {sorted(unknown)} have no place in TOOLSET_ORDER")
+    return "KEEL_TOOLSETS=" + ",".join(t for t in TOOLSET_ORDER if t in wanted)
+
+
 _ALIASES: dict[str, frozenset[str]] = {
     # Backward compatibility for existing MCP host configs. New docs should use
     # `live-write` when they mean deploy/control.
@@ -396,13 +426,168 @@ def listed_paper_enabled() -> bool:
 LISTED_PAPER_TOOLS: frozenset[str] = frozenset({"keel_paper_deploy", "keel_paper_control"})
 
 
+# ── Per-host listed screens (screeners L13, founder 2026-11-03) ──────────
+#
+# The same shape as the paper switch above: ``KEEL_LISTED_SCREENS_HOSTS`` is a
+# comma list of host keys (``claude``, ``chatgpt``) or ``all``; unset or empty
+# is off for every host, and the listed surface is then the base's, byte for
+# byte (tests/test_listed_screens.py proves it against the frozen head). On,
+# the caller's host gets :data:`LISTED_SCREEN_TOOLS`, the screen card, the
+# screen-aware ``keel_strategy_compose`` copy, the ``screen-creation`` prompt
+# and the SCREENS instruction line. The full/local profile carries all of that
+# unflagged: the flag governs only the reviewed hosted surface.
+LISTED_SCREENS_HOSTS_ENV = "KEEL_LISTED_SCREENS_HOSTS"
+
+#: The tools the screens flag adds to the listed surface: exact names. Each
+#: reads or runs a screen (a pipeline with ``Outputs`` instead of
+#: ``Execution``); none places an order or moves money. Publishing a screen
+#: stays in the Keel web app (``keel_app_link``, founder F2).
+LISTED_SCREEN_TOOLS: frozenset[str] = frozenset(
+    {
+        "keel_screener_run",
+        "keel_screener_view",
+        "keel_screener_view_set",
+        "keel_screener_list",
+    }
+)
+
+
+def listed_screens_hosts() -> frozenset[str]:
+    """The host keys the listed screens surface is on for.
+
+    ``KEEL_LISTED_SCREENS_HOSTS`` parsed: each entry one of
+    :data:`LISTED_HOSTS` or ``all``. Any other entry raises ``ValueError``
+    (no silent fallback), so an invalid setting fails server creation. Read on
+    every call, never cached.
+    """
+    raw = os.environ.get(LISTED_SCREENS_HOSTS_ENV, "")
+    parts = {p.strip().lower() for p in raw.split(",") if p.strip()}
+    invalid = parts - {*LISTED_HOSTS, _LISTED_HOST_ALL}
+    if invalid:
+        raise ValueError(
+            f"Invalid {LISTED_SCREENS_HOSTS_ENV}={raw!r}: unknown host key(s) "
+            f"{sorted(invalid)}. Valid: {', '.join(LISTED_HOSTS)}, {_LISTED_HOST_ALL} (or unset)."
+        )
+    return frozenset(parts)
+
+
+def listed_screens_enabled() -> bool:
+    """Whether the listed profile carries screens for the CURRENT caller.
+
+    True when :func:`listed_screens_hosts` holds ``all`` or the caller's host
+    key (:func:`listed_host`). Unset is off for every caller.
+    """
+    hosts = listed_screens_hosts()
+    if not hosts:
+        return False
+    return _LISTED_HOST_ALL in hosts or listed_host() in hosts
+
+
+def screens_served() -> bool:
+    """Whether the active surface serves screens: always on the full profile,
+    on the listed profile only while :func:`listed_screens_enabled`."""
+    return not is_listed_profile() or listed_screens_enabled()
+
+
+#: The knowledge topics that teach screens. A listed caller without the
+#: screens flag is not served them: they describe tools that surface does not
+#: register (R-L4); every other surface serves them.
+SCREEN_TOPICS: frozenset[str] = frozenset({"screener", "view_language", "screen_recipes"})
+
+
+def screen_topic_withheld(topic: str) -> bool:
+    """Whether the active surface withholds the (normalized) ``topic``."""
+    return topic in SCREEN_TOPICS and not screens_served()
+
+
+# ── Research (spec 07 §5.3, RL-91): one runtime flag, learned per request ──
+#
+# No environment variable or constant switches Research. keel-api answers
+# every research call (``RESEARCH_PAUSED`` while ``research.enabled`` is off),
+# and the hosted server learns the flag per caller from ``/v1/me``'s
+# ``me.research`` (``services/mcp-server/src/auth.py``), binding it here for
+# the request with :func:`research_served_context`. Unbound, the full profile
+# and the CLI serve the verbs and let the API answer (true), and the listed
+# profile serves none (false: the listing fails closed, and a listed snapshot
+# with nothing bound is the frozen head). The hosted listed server binds true
+# while it registers its tools and per caller from /v1/me for each request.
+
+#: The listed research tools (07 A1, the founder's 2026-11-11 listing ruling).
+LISTED_RESEARCH_TOOLS: frozenset[str] = frozenset(
+    {"keel_research_plan", "keel_research_run", "keel_research_get"}
+)
+
+#: RI-168 (06 §4.1 "Use with your agent", A-06-46): the keel-api route each listed research tool calls, as the app's
+#: dialog shows it beside the tool and its CLI form. test_surface_routing drives each tool's handler and proves the
+#: route it sends is this one.
+RESEARCH_TOOL_ROUTES: dict[str, tuple[str, str]] = {
+    "keel_research_plan": ("POST", "/v1/research/plans"),
+    "keel_research_run": ("POST", "/v1/research/runs"),
+    "keel_research_get": ("GET", "/v1/research/studies/{study_id}"),
+}
+
+#: The knowledge topics that teach Research (07 §4.10); ``step:<Name>`` too.
+RESEARCH_TOPICS: frozenset[str] = frozenset({"research", "research_steps"})
+RESEARCH_STEP_TOPIC_PREFIX = "step:"
+
+#: The card kind the research tools draw (07 §3.3).
+RESEARCH_CARD_KIND = "study"
+
+_RESEARCH_SERVED: ContextVar[bool | None] = ContextVar("keel_research_served", default=None)
+
+
+def research_served() -> bool:
+    """Whether this request serves Research: what the caller's ``/v1/me`` said
+    (bound per request on the hosted server), else true off the listed profile
+    and false on it."""
+    bound = _RESEARCH_SERVED.get()
+    if bound is not None:
+        return bound
+    return not is_listed_profile()
+
+
+def research_served_bound() -> bool | None:
+    """What this request BOUND for Research (``research_served_context``, the hosted server's ``/v1/me``), or None
+    when nothing bound it. D-358: a core surface's Research wording rides a bound yes only, so an unbound full
+    profile publishes its pre-Research text byte for byte."""
+    return _RESEARCH_SERVED.get()
+
+
+@contextmanager
+def research_served_context(served: bool) -> Iterator[None]:
+    """Bind whether Research is served for the enclosed work (one request)."""
+    if not isinstance(served, bool):
+        raise TypeError(f"research_served must be a bool, got {served!r}")
+    token = _RESEARCH_SERVED.set(served)
+    try:
+        yield
+    finally:
+        _RESEARCH_SERVED.reset(token)
+
+
+def research_topic_withheld(topic: str) -> bool:
+    """Whether the active request withholds the (normalized) ``topic``."""
+    is_research = topic in RESEARCH_TOPICS or topic.startswith(RESEARCH_STEP_TOPIC_PREFIX)
+    return is_research and not research_served()
+
+
 def listed_profile_tools() -> frozenset[str]:
     """The listed surface's tool set: :data:`LISTED_PROFILE_TOOLS` (29), plus
-    :data:`LISTED_PAPER_TOOLS` only while :func:`listed_paper_enabled` is
-    true (31). Read at call time; a server evaluates it at creation."""
+    :data:`LISTED_PAPER_TOOLS` while :func:`listed_paper_enabled` is true, plus
+    :data:`LISTED_SCREEN_TOOLS` while :func:`listed_screens_enabled` is true,
+    plus :data:`LISTED_RESEARCH_TOOLS` while :func:`research_served` is true.
+    Read at call time; a server evaluates it at creation."""
+    tools = LISTED_PROFILE_TOOLS
     if listed_paper_enabled():
-        return LISTED_PROFILE_TOOLS | LISTED_PAPER_TOOLS
-    return LISTED_PROFILE_TOOLS
+        tools = tools | LISTED_PAPER_TOOLS
+    if listed_screens_enabled():
+        tools = tools | LISTED_SCREEN_TOOLS
+    if research_served():
+        # 07 §5.3: the three listed research tools, while this request serves
+        # Research (the caller's /v1/me carries me.research on the hosted
+        # server; true by default for the full profile and the CLI).
+        tools = tools | LISTED_RESEARCH_TOOLS
+    return tools
 
 
 def local_tools_registered() -> bool:
@@ -516,6 +701,7 @@ def is_tool_loaded(
     *,
     local_only: bool = False,
     name: str = "",
+    cli_only: bool = False,
 ) -> bool:
     """Return True if a tool with `tool_toolset` should be exposed
     given the `active` toolset set.
@@ -532,7 +718,13 @@ def is_tool_loaded(
     consulted, so the directory-reviewed registration can never vary
     with toolset env. ``name`` is required for the profile check; an
     empty name under ``listed`` fails closed.
+
+    ``cli_only`` tools are CLI commands with no MCP registration on any
+    profile (``OutcomeTool.cli_only``): a UI-shaped or redundant command an
+    agent reaches through another tool (screeners L13 §2b).
     """
+    if cli_only:
+        return False
     if local_only:
         from keel.hosting import is_hosted
 

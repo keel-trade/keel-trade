@@ -1,0 +1,700 @@
+{
+  "_meta": {
+    "keel/card": {
+      "card_data": {
+        "charts": [
+          {
+            "chart": {
+              "cat": null,
+              "cats": [],
+              "enc": "b64x2",
+              "family": "Scatter",
+              "kind": "scatter",
+              "legend": null,
+              "marks": [],
+              "more_words": null,
+              "note_words": "Showing 300 of 384 points",
+              "pts": "bU-KNpoefs6poOfsePTgsrRjjey8oOcfjGgIapiHGjkNmzePfkbxcf0q3g28H4h0gPWxVReVXkTgwbQyXQapWIgKqYfkVXfsAAg63iWIn0WxiaYcwbYsfke8Gjje6pDvbxgz2Ry8Rj85gfG-DRXk-z6peVfYoeT46pe8ha__tvRjoVTgdz85DvEzndgfh7oOT9iHgPIvDRPfDRiHmo__cfTgCnmzIv85g6T9Pfoeu8cf0q-KfEsrfDeneV3gRSsrgFnAG-YAoe85VXLtTgoedz6pGj-zjGfZRj4Eg6jeh73iRjDRoOwbTegzLtgKn0engPgAmzVRcfoObxXkG-IvdzjGT9y8eVTeieLtfYsre8IvDRfD2RfsIvbiEzQ_28iHIyfZfkndWINdte__fZXk3gQygVT9enRj3gfsGjkDIyIyapf9YsT4TeH44ET4gfYAIvtvfsIvnddzeVftoOzKteg6g6XQdmjGqYoVnAQ_GjNpgKYAoOjGUGgPmzQydzmoYcgKkDXQbU3iteh0moRbn08lfD853iu8QynAeVu80qT4T9eVQ_DRVXIy3ifsYsIveVTgmzn0XkieYsAAjG6pAARj1vPCyFpGkTVgvXkTzyxjy-uh4KvdvX-v2ktJqIzmhNvE0ZzytXce-vzkYDAAsAvk9Gth1Rop1pxjYPwLruqI723Ae8tXrKkTrw6qjG72umthkL__YPvOtXj_hN4KVgOkce03hGvduhXdoda2nX1pzAVgopwypGgaVgj_9juBiiuhtzxjxEXdOkbH2GYp8WvXuczm9GWunX9bnXzm_JuB-vxjc50ZWuXd6quc9bpGFr-vzkPCjpy-iisUopYDtqy-4A2Oa2rUpGXdrKkKxjpGxEVghNzA2kucuhcp6q4K8WjGuhnXvXYP9X03kK3AumsU9Gtn0Z1R-vvXce1pa2WuxE2kucvdop9X2_kKwyy-j_WunXiihGkTWumBbHsdAAzmeductX2G72u_1_uBuc1pYDwLxducsUuhYDkThNueededqImmvOga9XsAcpgaodrUWuiikTWu2GxEopi1vXv11_6q6qru-52ke8tz2OsdhNyF3ArUvX2kv89G0ZwLxE_J__3Aueru1vjG1_vk_J2eumvjiiXdjGFrwL2OopFrzkgaucopsdnXrKedjGkTvOWuopxj0Zum1p2_vOrw2kVgrwuh",
+              "read": null,
+              "series": [],
+              "title": "Before vs after the split",
+              "x": {
+                "label": "Sharpe before the split",
+                "n": null,
+                "pos": null,
+                "ticks": [
+                  {
+                    "at": 620,
+                    "w": "−2.00"
+                  },
+                  {
+                    "at": 1648,
+                    "w": "−1.00"
+                  },
+                  {
+                    "at": 2676,
+                    "w": "0.00"
+                  },
+                  {
+                    "at": 3704,
+                    "w": "1.00"
+                  }
+                ]
+              },
+              "y": {
+                "label": "Sharpe after the split",
+                "n": null,
+                "pos": null,
+                "ticks": [
+                  {
+                    "at": 628,
+                    "w": "0.00"
+                  },
+                  {
+                    "at": 2360,
+                    "w": "1.00"
+                  },
+                  {
+                    "at": 4091,
+                    "w": "2.00"
+                  }
+                ]
+              }
+            },
+            "family": "Scatter",
+            "form": "chart",
+            "index": 1,
+            "lead": null,
+            "state_words": null,
+            "thumb": null,
+            "title": "Before vs after the split",
+            "v": "Before%20vs%20after%20the%20split"
+          },
+          {
+            "chart": {
+              "bins": "DohzPsIdOfytxg7K4v__reOfmoAAK3",
+              "enc": "b64x2",
+              "family": "Distribution",
+              "kind": "dist",
+              "legend": null,
+              "marker": {
+                "at": 2576,
+                "w": "Momentum rotation 0.29"
+              },
+              "marks": [],
+              "more_words": null,
+              "note_words": null,
+              "overlays": [],
+              "read": {
+                "band": null,
+                "bins": "−1.55 to −1.36: 3|−1.36 to −1.16: 28|−1.16 to −0.97: 13|−0.97 to −0.77: 7|−0.77 to −0.57: 12|−0.57 to −0.38: 42|−0.38 to −0.18: 41|−0.18 to 0.013: 49|0.013 to 0.21: 47|0.21 to 0.40: 53|0.40 to 0.60: 36|0.60 to 0.80: 12|0.80 to 0.99: 32|0.99 to 1.19: 0|1.19 to 1.38: 9",
+                "cells": null,
+                "ring_words": null,
+                "sel": null,
+                "sel_rows": null,
+                "withheld": null,
+                "x": null,
+                "y": []
+              },
+              "series": [],
+              "title": "Every setting",
+              "x": {
+                "label": "Sharpe",
+                "n": 15,
+                "pos": null,
+                "ticks": [
+                  {
+                    "at": 771,
+                    "w": "−1.00"
+                  },
+                  {
+                    "at": 2166,
+                    "w": "0.00"
+                  },
+                  {
+                    "at": 3561,
+                    "w": "1.00"
+                  }
+                ]
+              },
+              "y": null
+            },
+            "family": "Distribution",
+            "form": "chart",
+            "index": 2,
+            "lead": null,
+            "state_words": null,
+            "thumb": null,
+            "title": "Every setting",
+            "v": "Every%20setting"
+          },
+          {
+            "chart": {
+              "enc": "b64x2",
+              "family": "Curve",
+              "kind": "line",
+              "legend": null,
+              "marks": [],
+              "more_words": "+16 more results in Keel",
+              "note_words": null,
+              "read": {
+                "band": null,
+                "bins": null,
+                "cells": null,
+                "ring_words": null,
+                "sel": null,
+                "sel_rows": null,
+                "withheld": null,
+                "x": "1|2|3|4|5|6|7|8|10|12|14|16|20|24|28|30",
+                "y": [
+                  "−0.023|0.90|0.90|−0.62|0.34|−0.092|0.84|−0.012|0.42|−0.092|0.076|0.15|−0.39|0.62|−0.51|0.33",
+                  "−1.28|0.85|0.42|0.16|0.30|−0.51|0.035|−0.20|0.23|0.47|−1.16|0.25|0.43|0.076|−0.62|−0.0008",
+                  "−0.34|0.16|1.25|0.98|0.74|0.43|−0.95|−0.42|0.16|0.29|−0.31|−0.42|−0.29|−0.069|−0.19|−0.39",
+                  "−1.20|0.45|−0.51|−0.32|0.19|−0.20|−0.15|0.15|0.29|−0.51|−0.0008|−0.41|−0.092|−1.28|−0.23|0.23",
+                  "0.88|−0.15|0.47|0.40|−0.31|0.021|−0.0015|−1.55|0.45|−0.20|−0.0008|0.47|−0.11|−1.16|0.33|0.84",
+                  "−1.10|−1.48|−0.34|0.19|0.23|0.81|0.85|−0.51|0.95|0.41|−0.0028|−1.23|−1.20|0.16|−0.19|1.38",
+                  "0.84|−0.069|−0.15|0.065|0.34|−0.61|0.84|−0.19|−0.11|0.34|1.37|−0.19|0.48|−0.51|0.41|−0.39",
+                  "0.17|0.017|0.95|−1.48|0.076|−1.29|0.47|−0.19|0.33|0.45|0.42|−0.44|0.23|−0.13|0.29|−1.19"
+                ]
+              },
+              "series": [
+                {
+                  "c": 1,
+                  "hi": null,
+                  "lo": null,
+                  "name": "2",
+                  "ref": false,
+                  "y": "hW1Z1ZUWpUf20Ghmq8f2jglIZWvaWoo9"
+                },
+                {
+                  "c": 2,
+                  "hi": null,
+                  "lo": null,
+                  "name": "3",
+                  "ref": false,
+                  "y": "F_0Tq8lYodWoimdlm0sMInnYrPjgUWh1"
+                },
+                {
+                  "c": 3,
+                  "hi": null,
+                  "lo": null,
+                  "name": "4",
+                  "ref": false,
+                  "y": "aglY9C3KyDrPNEYplcoQbNYpbegWdvZW"
+                },
+                {
+                  "c": 4,
+                  "hi": null,
+                  "lo": null,
+                  "name": "5",
+                  "ref": false,
+                  "y": "HrrwWta9l6dleelIoOWoh1Y8f2F_c5mx"
+                },
+                {
+                  "c": 5,
+                  "hi": null,
+                  "lo": null,
+                  "name": "6",
+                  "ref": false,
+                  "y": "1FeesMqnbNiUh0AArwdbh1sMfWIno90G"
+                },
+                {
+                  "c": 6,
+                  "hi": null,
+                  "lo": null,
+                  "name": "7",
+                  "ref": false,
+                  "y": "J1Bkagl6m-za0TWo2mqvhyHDHrlYdv__"
+                },
+                {
+                  "c": 7,
+                  "hi": null,
+                  "lo": null,
+                  "name": "8",
+                  "ref": false,
+                  "y": "0GgWeejRpUUj0GdufWpW_qdvsTWoqvZW"
+                },
+                {
+                  "c": 8,
+                  "hi": null,
+                  "lo": null,
+                  "name": "10",
+                  "ref": false,
+                  "y": "lfiO2mBkjgFzsMduo_rwq8YUm0e_oQH_"
+                }
+              ],
+              "title": "Across holds",
+              "x": {
+                "label": "hold",
+                "n": 16,
+                "pos": "AACNEaGoI1LCNPPcT3YRcshGp7yw7l__",
+                "ticks": [
+                  {
+                    "at": 0,
+                    "w": "1"
+                  },
+                  {
+                    "at": 424,
+                    "w": "4"
+                  },
+                  {
+                    "at": 847,
+                    "w": "7"
+                  },
+                  {
+                    "at": 1553,
+                    "w": "12"
+                  },
+                  {
+                    "at": 2683,
+                    "w": "20"
+                  },
+                  {
+                    "at": 4095,
+                    "w": "30"
+                  }
+                ]
+              },
+              "y": {
+                "label": "Sharpe",
+                "n": null,
+                "pos": null,
+                "ticks": [
+                  {
+                    "at": 771,
+                    "w": "−1.00"
+                  },
+                  {
+                    "at": 2166,
+                    "w": "0.00"
+                  },
+                  {
+                    "at": 3561,
+                    "w": "1.00"
+                  }
+                ]
+              }
+            },
+            "family": "Curve",
+            "form": "chart",
+            "index": 3,
+            "lead": null,
+            "state_words": null,
+            "thumb": null,
+            "title": "Across holds",
+            "v": "Across%20holds"
+          }
+        ],
+        "checks": null,
+        "chips": [],
+        "copy": {
+          "charts": "Charts",
+          "failed_cell": "Didn't finish",
+          "full_chart_in_keel": "Open in Keel for the full chart",
+          "highest": "Highest",
+          "hint_pointer": "Hover or tap the chart for values",
+          "hint_touch": "Tap the chart for values",
+          "locked": "not included in this account's plan",
+          "lowest": "Lowest",
+          "met": "met",
+          "more_charts": "",
+          "not_measured": "not measured",
+          "not_met": "not met",
+          "not_run": "Not run yet",
+          "not_valid": "Not a valid setting",
+          "numbers": "The numbers",
+          "open_bar": "Open this bar in Keel",
+          "open_chart": "Open this chart in Keel",
+          "open_setting": "Open this setting in Keel",
+          "points_in_keel": "Open in Keel to read each point",
+          "steps": "Steps",
+          "yours": "Yours"
+        },
+        "focus": null,
+        "head_words": null,
+        "key": {
+          "cols": 16,
+          "d": "gqqakfpglfhicnbk3plikbhejl4jlhagdiurol6cikdcdgec4lbdiefijbgcf3ejqflldhg0leglf4kp51dijppbqlg34ievpgfhkapefkvelblcihq1h3lekllcjfk44ca4jmvjic2ql4qjgcckfiirqifnfcggoaknil63dkqic7ckbhp44vkhbapjk7kqb4hlleji7ilggkhkldildde342hkcjpgejg7hncf44fhpf4le3bl3j5hjglf9iovhegobhhcgbojf4jk55eggeaeh6paged4lfe4lhegflqvojjjdikjdllb44aidalkccklbhnmgijbdgqeoimc5lufdqqib5lgikracgkb4cq5qfee4gclvlejie3kp93b",
+          "enc": "b64x2",
+          "family": "Heatmap",
+          "kind": "heat",
+          "legend": {
+            "hi": "1.38",
+            "lo": "−1.55",
+            "ramp": "div"
+          },
+          "marks": [],
+          "more_words": null,
+          "note_words": "Marked: the 3 best and the 3 worst; the cell you pick is outlined too",
+          "outline": {
+            "high": [372, 181, 95],
+            "low": [71, 81, 115]
+          },
+          "read": {
+            "band": null,
+            "bins": null,
+            "cells": "−0.023|0.90|0.90|−0.62|0.34|−0.092|0.84|−0.012|0.42|−0.092|0.076|0.15|−0.39|0.62|−0.51|0.33|−1.28|0.85|0.42|0.16|0.30|−0.51|0.035|−0.20|0.23|0.47|−1.16|0.25|0.43|0.076|−0.62|−0.0008|−0.34|0.16|1.25|0.98|0.74|0.43|−0.95|−0.42|0.16|0.29|−0.31|−0.42|−0.29|−0.069|−0.19|−0.39|−1.20|0.45|−0.51|−0.32|0.19|−0.20|−0.15|0.15|0.29|−0.51|−0.0008|−0.41|−0.092|−1.28|−0.23|0.23|0.88|−0.15|0.47|0.40|−0.31|0.021|−0.0015|−1.55|0.45|−0.20|−0.0008|0.47|−0.11|−1.16|0.33|0.84|−1.10|−1.48|−0.34|0.19|0.23|0.81|0.85|−0.51|0.95|0.41|−0.0028|−1.23|−1.20|0.16|−0.19|1.38|0.84|−0.069|−0.15|0.065|0.34|−0.61|0.84|−0.19|−0.11|0.34|1.37|−0.19|0.48|−0.51|0.41|−0.39|0.17|0.017|0.95|−1.48|0.076|−1.29|0.47|−0.19|0.33|0.45|0.42|−0.44|0.23|−0.13|0.29|−1.19|−1.20|−0.40|−0.62|−1.20|0.23|0.53|1.37|0.23|0.16|−0.39|−1.34|0.95|0.43|−1.19|0.95|0.23|−0.069|−0.44|−0.40|0.34|−0.15|0.16|0.16|0.98|0.90|0.19|−0.10|0.62|−0.13|−0.39|−0.012|−0.069|0.74|−0.57|0.33|0.62|0.17|0.45|−0.95|−1.23|−0.28|0.34|0.95|0.15|−0.41|−0.91|−0.39|0.34|−0.51|0.017|0.84|−1.16|−1.19|1.38|0.30|0.014|−0.51|−0.62|0.82|0.23|0.33|−0.91|0.33|0.88|−0.51|−1.20|0.045|0.42|0.45|−0.26|0.25|0.19|−0.91|0.15|0.40|−0.0015|−0.012|0.29|0.045|0.34|0.43|−0.29|0.16|0.42|−0.34|−0.34|−0.19|−1.23|−1.19|−1.34|0.017|0.30|−0.44|0.23|0.85|−0.069|−0.26|0.28|−0.012|−0.91|0.065|0.62|−0.42|−0.11|−1.19|−1.20|−0.13|0.083|0.81|−0.092|−1.19|0.45|−0.23|−1.29|−0.56|0.43|−1.23|0.23|−1.10|0.014|0.23|−0.0008|0.47|−0.15|−0.69|0.17|0.71|1.37|0.014|−0.19|−0.037|0.74|−0.51|0.083|0.017|−0.44|−0.012|−0.51|0.74|0.29|−0.092|−1.16|0.23|0.33|−1.10|−1.10|−0.20|−0.037|−0.069|−0.20|−0.61|−0.26|0.083|−0.95|0.82|−0.61|−0.0028|−0.23|−0.28|−1.19|0.48|−0.092|−0.19|−1.19|0.47|0.017|−0.26|−0.069|−0.091|0.42|0.87|1.37|0.71|0.23|0.23|0.23|−0.32|0.19|0.30|0.29|−0.29|0.41|0.45|−0.56|−1.16|−1.16|−0.62|0.15|−0.28|−0.62|0.42|0.30|−0.39|−0.44|0.29|0.43|−0.51|0.017|0.62|0.53|−0.0015|0.15|0.23|−0.51|−0.32|−0.023|0.88|−0.23|0.71|0.16|0.53|−0.42|−1.09|0.40|1.25|−0.13|−0.32|0.95|0.88|0.16|−0.51|−1.10|0.45|−0.069|0.16|0.30|0.98|−0.61|−0.44|−0.069|0.34|−0.56|−1.20|−0.41|0.90|−1.10|0.88|−0.092|−0.20|−0.19|−1.19|−0.069|−0.39|0.43|1.38|0.40|−0.19|0.28|0.16|−0.20|−1.28|0.30|0.84|−0.69|−1.28|−0.51",
+            "ring_words": null,
+            "sel": "hold:1|hold:2|hold:3|hold:4|hold:5|hold:6|hold:7|hold:8|hold:10|hold:12|hold:14|hold:16|hold:20|hold:24|hold:28|hold:30",
+            "sel_rows": "lookback:2|lookback:3|lookback:4|lookback:5|lookback:6|lookback:7|lookback:8|lookback:10|lookback:12|lookback:14|lookback:16|lookback:18|lookback:21|lookback:24|lookback:28|lookback:32|lookback:36|lookback:42|lookback:48|lookback:56|lookback:64|lookback:72|lookback:80|lookback:90",
+            "withheld": null,
+            "x": "1|2|3|4|5|6|7|8|10|12|14|16|20|24|28|30",
+            "y": [
+              "2|3|4|5|6|7|8|10|12|14|16|18|21|24|28|32|36|42|48|56|64|72|80|90"
+            ]
+          },
+          "ring": null,
+          "rows": 24,
+          "series": [],
+          "title": "Lookback × hold",
+          "values_in_cells": false,
+          "x": {
+            "label": "Hold",
+            "n": 16,
+            "pos": null,
+            "ticks": [
+              {
+                "at": 128,
+                "w": "1"
+              },
+              {
+                "at": 896,
+                "w": "4"
+              },
+              {
+                "at": 1664,
+                "w": "7"
+              },
+              {
+                "at": 2431,
+                "w": "12"
+              },
+              {
+                "at": 3199,
+                "w": "20"
+              },
+              {
+                "at": 3967,
+                "w": "30"
+              }
+            ]
+          },
+          "y": {
+            "label": "Lookback",
+            "n": 24,
+            "pos": null,
+            "ticks": [
+              {
+                "at": 85,
+                "w": "2"
+              },
+              {
+                "at": 938,
+                "w": "7"
+              },
+              {
+                "at": 1621,
+                "w": "14"
+              },
+              {
+                "at": 2474,
+                "w": "28"
+              },
+              {
+                "at": 3157,
+                "w": "48"
+              },
+              {
+                "at": 4010,
+                "w": "90"
+              }
+            ]
+          }
+        },
+        "key_v": "Lookback%20%C3%97%20hold",
+        "links": {
+          "chart": "https://app.usekeel.io/research/stu_000005?v={v}",
+          "select": "https://app.usekeel.io/research/stu_000005?v={v}&sel={sel}",
+          "study": "https://app.usekeel.io/research/stu_000005"
+        },
+        "method_line": "Measured with Neighbours v1, SplitCompare v1",
+        "more_charts_total": 0,
+        "more_words": null,
+        "notes": {
+          "draft": null,
+          "linked": null,
+          "not_measured": [],
+          "saved": null,
+          "stale": ["Momentum rotation v3 has a newer version, v4."]
+        },
+        "rows": null,
+        "schema": "keel.research.card-data/2",
+        "steps": [],
+        "top": {
+          "lines": [
+            "Highest: hold 30 · lookback 7 at 1.38",
+            "Lowest: hold 8 · lookback 6 at −1.55"
+          ]
+        }
+      },
+      "card_summary": {
+        "thumb": {
+          "facts": {
+            "c": 16,
+            "d": "gqqakfpglfhicnbk3plikbhejl4jlhagdiurol6cikdcdgec4lbdiefijbgcf3ejqflldhg0leglf4kp51dijppbqlg34ievpgfhkapefkvelblcihq1h3lekllcjfk44ca4jmvjic2ql4qjgcckfiirqifnfcggoaknil63dkqic7ckbhp44vkhbapjk7kqb4hlleji7ilggkhkldildde342hkcjpgejg7hncf44fhpf4le3bl3j5hjglf9iovhegobhhcgbojf4jk55eggeaeh6paged4lfe4lhegflqvojjjdikjdllb44aidalkccklbhnmgijbdgqeoimc5lufdqqib5lgikracgkb4cq5qfee4gclvlejie3kp93b",
+            "r": 24,
+            "ramp": "div"
+          },
+          "family": "Heatmap",
+          "view_index": 0
+        }
+      }
+    },
+    "ui": {
+      "resourceUri": "ui://keel/cards/study.html"
+    }
+  },
+  "content": [
+    {
+      "text": "card: where the host draws Keel cards, the user sees what follows as a card carrying its name, links and ids, so a reply can call it by name; the ids and links here serve tool calls and hosts without cards.\n\nMap a strategy's settings · Lookback × hold · version 1 · Done · Oct 29\nUsed 0 of 400 studies; resets Dec 1. Planning, reading, saving, and runs that reuse everything or run nothing, do not count.\nNearby settings as a share of yours: −0.78\nDays Mar 23, 2025 to Oct 29, 2026, split Apr 17, 2026 · 100 coins: the coins Momentum rotation trades · costs 9 bp a fill · data as of Oct 29, 2026\nMeasured with SettingsGrid v2, SplitCompare v1, Neighbours v1.\nIn short:\n- Nearby settings as a share of yours: −0.78, no interval; sample not stated\n- Rank among nearby settings: 3, no interval; sample not stated\n- Rank agreement before and after the split: 0.041, interval withheld: No interval: the values share their data.; sample not stated\nRuns: 0 runs, 0 reused, none failed · versions tried: unknown\nCharts (4): Lookback × hold · Before vs after the split · Every setting · Across holds — keel_research_get(study_id=\"stu_000005\", view=0) reads the numbers behind any of them.\nMomentum rotation v3 has a newer version, v4. Plan it: keel_research_plan(study_id=\"stu_000005\", source=\"Study(\\n    title=\\\"Lookback × hold\\\",\\n    question=\\\"How do the results change around lookback 10, hold 28?\\\",\\n)\\n\\nSubjects(\\n    v3=Strategy(\\\"str_momrotpro00000000000000000@4\\\"),\\n)\\n\\nRun(\\n    days=Days(\\\"2025-03-23\\\", \\\"2026-10-29\\\"),\\n    split=Split(\\\"2026-04-17\\\"),\\n    coins=Coins([\\\"BTC\\\", \\\"ETH\\\", \\\"SOL\\\", \\\"HYPE\\\", \\\"XRP\\\", \\\"DOGE\\\", \\\"SUI\\\", \\\"BNB\\\", \\\"ADA\\\", \\\"LINK\\\", \\\"AVAX\\\", \\\"TRX\\\", \\\"LTC\\\", \\\"BCH\\\", \\\"DOT\\\", \\\"NEAR\\\", \\\"APT\\\", \\\"ARB\\\", \\\"OP\\\", \\\"INJ\\\", \\\"TIA\\\", \\\"SEI\\\", \\\"WLD\\\", \\\"JUP\\\", \\\"kPEPE\\\", \\\"WIF\\\", \\\"kBONK\\\", \\\"TON\\\", \\\"ATOM\\\", \\\"FIL\\\", \\\"ETC\\\", \\\"UNI\\\", \\\"AAVE\\\", \\\"MKR\\\", \\\"LDO\\\", \\\"CRV\\\", \\\"ENA\\\", \\\"ONDO\\\", \\\"PENDLE\\\", \\\"RENDER\\\", \\\"FET\\\", \\\"TAO\\\", \\\"STX\\\", \\\"IMX\\\", \\\"GALA\\\", \\\"SAND\\\", \\\"ILV\\\", \\\"AXS\\\", \\\"APE\\\", \\\"DYDX\\\", \\\"GMX\\\", \\\"SNX\\\", \\\"COMP\\\", \\\"SUSHI\\\", \\\"UMA\\\", \\\"BLUR\\\", \\\"JTO\\\", \\\"PYTH\\\", \\\"W\\\", \\\"STRK\\\", \\\"ZK\\\", \\\"ZRO\\\", \\\"EIGEN\\\", \\\"ETHFI\\\", \\\"REZ\\\", \\\"BOME\\\", \\\"MEW\\\", \\\"POPCAT\\\", \\\"TRUMP\\\", \\\"FARTCOIN\\\", \\\"AI16Z\\\", \\\"VIRTUAL\\\", \\\"KAITO\\\", \\\"BERA\\\", \\\"IP\\\", \\\"MOVE\\\", \\\"ME\\\", \\\"PNUT\\\", \\\"GOAT\\\", \\\"HBAR\\\", \\\"XLM\\\", \\\"ALGO\\\", \\\"KAS\\\", \\\"ORDI\\\", \\\"MINA\\\", \\\"ZEC\\\", \\\"DASH\\\", \\\"NEO\\\", \\\"ICP\\\", \\\"RUNE\\\", \\\"ENS\\\", \\\"ZEN\\\", \\\"CFX\\\", \\\"BLAST\\\", \\\"SAGA\\\", \\\"NOT\\\", \\\"MEME\\\", \\\"ALT\\\", \\\"DYM\\\", \\\"MANTA\\\"], chosen=SubjectUniverse(\\\"v3\\\")),\\n    costs=Costs(fee=0.00045, slippage=0.00045),\\n    data=Data(\\\"snap_6c1f0e8a2b9d4f37\\\"),\\n)\\n\\nSteps(\\n    map=SettingsGrid(axes=[SettingAxis(\\\"step[2].period\\\", [2, 3, 4, 5, 6, 7, 8, 10, 12, 14, 16, 18, 21, 24, 28, 32, 36, 42, 48, 56, 64, 72, 80, 90], name=\\\"lookback\\\", stamp=Stamp(\\\"ROC\\\", version=1, param=\\\"period\\\", value=10, written=True)), SettingAxis(\\\"step[7].branch[max_hold].step[1].threshold\\\", [1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 14, 16, 20, 24, 28, 30], name=\\\"hold\\\", stamp=Stamp(\\\"AboveThresholdFilter\\\", version=1, param=\\\"threshold\\\", value=28, written=True))]),\\n    split=SplitCompare(grid=\\\"map\\\"),\\n    nearby=Neighbours(grid=\\\"map\\\"),\\n)\\n\\nViews(\\n    Page(default=\\\"Lookback × hold\\\", switch=[\\\"Lookback × hold\\\", \\\"Before vs after the split\\\", \\\"Every setting\\\"]),\\n    Heatmap(\\\"Lookback × hold\\\", of=\\\"map\\\", x=Axis(\\\"hold\\\"), y=Axis(\\\"lookback\\\"), colour=Raw(Control(\\\"measure\\\", \\\"sharpe\\\", options=[\\\"sharpe\\\", \\\"cagr\\\", \\\"max_drawdown\\\"])), marks=[Ring(Yours()), Box(Selected())], select=\\\"cell\\\"),\\n    Scatter(\\\"Before vs after the split\\\", of=\\\"split\\\", x=Raw(\\\"sharpe_before\\\"), y=Raw(\\\"sharpe_after\\\")),\\n    Distribution(\\\"Every setting\\\", of=\\\"map\\\", x=Raw(\\\"sharpe\\\"), marker=Final(\\\"map\\\", measure=\\\"sharpe\\\", at={\\\"lookback\\\": 10, \\\"hold\\\": 28})),\\n    Curve(\\\"Across holds\\\", of=\\\"map\\\", x=Axis(\\\"hold\\\"), y=Raw(\\\"sharpe\\\"), where=Is(\\\"lookback\\\", Selected(\\\"lookback\\\"))),\\n)\\n\", base={\"version\": 1, \"revision\": 1, \"evidence_hash\": \"b351b78da4ef4314590c9d6503b40d821b040901cbe85c139f24a92dccfd43cf\"})\nView in Keel: https://app.usekeel.io/research/stu_000005",
+      "type": "text"
+    }
+  ],
+  "structuredContent": {
+    "base": {
+      "evidence_hash": "b351b78da4ef4314590c9d6503b40d821b040901cbe85c139f24a92dccfd43cf",
+      "revision": 1,
+      "version": 1
+    },
+    "can_retry": false,
+    "can_run": true,
+    "card_summary": {
+      "footer": {
+        "runs_words": "no new runs",
+        "subject": "Momentum rotation"
+      },
+      "footing_line": "585 days · 100 coins · 9 bp a fill",
+      "headline": {
+        "chips": [],
+        "text": "Nearby settings as a share of yours: −0.78"
+      },
+      "kind_label": {
+        "key": "map",
+        "name": "Map a strategy's settings",
+        "short": "Settings map"
+      },
+      "lead": "Nearby settings as a share of yours −0.78",
+      "maker": "you",
+      "maker_words": "by you",
+      "numbers": [
+        {
+          "label": "Nearby settings as a share of yours",
+          "measure": "share_of_yours",
+          "ref": "nearby.summary",
+          "sample": {
+            "first_day": "2025-03-23",
+            "last_day": "2026-10-29"
+          },
+          "unit": "ratio",
+          "value": -0.7762622105561354,
+          "value_words": "−0.78"
+        },
+        {
+          "label": "Rank among nearby settings",
+          "measure": "rank_among",
+          "ref": "nearby.summary",
+          "sample": {
+            "first_day": "2025-03-23",
+            "last_day": "2026-10-29"
+          },
+          "unit": "count",
+          "value": 3.0,
+          "value_words": "3"
+        },
+        {
+          "label": "Rank agreement before and after the split",
+          "measure": "rank_agreement",
+          "ref": "split.summary",
+          "sample": {
+            "first_day": "2025-03-23",
+            "last_day": "2026-10-29"
+          },
+          "unit": "score",
+          "value": 0.041312568875654695,
+          "value_words": "0.041"
+        }
+      ],
+      "schema": "keel.research.card/2",
+      "state": "completed",
+      "state_words": "Done · Oct 29",
+      "title": "Lookback × hold",
+      "top5": {
+        "kind": "best_settings",
+        "rows": [
+          {
+            "label": "hold 30 · lookback 7",
+            "slot": 0,
+            "unit": "ratio",
+            "value": 1.3823968065314913,
+            "value_words": "1.38"
+          },
+          {
+            "label": "hold 6 · lookback 18",
+            "slot": 0,
+            "unit": "ratio",
+            "value": 1.3823968065314913,
+            "value_words": "1.38"
+          },
+          {
+            "label": "hold 5 · lookback 90",
+            "slot": 0,
+            "unit": "ratio",
+            "value": 1.3823968065314913,
+            "value_words": "1.38"
+          },
+          {
+            "label": "hold 14 · lookback 8",
+            "slot": 0,
+            "unit": "ratio",
+            "value": 1.3669974650834855,
+            "value_words": "1.37"
+          },
+          {
+            "label": "hold 7 · lookback 12",
+            "slot": 0,
+            "unit": "ratio",
+            "value": 1.3669974650834855,
+            "value_words": "1.37"
+          }
+        ],
+        "total": 384
+      },
+      "version": 1
+    },
+    "counts": {
+      "allowance": {
+        "study": "free",
+        "units": [
+          {
+            "limit": 400,
+            "resets_at": "2026-12-18",
+            "unit": "research_studies",
+            "used": 0
+          }
+        ]
+      },
+      "runs": {
+        "executed": 0,
+        "failed_content": 0,
+        "failed_platform": 0,
+        "planned": 0,
+        "reused": 0,
+        "words": "0 runs, 0 reused, none failed"
+      },
+      "versions_tried": {
+        "added": 0,
+        "family": "",
+        "why": ""
+      }
+    },
+    "footing": {
+      "coins": {
+        "chosen": "The coins Momentum rotation trades",
+        "count": 100,
+        "names_sha256": "6892dc8e601171fcb382e7a0d253cf7c697378343e093731f8e5efcd580a72bd"
+      },
+      "costs": {
+        "fee": 0.00045,
+        "slippage": 0.00045
+      },
+      "data": "snap_6c1f0e8a2b9d4f37",
+      "days": {
+        "end": "2026-10-29",
+        "start": "2025-03-23"
+      },
+      "delay": 0,
+      "engine": "eng_000000000000000000000000000000000000000000000000000000000000",
+      "engine_words": "This version of the engine",
+      "leverage": 1.0,
+      "split": "2026-04-17",
+      "split_words": "Split on Apr 17, 2026: 390 days before, 195 after"
+    },
+    "hero_url": "https://app.usekeel.io/research/stu_000005",
+    "links": {
+      "app": "https://app.usekeel.io/research/stu_000005"
+    },
+    "locked": [],
+    "not_measured": [],
+    "notes": {
+      "notes_total": 0
+    },
+    "page": {
+      "default": 0,
+      "switch": [0, 1, 2]
+    },
+    "stale": [
+      {
+        "kind": "newer_subject",
+        "offer": {
+          "plan": {
+            "base": {
+              "evidence_hash": "b351b78da4ef4314590c9d6503b40d821b040901cbe85c139f24a92dccfd43cf",
+              "revision": 1,
+              "version": 1
+            },
+            "study_id": "stu_000005"
+          },
+          "ref": "str_momrotpro00000000000000000@4"
+        },
+        "short": "v4 is out",
+        "words": "Momentum rotation v3 has a newer version, v4."
+      }
+    ],
+    "steps": {
+      "by_status": {
+        "completed": 3
+      },
+      "total": 3
+    },
+    "study": {
+      "archived": false,
+      "can_delete": true,
+      "evidence_hash": "b351b78da4ef4314590c9d6503b40d821b040901cbe85c139f24a92dccfd43cf",
+      "kind_label": {
+        "key": "map",
+        "name": "Map a strategy's settings",
+        "short": "Settings map"
+      },
+      "linked_to": [],
+      "linked_to_total": 0,
+      "presentation_hash": "d3e7a3cbbfd605cb7c091726b817906854f01a87e1b097391a34b36af00de0df",
+      "question": "How do the results change around lookback 10, hold 28?",
+      "revision": 1,
+      "run_set_id": "rus_000005",
+      "set_aside": false,
+      "state": "completed",
+      "study_id": "stu_000005",
+      "title": "Lookback × hold",
+      "version": 1
+    },
+    "subjects": {
+      "total": 1
+    },
+    "url_line": "View in Keel: https://app.usekeel.io/research/stu_000005",
+    "view": {
+      "at": "2026-11-17T00:00:07.000Z",
+      "kind": "study",
+      "mode": "study",
+      "object": "stu_000005",
+      "seq": 8,
+      "size": "view",
+      "version": 1
+    },
+    "views": {
+      "total": 4
+    },
+    "words": {
+      "allowance": "Used 0 of 400 studies; resets Dec 1. Planning, reading, saving, and runs that reuse everything or run nothing, do not count."
+    }
+  }
+}

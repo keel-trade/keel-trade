@@ -227,7 +227,56 @@ def test_a_429_asking_for_a_long_wait_returns_it_instead_of_blocking(client):
     assert route.call_count == 1 and SLEPT == []
     env = exc.value.to_envelope()
     assert env["code"] == "rate_limited" and env["retryable"] is True
-    assert env["detail"] == {"retry_after_s": 3600} and "3600 seconds" in env["message"]
+    assert env["detail"] == {"retry_after_s": 3600}
+    # doc 07 §5: a rate limit is not a plan limit, and says so.
+    assert env["message"].endswith("Rate limit, not a plan limit; retry in 3600 s.")
+    assert env["what_was_expected"] == "Rate limit, not a plan limit; retry in 3600 s."
+
+
+def test_a_429_passes_the_servers_own_words_through(client):
+    """doc 07 §5 (Q-7601): the server's sentence leads, then the one
+    instruction. Control: the body-less 429 above reads the SDK's words."""
+    with respx.mock:
+        respx.get(f"{API}/v1/me").mock(
+            return_value=httpx.Response(
+                429,
+                headers={"Retry-After": "30"},
+                json={"detail": "Too many backtests submitted in a minute."},
+            )
+        )
+        with pytest.raises(KeelError) as exc:
+            client.get("/v1/me")
+    assert str(exc.value) == (
+        "Too many backtests submitted in a minute. Rate limit, not a plan limit; retry in 30 s."
+    )
+
+
+#: The words staging's rate limiter answered with (probe capture
+#: ratelimited/04_bt_009_429.json, 2026-11-16): they already state the wait.
+_SERVER_WORDS_WITH_A_WAIT = "Rate limit exceeded. Retry after 15 seconds."
+
+
+def test_a_429_whose_words_state_the_wait_is_not_told_it_twice(client):
+    """Q-7601 fix round: before, "Rate limit exceeded. Retry after 15 seconds.
+    Rate limit, not a plan limit; retry in 15 s." When the server's words
+    already say when to retry, the message adds only the plan-limit half; the
+    suggestion keeps the full instruction. Control: the "Too many backtests"
+    test above, whose words state no wait, keeps "; retry in 30 s".
+
+    SEED (run 2026-11-16, reversed by reversing the edit): `_STATES_RETRY_RE`
+    matching nothing reds this test alone; the control stays green."""
+    with respx.mock:
+        respx.get(f"{API}/v1/me").mock(
+            return_value=httpx.Response(
+                429, headers={"Retry-After": "15"}, json={"detail": _SERVER_WORDS_WITH_A_WAIT}
+            )
+        )
+        with pytest.raises(KeelError) as exc:
+            client.get("/v1/me")
+    env = exc.value.to_envelope()
+    assert env["message"] == f"{_SERVER_WORDS_WITH_A_WAIT} Rate limit, not a plan limit."
+    assert env["what_was_expected"] == "Rate limit, not a plan limit; retry in 15 s."
+    assert env["detail"] == {"retry_after_s": 15}
 
 
 def test_a_429_on_the_last_attempt_is_reported_not_slept_on(client):

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from keel.api_path import seg
 from keel.errors import KeelError, NotFoundError
 
 from . import register
@@ -38,7 +39,7 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
 
     client = ctx.get_client()
     try:
-        client.delete(f"/v1/strategies/{strategy_id}")
+        client.delete(f"/v1/strategies/{seg(strategy_id)}")
     except NotFoundError:
         raise NotFoundError(
             f"Strategy not found: {strategy_id}",
@@ -71,6 +72,7 @@ STRATEGY_DELETE = register(
     OutcomeTool(
         name="keel_strategy_delete",
         required_action="strategy.delete",
+        rate_tier="mutation",
         cli_path=("strategy", "delete"),
         toolset="backtest",
         # grounded-in: system/chat/collaboration.md:86 (recovery is a change

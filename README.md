@@ -72,10 +72,10 @@ client's own OAuth flow; no API key to copy, no local install.
 <!-- agent-surface:begin -->
 <!-- GENERATED from shared/agent-surface.json + LISTED_PROFILE_TOOLS — edit there, then run
      python packages/keel-trade/keel-sdk/scripts/check_surface_routing.py --write -->
-Hosted endpoint URL: `https://mcp.usekeel.io/mcp` — one endpoint, a 29-tool research/backtest/read surface, nothing to install. Sign in or sign up on the Keel page that opens (no account needed beforehand); authentication is your MCP client's OAuth flow, never a tool call.
+Hosted endpoint URL: `https://mcp.usekeel.io/mcp` — one endpoint, a 33-tool research/backtest/read surface, nothing to install. Sign in or sign up on the Keel page that opens (no account needed beforehand); authentication is your MCP client's OAuth flow, never a tool call.
 
-- **Claude**: Customize → Connectors → Add custom connector. Paste https://mcp.usekeel.io/mcp and choose Connect.
-- **ChatGPT**: Settings → Security and login → turn on Developer mode (a paid ChatGPT plan; on Business/Enterprise an admin must allow it). Open chatgpt.com/plugins, choose +, give the connector a name and a description, and enter https://mcp.usekeel.io/mcp as the MCP server URL (the /mcp path included).
+- **Claude**: Add Keel from its Claude listing: https://claude.ai/directory/connectors/keel (Customize → Connectors, then search for Keel), then choose Connect. Or add it by URL: Customize → Connectors → Add custom connector. Paste https://mcp.usekeel.io/mcp and choose Connect.
+- **ChatGPT**: Add Keel from its ChatGPT listing: https://chatgpt.com/plugins/plugin_asdk_app_6abdbe58e6a481919a03773b4c124fe0 (chatgpt.com/plugins, then search for Keel), then choose Install plugin. Or add it by URL: Settings → Security and login → turn on Developer mode (in a workspace, an admin may have to allow it). Open chatgpt.com/plugins, choose +, give the connector a name and a description, and enter https://mcp.usekeel.io/mcp as the MCP server URL (the /mcp path included).
 - **Claude Code**: `claude mcp add --transport http keel https://mcp.usekeel.io/mcp`. Inside Claude Code run /mcp and choose Authenticate.
 - **Cursor**: Add the server to .cursor/mcp.json (project) or ~/.cursor/mcp.json (global): `{"mcpServers": {"keel": {"url": "https://mcp.usekeel.io/mcp"}}}`. Cursor asks you to sign in on first use.
 - **Codex**: `codex mcp add keel --url https://mcp.usekeel.io/mcp` then `codex mcp login keel`. Codex opens your browser for the sign-in.
@@ -101,7 +101,7 @@ the default; this package is the CLI + local MCP path.
      python packages/keel-trade/keel-sdk/scripts/check_surface_routing.py --write -->
 | You are… | Default path (shown first) | Also works |
 | --- | --- | --- |
-| Using Claude/ChatGPT on web or phone | Hosted endpoint — paste the URL (directory one-click coming) | CLI + local MCP |
+| Using Claude/ChatGPT on web or phone | Official listing in Claude or ChatGPT (one click), or paste the hosted URL | CLI + local MCP |
 | Working in Claude Code / Cursor / terminal | Hosted endpoint — one command, or paste the URL | CLI + local MCP |
 | Running a strategy from the Keel app | Keel web app (connect an account, review sizing, start it there) | reads on every surface |
 | Trying a strategy forward without a connected exchange account | Paper run (simulated) — Keel web app, or `keel paper` on the CLI | in-app chat, local MCP |
@@ -143,7 +143,7 @@ claude mcp add keel -- keel mcp serve
 codex mcp add keel -- keel mcp serve
 ```
 
-For Cursor, Windsurf, and generic MCP clients, see [usekeel.io/keel-mcp#install](https://usekeel.io/keel-mcp#install) or the [agent setup guide](https://usekeel.io/docs/agents/setup).
+For Cursor, Windsurf, and generic MCP clients, see [usekeel.io/keel-mcp](https://usekeel.io/keel-mcp) or the [agent setup guide](https://usekeel.io/docs/agents/setup).
 
 ## First conversation with your agent
 
@@ -198,7 +198,7 @@ Full CLI reference: [usekeel.io/docs/sdk/cli-reference](https://usekeel.io/docs/
 | **Backtest a Hyperliquid strategy** — real fees, funding and slippage across the HL perp universe, delisted names included | [usekeel.io/hyperliquid-backtest](https://usekeel.io/hyperliquid-backtest)                 |
 | **Screen HL perps** — momentum, funding, volume, breakout, regime              | [usekeel.io/lab](https://usekeel.io/lab)                                                   |
 | **Use AI to build strategies** — typed composition, not freeform code          | [usekeel.io/ai-trading-strategy-builder](https://usekeel.io/ai-trading-strategy-builder)   |
-| **Backtest portfolios** across the HL universe                                 | [usekeel.io/crypto-portfolio-backtesting](https://usekeel.io/crypto-portfolio-backtesting) |
+| **Backtest portfolios** across the HL universe                                 | [usekeel.io/crypto-backtesting](https://usekeel.io/crypto-backtesting) |
 | **Robustness calculators** — walk-forward visualizer, Monte Carlo, deflated Sharpe, overfit check | [usekeel.io/lab](https://usekeel.io/lab)                                                   |
 | **Run a strategy live** from the Keel web app, on your own Hyperliquid account (non-custodial) | [usekeel.io/strategy-os](https://usekeel.io/strategy-os)                                   |
 | **Compare strategies + venues**                                                | [usekeel.io/compare](https://usekeel.io/compare)                                           |

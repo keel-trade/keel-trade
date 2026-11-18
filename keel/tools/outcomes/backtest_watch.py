@@ -5,6 +5,7 @@ from __future__ import annotations
 import time
 from typing import Any
 
+from keel.api_path import seg
 from keel.errors import KeelError, NotFoundError
 
 from . import register
@@ -102,7 +103,7 @@ def _snapshot_envelope(
         # rule as `keel_backtest_summarize`; `tearsheet_url` is the link.
         if not is_listed_profile():
             try:
-                results = ctx.get_client().get(f"/v1/backtests/{backtest_id}/results")
+                results = ctx.get_client().get(f"/v1/backtests/{seg(backtest_id)}/results")
                 if isinstance(results, dict) and results.get("presigned_url"):
                     extra["results_url"] = results["presigned_url"]
                     extra["results_url_expires_in_s"] = results.get("expires_in", 3600)
@@ -183,7 +184,7 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
     while True:
         polls += 1
         try:
-            detail = client.get(f"/v1/backtests/{backtest_id}")
+            detail = client.get(f"/v1/backtests/{seg(backtest_id)}")
         except NotFoundError:
             raise NotFoundError(
                 f"Backtest {backtest_id} not found.",

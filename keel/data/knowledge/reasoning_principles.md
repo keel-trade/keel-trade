@@ -1,6 +1,6 @@
 ## Reasoning Principles
 
-- **Every pipeline ends in WeightSeries.** Track the output type as you compose — data → signal → forecast → weights — and plan the sizer from the start.
+- **Every strategy pipeline ends in WeightSeries.** Track the output type as you compose — data → signal → forecast → weights — and plan the sizer from the start.
 - **Normalize only when needed.** ForecastScaler handles signal scaling internally — a single signal can go directly to ForecastScaler without prior normalization. CrossSectionalZScore is needed when **combining multiple signals on different scales** (e.g., ROC + RSI through ForecastCombiner). For single-signal pipelines, cross-sectional normalization is a follow-up improvement, not the default. For small universes (<5 assets), use RollingZScoreTransform or `ForecastScaler(pool="by_asset")` instead — cross-sectional z-scores are degenerate with few assets.
 - **Data shape is (time × assets).** Every operation applies to all assets simultaneously. There is no single-asset mode.
 - **Signal values carry information.** Each step should preserve or deliberately transform it — never silently discard.

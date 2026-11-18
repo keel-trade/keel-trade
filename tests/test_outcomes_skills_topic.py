@@ -33,7 +33,7 @@ import json
 import pytest
 from click.testing import CliRunner
 from keel.cli.main import cli
-from keel.mcp.server import LISTED_EXCLUDED_SKILLS
+from keel.mcp.server import LISTED_EXCLUDED_SKILLS, listed_excluded_skills
 from keel.skills import BUNDLED_SKILLS, compose_skill
 from keel.tools.outcomes import OUTCOMES, _bootstrap
 from keel.tools.outcomes._base import ToolContext
@@ -123,7 +123,9 @@ def test_full_profile_lists_every_bundled_skill(full_profile):
 def test_listed_profile_omits_exactly_the_prompt_exclusions(listed_profile):
     full_names = set(BUNDLED_SKILLS)
     tool_names = {row["name"] for row in _call_handler("skills")["skills"]}
-    assert full_names - tool_names == set(LISTED_EXCLUDED_SKILLS)
+    # The base exclusion plus screen-creation while the screens flag is off.
+    assert full_names - tool_names == set(listed_excluded_skills())
+    assert set(LISTED_EXCLUDED_SKILLS) < set(listed_excluded_skills())
 
 
 def test_tool_and_prompt_surfaces_agree_on_the_listed_profile(listed_profile):

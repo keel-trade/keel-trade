@@ -1,0 +1,193 @@
+{
+  "_meta": {
+    "keel/card": {
+      "card_data": null,
+      "card_summary": {
+        "thumb": null
+      }
+    },
+    "ui": {
+      "resourceUri": "ui://keel/cards/study.html"
+    }
+  },
+  "content": [
+    {
+      "text": "card: where the host draws Keel cards, the user sees what follows as a card carrying its name, links and ids, so a reply can call it by name; the ids and links here serve tool calls and hosts without cards.\n\nCheck a strategy · Momentum rotation v3 · version 1 · Didn't finish\nUsed 0 of 400 studies; resets Dec 1. Planning, reading, saving, and runs that reuse everything or run nothing, do not count.\nDays Mar 23, 2025 to Oct 29, 2026, split Apr 17, 2026 · 100 coins: the coins Momentum rotation trades · costs 9 bp a fill · data as of Oct 29, 2026\nMeasured with Backtest v1, CostStress v1, DelayStress v1, TopCoins v1, WithoutBestCoins v1, RandomBooks v1, RepickSettings v1, Neighbours v1, DeflatedSharpe v1, ResampledPaths v1, ReturnByCoin v1, MarketStates v1, CorrelationWithRunning v1.\nDidn't finish\nRuns: 3 runs, 0 reused, 23 couldn't run on Keel's side · versions tried: unknown\nCharts (13): Your checks · Growth of 1 · Before and after the split · Sharpe as costs rise · Sharpe when trading late · Sharpe on the top coins · Sharpe without the best coins · 150 random books · A year ahead, resampled · Re-picking the settings · Where the return came from · Up and down markets · How it moves with what you run — keel_research_get(study_id=\"stu_000010\", view=0) reads the numbers behind any of them.\nMomentum rotation v3 has a newer version, v4. Plan it in the app: keel_app_link(id=\"stu_000010\")\nView in Keel: https://app.usekeel.io/research/stu_000010",
+      "type": "text"
+    }
+  ],
+  "structuredContent": {
+    "can_retry": true,
+    "can_run": true,
+    "card_summary": {
+      "footer": {
+        "runs_words": "3 runs",
+        "subject": "Momentum rotation"
+      },
+      "footing_line": "585 days · 100 coins · 9 bp a fill",
+      "headline": {
+        "chips": [],
+        "text": ""
+      },
+      "kind_label": {
+        "key": "check",
+        "name": "Check a strategy",
+        "short": "Check"
+      },
+      "lead": "Didn't finish",
+      "maker": "you",
+      "maker_words": "by you",
+      "numbers": [],
+      "schema": "keel.research.card/2",
+      "state": "failed",
+      "state_words": "Didn't finish",
+      "title": "Momentum rotation v3",
+      "top5": {
+        "kind": "checks",
+        "rows": [],
+        "total": 0
+      },
+      "version": 1
+    },
+    "counts": {
+      "allowance": {
+        "study": "free",
+        "units": [
+          {
+            "limit": 400,
+            "resets_at": "2026-12-18",
+            "unit": "research_studies",
+            "used": 0
+          }
+        ]
+      },
+      "runs": {
+        "executed": 3,
+        "failed_content": 0,
+        "failed_platform": 23,
+        "planned": 26,
+        "reused": 0,
+        "words": "3 runs, 0 reused, 23 couldn't run on Keel's side"
+      },
+      "versions_tried": {
+        "added": 0,
+        "family": "",
+        "why": ""
+      }
+    },
+    "footing": {
+      "coins": {
+        "chosen": "The coins Momentum rotation trades",
+        "count": 100,
+        "names_sha256": "6892dc8e601171fcb382e7a0d253cf7c697378343e093731f8e5efcd580a72bd"
+      },
+      "costs": {
+        "fee": 0.00045,
+        "slippage": 0.00045
+      },
+      "data": "snap_6c1f0e8a2b9d4f37",
+      "days": {
+        "end": "2026-10-29",
+        "start": "2025-03-23"
+      },
+      "delay": 0,
+      "engine": "eng_000000000000000000000000000000000000000000000000000000000000",
+      "engine_words": "This version of the engine",
+      "leverage": 1.0,
+      "split": "2026-04-17",
+      "split_words": "Split on Apr 17, 2026: 390 days before, 195 after"
+    },
+    "hero_url": "https://app.usekeel.io/research/stu_000010",
+    "links": {
+      "app": "https://app.usekeel.io/research/stu_000010"
+    },
+    "locked": [],
+    "not_measured": [],
+    "notes": {
+      "notes_total": 0
+    },
+    "page": {
+      "default": 0,
+      "switch": [0, 1, 2]
+    },
+    "progress": {
+      "by_status": {
+        "completed": 3,
+        "failed": 23
+      },
+      "children": 26,
+      "done": 3,
+      "progress_seq": 0,
+      "receipt": "Didn't finish",
+      "stopped": "This run took longer than 30 s and was stopped; it is charged for the time it held. 23 runs didn't finish on our side; they can be retried in Keel",
+      "words": "Didn't finish"
+    },
+    "quota": [],
+    "stale": [
+      {
+        "kind": "newer_subject",
+        "offer": {
+          "plan": {
+            "base": {
+              "evidence_hash": "39d12a6a11826154a9f5ec9190144873b7f9ebad4ea9438c3debdaeff71bc893",
+              "revision": 1,
+              "version": 1
+            },
+            "study_id": "stu_000010"
+          },
+          "ref": "str_momrotpro00000000000000000@4"
+        },
+        "short": "v4 is out",
+        "words": "Momentum rotation v3 has a newer version, v4."
+      }
+    ],
+    "steps": {
+      "by_status": {
+        "failed": 12,
+        "planned": 1
+      },
+      "total": 13
+    },
+    "study": {
+      "archived": false,
+      "can_delete": true,
+      "evidence_hash": "39d12a6a11826154a9f5ec9190144873b7f9ebad4ea9438c3debdaeff71bc893",
+      "kind_label": {
+        "key": "check",
+        "name": "Check a strategy",
+        "short": "Check"
+      },
+      "linked_to": [],
+      "linked_to_total": 0,
+      "presentation_hash": "a083fb140a6abdc66daa55e6701a2a316f92e62885bbbb140b14107904c36d28",
+      "question": "How does v3 do against costs, delay, luck and later data?",
+      "revision": 1,
+      "run_set_id": "rus_000010",
+      "set_aside": false,
+      "state": "failed",
+      "study_id": "stu_000010",
+      "title": "Momentum rotation v3",
+      "version": 1
+    },
+    "subjects": {
+      "total": 1
+    },
+    "url_line": "View in Keel: https://app.usekeel.io/research/stu_000010",
+    "view": {
+      "at": "2026-11-17T00:00:13.000Z",
+      "kind": "study",
+      "mode": "run",
+      "object": "stu_000010",
+      "seq": 14,
+      "size": "progress",
+      "version": 1
+    },
+    "views": {
+      "total": 13
+    },
+    "words": {
+      "allowance": "Used 0 of 400 studies; resets Dec 1. Planning, reading, saving, and runs that reuse everything or run nothing, do not count.",
+      "stopped": "This run took longer than 30 s and was stopped; it is charged for the time it held. 23 runs didn't finish on our side; they can be retried in Keel"
+    }
+  }
+}

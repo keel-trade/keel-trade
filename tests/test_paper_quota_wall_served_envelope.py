@@ -47,7 +47,8 @@ import pytest
 #: current_count=1))`` (libs/platform_auth/quota.py:291-313, :356-388);
 #: ``quota`` is ``parse_denial_reason`` of it (:391-408) plus ``plan`` and
 #: ``higher_plans`` (services/keel-api/src/errors.py ``_quota_with_paths``,
-#: plans.yaml: free 1, starter 5, trader 20, pro 50); ``code`` is
+#: against the org's own ``(plan, plan_version)``, here a v2 Free: the
+#: catalog's Trader 5 and Pro 20, value-and-pricing spec 01); ``code`` is
 #: ``DENIAL_CODES["cap_exceeded"]`` (quota.py:116-122); ``detail`` is
 #: ``_entitlement_detail``'s cap sentence and ``type`` is
 #: ``_ERROR_TYPES["forbidden"]`` (errors.py). The label is what keel-api
@@ -69,10 +70,10 @@ SERVED_PAPER_CAP_403 = {
         "used": 1,
         "remaining": 0,
         "plan": "free",
+        "plan_name": "Free",
         "higher_plans": [
-            {"plan": "starter", "limit": 5},
-            {"plan": "trader", "limit": 20},
-            {"plan": "pro", "limit": 50},
+            {"plan": "trader", "version": "v2", "name": "Trader", "limit": 5},
+            {"plan": "pro", "version": "v2", "name": "Pro", "limit": 20},
         ],
     },
 }
@@ -91,10 +92,11 @@ def test_the_fixture_is_the_producers_output():
     )
     assert SERVED_PAPER_CAP_403["reasons"] == [reason]
     parsed = quota.parse_denial_reason(reason)
+    # keel-api's 403 handler adds exactly this projection (D-14:
+    # `services/keel-api/src/errors.py`, `plan_limit_fields`).
     served = {
         **parsed,
-        "plan": "free",
-        "higher_plans": pricing.higher_plan_limits("free", "paper_strategies_max"),
+        **pricing.plan_limit_fields("free", "paper_strategies_max", version="v2"),
     }
     assert SERVED_PAPER_CAP_403["quota"] == served
     assert SERVED_PAPER_CAP_403["code"] == quota.DENIAL_CODES["cap_exceeded"]

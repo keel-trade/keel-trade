@@ -1,0 +1,31 @@
+{
+  "about": "Real study-card envelopes (research.card_fixtures, spec 13 §7.1); never edit by hand.",
+  "built_with": {
+    "numpy": "1.26.4",
+    "pandas": "2.3.3",
+    "python": "3.11"
+  },
+  "fixtures": [
+    "chart-map_v3-view0",
+    "list",
+    "refusal-limit",
+    "refusal-notfound",
+    "refusal-paused",
+    "run-done",
+    "run-failed",
+    "run-partial",
+    "run-queued",
+    "run-running",
+    "run-stopped",
+    "study-chk_v3",
+    "study-chk_v3-again",
+    "study-chk_v3-summary",
+    "study-cmp_sig",
+    "study-cmp_v3v4",
+    "study-ent_hi",
+    "study-map_one_axis",
+    "study-map_v3",
+    "study-sig_lowvol"
+  ],
+  "skipped": {}
+}

@@ -31,6 +31,7 @@ SKILLS_DIR = Path(__file__).parent.parent / "keel" / "skills"
 
 EXPECTED_SKILLS = [
     "strategy-creation",
+    "screen-creation",
     "strategy-fork-and-iterate",
     "backtest-and-analyze",
     "overfit-check",
@@ -270,7 +271,7 @@ class TestLoader:
     def test_list_skills_returns_all_eight(self):
         from keel.skills import BUNDLED_SKILLS, list_skills
 
-        assert len(BUNDLED_SKILLS) == 8
+        assert len(BUNDLED_SKILLS) == 9
         assert set(BUNDLED_SKILLS) == set(EXPECTED_SKILLS)
         skills_map = list_skills()
         assert set(skills_map.keys()) == set(EXPECTED_SKILLS)
@@ -339,7 +340,11 @@ class TestLoader:
             f"{skill_name} ({profile}) composes to {tokens} tokens (budget {SKILL_TOKEN_BUDGET})"
         )
 
-    @pytest.mark.parametrize("skill_name", EXPECTED_SKILLS)
+    # screen-creation (screeners L13) was born after the method+index build:
+    # it never appended a section, so it has nothing to conserve.
+    @pytest.mark.parametrize(
+        "skill_name", [s for s in EXPECTED_SKILLS if s != "screen-creation"]
+    )
     def test_the_index_names_every_section_the_skill_dropped(self, skill_name):
         """The guard the spec asserts: CONSERVATION, not size.
 
@@ -406,7 +411,9 @@ class TestLoader:
     def test_load_unknown_skill_raises(self):
         from keel.skills import load_skill
 
-        with pytest.raises(FileNotFoundError):
+        from keel.errors import NotFoundError
+
+        with pytest.raises(NotFoundError):
             load_skill("does-not-exist")
 
 
@@ -423,7 +430,7 @@ class TestCLI:
         import json as _json
 
         rows = _json.loads(result.stdout)
-        assert len(rows) == 8
+        assert len(rows) == 9
         assert {r["name"] for r in rows} == set(EXPECTED_SKILLS)
         for row in rows:
             assert row["description"]
@@ -573,13 +580,13 @@ _METHOD_ONLY_FAMILIES = {
 
 
 def _listed_bodies() -> dict[str, str]:
-    from keel.mcp.server import LISTED_EXCLUDED_SKILLS
+    from keel.mcp.server import listed_excluded_skills
     from keel.skills import BUNDLED_SKILLS, compose_skill
 
     return {
         name: compose_skill(name, profile="listed")
         for name in BUNDLED_SKILLS
-        if name not in LISTED_EXCLUDED_SKILLS
+        if name not in listed_excluded_skills()
     }
 
 
@@ -604,7 +611,8 @@ def test_listed_skill_bodies_are_method_only():
     """
     bodies = _listed_bodies()
     # Non-vacuity on quantities no seeded phrase can move: seven served
-    # skills, each a whole composed document.
+    # skills (screen-creation joins only with the listed screens flag on),
+    # each a whole composed document.
     assert len(bodies) == 7, sorted(bodies)
     for name, body in bodies.items():
         assert body.startswith("---") and "# Method" in body, name
@@ -710,3 +718,18 @@ def test_a_skill_that_fails_to_parse_fails_server_startup(monkeypatch):
         monkeypatch.undo()
         skills.list_skills.cache_clear()
         skills.load_skill.cache_clear()
+
+
+def test_screen_creation_is_method_only_when_the_screens_flag_serves_it(monkeypatch):
+    """L13: with the listed screens flag on, screen-creation joins the served
+    bodies, and it passes the same method-only scan as the seven."""
+    from keel.mcp.server import listed_excluded_skills
+    from keel.skills import compose_skill
+
+    monkeypatch.setenv("KEEL_LISTED_SCREENS_HOSTS", "all")
+    assert "screen-creation" not in listed_excluded_skills()
+    body = compose_skill("screen-creation", profile="listed")
+    assert body.startswith("---") and "# Method" in body
+    assert not _method_only_hits(body)
+    monkeypatch.delenv("KEEL_LISTED_SCREENS_HOSTS")
+    assert "screen-creation" in listed_excluded_skills()

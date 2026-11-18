@@ -90,6 +90,7 @@
   var lastEnvelope = null;
   var currentDisplayMode = "inline";
   var hostDisplayModes = [];
+  var memoryState = null;
 
   function post(msg) {
     try {
@@ -645,7 +646,10 @@
       try {
         resultListeners[i](envelope);
       } catch (e) {
-        /* one bad renderer never blocks the fallback link row */
+        // One bad listener never blocks the fallback link row, and never
+        // fails in silence (RI-602): a card's own draw is caught in
+        // `ready` and drawn as its terminal state; this is the backstop.
+        logRenderError(e);
       }
     }
     resendSize();
@@ -723,8 +727,59 @@
   // say the same outcome-neutral words); tests/test_widgets_inflight.py
   // pins it against the Python owners. `needs` = the tool's required
   // arguments; `present: true` = the tool takes the `present` argument;
-  // `dryRun` = what a `dry_run: true` call resolves to.
+  // `dryRun` = what a `dry_run: true` call resolves to. A research run
+  // waits as its run card (`progress`, 13 §4.3): one fixed height that its
+  // progress and its compact result both fill.
   var INFLIGHT = {
+    keel_research_plan: {
+      kind: "study",
+      needs: [],
+      invoking: "Planning study…",
+      size: "receipt",
+    },
+    keel_research_run: {
+      kind: "study",
+      needs: [],
+      invoking: "Running study…",
+      size: "progress",
+      present: true,
+    },
+    keel_research_get: {
+      kind: "study",
+      needs: [],
+      invoking: "Reading the study…",
+      size: "view",
+      present: true,
+    },
+    keel_research_view_set: {
+      kind: "study",
+      needs: ["study_id", "expected_revision"],
+      invoking: "Saving the study view…",
+      size: "view",
+      dryRun: "receipt",
+      present: true,
+    },
+    keel_screener_run: {
+      kind: "screener",
+      needs: [],
+      invoking: "Running screen…",
+      size: "receipt",
+      present: true,
+    },
+    keel_screener_view: {
+      kind: "screener",
+      needs: [],
+      invoking: "Reading screen…",
+      size: "view",
+      present: true,
+    },
+    keel_screener_view_set: {
+      kind: "screener",
+      needs: ["strategy_id", "expected_revision"],
+      invoking: "Editing the screen view…",
+      size: "view",
+      dryRun: "receipt",
+    },
     keel_backtest_summarize: {
       kind: "backtest",
       needs: ["backtest_id"],
@@ -790,6 +845,18 @@
       invoking: "Reading live state…",
       size: "view",
     },
+    keel_paper_deploy: {
+      kind: "live",
+      needs: ["strategy_id"],
+      invoking: "Starting the paper run…",
+      size: "view",
+    },
+    keel_paper_control: {
+      kind: "live",
+      needs: ["deployment_id", "action"],
+      invoking: "Changing the paper run…",
+      size: "view",
+    },
     keel_live_deploy: {
       kind: "preflight",
       needs: ["strategy_id"],
@@ -853,7 +920,8 @@
   }
 
   /**
-   * `receipt` or `view`. When the candidates disagree (no tool name, and
+   * `receipt`, `view` or `progress` (a research run's card, only when
+   * every candidate says so). When the candidates disagree (no tool name, and
    * the arguments fit tools that resolve differently) the answer is the
    * SMALLER: guessing small costs one grow when the result lands,
    * guessing big costs the collapse this section exists to remove. With
@@ -872,6 +940,15 @@
         return "receipt";
       }
     }
+    // Every candidate agrees on the run card's own size (13 §4.3).
+    if (
+      args !== undefined &&
+      names.length &&
+      names.every(function (t) {
+        return sizeFor(INFLIGHT[t], args) === "progress";
+      })
+    )
+      return "progress";
     return "view";
   }
 
@@ -918,10 +995,12 @@
   // true of EVERY tool that can draw this kind (a backtest card may be a
   // run, a watch or a read), so it never names the wrong one.
   var KIND_WAITING = {
+    screener: "Reading the screen…",
     backtest: "Working on the backtest…",
     strategy: "Working on the strategy…",
     compare: "Comparing runs…",
     live: "Reading live state…",
+    study: "Working on the study…",
   };
 
   function drawInFlight() {
@@ -1452,10 +1531,18 @@
   }
 
   /**
-   * The one header shape (Q-1630): Keel · name · vN · state · clock.
+   * The one header shape (Q-1630): Keel · name · vN · kind · state ·
+   * notes · clock.
    *
    * The name is mono and ellipsises; a missing one is "Untitled",
    * never an id. Dates arrive already relative ("since Aug 20").
+   *
+   * `kind` (research 13 §2.2, the study card): the served
+   * `{short, name}` kind label, drawn as a chip whose words are `short`
+   * and whose title and aria label are `name`. A card that names its
+   * kind never says "Untitled": with no name it draws the kind chip
+   * alone. `notes`: up to two served note chips ("Snapshot", "Linked"),
+   * the first chips to give way when space is short.
    */
   function header(spec) {
     var head = document.getElementById("card-head");
@@ -1474,11 +1561,29 @@
       head.appendChild(meta);
     }
     meta.textContent = "";
-    var name = el("span", "head-name", spec.name || "Untitled");
-    name.title = spec.name || "Untitled";
-    meta.appendChild(name);
+    var kind = spec.kind && typeof spec.kind === "object" ? spec.kind : null;
+    var kindWords = kind && (kind.short || kind.name);
+    var named =
+      spec.name || (kindWords || spec.untitled === false ? "" : "Untitled");
+    if (named) {
+      var name = el("span", "head-name", named);
+      name.title = named;
+      meta.appendChild(name);
+    }
     if (spec.version != null && spec.version !== "") {
-      meta.appendChild(el("span", "chip", "v" + spec.version));
+      // A live or paper run's label arrives already prefixed ("v3",
+      // "v3.0"); drawing "v" + it read "vv3" on the live card (Q-7603).
+      meta.appendChild(
+        el("span", "chip", "v" + String(spec.version).replace(/^v/i, "")),
+      );
+    }
+    if (kindWords) {
+      var chip = el("span", "chip kind", kindWords);
+      if (kind.name) {
+        chip.title = kind.name;
+        chip.setAttribute("aria-label", kind.name);
+      }
+      meta.appendChild(chip);
     }
     if (spec.state) {
       meta.appendChild(
@@ -1489,6 +1594,12 @@
         ),
       );
     }
+    (spec.notes || []).slice(0, 2).forEach(function (note) {
+      if (typeof note !== "string" || !note) return;
+      var n = el("span", "chip muted note", note);
+      n.title = note;
+      meta.appendChild(n);
+    });
     if (spec.clock) meta.appendChild(el("span", "chip muted", spec.clock));
     if (spec.when) meta.appendChild(el("span", "head-when", spec.when));
     return meta;
@@ -2252,7 +2363,10 @@
   // ("Backtest not submitted — …", "Comparison unavailable — …"); for
   // every other kind, and for an empty result on any kind, the adapter
   // draws one terminal line itself. Neither ever shows the action band.
-  var CARDS_OWNING_ERRORS = ["backtest", "compare"];
+  // The study card owns its refusal (research 13 §5, D-328 D3): the served
+  // card words (`detail.card_words`, else the message) with one link to the
+  // study or to Research, never the generic "Result unavailable".
+  var CARDS_OWNING_ERRORS = ["backtest", "compare", "screener", "study"];
   var UNAVAILABLE = {
     backtest: "Backtest unavailable",
     strategy: "Strategy unavailable",
@@ -2380,6 +2494,60 @@
     renderLinkRow(null);
   }
 
+  // ── A card that could not draw its result (RI-602) ─────────────────
+  // A renderer that threw used to leave whatever it had drawn before the
+  // throw, and said so nowhere: the study card's thumb parser threw on
+  // every served Lines thumb, so a Check drew its header and headline over
+  // nothing, with no console line and no state a test could read. Now a
+  // throw is a terminal state of its own: one plain line saying the card
+  // could not draw this result, the link row to the object (the result
+  // itself is fine: it is in Keel and in the reply), and the error on the
+  // console and on `<body data-render-error>`. Never the error's own text
+  // in the card: it is a developer's words, not the user's.
+  var DRAW_FAILED = "This card could not draw the result.";
+  var DRAW_FAILED_NO_LINK =
+    "This card could not draw the result — see the reply.";
+
+  // Set by a throw, cleared by the next result (`ready` below): Expand
+  // has nothing to show for a card that could not draw.
+  function logRenderError(e) {
+    var text = String((e && e.message) || e || "");
+    if (document.body)
+      document.body.setAttribute("data-render-error", text.slice(0, 200));
+    if (window.console && typeof console.error === "function")
+      console.error("Keel card: the result could not be drawn", e);
+  }
+
+  function renderDrawFailed(envelope) {
+    clearSkeleton();
+    var b = document.body;
+    if (b) {
+      b.removeAttribute("data-expect");
+      b.removeAttribute("data-size");
+      b.removeAttribute("data-layout");
+      b.setAttribute("data-owns-link", "0");
+    }
+    var head = document.getElementById("card-head");
+    if (head) head.hidden = true;
+    var body = document.getElementById("card-body");
+    if (!body) return;
+    body.textContent = "";
+    body.removeAttribute("aria-busy");
+    var row = el("div", "err-line");
+    if (wordmark()) row.appendChild(el("span", "brand", "Keel"));
+    var url =
+      envelope &&
+      (envelope.hero_url ||
+        envelope.share_url ||
+        (envelope.render && envelope.render.fallback_url));
+    // Ordinary text, never the red of a failed run: nothing about the
+    // result is wrong, only this frame's drawing of it.
+    row.appendChild(el("span", "", url ? DRAW_FAILED : DRAW_FAILED_NO_LINK));
+    body.appendChild(row);
+    renderLinkRow(envelope);
+    scheduleSize();
+  }
+
   // ── The non-negotiable fallback link row ──────────────────────────
   var LINK_LABELS = {
     backtest: "Open tearsheet in Keel",
@@ -2390,7 +2558,34 @@
     // the runs belong to (V-6). When the runs span strategies there is
     // no single target and the card passes no url at all (Q-1686).
     compare: "Open strategy in Keel",
+    // Research 13 §2.2: a link to one study says so; a study card whose
+    // link is Research itself (a refusal before any study exists, the
+    // list) says that instead (`studyLinkLabel`).
+    study: "Open the study in Keel",
   };
+  var RESEARCH_LINK_LABEL = "Open Research in Keel";
+  var STUDY_PATH = /\/research\/stu_[A-Za-z0-9]+/;
+
+  function studyLinkLabel(url) {
+    return url && STUDY_PATH.test(String(url))
+      ? LINK_LABELS.study
+      : RESEARCH_LINK_LABEL;
+  }
+  // A screen draws through the strategy card (compose, get, fork), so its
+  // kind cannot tell it apart; its view names what it produces
+  // (`view.outputs`, non-empty only for a file with `Outputs(...)`), and
+  // its link says what opens (Q-3639).
+  var SCREEN_LINK_LABEL = "Open screen in Keel";
+
+  function isScreenView(envelope) {
+    var v = envelope && envelope.view;
+    return !!(
+      v &&
+      typeof v === "object" &&
+      Array.isArray(v.outputs) &&
+      v.outputs.length
+    );
+  }
 
   /**
    * Whether this host wants us to draw the `Keel` wordmark (REVIEW §4.4).
@@ -2457,16 +2652,31 @@
     // single destination exists (Q-1686's cross-strategy comparison, which
     // still declares that absence as `data-no-hero`).
     var kind = document.body && document.body.getAttribute("data-card");
-    var label = LINK_LABELS[kind] || "View in Keel";
+    var label =
+      kind === "strategy" && isScreenView(envelope)
+        ? SCREEN_LINK_LABEL
+        : LINK_LABELS[kind] || "View in Keel";
     var url = null;
     if (envelope) {
       url = envelope.hero_url || envelope.share_url || null;
       if (!url && envelope.render) url = envelope.render.fallback_url || null;
+      // A study refusal's one link is its served `detail.links.app` (13 §5).
+      if (
+        !url &&
+        kind === "study" &&
+        envelope.detail &&
+        envelope.detail.links &&
+        typeof envelope.detail.links.app === "string"
+      )
+        url = envelope.detail.links.app;
       if (!url && typeof envelope.url_line === "string") {
         var m = envelope.url_line.match(/https?:\/\/\S+/);
         if (m) url = m[0];
       }
     }
+    // A study card's label says where its one link goes (13 §2.2): the study,
+    // or Research when the served link is Research itself.
+    if (kind === "study") label = studyLinkLabel(url);
     row.hidden = false;
     row.textContent = "";
     if (url) {
@@ -2498,7 +2708,16 @@
     }
     // The second (and last) action: Expand, only where the host says it
     // can honour it, and only from inline (Q-1632).
-    if (hostOffersFullscreen() && currentDisplayMode !== "fullscreen") {
+    if (
+      cardKind() !== "screener" &&
+      hostOffersFullscreen() &&
+      currentDisplayMode !== "fullscreen" &&
+      !(
+        document.body &&
+        (document.body.hasAttribute("data-render-error") ||
+          document.body.hasAttribute("data-no-expand"))
+      )
+    ) {
       row.appendChild(
         buttonLink("Expand", function () {
           KeelHost.requestDisplayMode("fullscreen");
@@ -2523,6 +2742,49 @@
     historicalNote: historicalNote,
     receiptRow: receiptRow,
     wordmark: wordmark,
+    studyLinkLabel: studyLinkLabel,
+    /** The adapter's own words a card may need (the card files carry none). */
+    words: { showSteps: "Show steps", showStudy: "Show" },
+
+    /**
+     * Per-card view state (research 13 §4.1): `{tab, sel, isolated}`. On
+     * ChatGPT it is the host's `widgetState`, saved with `setWidgetState`
+     * where that exists (probe P3, feature-detected); everywhere else it
+     * lives in memory for this frame only.
+     */
+    widgetState: function () {
+      var o = window.openai;
+      if (
+        !memoryState &&
+        o &&
+        o.widgetState &&
+        typeof o.widgetState === "object"
+      )
+        memoryState = o.widgetState;
+      return memoryState || {};
+    },
+    setWidgetState: function (state) {
+      memoryState = state || {};
+      var o = window.openai;
+      if (o && typeof o.setWidgetState === "function") {
+        try {
+          o.setWidgetState(memoryState);
+        } catch (e) {
+          /* the host refused it: memory still holds the state */
+        }
+      }
+    },
+    /** ChatGPT's own "Open in …" button target, where the host lets a widget set it (probe P3). */
+    setOpenInAppUrl: function (url) {
+      var o = window.openai;
+      if (!url || !o || typeof o.setOpenInAppUrl !== "function") return false;
+      try {
+        o.setOpenInAppUrl({ href: url });
+        return true;
+      } catch (e) {
+        return false;
+      }
+    },
     kvTable: kvTable,
 
     /** Re-draw the one action row (after an in-place open). */
@@ -2652,8 +2914,12 @@
       resultListeners.push(function (envelope) {
         lastEnvelope = envelope;
         // A previous terminal line's "nothing to open" is not this
-        // result's; the card re-declares it if it holds.
-        if (document.body) document.body.removeAttribute("data-no-hero");
+        // result's; the card re-declares it if it holds. Nor is a
+        // previous draw's failure.
+        if (document.body) {
+          document.body.removeAttribute("data-no-hero");
+          document.body.removeAttribute("data-render-error");
+        }
         if (isEmptyResult(envelope)) {
           renderTerminal(null);
           return;
@@ -2673,7 +2939,12 @@
         // turn (BUILD §2.9).
         electFrom(envelope);
         renderLinkRow(envelope);
-        cb(envelope);
+        try {
+          cb(envelope);
+        } catch (e) {
+          logRenderError(e);
+          renderDrawFailed(envelope);
+        }
       });
       watchSize();
       if (isOpenAI) readOpenAIGlobals();
@@ -2698,4 +2969,225 @@
   };
 
   window.KeelHost = KeelHost;
+  KeelHost.drawMulti = (function (H) {
+    var F = H.fmt;
+    var SVG_NS = "http://www.w3.org/2000/svg";
+    function svg(tag, attrs, cls) {
+      var node = document.createElementNS(SVG_NS, tag);
+      if (attrs) {
+        Object.keys(attrs).forEach(function (k) {
+          node.setAttribute(k, attrs[k]);
+        });
+      }
+      if (cls) node.setAttribute("class", cls);
+      return node;
+    }
+
+    function text(x, y, str, attrs, cls) {
+      var t = svg("text", attrs, cls);
+      t.setAttribute("x", x);
+      t.setAttribute("y", y);
+      t.textContent = str;
+      return t;
+    }
+
+    function ticks(lo, hi, count) {
+      if (!(hi > lo)) return [lo];
+      var raw = (hi - lo) / count;
+      var mag = Math.pow(10, Math.floor(Math.log(raw) / Math.LN10));
+      var norm = raw / mag;
+      var step = (norm >= 5 ? 10 : norm >= 2 ? 5 : norm >= 1 ? 2 : 1) * mag;
+      var out = [];
+      for (var v = Math.ceil(lo / step) * step; v <= hi + 1e-9; v += step) {
+        out.push(Math.round(v / step) * step);
+      }
+      return out.length ? out : [lo, hi];
+    }
+    function drawMulti(container, series, opts, width) {
+      container.textContent = "";
+      if (!series.length) return;
+      var W = Math.max(240, Math.floor(width || container.clientWidth || 600));
+      var tall = !!opts.tall;
+      var padL = 44;
+      var padR = 10;
+      var padT = 10;
+      var gap = 14;
+      var padB = 18;
+      var eqH = tall ? 280 : W < 420 ? 130 : 170;
+      var ddH = opts.dd ? (tall ? 96 : W < 420 ? 48 : 60) : 0;
+      var Hgt = padT + eqH + (opts.dd ? gap + ddH : 0) + padB;
+      var plotW = W - padL - padR;
+
+      var t0 = Infinity;
+      var t1 = -Infinity;
+      var lo = Infinity;
+      var hi = -Infinity;
+      var ddMin = 0;
+      series.forEach(function (s) {
+        s.pts.forEach(function (p) {
+          if (p.t < t0) t0 = p.t;
+          if (p.t > t1) t1 = p.t;
+          if (opts.gaps && p.equity == null) return;
+          if (p.equity < lo) lo = p.equity;
+          if (p.equity > hi) hi = p.equity;
+          if (p.dd < ddMin) ddMin = p.dd;
+        });
+      });
+      if (hi === lo) {
+        hi += 1;
+        lo -= 1;
+      }
+      var pad = (hi - lo) * 0.06;
+      var yLo = lo - pad;
+      var yHi = hi + pad;
+      if (ddMin > -0.5) ddMin = -0.5;
+
+      function X(t) {
+        return padL + (t1 === t0 ? 0 : ((t - t0) / (t1 - t0)) * plotW);
+      }
+      function Y(v) {
+        if (opts.y_scale === "log")
+          return (
+            padT +
+            eqH -
+            ((Math.log(v) - Math.log(lo)) / (Math.log(hi) - Math.log(lo))) * eqH
+          );
+        return padT + eqH - ((v - yLo) / (yHi - yLo)) * eqH;
+      }
+      var ddTop = padT + eqH + gap;
+      function YD(d) {
+        return ddTop + (d / ddMin) * ddH;
+      }
+
+      // The shaded spans: union minus the common window, in plot pixels.
+      var shade = [];
+      var ov = opts.overlap;
+      if (ov && t1 > t0) {
+        var a = Math.max(t0, Math.min(t1, ov.t0));
+        var b = Math.max(t0, Math.min(t1, ov.t1));
+        if (a > t0) shade.push([t0, a]);
+        if (b < t1) shade.push([b, t1]);
+      }
+      var root = svg("svg", {
+        viewBox: "0 0 " + W + " " + Hgt,
+        width: "100%",
+        height: Hgt,
+        role: "img",
+        // The label carries the READING, not the chart's name (Q-1633).
+        "aria-label":
+          opts.label ||
+          series.length +
+            " equity curves overlaid over " +
+            H.fmtPeriod(new Date(t0), new Date(t1)) +
+            ". " +
+            series[0].label +
+            " is the baseline and is drawn heaviest." +
+            (shade.length
+              ? " Shaded: dates not every run covers; every run covers " +
+                H.fmtPeriod(new Date(ov.t0), new Date(ov.t1)) +
+                "."
+              : ""),
+      });
+      var paneH = eqH + (opts.dd ? gap + ddH : 0);
+      shade.forEach(function (span) {
+        var x0 = X(span[0]);
+        var w = Math.max(1, X(span[1]) - x0);
+        root.appendChild(
+          svg(
+            "rect",
+            { x: x0.toFixed(1), y: padT, width: w.toFixed(1), height: paneH },
+            "outside",
+          ),
+        );
+      });
+      var grid = svg("g", null, "grid");
+      var axis = svg("g", null, "axis");
+      // One format for the whole value axis (Q-1802): 5k · 10k · 15k.
+      var yt = ticks(yLo, yHi, 3).filter(function (v) {
+        var y = Y(v);
+        return y >= padT - 1 && y <= padT + eqH + 1;
+      });
+      var yl = H.fmtAxisValues(yt);
+      yt.forEach(function (v, j) {
+        var y = Y(v);
+        grid.appendChild(svg("line", { x1: padL, x2: W - padR, y1: y, y2: y }));
+        axis.appendChild(
+          text(padL - 6, y + 3.5, yl[j], { "text-anchor": "end" }),
+        );
+      });
+      if (opts.dd) {
+        grid.appendChild(
+          svg("line", { x1: padL, x2: W - padR, y1: ddTop, y2: ddTop }),
+        );
+        axis.appendChild(
+          text(padL - 6, ddTop + 3.5, "0%", { "text-anchor": "end" }),
+        );
+        axis.appendChild(
+          text(padL - 6, ddTop + ddH + 3.5, F.drawdown(ddMin, { dp: 0 }).text, {
+            "text-anchor": "end",
+          }),
+        );
+        axis.appendChild(
+          text(
+            W - padR,
+            ddTop + 11,
+            "drawdown",
+            { "text-anchor": "end" },
+            "pane-label",
+          ),
+        );
+      }
+      var n = W < 420 ? 3 : 4;
+      var xt = [];
+      for (var i = 0; i < n; i++) xt.push(t0 + (t1 - t0) * (i / (n - 1)));
+      // One format for the whole axis (Q-1783): "Aug 2024 · Apr 2025 ·
+      // Jan 2026 · Sep 2026", never "Aug 9, 2024 · Apr 24 · Jan 6".
+      var xl = H.fmtAxisDates(xt);
+      xt.forEach(function (t, j) {
+        axis.appendChild(
+          text(X(t), Hgt - 4, xl[j], {
+            "text-anchor": j === 0 ? "start" : j === n - 1 ? "end" : "middle",
+          }),
+        );
+      });
+      root.appendChild(grid);
+      root.appendChild(axis);
+
+      // Drawn back to front so the baseline — the heaviest line and the
+      // one every delta is against — is on top.
+      series
+        .slice()
+        .reverse()
+        .forEach(function (s) {
+          var d = "";
+          var dd = "";
+          var pen = false;
+          s.pts.forEach(function (p, i) {
+            if (opts.gaps && p.equity == null) {
+              pen = false;
+              return;
+            }
+            var x = X(p.t).toFixed(1);
+            d +=
+              ((opts.gaps ? pen : i) ? "L" : "M") +
+              x +
+              "," +
+              Y(p.equity).toFixed(1);
+            dd += (i ? "L" : "M") + x + "," + YD(p.dd).toFixed(1);
+            pen = true;
+          });
+          var attrs = { d: d, stroke: s.stroke };
+          if (s.dash) attrs["stroke-dasharray"] = s.dash;
+          root.appendChild(svg("path", attrs, "ml" + (s.base ? " base" : "")));
+          if (opts.dd) {
+            var a2 = { d: dd, stroke: s.stroke };
+            if (s.dash) a2["stroke-dasharray"] = s.dash;
+            root.appendChild(svg("path", a2, "mdd"));
+          }
+        });
+      container.appendChild(root);
+    }
+
+    return drawMulti;
+  })(window.KeelHost);
 })();

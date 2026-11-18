@@ -79,6 +79,8 @@ def _bootstrap() -> None:
         backtest_run,
         backtest_summarize,
         backtest_watch,
+        blocks_get,
+        blocks_search,
         components_detail_batch,
         components_help,
         components_search,
@@ -95,6 +97,28 @@ def _bootstrap() -> None:
         open_in_app,
         ownership_status,
         plan_status,
+        research_brief,
+        research_cancel,
+        research_cli,
+        research_get,
+        research_make_signal,
+        research_note,
+        research_plan,
+        research_run,
+        research_view_set,
+        screener_action,
+        screener_copy,
+        screener_describe,
+        screener_follow,
+        screener_follow_view_set,
+        screener_list,
+        screener_passing,
+        screener_publish,
+        screener_refresh,
+        screener_run,
+        screener_unpublish,
+        screener_view,
+        screener_view_set,
         share_create,
         status,
         strategy_checkout,
@@ -113,6 +137,10 @@ def _bootstrap() -> None:
         strategy_status,
         strategy_upgrade,
         strategy_workspaces,
+        use_detach,
+        use_preview,
+        use_upgrade,
+        view_describe,
     )
     from . import help as _help
 
@@ -161,7 +189,9 @@ def paper_deploy_loaded(active_toolsets: frozenset[str] | None = None) -> bool:
     if tool is None:  # the held SDK registers no paper tool
         return False
     active = load_toolsets() if active_toolsets is None else active_toolsets
-    return is_tool_loaded(tool.toolset, active, local_only=tool.local_only, name=tool.name)
+    return is_tool_loaded(
+        tool.toolset, active, local_only=tool.local_only, name=tool.name, cli_only=tool.cli_only
+    )
 
 
 _BOOTSTRAPPED = False

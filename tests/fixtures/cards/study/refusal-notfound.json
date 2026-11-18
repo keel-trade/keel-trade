@@ -1,0 +1,33 @@
+{
+  "_meta": {
+    "keel/card": {},
+    "ui": {
+      "resourceUri": "ui://keel/cards/study.html"
+    }
+  },
+  "content": [
+    {
+      "text": "There is no study with that id that you can read.\nA study id you can read; keel_research_get with no id lists your studies. keel_research_get()\nView in Keel: https://app.usekeel.io/research/stu_000013\n\n{\"code\": \"not_found\", \"message\": \"There is no study with that id that you can read.\", \"what_was_expected\": \"A study id you can read; keel_research_get with no id lists your studies.\", \"example\": {}, \"suggested_next_action\": {\"tool\": \"keel_research_get\", \"args\": {}, \"reason\": \"A study id you can read; keel_research_get with no id lists your studies.\"}, \"detail\": {\"code\": \"RESEARCH_STUDY_NOT_FOUND\", \"links\": {\"app\": \"https://app.usekeel.io/research/stu_000013\"}}, \"exit_code\": 3, \"retryable\": false}",
+      "type": "text"
+    }
+  ],
+  "structuredContent": {
+    "code": "not_found",
+    "detail": {
+      "code": "RESEARCH_STUDY_NOT_FOUND",
+      "links": {
+        "app": "https://app.usekeel.io/research/stu_000013"
+      }
+    },
+    "example": {},
+    "exit_code": 3,
+    "message": "There is no study with that id that you can read.",
+    "retryable": false,
+    "suggested_next_action": {
+      "args": {},
+      "reason": "A study id you can read; keel_research_get with no id lists your studies.",
+      "tool": "keel_research_get"
+    },
+    "what_was_expected": "A study id you can read; keel_research_get with no id lists your studies."
+  }
+}

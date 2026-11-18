@@ -51,6 +51,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from keel.api_path import seg
 from keel.errors import (
     PAPER_NOT_ENABLED_CODE,
     ConflictError,
@@ -62,6 +63,7 @@ from keel.errors import (
 
 from . import register
 from ._base import OutcomeResult, OutcomeTool, ToolContext
+from ._paper_card import paper_card_block
 from ._paper_guard import other_class_refusal, paper_server_error
 from ._paper_status import paper_status_word
 from ._paper_strings import (
@@ -71,6 +73,8 @@ from ._paper_strings import (
     MONITOR_PAPER_LABEL,
 )
 from ._toolsets import is_listed_profile
+from .backtest_run import served_quota_fields
+from .live_control import carries_run_block, run_block
 from .open_in_app import app_url_for
 
 
@@ -295,7 +299,7 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
     method, suffix = _ACTIONS[action]
     client = ctx.get_client()
     try:
-        result = _call(client, method, f"/v1/paper/{deployment_id}{suffix}")
+        result = _call(client, method, f"/v1/paper/{seg(deployment_id)}{suffix}")
     except EntitlementError as e:
         # The permission arm and the neutral quota wall (§3.2.4, §3.6).
         from ._paper_walls import paper_wall
@@ -371,6 +375,12 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
                 # The id this call restarted (PT2-9); the route echoes it too.
                 "restarted_from": deployment_id,
                 "result": _status_fields(result),
+                # RF-80.4: the restart trades at once; present only when the route sent it.
+                **({"run": run_block(result)} if carries_run_block(result) else {}),
+                # The last paper slot taken (doc 07 §5): the notice, names only.
+                **served_quota_fields(result.get("quota")),
+                # The card's receipt (Q-7603), card-only under the card-meta arm.
+                "render": paper_card_block(result, state=_new_state(action, result)),
             },
         )
 
@@ -387,6 +397,12 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
         # as the route sent it.
         extra["version"] = (result or {}).get("deployed_version_string")
     extra["result"] = _status_fields(result)
+    if action == "resume" and carries_run_block(result):
+        # RF-80.4: the resume trades at once; the run it requested.
+        extra["run"] = run_block(result)
+    # The card's receipt (Q-7603), card-only under the card-meta arm. A stop
+    # answers 204, so its receipt carries the state alone.
+    extra["render"] = paper_card_block(result, state=extra["new_state"])
     return OutcomeResult(run_id=deployment_id, hero_url=url, share_url=None, extra=extra)
 
 
@@ -398,7 +414,7 @@ PAPER_CONTROL_DESCRIPTION = (
     "strategy's newest saved version: the run keeps its id and record, is relabelled "
     "with the new version, and the result carries `version`; an update onto the version "
     "it already runs is refused with paper_run_up_to_date. Stopping frees the run's paper "
-    "slot; restarting reuses it. Each call changes the run once; a repeated call is "
+    "slot; ask the user before stopping a run to make room for another. Restarting reuses it. Each call changes the run once; a repeated call is "
     "refused with paper_run_state_conflict when the run is already in that state. This "
     "tool never touches live deployments: a live deployment is refused with "
     "invalid_target, and `keel_live_control` controls those. Get the `deployment_id` from "
@@ -415,7 +431,7 @@ PAPER_CONTROL_LISTED_DESCRIPTION = (
     "real orders are placed and no real capital is at risk. `update` moves the run onto "
     "the strategy's newest saved version and keeps its record; `restart` starts a fresh "
     "record of the same version; `stop` ends the record for good and frees its paper "
-    "slot. A repeated call is refused when the run is already in that state. Running a "
+    "slot; ask the user first. A repeated call is refused when the run is already in that state. Running a "
     "strategy with real capital is a step you take in the Keel web app. The run's id "
     "comes from `keel_paper_deploy` or `keel_live_monitor`, which also reads the run."
 )
@@ -455,6 +471,7 @@ PAPER_CONTROL = register(
     OutcomeTool(
         name="keel_paper_control",
         required_action="backtest.create",
+        rate_tier="mutation",
         cli_path=("paper", "control"),
         toolset="paper",
         # grounded-in: system/operating_core.md:116-125 (the `live` section:

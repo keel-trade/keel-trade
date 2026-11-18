@@ -7,6 +7,7 @@ Covers `keel_backtest_run` (submit + optional polling) and
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from unittest.mock import patch
 
@@ -23,6 +24,8 @@ from keel.tools.outcomes import backtest_watch as _bt_watch_mod  # noqa: F401
 from keel.tools.outcomes._base import ToolContext
 
 from pipeline_engine.backtest_config import BacktestConfig
+
+from . import _plan_catalog as cat
 
 
 # ─── shared fixtures ─────────────────────────────────────────────────────
@@ -1151,6 +1154,58 @@ def test_backtest_run_other_window_refusals_carry_no_invented_next_call(ctx):
     assert env["detail"]["code"] == "WINDOW_EMPTY"
 
 
+def test_backtest_run_too_large_suggests_the_longest_window_that_fits(ctx):
+    """Q-3316: of the three fits keel-api names, only the window changes THIS
+    call, so the next action is the same run over the server's fitting window,
+    verbatim (never a window the SDK computed)."""
+    refusal = _window_422(
+        "BACKTEST_TOO_LARGE",
+        "This backtest is too large to run. Try one of: up to 98 symbols at 5min over "
+        "this window, 15min bars for all 197 symbols, or a shorter window of up to 292 "
+        "days (from 2026-01-09).",
+        remedy={
+            "max_symbols": 98,
+            "finest_fitting_timeframe": "15min",
+            "max_window_days": 292,
+            "max_window_start_date": "2026-01-09",
+            "max_window_end_date": "2026-10-28",
+        },
+    )
+    with patch("keel.client.KeelClient.post", side_effect=refusal):
+        with pytest.raises(KeelError) as exc:
+            OUTCOMES["keel_backtest_run"].handler(
+                {"strategy_id": "strat_xyz", "start_date": "2025-03-24", "end_date": "2026-10-28"},
+                ctx,
+            )
+    env = exc.value.to_envelope()
+    assert env["code"] == "BACKTEST_TOO_LARGE"
+    assert env["suggested_next_action"]["tool"] == "keel_backtest_run"
+    assert env["suggested_next_action"]["args"] == {
+        "strategy_id": "strat_xyz",
+        "start_date": "2026-01-09",
+        "end_date": "2026-10-28",
+    }
+
+
+def test_backtest_run_too_large_with_no_fitting_window_names_no_next_call(ctx):
+    """Control arm: when no window fits (the remedy carries none), the refusal
+    re-raises with no invented call."""
+    refusal = _window_422(
+        "BACKTEST_TOO_LARGE",
+        "This backtest is too large to run. Try 1h bars for all 197 symbols.",
+        remedy={"finest_fitting_timeframe": "1h"},
+    )
+    with patch("keel.client.KeelClient.post", side_effect=refusal):
+        with pytest.raises(KeelError) as exc:
+            OUTCOMES["keel_backtest_run"].handler(
+                {"strategy_id": "strat_xyz", "start_date": "2025-03-24", "end_date": "2026-10-28"},
+                ctx,
+            )
+    env = exc.value.to_envelope()
+    assert env["suggested_next_action"]["tool"] is None
+    assert env["code"] == "BACKTEST_TOO_LARGE"
+
+
 def test_backtest_summarize_404_raises_NotFoundError(ctx):
     """Missing backtest_id surfaces NotFoundError (exit_code=3)."""
     with patch(
@@ -1365,9 +1420,7 @@ def test_backtest_run_renders_one_sentence_from_the_served_quota_block(ctx):
             "resets_at": "2026-09-22T00:00:00Z",
         }
     ], "the served block rides through projected to its allow-list"
-    assert env["quota_notice"] == (
-        "6 of 50 backtests left this week; they reset Tue 22 Sep 00:00 UTC."
-    )
+    assert env["quota_notice"] == "6 of 50 backtests left; resets Tue 22 Sep."
 
 
 def test_backtest_run_headline_is_the_most_urgent_unit(ctx):
@@ -1389,7 +1442,7 @@ def test_backtest_run_headline_is_the_most_urgent_unit(ctx):
             .handler({"strategy_id": "strat_xyz", "wait": False, "skip_readiness": True}, ctx)
             .to_envelope()
         )
-    assert env["quota_notice"].startswith("50 of 1500 backtest compute time left this week")
+    assert env["quota_notice"].startswith("50 s of 1,500 s backtest compute time left;")
     assert len(env["quota"]) == 2
 
 
@@ -1420,51 +1473,87 @@ def test_backtest_run_quota_survives_the_wait_path(ctx):
             .to_envelope()
         )
     assert env["status"] == "completed"
-    assert env["quota_notice"].startswith("6 of 50 backtests left this week")
+    assert env["quota_notice"].startswith("6 of 50 backtests left;")
 
 
-def test_backtest_run_critical_notice_is_the_same_line_for_every_plan(ctx):
-    """D-12 §4.2: near the wall the server attaches `plan` and the plans
-    with a higher limit (`higher_plans`, D-10) — the notice renders NEITHER.
-    It is the one line, identical for the free plan and a paid one, and the
-    projected `quota` carries no `plan`/`higher_plans`.
+def test_backtest_run_critical_notice_names_the_plans_that_include_more(ctx):
+    """doc 07 §5 (founder Q2/Q3): near the wall keel-api attaches `plan` and
+    `higher_plans` (names AND limits, D-10). The notice names the plans —
+    computed here from plans.yaml for each v2 plan — and none of their
+    numbers; the projected `quota` carries the names as `more_plans` only.
 
-    SEEDS (run 2026-09-28, each reverted by reversing the edit): append
-    "Plans are listed at <billing link>." to the notice (bypassing the D-12
-    scan) — the equality reds while the most-urgent-unit test stays green;
-    restore the passthrough (`"quota": notable`) — this and the
-    one-sentence test red while the omit-when-nothing-notable control
-    stays green."""
-    paths = [
-        {"plan": "starter", "limit": 500, "period": "weekly"},
-        {"plan": "trader", "unlimited": True},
-    ]
-    notices = {}
-    for plan in ("free", "starter"):
-        submitted = {
-            "id": "bt_q5",
-            "status": "queued",
-            "quota": [
-                _quota_block(tier="critical", used=46, remaining=4, plan=plan, higher_plans=paths)
-            ],
-        }
-        with patch("keel.client.KeelClient.post", return_value=submitted):
-            env = (
-                OUTCOMES["keel_backtest_run"]
-                .handler({"strategy_id": "strat_xyz", "wait": False, "skip_readiness": True}, ctx)
-                .to_envelope()
+    SEEDS (run 2026-11-16, each reverted by reversing the edit): drop the
+    tier gate in `render_quota_notice` — the notice-tier control below reds;
+    restore the passthrough (`"quota": notable`) — the key-set and
+    no-numbers assertions red."""
+    from keel.errors import more_clause
+
+    for plan in ("free", "trader", "pro"):
+        higher = cat.higher_plans(plan, "backtest_runs")
+        for entry in higher:
+            entry["limit"] = int(cat._value(entry["plan"], entry["version"], "backtest_runs"))
+        block = _quota_block(tier="critical", used=46, remaining=4, plan=plan, higher_plans=higher)
+        env = _submit(ctx, [block])
+        more = more_clause("consumable", cat.names(higher))
+        expected = "4 of 50 backtests left; resets Tue 22 Sep." + (f" {more}" if more else "")
+        assert env["quota_notice"] == expected, plan
+        blob = json.dumps(env)
+        assert "higher_plans" not in blob
+        assert not re.search(r"\b(?:1,?000|4,?000)\b", blob), "no other plan's number"
+        keys = {"unit", "limit", "used", "remaining", "resets_at"}
+        assert set(env["quota"][0]) == (keys | {"more_plans"} if higher else keys), plan
+    # Control: the 50% notice stays a bare count, even with names served.
+    notice = _submit(
+        ctx,
+        [
+            _quota_block(
+                tier="notice", plan="free", higher_plans=cat.higher_plans("free", "backtest_runs")
             )
-        notices[plan] = env["quota_notice"]
-        assert set(env["quota"][0]) == {"unit", "limit", "used", "remaining", "resets_at"}
-        assert "higher_plans" not in json.dumps(env) and "Starter" not in json.dumps(env)
-    assert (
-        notices["free"]
-        == notices["starter"]
-        == ("4 of 50 backtests left this week; they reset Tue 22 Sep 00:00 UTC.")
+        ],
     )
+    assert notice["quota_notice"] == "6 of 50 backtests left; resets Tue 22 Sep."
     from keel.tools.outcomes._handoff import _FORBIDDEN_UPSELL_RE
 
-    assert not _FORBIDDEN_UPSELL_RE.search(notices["free"]), "facts, not a pitch (D-12 guard)"
+    assert not _FORBIDDEN_UPSELL_RE.search(env["quota_notice"]), "facts, not a pitch"
+
+
+def test_backtest_run_carries_the_timeframe_floor_heads_up(ctx):
+    """doc 07 §5 (founder Q4): a submit whose strategy is faster than the
+    caller's paper/live floor carries `serving_floor`, and the run says so.
+    Control: a submit without it carries no `floor_notice`."""
+    faster = cat.faster_plans("free")
+    for entry in faster:
+        entry["floor"] = cat.floor_of(entry["plan"])
+    submitted = {
+        "id": "bt_floor",
+        "status": "queued",
+        "strategy_id": "strat_xyz",
+        "serving_floor": {
+            "floor": "1h",
+            "requested": "15min",
+            "plan": "free",
+            "plan_name": "Free",
+            "higher_plans": faster,
+        },
+    }
+    with patch("keel.client.KeelClient.post", return_value=submitted):
+        env = (
+            OUTCOMES["keel_backtest_run"]
+            .handler({"strategy_id": "strat_xyz", "wait": False, "skip_readiness": True}, ctx)
+            .to_envelope()
+        )
+    assert env["floor_notice"] == (
+        "Note: paper and live on Free need 1h or slower; this is 15min. Trader and Pro run faster."
+    )
+    assert '"5min"' not in json.dumps(env) and "serving_floor" not in env
+    plain = {"id": "bt_ok", "status": "queued", "strategy_id": "strat_xyz"}
+    with patch("keel.client.KeelClient.post", return_value=plain):
+        env = (
+            OUTCOMES["keel_backtest_run"]
+            .handler({"strategy_id": "strat_xyz", "wait": False, "skip_readiness": True}, ctx)
+            .to_envelope()
+        )
+    assert "floor_notice" not in env
 
 
 def test_backtest_run_quota_notice_never_invents_numbers(ctx):
@@ -1498,7 +1587,10 @@ _FIRST_WEEK = {
     "grant_id": "grt_unreviewed",
 }
 
-_FIRST_WEEK_SENTENCE = "40 of 200 first-week backtests left; they end Tue 13 Oct 15:02 UTC."
+#: The clause `_FIRST_WEEK` folds into a backtests line (Q-7601 fix round),
+#: computed from it; the exact words are pinned once in
+#: test_plan_limits_first_week_golden.py.
+_FIRST_WEEK_CLAUSE = f"({_FIRST_WEEK['remaining']} first-week extras until Tue 13 Oct)"
 
 
 def _submit(ctx, quota: list[dict]) -> dict:
@@ -1512,15 +1604,14 @@ def _submit(ctx, quota: list[dict]) -> dict:
 
 
 def test_first_week_rides_a_notice_that_renders_without_it(ctx):
-    """Spec 01 §1.9: the sentence follows the quota line it rides, verbatim,
-    and the block's `first_week` is projected to granted/remaining/ends_at."""
+    """Spec 01 §1.9 / Q-7601: the clause is folded into the quota line it
+    rides, and the block's `first_week` is projected to granted/remaining/ends_at."""
     runs = _quota_block(
         limit=250, used=210, remaining=40, tier="critical", first_week=dict(_FIRST_WEEK)
     )
     env = _submit(ctx, [runs])
     assert env["quota_notice"] == (
-        "40 of 250 backtests left this week; they reset Tue 22 Sep 00:00 UTC. "
-        + _FIRST_WEEK_SENTENCE
+        f"40 of 250 backtests left {_FIRST_WEEK_CLAUSE}; resets Tue 22 Sep."
     )
     assert env["quota"][0]["first_week"] == {
         "granted": 200,
@@ -1566,7 +1657,7 @@ def test_first_week_below_the_runs_threshold_adds_nothing(ctx):
     )
     env = _submit(ctx, [compute])
     assert env["quota_notice"] == (
-        "600 of 7500 backtest compute time left this week; they reset Tue 22 Sep 00:00 UTC."
+        "600 s of 7,500 s backtest compute time left; resets Tue 22 Sep."
     )
     assert "first-week" not in json.dumps(env)
 
@@ -1589,15 +1680,13 @@ def test_no_first_week_block_leaves_the_notice_unchanged(ctx):
     """Control arm: the same critical block without `first_week` renders the
     pre-existing line and the pre-existing projection, byte for byte."""
     env = _submit(ctx, [_quota_block(limit=250, used=210, remaining=40, tier="critical")])
-    assert env["quota_notice"] == (
-        "40 of 250 backtests left this week; they reset Tue 22 Sep 00:00 UTC."
-    )
+    assert env["quota_notice"] == "40 of 250 backtests left; resets Tue 22 Sep."
     assert set(env["quota"][0]) == {"unit", "limit", "used", "remaining", "resets_at"}
 
 
 def test_headroom_blocks_carry_first_week_from_the_entitlements_read():
     """The compare-hint headroom arm reads `/v1/entitlements`, whose balances
-    carry `first_week` (§1.8); the notice it renders rides the sentence."""
+    carry `first_week` (§1.8); the notice it renders folds the clause in."""
     from keel.tools.outcomes.backtest_run import _headroom_blocks, _quota_envelope_fields
 
     class _Client:
@@ -1618,9 +1707,8 @@ def test_headroom_blocks_carry_first_week_from_the_entitlements_read():
             }
 
     fields = _quota_envelope_fields(_headroom_blocks(_Client()))
-    # A balance carries no label, so the unit name reads mechanically.
+    # A balance carries no label, so the unit table's row names it.
     assert fields["quota_notice"] == (
-        "40 of 250 backtest runs left this week; they reset Tue 22 Sep 00:00 UTC. "
-        + _FIRST_WEEK_SENTENCE
+        f"40 of 250 backtests left {_FIRST_WEEK_CLAUSE}; resets Tue 22 Sep."
     )
     assert fields["quota"][0]["first_week"]["remaining"] == 40

@@ -419,3 +419,62 @@ def test_the_card_meta_arm_keeps_the_live_monitor_shape(monkeypatch) -> None:
     # partitioned envelope too — the series lives in the card alone.
     assert result.content[0].text == result.structured_content["result"]
     assert "curve" not in json.loads(result.content[0].text)
+
+
+def test_a_screen_result_partitions_without_undeclared_field_warnings(caplog):
+    """L13: every screen call logged ~14 "no declared home" warnings (the
+    screener spec declares `view` whole). A bare `view` row now claims the
+    object, and `view_source` has its home.
+
+    # SEED (L13): drop the bare-`view` rule in `_channels.unassigned_paths` —
+    # this reds with the view.* warnings. Reverse the edit."""
+    import json
+    import logging
+    from pathlib import Path
+
+    from keel.tools.outcomes._base import ToolContext
+    from keel.tools.outcomes._channels import partition
+    from keel.tools.outcomes._screener_view import build_result
+
+    envelope = json.loads(
+        (Path(__file__).parent / "fixtures/cards/screener_fallback.json").read_text()
+    )
+    extra = build_result(envelope, ToolContext()).extra
+    extra["view_source"] = {"source": "x", "revision": 1, "revisions": []}
+    # Non-vacuous: the result really carries a view with members.
+    assert len(extra["view"]) >= 5
+    with caplog.at_level(logging.WARNING):
+        structured, _card = partition(extra, "screener", move_card=False)
+    assert "no declared home" not in caplog.text
+    assert structured["view_source"]["revision"] == 1
+
+
+def test_d352_a_study_answer_carries_no_null_member_in_structured_content() -> None:
+    """D-352 (5): CARDUI measured six real fixtures over 13 §3.5's 8,000 B, 125 B of each chk_v3 read being
+    ``prop_target_words: null`` on every check row. A null member of any object leaves the study kind's
+    structuredContent; a null inside a list keeps its place, and the card dict is untouched. SEED (reversed):
+    ``omit_nulls=True`` removed from ``_STUDY`` -> this reds. Control: an error envelope rides whole, nulls kept."""
+    from keel.tools.outcomes._channels import partition
+
+    envelope = {
+        "study": {"study_id": "stu_x", "title": "T", "share_id": None},
+        "checks": {"rows": [{"label": "a", "prop_target_words": None, "value": 1}], "total": 1},
+        "links": {"app": "https://app.usekeel.io/research/stu_x", "share": None},
+        "notes": [None, {"kind": "decision", "id": None}],
+        "card_data": {"key": None, "rows": []},
+        "view": {"kind": "study", "size": "view", "mode": "study", "markdown": "x"},
+    }
+    structured, card = partition(envelope, "study", move_card=True)
+    text = json.dumps(structured)
+    assert "null" not in text.replace("[null", "["), text  # no null member anywhere
+    assert structured["study"] == {"study_id": "stu_x", "title": "T"}
+    assert structured["links"] == {"app": "https://app.usekeel.io/research/stu_x"}
+    assert card["card_data"] == {"key": None, "rows": []}  # the card's own dict keeps what it was served
+    error = {
+        "code": "usage_error",
+        "message": "m",
+        "what_was_expected": None,
+        "suggested_next_action": {"tool": None, "args": {}},
+        "detail": {"x": None},
+    }
+    assert partition(error, "study")[0] == error  # control

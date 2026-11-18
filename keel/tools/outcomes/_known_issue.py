@@ -25,6 +25,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from keel.api_path import seg
 from keel.errors import KeelError
 
 
@@ -278,7 +279,7 @@ def head_upgrade_lock(
     if base_lock is not None and not _pins_a_recipe_component(base_lock):
         return None
     try:
-        head = client.get(f"/v1/strategies/{strategy_id}/versions/HEAD/source")
+        head = client.get(f"/v1/strategies/{seg(strategy_id)}/versions/HEAD/source")
     except Exception:  # noqa: BLE001 — advisory read; the save keeps its pins
         return None
     if not isinstance(head, dict) or not isinstance(head.get("source"), str):

@@ -15,6 +15,8 @@ import copy
 import math
 import re
 import sys
+from collections.abc import Mapping
+from dataclasses import replace
 from typing import Any, Callable, Iterator
 
 from pipeline_engine.base.registry import ParamTier
@@ -29,9 +31,13 @@ from pipeline_engine.dsl.catalog import (
     STAGED_CHANGES,
     Applicability,
     CatalogError,
+    Rule,
     RuleCategory,
     Stage,
     _template_placeholders,
+    active_file_kind,
+    file_kind_scope,
+    rule_applies,
     severity_for,
 )
 from pipeline_engine.dsl.component_names import (
@@ -48,6 +54,7 @@ from pipeline_engine.dsl.spec import (
     EXECUTION_VALID_REBALANCE_METHOD,
     LOADER_MARKET_FIELDS,
     MISSING,
+    OUTPUTS_MAX,
     UNIVERSE_FIELD_ALIASES,
     ComponentRef,
     ExecutionSpec,
@@ -64,6 +71,7 @@ from pipeline_engine.dsl.spec import (
     UniverseSpec,
     VariableAssignment,
     VariableRef,
+    file_kind,
     unsupported_market_params,
 )
 from pipeline_engine.dsl.trace_shim import (
@@ -270,9 +278,19 @@ def emit(
     valid_options: tuple = (),
     suggested_edit: Any = None,
     applicability_override: str | None = None,
+    template_context: dict[str, Any] | None = None,
+    rules: Mapping[str, Rule] | None = None,
     **params: Any,
 ) -> None:
     """Append a catalog-rendered :class:`ValidationIssue` (spec 02 §2.1).
+
+    ``rules`` is the rule set the code is looked up in (Research 00 §G13,
+    RL-88 §2). ``None``, the default, is the pipeline catalog's module
+    :data:`~pipeline_engine.dsl.catalog.RULES`, read at call time, so every
+    existing site and every test that swaps a ``RULES`` entry is unchanged.
+    Another rule set (the study catalog) passes its own validated mapping and
+    renders through this one ``emit``: the same severity policy, strict
+    templates and staged-change logic, never a copy.
 
     Code, severity, and message/suggestion text render from the rule catalog
     (``pipeline_engine.dsl.catalog``) — severity is POLICY, never a per-site
@@ -308,11 +326,17 @@ def emit(
     ``recoverable`` and ``staging`` are STAMPED from the catalog (the
     dropped-applicability fix); ``tier`` is always ``"static"`` here.
     """
-    rule = RULES.get(code)
+    rule = (RULES if rules is None else rules).get(code)
     if rule is None:
         raise CatalogError(
             f"emit(): unknown issue code {code!r} — add the catalog entry "
             f"in dsl/catalog.py first (spec 02 §1.4 standing intake rule)."
+        )
+
+    kind = active_file_kind()
+    if kind is not None and kind not in rule.applies_to:
+        raise CatalogError(
+            f"emit({code}): applies_to={rule.applies_to} but the subject is a {kind}; guard the emitting site with rule_applies()"
         )
 
     # Severity resolves in ONE function (spec 05 §2.2): context/declared
@@ -341,6 +365,13 @@ def emit(
     # passthrough (path/span/provenance/valid_options/suggested_edit) is
     # envelope-only and never a template placeholder.
     render_ns = dict(params)
+    if template_context is not None:
+        duplicate = render_ns.keys() & template_context.keys()
+        if duplicate:
+            raise CatalogError(
+                f"emit({code}): duplicate template context keys: {sorted(duplicate)}"
+            )
+        render_ns.update(template_context)
     for _name, _val in (("expected", expected), ("actual", actual)):
         if _name in required and _name not in render_ns and _val is not None:
             render_ns[_name] = _val.declared if isinstance(_val, TypeRef) else _val
@@ -447,6 +478,8 @@ def validate_strategy(
     *,
     pre_save: bool = False,
     source: str | None = None,
+    expansions=None,
+    consumer_id: str | None = None,
 ) -> ValidationResult:
     """Validate a parsed StrategyFile against the component registry.
 
@@ -522,26 +555,115 @@ def validate_strategy(
             Ignored under ``production_mode`` — a gate never has a pre-save
             exemption. Default False: every existing caller is unchanged.
     """
-    if trace_sink is None:
-        return _validate_strategy_impl(
-            strategy,
-            lock,
-            production_mode,
-            trace_sink=None,
-            resolution_pin=resolution_pin,
-            pre_save=pre_save,
-            source=source,
-        )
-    with activate_trace_sink(trace_sink):
-        return _validate_strategy_impl(
-            strategy,
-            lock,
-            production_mode,
-            trace_sink=trace_sink,
-            resolution_pin=resolution_pin,
-            pre_save=pre_save,
-            source=source,
-        )
+    from pipeline_engine.pipeline.link import UseLinkError, link_notices, link_uses
+
+    with file_kind_scope(file_kind(strategy)):
+        original = strategy
+        # Q-7058: a Use reference links a stored block's steps in; bound the
+        # count before linking any of them.
+        from pipeline_engine.dsl.use import iter_uses
+
+        n_uses = sum(1 for _ in iter_uses(strategy))
+        if n_uses > PIPELINE_MAX_USES:
+            issues: list[ValidationIssue] = []
+            emit(
+                issues,
+                "PIPELINE_TOO_LARGE",
+                location=_format_location(strategy.pipeline.location),
+                value=f"{n_uses:,}",
+                what="Use references",
+                limit=f"{PIPELINE_MAX_USES:,}",
+            )
+            if trace_sink is not None:
+                trace_sink.finalize("None")
+            return ValidationResult(valid=False, errors=issues, warnings=[], info=[])
+        try:
+            strategy = link_uses(strategy, expansions, consumer_id=consumer_id, consumer_lock=lock)
+        except UseLinkError as exc:
+            issues = list(getattr(exc, "issues", ()))
+            if not issues:
+                params = {
+                    k: v for k, v in exc.context.items() if k in RULES[exc.code].template_params
+                }
+                emit(issues, exc.code, location=_format_location(exc.location), **params)
+            errors, warnings, info = _group_by_severity(issues)
+            if trace_sink is not None:
+                # Linking precedes the pass walk, so its refusal has no steps
+                # or stores. Observe copied definition issues as well as the
+                # link issue and close both trace schemas at the initial fold.
+                for issue in issues:
+                    trace_sink.on_issue(issue.code, issue.severity, issue.location)
+                trace_sink.finalize("None")
+            return ValidationResult(valid=not errors, errors=errors, warnings=warnings, info=info)
+
+        def collect_link_notices():
+            notices = []
+            for notice in link_notices(original, expansions, consumer_lock=lock):
+                emit(
+                    notices,
+                    notice["code"],
+                    location=_format_location(notice["location"]),
+                    path=tuple(notice["path"].split(".")),
+                    **notice["context"],
+                )
+            return notices
+
+        if trace_sink is None:
+            result = _validate_strategy_impl(
+                strategy,
+                lock,
+                production_mode,
+                trace_sink=None,
+                resolution_pin=resolution_pin,
+                pre_save=pre_save,
+                source=source,
+            )
+            notices = collect_link_notices()
+        else:
+            with activate_trace_sink(trace_sink):
+                # The implementation finalizes its sink. Record Use notices
+                # first so they are present in the immutable terminal document.
+                notices = collect_link_notices()
+                result = _validate_strategy_impl(
+                    strategy,
+                    lock,
+                    production_mode,
+                    trace_sink=trace_sink,
+                    resolution_pin=resolution_pin,
+                    pre_save=pre_save,
+                    source=source,
+                )
+        result.info.extend(notices)
+        return cap_issues(result)
+
+
+#: The most issues one validation returns (Q-7067, RV-S §B-12). Real
+#: strategies produce few (the largest count in the corpus and on staging is
+#: 25); a mistyped 1,000-step chain returned 999 TYPE_MISMATCH issues in one
+#: response before this cap. The verdict is decided before the cap.
+ISSUES_MAX = 200
+
+
+def cap_issues(result: ValidationResult) -> ValidationResult:
+    """Keep the first ``ISSUES_MAX - 1`` issues (errors, then warnings, then info) and say so.
+
+    Past the cap, ``ISSUES_TRUNCATED`` (info) closes the list with the total,
+    so a reader sees that issues were dropped and how many. ``valid`` is
+    untouched: it was decided over every error. TS mirror: ``capIssues`` in
+    keel-app's ``validator/index.ts``.
+    """
+    total = len(result.errors) + len(result.warnings) + len(result.info)
+    if total <= ISSUES_MAX:
+        return result
+    room = ISSUES_MAX - 1
+    errors = result.errors[:room]
+    room -= len(errors)
+    warnings = result.warnings[:room]
+    room -= len(warnings)
+    issues = result.info[:room]
+    emit(issues, "ISSUES_TRUNCATED", location=None, shown=f"{ISSUES_MAX - 1:,}", total=f"{total:,}")
+    result.errors, result.warnings, result.info = errors, warnings, issues
+    return result
 
 
 def _validate_strategy_impl(
@@ -742,6 +864,7 @@ def _validate_strategy_impl(
 
     # Pass 2: Name collision check (uses full registry — all known components)
     _validate_name_collisions(strategy, full_registry, issues)
+    _validate_names_defined_twice(strategy, issues, pre_save=pre_save)
 
     # Pass 3a: factory-call acyclicity — must gate BEFORE expansion (unlike
     # its 3b variable sibling, which needs the EXPANDED graph): pass 3
@@ -759,6 +882,21 @@ def _validate_strategy_impl(
             errors=cycle_errors,
             warnings=cycle_warnings,
             info=cycle_info,
+            type_flow=type_flow,
+        )
+
+    # Pass 2b: the expanded-size ceiling (Q-7058) — after the cycle gate (a
+    # cycle is its own refusal) and before pass 3 expands anything, so a
+    # source that names 100,000 steps is refused for the cost of reading it.
+    if _validate_pipeline_size(strategy, issues):
+        size_errors, size_warnings, size_info = _group_by_severity(issues)
+        if trace_sink is not None:
+            trace_sink.finalize(final_name)
+        return ValidationResult(
+            valid=False,
+            errors=size_errors,
+            warnings=size_warnings,
+            info=size_info,
             type_flow=type_flow,
         )
 
@@ -839,6 +977,10 @@ def _validate_strategy_impl(
     # pipeline every step of which carries the call's location, so an issue
     # inside it is attributed to the call site.
     expanded = _expand_registered_factories(expanded, registry, issues)
+    # Partial locks can omit children introduced only by registered factories.
+    # Give the common walk their latest metadata, just as TS's scoped registry
+    # does, while preserving every explicit child pin already in the view.
+    registry = overlay_unpinned_at_latest(registry, expanded, full_registry)
 
     # Pass 6 position: the judgment-table interpreter walk (spec 03 §2.4,
     # M2c cutover). ONE walk carries passes 6+8 under the shipped
@@ -906,6 +1048,8 @@ def _validate_strategy_impl(
     # after the other 7d checks so the cascade gate sees every walk error.
     _validate_terminal_shape(expanded, issues, walk, production_mode=production_mode)
 
+    outputs = _validate_outputs(expanded, issues, walk)
+
     # Pass 8 position: Σ-journal flush (flush mode — spec 03 §2.4/§5, R-12)
     _validate_slots(expanded, registry, issues, slot_types, trace_sink=trace_sink, walk=walk)
 
@@ -944,6 +1088,7 @@ def _validate_strategy_impl(
         type_flow=type_flow,
         slot_types=slot_types,
         pipeline_summary=pipeline_summary,
+        outputs=outputs,
     )
 
 
@@ -1345,6 +1490,166 @@ def _validate_name_collisions(
             )
 
 
+def _validate_names_defined_twice(
+    strategy: StrategyFile, issues: list[ValidationIssue], *, pre_save: bool = False
+) -> None:
+    """Pass 2 (Q-7153): a variable, factory or branch key defined twice (NAME_DEFINED_TWICE).
+
+    The resolver, the expansion and the walk keep the LAST definition of a
+    name (Python's own rebinding), the edit layer refused or took the FIRST,
+    and a dict literal dropped the first branch before any of them saw it.
+    One written name naming two places is reported at each later definition.
+    Error in the save context (``pre_save``; keel-api's save refuses it), a
+    warning when a stored strategy is re-validated, never promoted by
+    production mode. Nothing here changes what compiles: last-wins stays.
+    """
+    context = "pre_save" if pre_save else None
+    for kind, defs in (("Variable", strategy.variables), ("Factory", strategy.factories)):
+        seen: set[str] = set()
+        for definition in defs:
+            if definition.name in seen:
+                emit(
+                    issues,
+                    "NAME_DEFINED_TWICE",
+                    location=_format_location(definition.location),
+                    severity_context=context,
+                    kind=kind,
+                    name=definition.name,
+                )
+            seen.add(definition.name)
+
+    def walk(steps: list) -> None:
+        for step in steps:
+            if isinstance(step, ParallelSpec):
+                for key in step.duplicate_keys:
+                    emit(
+                        issues,
+                        "NAME_DEFINED_TWICE",
+                        location=_format_location(step.location),
+                        severity_context=context,
+                        kind="Branch key",
+                        name=key,
+                    )
+                for branch in step.branches.values():
+                    walk(branch)
+            elif isinstance(step, PipelineSpec):
+                walk(step.steps)
+
+    walk(strategy.pipeline.steps)
+    for factory in strategy.factories:
+        walk(factory.body.steps)
+    for variable in strategy.variables:
+        if isinstance(variable.value, PipelineSpec):
+            walk(variable.value.steps)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PASS 2b: the expanded-size ceiling (Q-7058, RV-S §B-1)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+#: What one source may expand to. A factory call or a pipeline-variable
+#: reference counts its body once per use, so a 1 KB source of nested factory
+#: calls can name 100,000 steps; nothing bounded that before Q-7058. The
+#: ceilings are generous: the largest Library strategy has 25 component steps
+#: and the largest stored one (staging, census 2026-11-12) 171, nesting 8 and 8
+#: branches. Counted from the written definitions with memoisation, BEFORE the
+#: pass-3 expansion and before the resolver inlines anything, so refusing a
+#: bomb costs a walk over what was written, never the expansion.
+PIPELINE_MAX_STEPS = 5_000
+PIPELINE_MAX_DEPTH = 64
+PIPELINE_MAX_BRANCHES = 256
+PIPELINE_MAX_USES = 64
+
+
+def pipeline_size(strategy: StrategyFile) -> dict[str, int]:
+    """Expanded component steps, nesting depth and widest parallel block of ``strategy``.
+
+    A factory call counts its factory's body, a reference to a pipeline
+    variable counts the variable's body, each once per use; a name defined
+    twice resolves to its LAST definition, as the resolver does. Each body is
+    measured once (memoised), so the walk is linear in what was written. A
+    reference to a body already on the walk's stack (a cycle, refused by pass
+    3a) counts nothing. The step count saturates at ``PIPELINE_MAX_STEPS + 1``.
+    """
+    factories = {f.name: f.body for f in strategy.factories}
+    variables = {v.name: v.value for v in strategy.variables if isinstance(v.value, PipelineSpec)}
+    cap = PIPELINE_MAX_STEPS + 1
+    memo: dict[str, tuple[int, int, int]] = {}
+
+    def steps_of(steps: list, stack: tuple[str, ...]) -> tuple[int, int, int]:
+        total = depth = width = 0
+        for step in steps:
+            n, d, w = step_of(step, stack)
+            total = min(cap, total + n)
+            depth, width = max(depth, d), max(width, w)
+        return total, depth, width
+
+    def named(key: str, body: PipelineSpec, stack: tuple[str, ...]) -> tuple[int, int, int]:
+        if key in stack:
+            return 0, 0, 0
+        if key not in memo:
+            n, d, w = steps_of(body.steps, (*stack, key))
+            memo[key] = (n, d + 1, w)
+        return memo[key]
+
+    def step_of(step: Any, stack: tuple[str, ...]) -> tuple[int, int, int]:
+        if isinstance(step, PipelineSpec):
+            n, d, w = steps_of(step.steps, stack)
+            return n, d + 1, w
+        if isinstance(step, ParallelSpec):
+            total, depth, width = 0, 0, len(step.branches)
+            for branch in step.branches.values():
+                n, d, w = steps_of(branch, stack)
+                total = min(cap, total + n)
+                depth, width = max(depth, d), max(width, w)
+            return total, depth + 1, width
+        if isinstance(step, FactoryCallSpec) and step.name in factories:
+            return named(f"factory:{step.name}", factories[step.name], stack)
+        if isinstance(step, VariableRef) and step.name in variables:
+            return named(f"var:{step.name}", variables[step.name], stack)
+        if isinstance(step, ComponentRef) or type(step).__name__ == "UseSpec":
+            return 1, 0, 0
+        return 0, 0, 0
+
+    steps, depth, width = steps_of(strategy.pipeline.steps, ())
+    return {"steps": steps, "depth": depth + 1, "branches": width}
+
+
+#: (size key, the words for it, its ceiling)
+_SIZE_LIMITS = (
+    (
+        "steps",
+        "component steps once factories and pipeline variables are expanded",
+        PIPELINE_MAX_STEPS,
+    ),
+    ("depth", "levels of nested pipelines and parallel blocks", PIPELINE_MAX_DEPTH),
+    ("branches", "branches in one parallel block", PIPELINE_MAX_BRANCHES),
+)
+
+
+def _validate_pipeline_size(strategy: StrategyFile, issues: list[ValidationIssue]) -> bool:
+    """Pass 2b: refuse a source past an expanded-size ceiling (PIPELINE_TOO_LARGE).
+
+    Returns True when a ceiling was passed; the caller then stops at the
+    structural stage, before pass 3 would expand anything.
+    """
+    size = pipeline_size(strategy)
+    over = False
+    for key, words, limit in _SIZE_LIMITS:
+        if size[key] > limit:
+            over = True
+            value = f"more than {limit:,}" if key == "steps" else f"{size[key]:,}"
+            emit(
+                issues,
+                "PIPELINE_TOO_LARGE",
+                location=_format_location(strategy.pipeline.location),
+                value=value,
+                what=words,
+                limit=f"{limit:,}",
+            )
+    return over
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # PASS 3a: Factory-call acyclicity
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1407,8 +1712,35 @@ def _expand_registered_factories(
     return expand_registered_factories(strategy, registry, report)
 
 
+class PipelineTooLarge(ValueError):
+    """A source past an expanded-size ceiling reached an expansion (Q-7058)."""
+
+
+def assert_pipeline_size(strategy: StrategyFile) -> None:
+    """Raise :class:`PipelineTooLarge` when ``strategy`` is past an expanded-size ceiling.
+
+    The guard every expansion site runs before it copies a body: pass 3 here
+    (``verify_spec`` calls it too, ahead of validation on the save and compile
+    paths) and the resolver. The validator's pass 2b reports the same verdict
+    as a structured ``PIPELINE_TOO_LARGE`` issue first.
+    """
+    size = pipeline_size(strategy)
+    over = [
+        f"more than {limit:,} {words}" for key, words, limit in _SIZE_LIMITS if size[key] > limit
+    ]
+    if over:
+        raise PipelineTooLarge(
+            "Strategy too large to build (PIPELINE_TOO_LARGE): " + "; ".join(over) + "."
+        )
+
+
 def _expand_factories(strategy: StrategyFile, issues: list[ValidationIssue]) -> StrategyFile:
-    """Pass 3: Expand all FactoryCallSpec into PipelineSpec."""
+    """Pass 3: Expand all FactoryCallSpec into PipelineSpec.
+
+    Refuses a source past an expanded-size ceiling before copying anything
+    (Q-7058): ``verify_spec`` reaches this expansion ahead of validation.
+    """
+    assert_pipeline_size(strategy)
     factory_map = {f.name: f for f in strategy.factories}
     # Active-expansion stack — the defensive cycle backstop for UNGATED
     # callers (mirrors the interpreter Walk's _var_stack): a clean error,
@@ -1505,7 +1837,7 @@ def _expand_factories(strategy: StrategyFile, issues: list[ValidationIssue]) -> 
 
     def _expand_steps_in(pipeline: PipelineSpec) -> PipelineSpec:
         new_steps = [_expand_step(s) for s in pipeline.steps]
-        return PipelineSpec(steps=new_steps, name=pipeline.name, location=pipeline.location)
+        return replace(pipeline, steps=new_steps)
 
     # Expand variables
     new_variables = []
@@ -1536,6 +1868,8 @@ def _expand_factories(strategy: StrategyFile, issues: list[ValidationIssue]) -> 
         globals_=strategy.globals_,
         universe=strategy.universe,
         execution=strategy.execution,
+        outputs=strategy.outputs,
+        uses=strategy.uses,
     )
 
 
@@ -2746,7 +3080,10 @@ def _validate_universe_mask_discipline(
 ) -> None:
     """Pass 7b: the three staged universe-mask rules (P2 group (c))."""
     suggest_registry = registry if suggest_registry is None else suggest_registry
-    armed = {code: _staged_key_armed(key) for code, key in _MASK_RULE_STAGED_KEYS.items()}
+    armed = {
+        code: _staged_key_armed(key) and rule_applies(code)
+        for code, key in _MASK_RULE_STAGED_KEYS.items()
+    }
     if not any(armed.values()):
         return  # every rule dormant — structurally silent (spec 05 §2.2)
 
@@ -3115,7 +3452,7 @@ def _validate_fixed_weight_cap(
     issues: list[ValidationIssue],
 ) -> None:
     """Pass 7d: FIXED_WEIGHT_UNCAPPED (Q-1694)."""
-    if not _staged_key_armed(_FIXED_WEIGHT_STAGED_KEY):
+    if not _staged_key_armed(_FIXED_WEIGHT_STAGED_KEY) or not rule_applies("FIXED_WEIGHT_UNCAPPED"):
         return  # dormant — structurally silent (spec 05 §2.2)
     variables = {v.name: v.value for v in strategy.variables if isinstance(v.value, PipelineSpec)}
     segments: list[list[tuple[ComponentRef, Any]]] = []
@@ -3291,7 +3628,10 @@ def _validate_terminal_shape(
     production_mode: bool = False,
 ) -> None:
     """Pass 7d: TERMINAL_NOT_WEIGHTS / TERMINAL_DICT_NOT_CONSUMED (Q-1694)."""
-    armed = {code: _staged_key_armed(key) for code, key in _TERMINAL_STAGED_KEYS.items()}
+    armed = {
+        code: _staged_key_armed(key) and rule_applies(code)
+        for code, key in _TERMINAL_STAGED_KEYS.items()
+    }
     if not any(armed.values()):
         return  # both dormant — structurally silent (spec 05 §2.2)
     if not strategy.pipeline.steps:
@@ -3526,6 +3866,8 @@ def _validate_price_marks_auto(
     issues: list[ValidationIssue],
 ) -> None:
     """Pass 9 addendum: PRICE_MARKS_AUTO (Q-0580)."""
+    if not rule_applies("PRICE_MARKS_AUTO"):
+        return
     variables = {v.name: v.value for v in strategy.variables if isinstance(v.value, PipelineSpec)}
     loaders: list[tuple[ComponentRef, Any]] = []
     _collect_data_loaders(strategy.pipeline, registry, variables, loaders, set())
@@ -3699,6 +4041,7 @@ def _validate_slots(
         # needs EVERY reader of the slot. Same position and same callable as
         # ``Walk.flush``'s — the shadow-parity suite compares the two paths.
         walk.flush_clock_slot_reads(issues)
+        walk.flush_outputs(issues)
         if trace_sink is not None:
             for slot_name, entry in walk.sigma.items():
                 trace_sink.on_slot_state(slot_name, entry.val.name)
@@ -3801,7 +4144,7 @@ def _validate_declarations(
         _validate_universe(
             strategy.universe, issues, production_mode=production_mode, pre_save=pre_save
         )
-    elif _staged_key_armed(_MISSING_UNIVERSE_STAGED_KEY):
+    elif _staged_key_armed(_MISSING_UNIVERSE_STAGED_KEY) and rule_applies("MISSING_UNIVERSE"):
         emit(issues, "MISSING_UNIVERSE", location="universe")
 
     # B1) A data loader naming a market, dex or venue Keel does not trade
@@ -3816,7 +4159,7 @@ def _validate_declarations(
 
     # C) Execution validation
     if strategy.execution is not None:
-        _validate_execution(strategy.execution, issues)
+        _validate_execution(strategy.execution, issues, pre_save=pre_save)
 
     # D) Declaration reference validation
     _validate_declaration_refs(strategy, expanded, registry, issues)
@@ -3876,6 +4219,43 @@ _MISSING_UNIVERSE_STAGED_KEY = "missing-universe"
 _SAVE_RESOLVED_MODES = frozenset({"top_volume", "category"})
 
 
+#: The most coins a Universe may name (Q-7068, RV-S §B-13): Research's 500
+#: coins per study (spec 01), above every perp Hyperliquid lists today. The
+#: largest stored universe (staging census 2026-11-12) resolves 226.
+UNIVERSE_MAX_COINS = 500
+
+
+def _validate_universe_size(
+    universe: UniverseSpec, loc: str, issues: list[ValidationIssue]
+) -> None:
+    """UNIVERSE_TOO_LARGE when ``symbols``, ``resolved`` or ``top_n`` names more than the cap.
+
+    Before Q-7068 a basket of 5,000 unknown names and ``top_n=100000`` both
+    validated; the effective bound was the venue's listings, discovered at
+    data load. A list counts its entries as written; ``top_n`` counts itself.
+    """
+    sizes = (
+        ("symbols", len(universe.symbols) if isinstance(universe.symbols, list) else None),
+        ("resolved", len(universe.resolved) if isinstance(universe.resolved, list) else None),
+        (
+            "top_n",
+            universe.top_n
+            if isinstance(universe.top_n, int) and not isinstance(universe.top_n, bool)
+            else None,
+        ),
+    )
+    for field_name, count in sizes:
+        if count is not None and count > UNIVERSE_MAX_COINS:
+            emit(
+                issues,
+                "UNIVERSE_TOO_LARGE",
+                location=loc,
+                field=field_name,
+                count=f"{count:,}",
+                limit=f"{UNIVERSE_MAX_COINS:,}",
+            )
+
+
 def _validate_universe(
     universe: UniverseSpec,
     issues: list[ValidationIssue],
@@ -3894,6 +4274,8 @@ def _validate_universe(
     loc = "universe"
     if universe.location:
         loc = _format_location(universe.location)
+
+    _validate_universe_size(universe, loc, issues)
 
     # Mode-specific required fields
     if universe.mode == "manual":
@@ -4233,11 +4615,40 @@ def _execution_valid_options(param: str, valid: Any) -> tuple[ValidOption, ...]:
     )
 
 
-def _validate_execution(execution: ExecutionSpec, issues: list[ValidationIssue]) -> None:
+def _validate_execution(
+    execution: ExecutionSpec, issues: list[ValidationIssue], *, pre_save: bool = False
+) -> None:
     """Validate Execution declaration values."""
     loc = "execution"
     if execution.location:
         loc = _format_location(execution.location)
+
+    # Q-7155: an Execution field written as a variable. The resolver copies
+    # the spec's fields verbatim, so the VariableRef reached the policy (an
+    # active field then failed to compile; an inactive one was dead), and
+    # the option checks below raised TypeError on it (a 500 at /validate and
+    # at save). Report each, then check the rest with the field at its
+    # default; with `rebalance` itself bound the mode is unknown, so stop.
+    bound = {
+        name: ref
+        for name in EXECUTION_PARAM_META
+        for ref in iter_variable_refs(getattr(execution, name, None))
+    }
+    for name, ref in bound.items():
+        emit(
+            issues,
+            "EXECUTION_FIELD_VARIABLE",
+            location=loc,
+            severity_context="pre_save" if pre_save else None,
+            field=name,
+            variable=ref.name,
+        )
+    if "rebalance" in bound:
+        return
+    if bound:
+        execution = replace(
+            execution, **{name: EXECUTION_PARAM_META[name].get("default") for name in bound}
+        )
 
     # Mode validation
     if execution.rebalance not in _VALID_REBALANCE:
@@ -4253,7 +4664,11 @@ def _validate_execution(execution: ExecutionSpec, issues: list[ValidationIssue])
         return  # short-circuit — other checks depend on valid mode
 
     # Conditional requirements
-    if execution.rebalance == "buffered" and execution.buffer_threshold is None:
+    if (
+        execution.rebalance == "buffered"
+        and execution.buffer_threshold is None
+        and "buffer_threshold" not in bound  # written, as a variable: reported above
+    ):
         emit(
             issues,
             "MISSING_EXECUTION_PARAM",
@@ -4631,5 +5046,212 @@ def _format_params_brief(params: dict[str, Any]) -> str:
 
 
 __all__ = [
+    "describe_outputs",
+    "descriptors_from_blob",
+    "is_run_ready",
+    "OutputsNotRunnable",
     "validate_strategy",
 ]
+
+
+class OutputsNotRunnable(ValueError):
+    """A descriptor request cannot return a partial or invalid output set."""
+
+
+def _validate_outputs(strategy: StrategyFile, issues: list[ValidationIssue], walk) -> list:
+    """Describe terminal stores once; judge output-specific laws at pass 7e."""
+    if strategy.outputs is None:
+        return []
+    from pipeline_engine.dsl import clocks as C
+    from pipeline_engine.validation_shared import MINUTES_TO_TOKEN, OutputDescriptor
+
+    outputs = []
+    cascade = bool({i.code for i in issues} & _TERMINAL_CASCADE_CODES)
+    declaration = strategy.outputs
+    expected_clock = C.kappa_exec(strategy.globals_)
+    for slot in declaration.slots:
+        entry = walk.sigma.get(slot)
+        if entry is None:
+            continue  # the structural pass-8 flush owns OUTPUT_NOT_STORED
+        val = entry.val
+        tok = val.tok
+        shape = None
+        domain = None
+        domain_source = "none"
+        tier = None
+        if isinstance(tok, R.Pair):
+            if R.classify_base(tok.base, "SignalSeries") in {"eq", "sub"}:
+                shape = "panel"
+            elif R.classify_base(tok.base, "GlobalSeries") in {"eq", "sub"}:
+                shape = "single"
+            if isinstance(tok.domain, dict) and ("set" in tok.domain or "interval" in tok.domain):
+                domain = {
+                    key: sorted(float(v) for v in values)
+                    if key == "set"
+                    else [float(v) for v in values]
+                    for key, values in tok.domain.items()
+                }
+                domain_source = "walk"
+                tier = "hard" if "set" in domain else "soft"
+            else:
+                refinement = R.refinement(tok.base)
+                if refinement is not None:
+                    domain = copy.deepcopy(refinement["dom"])
+                    domain_source = "refinement"
+                    tier = refinement["tier"]
+        clock_tuple = val.clock or expected_clock
+        clock_source = (
+            "walk" if val.clock is not None else "exec" if expected_clock is not None else None
+        )
+        clock = None
+        if clock_tuple is not None:
+            period, offset = clock_tuple
+            clock = {
+                "timeframe": MINUTES_TO_TOKEN.get(period, f"{period}min"),
+                "offset": None if offset == 0 else MINUTES_TO_TOKEN.get(offset, f"{offset}min"),
+                "period_minutes": period,
+                "offset_minutes": offset,
+            }
+        binary = domain is not None and "set" in domain and set(domain["set"]) <= {0.0, 1.0}
+        inferred = (
+            "regime" if shape == "single" else "filter" if shape == "panel" and binary else "signal"
+        )
+        declared = (declaration.roles or {}).get(slot)
+        role = declared or inferred
+        descriptor = OutputDescriptor(
+            name=slot,
+            value_type=type_name(val.obj),
+            shape=shape,
+            domain=domain,
+            domain_source=domain_source,
+            tier=tier,
+            clock_source=clock_source,
+            clock=clock,
+            bounded=domain is not None,
+            discrete=domain is not None and "set" in domain,
+            role=role,
+            role_source="declared" if declared is not None else "inferred",
+            unit=val.unit,
+            unit_source=val.unit_source,
+        )
+        outputs.append(descriptor)
+        if cascade:
+            continue
+        if shape is None:
+            emit(
+                issues,
+                "OUTPUT_NOT_DRAWABLE",
+                location="outputs",
+                slot=slot,
+                value_type=descriptor.value_type,
+            )
+        if declared is not None:
+            from pipeline_engine.pipeline.link import output_universe_sensitive
+
+            sensitive = output_universe_sensitive(strategy, slot) if shape is not None else False
+            fits = (
+                (declared == "regime" and shape == "single")
+                or (declared == "signal" and shape == "panel")
+                or (declared in {"filter", "universe", "event"} and shape == "panel" and binary)
+            )
+            if not fits:
+                emit(
+                    issues,
+                    "ROLE_MISMATCH",
+                    location="outputs",
+                    slot=slot,
+                    role=declared,
+                    value_type=descriptor.value_type,
+                    shape=shape,
+                    domain=domain,
+                    universe_sensitive=sensitive,
+                    inferred=inferred,
+                )
+        if expected_clock is not None and clock_tuple is not None and clock_tuple != expected_clock:
+            fix = (
+                f"Insert TargetSignalProjector() immediately before Store('{slot}') to project it onto {C.render_clock(expected_clock)}."
+                if C.terminal_repair_arm(clock_tuple, expected_clock) == "project"
+                else C.output_resample_up_suggestion(slot, clock_tuple, expected_clock)
+            )
+            emit(
+                issues,
+                "OUTPUT_CLOCK_MISMATCH",
+                location="outputs",
+                slot=slot,
+                actual_clock=C.render_clock(clock_tuple),
+                declared_tf=strategy.globals_.target_timeframe,
+                expected_clock=C.render_clock(expected_clock),
+                fix=fix,
+            )
+    if not cascade:
+        if len(declaration.slots) > OUTPUTS_MAX:
+            emit(
+                issues,
+                "OUTPUTS_TOO_MANY",
+                location="outputs",
+                count=len(declaration.slots),
+                limit=OUTPUTS_MAX,
+            )
+        if strategy.universe is None:
+            emit(
+                issues,
+                "SCREENER_DECLARATION_MISSING",
+                location="outputs",
+                declaration="Universe(...)",
+                why="a run reads its asset list from it, and every view is drawn across those assets",
+            )
+        if strategy.globals_ is None or not strategy.globals_.target_timeframe:
+            emit(
+                issues,
+                "SCREENER_DECLARATION_MISSING",
+                location="outputs",
+                declaration="Globals(target_timeframe=...)",
+                why="a run and every scheduled refresh read the bar clock from it, and every output is checked against it",
+            )
+    return outputs
+
+
+def describe_outputs(strategy: StrategyFile, result: ValidationResult) -> list:
+    """Return all declared outputs in order, or fail without a partial answer."""
+    if file_kind(strategy) != "screener" or not is_run_ready(strategy, result):
+        raise OutputsNotRunnable(
+            "The screener must validate with a drawable descriptor for every output."
+        )
+    by_name = {d.name: d for d in result.outputs}
+    if set(by_name) != set(strategy.outputs.slots):
+        raise OutputsNotRunnable("Output descriptors do not match the declared slots.")
+    return [by_name[name] for name in strategy.outputs.slots]
+
+
+def descriptors_from_blob(spec: dict) -> list:
+    """The worker/scheduler reader of static descriptors; never re-validate source."""
+    from pipeline_engine.dsl.spec import OUTPUTS_MAX, output_name_problems
+    from pipeline_engine.pipeline.compile import blob_kind
+    from pipeline_engine.validation_shared import OutputDescriptor
+
+    if blob_kind(spec) != "screener":
+        raise OutputsNotRunnable("A strategy blob has no screener outputs.")
+    try:
+        outputs = [OutputDescriptor.from_dict(value) for value in spec["outputs"]]
+    except (KeyError, TypeError, ValueError) as exc:
+        raise OutputsNotRunnable("Malformed output descriptors.") from exc
+    if (
+        not outputs
+        or len(outputs) > OUTPUTS_MAX
+        or output_name_problems([d.name for d in outputs])
+        or any(d.shape not in {"panel", "single"} for d in outputs)
+    ):
+        raise OutputsNotRunnable("Every output must be drawable before it can run.")
+    return outputs
+
+
+def is_run_ready(strategy: StrategyFile, result: ValidationResult) -> bool:
+    """The one readiness decision for either kind of pipeline file."""
+    if file_kind(strategy) == "strategy":
+        return is_backtest_ready(strategy, result)
+    return bool(
+        result.valid
+        and len(result.outputs) == len(strategy.outputs.slots)
+        and all(d.shape is not None for d in result.outputs)
+        and [d.name for d in result.outputs] == strategy.outputs.slots
+    )

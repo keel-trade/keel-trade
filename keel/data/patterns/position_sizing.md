@@ -34,9 +34,9 @@ Requires slots: `return_vol` (from ReturnVolatility) and the stored combined
 forecast (`Store("forecast_combined")` after the combiner). Use when: multiple
 signals, want diversification benefit, a portfolio volatility target.
 
-## Path C: EqualWeightAllocator (for screen-select strategies)
+## Path C: EqualWeightAllocator (for rank-and-select strategies)
 
-Best for: Screen-select strategies where all selected assets get
+Best for: Rank-and-select strategies where all selected assets get
 equal allocation.
 
 ```text
@@ -80,7 +80,7 @@ varies and you want to prevent concentration in few survivors.
 `RiskSizer` is the R-culture rule ("risk 1% per trade"): risk ÷ the stop
 distance sampled at the trade's entry bar, held for the trade; it never
 re-sizes into a shrinking stop. `distance` is a stored slot in price units
-(close − the stop level, or a multiple of ATR), the same slot an R-multiple
+(close − the stop level, buffer included, or a multiple of ATR), the same slot an R-multiple
 rule divides `TradePnL()` by through `AtEntry(slot=...)`. `max_weight` is
 load-bearing. A missing or zero distance at entry refuses that entry.
 `RiskBudgetSizer(risk_per_position=...)` sizes to a VOLATILITY budget — a
@@ -136,7 +136,7 @@ names.
 | Combined forecasts (vol-targeted) | ForecastCombiner → FDM → ForecastCapper → VolTargetWeightConverter chain | Full vol-targeted sizing                     |
 | BinarySignal (entry/exit)         | EqualWeightSizer                                                         | Default for TradeManager-based strategies    |
 | BinarySignal (mixed-vol)          | VolWeightSizer                                                           | Equal risk contribution across positions     |
-| Selections (screen-select)        | EqualWeightAllocator → WeightCadence → FillNaN                           | Equal allocation to selected assets          |
+| Selections (rank-and-select)      | EqualWeightAllocator → WeightCadence → FillNaN                           | Equal allocation to selected assets          |
 | TopN + conviction weighting       | ApplyMask(signal, TopN mask) → ForecastWeightNormalizer                  | Weight selected assets by signal strength    |
 | Raw signal (factor tilt)          | EqualWeightAllocator                                                     | Equal allocation to all assets               |
 | Hold / index basket (no signal)   | ConstantForecast → ForecastWeightNormalizer                              | Constant conviction, the normalizer sizes it |

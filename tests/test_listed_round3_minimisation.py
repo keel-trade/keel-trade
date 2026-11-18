@@ -380,6 +380,13 @@ def test_listed_output_schemas_declare_no_exit_code(profile):
         }
     declared.pop("keel_account_status")  # published only under the non-view arm
     if profile == "listed":
+        from keel.tools.outcomes._toolsets import LISTED_PROFILE_TOOLS
+        from tests._screeners_delta import SCREENER_CARD_TOOLS
+
+        assert not (SCREENER_CARD_TOOLS & LISTED_PROFILE_TOOLS)
+        assert SCREENER_CARD_TOOLS <= declared.keys()
+        for name in SCREENER_CARD_TOOLS:
+            declared.pop(name)  # Full-profile-only schemas are never published here.
         assert not any(declared.values()), declared
     else:
         assert all(declared.values()), declared

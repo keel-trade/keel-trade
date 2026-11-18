@@ -413,11 +413,14 @@ def test_hosted_auth_error_names_no_client():
     assert "re-authenticate" in text.lower() and "connector" in text.lower()
 
 
-def test_free_plan_wall_sentence_is_the_d12_fallback():
-    from keel.errors import FREE_PLAN_SENTENCE, quota_plans_line
+def test_the_plan_line_names_only_served_plans():
+    """D-14 (doc 07 §4): the wall's plan line is the served names' more clause
+    plus where plans change — never guessed from the plan id, never on a
+    block whose server named no higher plan (the top plan, an old server)."""
+    from keel.errors import WEB_APP_SENTENCE, quota_plans_line
 
-    assert FREE_PLAN_SENTENCE == "Plans are changed in the Keel web app."
-    assert quota_plans_line({"plan": "free", "unit": "backtest_runs"}) == FREE_PLAN_SENTENCE
-    assert "paid" not in FREE_PLAN_SENTENCE.lower() and "more" not in FREE_PLAN_SENTENCE.lower()
-    for plan in ("starter", "trader", "pro", None):
+    served = {"plan": "free", "unit": "backtest_runs", "more_plans": ["Trader", "Pro"]}
+    assert quota_plans_line(served) == f"Trader and Pro include more. {WEB_APP_SENTENCE}"
+    for plan in ("free", "trader", "pro", None):
         assert quota_plans_line({"plan": plan, "unit": "backtest_runs"}) is None
+        assert quota_plans_line({"plan": plan, "unit": "backtest_runs", "more_plans": []}) is None

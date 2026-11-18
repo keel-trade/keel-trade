@@ -22,6 +22,7 @@ from .core import (
     VALID_TIMEFRAMES,
     bars_per_bucket,
     bars_per_day,
+    covered_day,
     is_whole_multiple,
     label,
     match_minutes,
@@ -62,4 +63,6 @@ __all__ = [
     # Grain arithmetic
     "is_whole_multiple",
     "bars_per_bucket",
+    # Days
+    "covered_day",
 ]

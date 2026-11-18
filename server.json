@@ -1,0 +1,40 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.keel-trade/keel-trade",
+  "title": "Keel",
+  "description": "Build, backtest and paper-run Hyperliquid strategies from your AI assistant.",
+  "repository": {
+    "url": "https://github.com/keel-trade/keel-trade",
+    "source": "github"
+  },
+  "version": "0.9.0",
+  "websiteUrl": "https://usekeel.io/agents?utm_source=keel_mcp&utm_medium=directory&utm_content=mcp_registry",
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://mcp.usekeel.io/mcp"
+    }
+  ],
+  "packages": [
+    {
+      "registryType": "pypi",
+      "identifier": "keel-trade",
+      "version": "0.9.0",
+      "runtimeHint": "uvx",
+      "transport": { "type": "stdio" },
+      "runtimeArguments": [{ "type": "positional", "value": "--from" }],
+      "packageArguments": [
+        { "type": "positional", "value": "keel" },
+        { "type": "positional", "value": "mcp" },
+        { "type": "positional", "value": "serve" }
+      ]
+    },
+    {
+      "registryType": "mcpb",
+      "identifier": "https://github.com/keel-trade/keel-trade/releases/download/v0.9.0/keel-trade-0.9.0.mcpb",
+      "version": "0.9.0",
+      "fileSha256": "597c4ff9ea2b3a77d5f012585f9260fae4b393efa4581e9b72ffbbb4077dfc09",
+      "transport": { "type": "stdio" }
+    }
+  ]
+}

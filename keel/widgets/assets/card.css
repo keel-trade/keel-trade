@@ -511,7 +511,9 @@ pre.source {
 .button-link:hover {
   border-color: var(--accent);
 }
-@media (max-width: 480px) {
+/* Below 480 px, the adapter's narrow band (NARROW_PX, `width < 480`): at
+   exactly 480 a card is wide, so its actions are too (D-332 (5)). */
+@media (max-width: 479px) {
   .button-link {
     min-height: 44px;
     flex: 1 1 auto;
@@ -805,7 +807,7 @@ body[data-size="receipt-open"] .keel-card {
 /* Below 480 px (Q-1772): two deliberate lines. Line 1 is who it is —
    name (ellipsis) · version · state; line 2 is what it says and what you
    can do — chips and numbers left, actions pinned to the right edge. */
-@media (max-width: 480px) {
+@media (max-width: 479px) {
   .rr {
     flex-direction: column;
     align-items: stretch;
@@ -904,7 +906,7 @@ body[data-size="receipt-open"] .rr .rr-win {
   margin-left: 5px;
   color: var(--muted);
 }
-@media (max-width: 480px) {
+@media (max-width: 479px) {
   .rr .rr-act {
     min-height: 44px;
   }

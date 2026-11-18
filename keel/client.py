@@ -26,6 +26,7 @@ from keel.errors import (
     KeelError,
     rate_limited_error,
     retry_after_seconds,
+    server_words,
     translate_http_error,
     transport_error,
     write_unconfirmed,
@@ -204,10 +205,10 @@ class KeelClient:
         self._require_auth()
         return self._request("PUT", path, json=json)
 
-    def delete(self, path: str) -> Any:
+    def delete(self, path: str, **params: Any) -> Any:
         """DELETE request with retries and error handling."""
         self._require_auth()
-        return self._request("DELETE", path)
+        return self._request("DELETE", path, params=params or None)
 
     def _maybe_refresh_proactively(self) -> None:
         """Refresh the access token if it expires within ~60s.
@@ -249,6 +250,49 @@ class KeelClient:
         return True
 
     def _request(self, method: str, path: str, **kwargs: Any) -> Any:
+        from keel import account_performance as performance
+        from keel.api_path import check_request_path
+
+        # Every SDK request passes this door: a path a caller-supplied value
+        # could have re-routed (`..`, `?`, `#`, `%`, a backslash, an empty segment)
+        # is refused here, before anything is sent (Q-3352).
+        check_request_path(path)
+        if method.upper() != "GET" or performance.ROUTES.fullmatch(path) is None:
+            return self._request_http(method, path, **kwargs)
+        # Selection needs the server witness, never a caller's supplied header.
+        headers = {
+            k: v
+            for k, v in kwargs.pop("headers", {}).items()
+            if k.lower() != performance.HEADER.lower()
+        }
+        if not performance.selected(self._config.api_url):
+            try:
+                value = self._request_http(
+                    method, path, headers=headers, _performance=True, **kwargs
+                )
+                # A different outstanding read may have selected the contract.
+                if not performance.selected(self._config.api_url):
+                    if performance.is_performance(value):
+                        raise performance.unavailable()
+                    return value
+            except performance.ActivationWitness:
+                performance.select(self._config.api_url)
+        try:
+            value = self._request_http(
+                method,
+                path,
+                headers={**headers, performance.HEADER: performance.CONTRACT},
+                _versioned=True,
+                **kwargs,
+            )
+            return performance.validate(value)
+        except KeelError as error:
+            error.retryable = False
+            raise
+
+    def _request_http(
+        self, method: str, path: str, *, _performance=False, _versioned=False, **kwargs: Any
+    ) -> Any:
         """Execute request with retry logic + transparent OAuth refresh.
 
         Refresh fires in two places when an OAuth refresh_token is set:
@@ -260,8 +304,10 @@ class KeelClient:
 
         idempotent = method.upper() in _IDEMPOTENT_METHODS
         refresh_already_attempted = False
-        for attempt in range(_MAX_RETRIES):
-            last = attempt == _MAX_RETRIES - 1
+        # A successful OAuth refresh owns one auth replay independently of
+        # contract negotiation. Versioned transport/status errors never retry.
+        for attempt in range(2 if _versioned else _MAX_RETRIES):
+            last = _versioned or attempt == _MAX_RETRIES - 1
             delay = _BACKOFF_BASE * (2**attempt)
             try:
                 response = self._client.request(method, path, **kwargs)
@@ -310,7 +356,7 @@ class KeelClient:
                 # is refused before it is processed, so a write may be resent.
                 wait = retry_after_seconds(response.headers.get("Retry-After"))
                 if last or (wait is not None and wait > _RETRY_AFTER_CAP_S):
-                    raise rate_limited_error(wait)
+                    raise rate_limited_error(wait, server_words(response.text))
                 wait = delay if wait is None else wait
                 logger.warning("Rate limited, retrying after %.1fs", wait)
                 time.sleep(wait)
@@ -323,14 +369,30 @@ class KeelClient:
                     time.sleep(delay)
                     continue
                 err = translate_http_error(response.status_code, response.text)
-                raise err if idempotent else write_unconfirmed(method, err)
+                # A coded 5xx refused the write; it was not applied.
+                refused = getattr(err, "refused", False)
+                raise err if idempotent or refused else write_unconfirmed(method, err)
             if (
                 response.status_code == 401
                 and self._config.credential_source == CREDENTIAL_SOURCE_ENV
             ):
                 raise _env_key_rejected(self._config.api_url)
+            if _performance and response.status_code == 409:
+                from keel import account_performance as performance
+
+                try:
+                    body = response.json()
+                except ValueError:
+                    body = None
+                if performance.activation(response.status_code, body):
+                    raise performance.ActivationWitness()
             if response.status_code >= 400:
                 raise translate_http_error(response.status_code, response.text)
+            if response.status_code == 204:
+                # No Content: the success shape of keel-api's stop and delete
+                # routes, which carry no body by definition (Q-3133). Only
+                # a 2xx that SHOULD carry a body is read as JSON below.
+                return None
             try:
                 return response.json()
             except ValueError:

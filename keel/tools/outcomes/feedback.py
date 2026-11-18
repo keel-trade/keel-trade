@@ -118,6 +118,7 @@ FEEDBACK = register(
         # by every authenticated caller, so it never sits behind a
         # write-scope grant (spec 02 R4 "no flow may gate on it").
         required_action="audit.read",
+        rate_tier="mutation",
         cli_path=("feedback",),
         toolset="always",
         # grounded-in: feedback.py docstring (spec 02 R4 — never-fails

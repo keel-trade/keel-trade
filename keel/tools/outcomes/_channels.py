@@ -113,6 +113,27 @@ class ChannelSpec:
     drop: frozenset[str] = frozenset()
     conditional_card: dict[str, Callable[[dict], bool]] = field(default_factory=dict)
     open: bool = False
+    #: A kind whose structured home is BOUNDED, not merely partitioned (the
+    #: study card, 07 §3.3, RL-58): applied to the copy before the rows move,
+    #: e.g. a list becomes its counts. The envelope (CLI, API) is untouched.
+    reduce: Callable[[dict], dict] | None = None
+    #: D-352 (5): a null member of an object leaves structuredContent (the card reads an absent member and a null
+    #: one alike; a model reads neither). A null inside a list keeps its place. The envelope (CLI, API) and the
+    #: card dict are untouched.
+    omit_nulls: bool = False
+    #: D-359 (5) (a): the kind's card rows leave structuredContent whatever the probe flag says. The study kind asks
+    #: keel-api for its card (``card=full``) on every profile, so with the flag off (its default, the local full
+    #: profile) card_data rode into model context: 12,743 B a study read against 13 §3.5's 8,000.
+    always_move_card: bool = False
+
+
+def _without_nulls(value: Any) -> Any:
+    """``value`` with every ``None`` member of every object removed, recursively; list items keep their places."""
+    if isinstance(value, dict):
+        return {k: _without_nulls(v) for k, v in value.items() if v is not None}
+    if isinstance(value, list):
+        return [_without_nulls(v) for v in value]
+    return value
 
 
 #: The shared error set (spec 02 §2.2): every kind's output schema carries it,
@@ -191,12 +212,19 @@ _BACKTEST = ChannelSpec(
             "strategy_config",
             "quota",
             "quota_notice",
+            # The paper/live timeframe heads-up (doc 07 §5, D-14).
+            "floor_notice",
             "remaining",
             "good_result",
             "realism",
+            # The money it needs to trade as backtested (design doc 14 §11);
+            # full profile only (LISTED_OUTPUT_OMISSIONS).
+            "capital_guide",
             "reference",
             "few_fills_note",
             "exposure",
+            # Which way the positions went (R-003).
+            "sides",
             # The capital and costs a run's numbers were computed at (Q-2270).
             "cost_model",
             "slice",
@@ -227,6 +255,9 @@ _BACKTEST = ChannelSpec(
             "view.config",
             "view.window_note",
             "view.exposure_line",
+            "view.sides_line",
+            # What the counts are, and why a win rate is not measured (R-009).
+            "view.count_basis",
             "view.markdown",
         }
     ),
@@ -419,6 +450,11 @@ _STRATEGY = ChannelSpec(
             "view.header",
             "view.change",
             "view.evidence",
+            # No evidence, and why, by backtest_state (R-009).
+            "view.evidence_note",
+            # What a screen produces, each output with its unit (Q-3637):
+            # the model reads it, and the card draws it as the Outputs list.
+            "view.outputs",
             "view.size",
             "view.status_text",
             "view.previous_version",
@@ -488,18 +524,247 @@ _LIVE = ChannelSpec(
     open=True,
 )
 
+
+def _study_reduce(envelope: dict) -> dict:
+    """07 §3.3's bound: a study read's lists become counts and its check rows
+    keep 5 (``_research_view.structured_study``); a plan keeps its step list
+    (the plan has no card, and its steps are what it would run)."""
+    from ._research_view import structured_study
+
+    if envelope.get("plan_id") is not None:
+        return envelope
+    card_data = envelope.get("card_data")
+    if (
+        isinstance(card_data, dict)
+        and card_data.get("rows")
+        and isinstance(envelope.get("studies"), list)
+    ):
+        envelope = {
+            **envelope,
+            "studies": [
+                {k: v for k, v in row.items() if k != "card_summary"}
+                if isinstance(row, dict)
+                else row
+                for row in envelope["studies"]
+            ],
+        }
+    reduced = structured_study(envelope)
+    view = envelope.get("view")
+    if isinstance(view, dict):
+        reduced["view"] = dict(view)  # view.markdown leaves by the drop row
+    return reduced
+
+
+#: The study kind's structured fields: every research envelope field (07 §3.1,
+#: §3.3's channel table, the plan, the data page, the brief, the list).
+_STUDY_FIELDS = frozenset(
+    {
+        "study",
+        "footing",
+        "counts",
+        "stale",
+        "links",
+        "draft",
+        # RI-483: the read an edit of its source is made on (keel_research_get).
+        "base",
+        "progress",
+        "not_measured",
+        "card_summary",
+        "checks",
+        "steps",
+        "views",
+        "notes",
+        "notes_total",
+        "saved",
+        "page",
+        "can_run",
+        "can_retry",
+        "source",
+        "subjects",
+        "quota",
+        "quota_notice",
+        "plan_id",
+        "expires_at",
+        "class",
+        "writes",
+        "linked_reason",
+        "filled",
+        "issues",
+        "runs",
+        "addresses_carried",
+        "addresses_changed",
+        "addresses_moved",
+        "estimate",
+        "allowance",
+        "run_allowed",
+        "limits",
+        "locked",
+        "versions_tried",
+        "preview",
+        "words",
+        "pagination",
+        "facts",
+        "subject",
+        "rows_total",
+        "by_reason",
+        "studies",
+        "studies_total",
+        "by_state",
+        "projects",
+        "projects_total",
+        "families_total",
+        "set_aside",
+        "set_aside_total",
+        "planned",
+        "planned_total",
+        "paper_and_live",
+        "paper_and_live_total",
+        # RI-592: served fields that had no home, so they only warned: the plan's
+        # paged children (07 §3.5), the add-plan's rows (04 §1.7, RI-385), a map
+        # data page's filling grid (D-158) and the share read's Keel fact (RI-235).
+        "children",
+        "added",
+        "refused",
+        "filling",
+        "by_keel",
+        # RI-592: a project read through keel_research_get (D-189, D-177): as
+        # served today, now homed
+        "project_id",
+        "name",
+        "question",
+        "archived",
+        "items",
+        "items_total",
+        # WL-SV-08 (13 §2.1, D8): the one-row receipt's served line (addresses, project) and a project's page; a
+        # plan's proposed edit (keel-api's PlanResponse.edit).
+        "card_line",
+        "link",
+        "edit",
+        # SERVE's preview read: what the preview changes against the kept version.
+        "preview_delta",
+        "view.kind",
+        "view.size",
+        # 13 §2.1 (WL-AG-10): the card picks its layout by it.
+        "view.mode",
+        "view.version",
+    }
+)
+
+#: RI-610 (measured, 13 §3.5): a list row keeps, in structuredContent, what the model reads a row by: its id, kind,
+#: title and state words (the text names each row too). Everything else a row carries is the card's: measured on
+#: keel-api's own list read, a 25-row page of bare rows was 8,575 B (343 B a row) before any card, and a v2 card
+#: per row adds about 2.4 KB each. The card's paths are each row's own (same length as `studies`), so the adapter's
+#: merge puts them back by index.
+_LIST_ROW_CARD = frozenset(
+    f"studies[].{field}"
+    for field in (
+        "card_summary",
+        "state",
+        "headline",
+        "set_aside",
+        "archived",
+        "maker",
+        "project_ids",
+        "notes_total",
+        "finished_at",
+        "version",
+        "card_version",
+        "plan_id",
+        "stale",
+    )
+)
+
+#: D-363 (2b) (ENGINE 910e68d3fd): a check row's "Your bars: stricter · looser" lens and the template default's words
+#: are the app's and the card's (the bar editor), never the model's: a reply quotes the row's bar and value words. In
+#: structuredContent they put five real fixtures back over 13 §3.5's 8,000 B (chk_v3 reads 8,029, run-partial 8,491).
+#: They ride ``_meta["keel/card"]`` on the reduced rows, so the card's merge puts them back by index.
+_CHECK_ROW_CARD = frozenset(
+    f"checks.rows[].{field}" for field in ("stricter", "looser", "bar_default_words")
+)
+
+_STUDY = ChannelSpec(
+    structured=_BASE | _ELECTION | _STUDY_FIELDS,
+    # The headline's one home is card_summary; the text carries each measure's
+    # interval; view.markdown is rendered into `content` (07 §3.3). RI-592:
+    # `mix` (RI-013's `{ref, included}`) is the app's mix row; it names no
+    # subject key, so an agent makes a signal by the mix subject's key, never
+    # by this, and its up-to-50 refs stay out of the budget. `coin_choices` is
+    # New study's Coins row (06 §3.10): the app's, never an agent's. `runs_on` (WL-SV-31) is the home's per-template
+    # capability line on a list read, the app's too.
+    drop=frozenset({"headline", "view.markdown", "mix", "coin_choices", "runs_on"}),
+    # D-332 (6), 13 §3.1, §3.8 (WL-AG-09): the card's own data rides `_meta["keel/card"]`, read by no model: the
+    # thumb (up to 3,000 B; a real chk_v3 read was 8,051 B of structuredContent with it), `card_data` on its own
+    # top-level key (RI-612: the adapter's merge drops array items past the structured array's length, so 40 card
+    # rows can never ride at `checks.rows`), and a list read's per-row cards (RI-610), the same length as the
+    # structured `studies`, so they merge back by index. `_study_reduce` drops those row cards outright once the
+    # list serves `card_data.rows` (13 §3.5: the card reads those, never both).
+    # A data read's rows (`data`, and the library's items) are written whole in the text block (07 §3.2 rule 4,
+    # raw values included) and ride the card for the chart card: CARDUI measured a Map's view-0 page at 12,230 B of
+    # structuredContent with its 25 rows in it. The page's facts and cursor stay.
+    card=frozenset({"card_summary.thumb", "card_data", "data"}) | _LIST_ROW_CARD | _CHECK_ROW_CARD,
+    reduce=_study_reduce,
+    # D-352 (5): CARDUI measured six real fixtures over 13 §3.5's 8,000 B, 125 B of each chk_v3 read being
+    # `prop_target_words: null` on every check row.
+    omit_nulls=True,
+    always_move_card=True,
+)
+
 #: kind → its channel spec (spec 02 §3).
 CHANNEL_MAP: dict[str, ChannelSpec] = {
+    "screener": ChannelSpec(
+        structured=_BASE
+        | frozenset(
+            {
+                "view",
+                "screener",
+                "run",
+                "in_flight",
+                "headline",
+                "manifest",
+                "latest_top",
+                "labels",
+                "passing",
+                "actions",
+                "copy",
+                # keel_screener_view(include_view_source=true), L13 §2a.3.
+                "view_source",
+                # A screen run spends a backtest run: the submit's counters
+                # (`quota` / `quota_notice` are error-set fields), Q-3634.
+                "remaining",
+                # The ranked output over every coin with a value (keel-api's
+                # `completed.range`, Q-3638/Q-3639): small, and the one fact
+                # about the coins below the shown rows.
+                "range",
+                # keel_screener_view_set: the PUT's answer about the write —
+                # the revision saved, the view check, the output units.
+                "revision",
+                "check",
+                "units",
+            }
+        ),
+        card=frozenset({"latest", "hero", "graphs"}),
+    ),
     "backtest": _BACKTEST,
     "comparison": _COMPARISON,
     "strategy": _STRATEGY,
     "status": _STATUS,
     "live": _LIVE,
+    "study": _STUDY,
 }
 
-#: tool → kind. The 12 markdown view tools (three kinds + status) and the one
-#: card-backed live tool (spec 02 §2.2).
+#: tool → kind. The 12 markdown view tools (three kinds + status) and the
+#: card-backed live tools: the monitor (spec 02 §2.2) and the two paper writes
+#: (Q-7603).
 KIND_BY_TOOL: dict[str, str] = {
+    # Research (07 §3.3): the five view tools draw the study kind.
+    "keel_research_plan": "study",
+    "keel_research_run": "study",
+    "keel_research_get": "study",
+    "keel_research_view_set": "study",
+    "keel_research_brief": "study",
+    "keel_screener_run": "screener",
+    "keel_screener_view": "screener",
+    "keel_screener_view_set": "screener",
     "keel_backtest_run": "backtest",
     "keel_backtest_watch": "backtest",
     "keel_backtest_summarize": "backtest",
@@ -513,6 +778,12 @@ KIND_BY_TOOL: dict[str, str] = {
     "keel_strategy_restore": "strategy",
     "keel_account_status": "status",
     "keel_live_monitor": "live",
+    # A paper run's start and its lifecycle writes draw the live card's paper
+    # receipt (Q-7603; S06 §3.5.6, no new card kind), so they take the
+    # monitor's registration mode: the envelope rides as structuredContent and
+    # the `render` block moves to the card, leaving the text block as before.
+    "keel_paper_deploy": "live",
+    "keel_paper_control": "live",
 }
 
 
@@ -587,6 +858,10 @@ def unassigned_paths(envelope: dict, kind: str) -> list[str]:
     for key in envelope:
         if key == "view":
             view = envelope["view"]
+            # A bare `view` row claims the whole object (the screener spec's
+            # one home for its view); only member rows are checked one by one.
+            if "view" in declared:
+                continue
             if isinstance(view, dict):
                 for member in view:
                     if f"view.{member}" not in views and not any(
@@ -620,10 +895,12 @@ def partition(
     if move_card is None:
         move_card = card_meta_move()
     structured = deepcopy(envelope)
+    if spec.reduce is not None:
+        structured = spec.reduce(structured)
     for path in sorted(spec.drop):
         _pop_path(structured, _split(path))
     card: dict = {}
-    if move_card:
+    if move_card or spec.always_move_card:
         for path in sorted(spec.card):
             predicate = spec.conditional_card.get(path)
             if predicate is not None and predicate(envelope):
@@ -631,6 +908,8 @@ def partition(
             taken = _pop_path(structured, _split(path))
             if taken is not None:
                 _merge(card, taken)
+    if spec.omit_nulls:
+        structured = _without_nulls(structured)
     if not spec.open:
         for path in unassigned_paths(structured, kind):
             _log.warning("channel map: %s field %r has no declared home", kind, path)

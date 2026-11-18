@@ -34,6 +34,7 @@ silent fallbacks — lessons.md).
 
 from __future__ import annotations
 
+import re
 import types
 from dataclasses import dataclass
 from dataclasses import replace as _dc_replace
@@ -44,7 +45,7 @@ from pipeline_engine.binding import MARKET, Facet, ScopeMachine, decl_from_signa
 from pipeline_engine.dsl import clocks as C
 from pipeline_engine.dsl import relation as R
 from pipeline_engine.dsl import transfers as T
-from pipeline_engine.dsl.catalog import RULES, STAGED_CHANGES, Stage
+from pipeline_engine.dsl.catalog import RULES, STAGED_CHANGES, Stage, rule_applies
 from pipeline_engine.dsl.judgments import FLOW_CONFIG_KEYS, emit_template
 from pipeline_engine.dsl.spec import (
     ComponentRef,
@@ -299,6 +300,42 @@ _BOOLEAN_DOMAIN = (0.0, 1.0)
 _MODE_GATED_DIRECTIONAL = "ThresholdCross"
 _MODES_EMITTING_SHORT = frozenset({"symmetric", "short_only"})
 
+#: ZONE_SIDE_DROPPED (Q-3308) — the zone family ONLY, hard-coded by founder
+#: decision 2026-10-28 (no general "direction" facet, nothing for another
+#: component to opt into). Each zone component emits a side-free number;
+#: ``direction`` only picks which zones it tracks. Value: the signed sibling
+#: the fix names (the ``*Entry`` components, lane P3b).
+_ZONE_SIDE_COMPONENTS: dict[str, str] = {
+    "OrderBlock": "OrderBlockEntry",
+    "FairValueGap": "FairValueGapEntry",
+    "BreakerBlock": "BreakerBlockEntry",
+}
+#: The ``direction`` literals whose tracked zones include bearish (supply)
+#: ones, each with the phrase naming where a long-only mask buys. "both" is
+#: the components' DEFAULT, so the common recipe ``OrderBlock() ->
+#: RangeSelector -> entries`` buys at supply zones too.
+_ZONE_LONG_AT_SUPPLY: dict[str, str] = {
+    "bearish": "every bearish (supply) zone",
+    "both": "every zone, including bearish (supply) ones",
+}
+#: LEVEL_SIDE_UNSCOPED (Q-3333) — the level factories, each with the parameter that
+#: names its level slot, and the zone-family producers whose `direction="both"` level
+#: can come from either side (hard-coded, the same founder rule as ZONE_SIDE_DROPPED).
+_LEVEL_FACTORY_SLOT: dict[str, str] = {
+    "LevelStop": "level",
+    "LevelTakeProfit": "level",
+    "RiskRewardTarget": "stop_level",
+    "LevelTarget": "level",
+}
+_LEVEL_ZONE_OUTPUTS = frozenset({"edge", "level"})
+#: SweepLevel's level is the sweep the entry reacted to when frozen at entry; only a
+#: LIVE read (a trailing stop) can pick up a later sweep of the other side.
+_LEVEL_SWEEP_PRODUCER = "SweepLevel"
+_ZONE_SIDE_CONSUMER = "TradeManager"
+_ZONE_SIDE_SLOT_PARAM = "entries"
+#: A non-negative 0/1 mask: what TradeManager can only read as long-or-flat.
+_ZONE_SIDE_MASK_DOMAIN = {"set": [0.0, 1.0]}
+
 
 def _domain_set(sig) -> tuple[float, ...] | None:
     """The declared ``output_domain`` as a sorted float tuple, or None."""
@@ -455,6 +492,8 @@ class FlowVal:
     # their facets on their FIELDS. Σ entries keep the FlowVal whole, so a
     # Store/Load carries the facet with it (03-R16).
     facet: object | None = None
+    unit: str = "unknown"
+    unit_source: str = "unknown"
 
 
 def _facet_of(fv: "FlowVal"):
@@ -715,6 +754,27 @@ def _tok_ref(tok) -> TypeRef | None:
     return None
 
 
+def _step_ctx(ctx: str, i: int) -> str:
+    """The edit-layer path of step ``i`` under ``ctx`` (Q-7156): ``step[i]`` at the root."""
+    return f"{ctx}.step[{i}]" if ctx else f"step[{i}]"
+
+
+_CANONICAL_HEAD = re.compile(r"^(step|var|factory)\[")
+
+
+def _message_context(step: TypingAny, walk_ctx: str) -> str:
+    """Where a message says a step is: its own location's path when it has one (Q-7156).
+
+    A parsed step carries its edit-layer path (a factory body's step reads
+    ``factory[f].step[j]``, a pipeline variable's ``var[v].step[j]``, as the
+    issue's location does); a graph-built step carries a block id, so the
+    walk's own path stands in.
+    """
+    loc = getattr(step, "location", None)
+    ctx = getattr(loc, "context", None)
+    return ctx if isinstance(ctx, str) and _CANONICAL_HEAD.match(ctx) else walk_ctx
+
+
 class Walk:
     """One interpreter run over an EXPANDED strategy (pass-6 + pass-8 semantics).
 
@@ -772,6 +832,10 @@ class Walk:
         # verify_spec) refuse cyclic specs with PIPELINE_VARIABLE_CYCLE
         # before this walk ever runs.
         self._var_stack: set[str] = set()
+        # The flow INPUT each component step received, keyed by the step's
+        # identity — the one-hop back-edge ZONE_SIDE_DROPPED walks to reach a
+        # value's root producer (``FlowVal.src_ref`` gives the forward edge).
+        self._step_inputs: dict[int, FlowVal] = {}
         self.final: FlowVal = _NONE_VAL
         # Pass-8 clock journal (spec 02 §4.3 slot shape): every slot clock
         # read is journaled during the walk; the write-side-vs-read-side
@@ -818,6 +882,8 @@ class Walk:
     ) -> FlowVal:
         """Pass-6 position: the single walk over the expanded strategy."""
         self.issues, self.type_flow = issues, type_flow
+        self.outputs = list(strategy.outputs.slots) if strategy.outputs is not None else []
+        self.used.update(self.outputs)
         self.variable_pipelines = {
             v.name: v.value for v in strategy.variables if isinstance(v.value, PipelineSpec)
         }
@@ -835,7 +901,8 @@ class Walk:
                 kappa_minutes=self._kexec[0] if self._kexec else None,
                 kappa_token=tok if isinstance(tok, str) else None,
             )
-        self.final = self._pipeline(strategy.pipeline, _NONE_VAL, "pipeline", "root")
+        # The walk's context is an edit-layer path (Q-7156): the root's steps are step[i].
+        self.final = self._pipeline(strategy.pipeline, _NONE_VAL, "", "root")
         if self.binding is not None:  # 01-R10 / 03-R27: the pipeline's end
             self._binding_emit(self.binding.finish(_facet_of(self.final)), None)
         if not self.structural:
@@ -942,6 +1009,8 @@ class Walk:
         the emission refuses the edit and gives the aggregation guidance
         instead (``clocks.terminal_resample_up_*``).
         """
+        if not rule_applies("TERMINAL_CLOCK_MISMATCH"):
+            return
         kexec = self._kexec
         kterm = self.final.clock
         if kexec is None or kterm is None or kterm == kexec:
@@ -962,7 +1031,7 @@ class Walk:
             "expected_clock": C.render_clock(kexec),
             "consequence": C.terminal_consequence(kterm, kexec),
         }
-        if C.is_subclock(kterm, kexec):
+        if C.terminal_repair_arm(kterm, kexec) == "project":
             env = C.FireEnvelope(
                 expected=expected_ref,
                 actual=actual_ref,
@@ -1245,6 +1314,7 @@ class Walk:
         for code, loc, kwargs in self.journal:
             emit(issues, code, location=loc, **kwargs)
         self.flush_clock_slot_reads(issues)
+        self.flush_outputs(issues)
         if self.sink is not None:
             for name, e in self.sigma.items():
                 self.sink.on_slot_state(name, e.val.name)
@@ -1256,6 +1326,12 @@ class Walk:
                     location=_format_location(e.location),
                     slot=name,
                 )
+
+    def flush_outputs(self, issues: list) -> None:
+        """Output declarations consume the terminal slot; missing stores are structural."""
+        for slot in self.outputs:
+            if slot not in self.sigma:
+                emit(issues, "OUTPUT_NOT_STORED", location="outputs", slot=slot)
 
     def flush_clock_slot_reads(self, issues: list) -> None:
         """The J-SLOTREAD clock half at the pass-8 position (spec 02 §4.3).
@@ -1840,8 +1916,10 @@ class Walk:
                 self._entry(step.name or "factory", cur.name, "UNRESOLVED", "error")
                 cur = _ANY_VAL
             elif isinstance(step, PipelineSpec):
+                if step.factory_call is not None and not self.structural:
+                    self._level_side_unscoped(step.factory_call)
                 sub = f"{spath}/!{step.name}" if step.name is not None else spath
-                cur = self._pipeline(step, cur, f"{ctx}.step[{i}]", sub)
+                cur = self._pipeline(step, cur, _step_ctx(ctx, i), sub)
             elif isinstance(step, VariableRef):
                 vp = self.variable_pipelines.get(step.name)
                 if vp is not None:
@@ -1880,11 +1958,15 @@ class Walk:
             self._trace(spath, "component", step.name, None, cur)
             return cur, prev_par
         loc = _format_location(step.location)
+        self._step_inputs[id(step)] = cur
         cat = sig.category.value
         loader = cat == "data_loader"
         dict_in = cur.obj is dict
         gated: str | None = None  # the fired dict-gate code, if any
         input_rejected = False  # base-half short-circuit for the clock facet
+        # (prev_key, allowed outputs) when the transition advisory applies;
+        # judged once the step's output type is synthesized (Q-3307).
+        advisory: tuple[str, list] | None = None
         bind_facet, bind_fired = None, False
         if self.binding is not None:
             bind_facet, bind_fired = self._binding_step(sig, step, cur, loc, spath)
@@ -1937,7 +2019,7 @@ class Walk:
                                 location=loc,
                                 suggestion=self._bridge(cur, sig.input_type, step.name),
                                 row_staged_by=v.staged_by,
-                                context=f"{ctx}.step[{i}]",
+                                context=_message_context(step, _step_ctx(ctx, i)),
                                 step=step.name,
                                 expected=_expected_ref(sig.input_type, sig.input_domain),
                                 actual=_actual_ref(cur),
@@ -1971,21 +2053,9 @@ class Walk:
                 if prev_key is not None and not loader:
                     row = _TRANSITIONS.get(prev_key)
                     if row is not None and cat in row:
-                        out_key = R.transition_key(type_name(sig.output_type))
-                        if out_key is not None and out_key not in row[cat]:
-                            emit(
-                                self.issues,
-                                _CODE["J-STEP.transition-advisory"],
-                                location=loc,
-                                step=step.name,
-                                category=cat,
-                                output=out_key,
-                                prev_output=prev_key,
-                                expected_outputs=row[cat],
-                                suggestion=_transition_suggestion(
-                                    step.name, cat, prev_key, row[cat]
-                                ),
-                            )
+                        # Evaluated AFTER synthesis (below): the output key of
+                        # a type_relation step is its SYNTHESIZED type (Q-3307).
+                        advisory = (prev_key, row[cat])
             if self.ev is not None:
                 self._sink_check(sig, cur, loader, dict_in, cat, gated)
             # ── Clock facet input resolution (spec 01 §6.1/§6.3) ──────────
@@ -2006,7 +2076,7 @@ class Walk:
                 step,
                 cur,
                 loc,
-                f"{ctx}.step[{i}]",
+                _message_context(step, _step_ctx(ctx, i)),
                 spath,
                 clock_in=clock_in,
                 clock_origin=clock_origin,
@@ -2016,6 +2086,8 @@ class Walk:
             )
             if bind_facet is not None:
                 out = _with_facet(out, bind_facet)
+            if advisory is not None:
+                self._transition_advisory(sig, step, out, cat, loc, *advisory)
             self._entry(
                 f"{step.name}({_format_params_brief(step.params)})",
                 cur.name,
@@ -2026,12 +2098,91 @@ class Walk:
         else:
             out = cur
         self._slot_reads(sig, step, cur, loc, spath)  # pass-8 runs regardless of pass-6 gates
+        if not self.structural:
+            unit = sig.unit
+            by_param = sig.unit_by_param
+            if by_param is not None:
+                value = _effective_param(step, sig, by_param["param"])
+                key = (
+                    "null"
+                    if value is None
+                    else str(value).lower()
+                    if isinstance(value, bool)
+                    else str(value)
+                )
+                unit = by_param["values"].get(key, "unknown")
+            if step.name == "Scale":
+                unit = step.params.get("unit") if cur.unit != "unknown" else "unknown"
+                source = "derived" if unit not in (None, "unknown") else "unknown"
+            elif unit == "preserve":
+                incoming = list(cur.fields.values()) if cur.fields is not None else [cur]
+                known = {v.unit for v in incoming}
+                unit = next(iter(known)) if len(known) == 1 else "unknown"
+                source = "derived" if unit != "unknown" else "unknown"
+            else:
+                source = "declared" if unit not in (None, "unknown") else "unknown"
+            out = _dc_replace(out, unit=unit or "unknown", unit_source=source)
         cur = out
         if gated:
             prev_par = None
         if not self.structural:
             self._trace(spath, "component", step.name, sig.version, cur)
         return cur, prev_par
+
+    def _transition_advisory(
+        self,
+        sig,
+        step: ComponentRef,
+        out: FlowVal,
+        cat: str,
+        loc: str,
+        prev_key: str,
+        allowed: list,
+    ) -> None:
+        """J-STEP.transition-advisory — TRANSITION_OUTPUT_MISMATCH (spec 01 §2.5).
+
+        For a step that declares a ``type_relation`` the output side also reads
+        the type the step SYNTHESIZED (J-INST, spec 01 §3), and the advisory
+        is silent when that type is admitted (Q-3307). Before, it read the
+        declared output only, so a ``∀T ≤ SignalSeries. T → T`` step (``Lag``,
+        ``NegateTransform``) after a ``BinarySignal`` reported its bound's
+        spelling ``SignalSeries`` and warned although J-INST had carried
+        ``(BinarySignal, Mask)`` through. A value-computing relation step
+        (``Clip``/``Abs``, transfer ``top``) synthesizes ``(BinarySignal, ⊤)``
+        → ``norm`` → ``SignalSeries`` and keeps warning, which is the
+        long-only bridge's job. The previous side (``prev_key``) already read
+        the synthesized type.
+
+        The synthesized reading can only CLEAR a fire, never add one: a fire
+        needs the declared output AND the synthesized output both outside the
+        row. The synthesized type refines the declared output (the relation's
+        bound), so a row that admits the declared supertype already admits
+        it by subsumption — the table spells base names, not the refinement
+        lattice (``ApplyMask`` synthesizing ``ForecastSeries`` under a row
+        that lists ``SignalSeries`` is the measured case). An unbounded
+        relation (declared ``Any``) has no transition key and stays silent,
+        as before. The message keeps the declared key, so every surviving
+        fire renders byte-identically. Twin: engine/interpreter.ts
+        ``transitionAdvisory``.
+        """
+        out_key = R.transition_key(type_name(sig.output_type))
+        if out_key is None or out_key in allowed:
+            return
+        if sig.type_relation and self.profile.flow["scheme-synthesis"] == "post":
+            synth_key = R.transition_key(out.name)
+            if synth_key is not None and synth_key in allowed:
+                return
+        emit(
+            self.issues,
+            _CODE["J-STEP.transition-advisory"],
+            location=loc,
+            step=step.name,
+            category=cat,
+            output=out_key,
+            prev_output=prev_key,
+            expected_outputs=allowed,
+            suggestion=_transition_suggestion(step.name, cat, prev_key, allowed),
+        )
 
     # ── synthesis: J-INST / J-LIT / declared output + norm (spec 01 §3-§4) ───
 
@@ -2356,6 +2507,8 @@ class Walk:
                 # and break conformance parity — typed implicit checks are a
                 # declared follow-up, not smuggled in).
                 continue
+            if step.name == _ZONE_SIDE_CONSUMER and pname == _ZONE_SIDE_SLOT_PARAM:
+                self._zone_side_dropped(step, entry.val, loc, sval)
             # Per-slot domain demand (slot-vocabulary successor, Q-0548): the
             # declared `slot_domains` element rides the SAME ≤_slot query the
             # base half always made — `_demand_tok`'s dom argument existed
@@ -2524,7 +2677,7 @@ class Walk:
             if self.binding is not None:
                 self.binding.enter_branch(bname)
             try:
-                bval = self._pipeline(sub, cur, f"{ctx}.branch[{bname}]", bpath)
+                bval = self._pipeline(sub, cur, f"{_step_ctx(ctx, i)}.branch[{bname}]", bpath)
             finally:
                 self._tail_frames.pop()
                 self._branch_frames.pop()
@@ -2714,6 +2867,8 @@ class Walk:
         two. A non-literal target (a VariableRef) means NO verdict: it can
         only ever suppress a fire.
         """
+        if not rule_applies("NORMALIZER_BEFORE_CONCAT"):
+            return
         offenders: list[tuple[str, str, object]] = []
         for bname, val in fields.items():
             ref = val.src_ref
@@ -2820,6 +2975,124 @@ class Walk:
                 producer=ref.name,
             )
             return
+
+    def _zone_side_dropped(self, step: ComponentRef, val: FlowVal, loc, slot: str) -> None:
+        """ZONE_SIDE_DROPPED (Q-3308): a zone mask that buys at supply zones.
+
+        Fires at ``TradeManager`` when the value its ``entries`` slot reads
+        (a) is PROVEN a non-negative 0/1 mask (domain ⊑ Set{0, 1}) and (b)
+        traces back, through single-input steps and Store/Load hops, to
+        ``OrderBlock`` / ``FairValueGap`` / ``BreakerBlock`` whose effective
+        ``direction`` tracks bearish zones: ``"bearish"``, or ``"both"`` (the
+        components' default). TradeManager reads +1 as long, so that
+        strategy opens LONGS at supply zones; ``"bullish"`` is the long-only
+        shape and stays silent.
+
+        (a) is what makes "no sign-changing step in between" exact without
+        a list of sign changers: ``NegateTransform`` proves ``Binary``
+        ({-1, 0, 1}), ``Scale`` proves nothing (⊤) and
+        ``ThresholdCross(short_only)`` proves ``Binary``, so any of them on the
+        path leaves the mask domain and the rule is silent. (b) walks the
+        producer chain backwards: ``FlowVal.src_ref`` names the step that
+        produced a value (carried whole through Σ by J-LOAD) and
+        ``_step_inputs`` holds the value that step received. A record input
+        (a Parallel / composer) or an unknown producer ends the walk with no
+        verdict, as does a non-literal ``direction`` — the rule can only
+        under-report. Python-only (catalog ``ts_absent_reason``).
+        """
+        if not isinstance(val.tok, R.Pair) or not R.domain_leq(
+            val.tok.domain, _ZONE_SIDE_MASK_DOMAIN
+        ):
+            return
+        seen: set[int] = set()
+        cur = val
+        while True:
+            ref = cur.src_ref
+            if not isinstance(ref, ComponentRef) or id(ref) in seen:
+                return
+            seen.add(id(ref))
+            entry_name = _ZONE_SIDE_COMPONENTS.get(ref.name)
+            if entry_name is not None:
+                direction = _effective_param(ref, self.registry.get(ref.name), "direction")
+                zones = _ZONE_LONG_AT_SUPPLY.get(direction) if isinstance(direction, str) else None
+                if zones is None:
+                    return
+                emit(
+                    self.issues,
+                    code="ZONE_SIDE_DROPPED",
+                    location=loc,
+                    producer=ref.name,
+                    direction=direction,
+                    zones=zones,
+                    entry_component=entry_name,
+                    slot=slot,
+                )
+                return
+            upstream = self._step_inputs.get(id(ref))
+            if upstream is None or not isinstance(upstream.tok, R.Pair):
+                return
+            cur = upstream
+
+    def _level_side_unscoped(self, call: ComponentRef) -> None:
+        """LEVEL_SIDE_UNSCOPED (Q-3333): a level factory reading a level of either side.
+
+        At a ``LevelStop`` / ``LevelTakeProfit`` / ``RiskRewardTarget`` (or deprecated
+        ``LevelTarget``) call with no ``side=``, walk the value in its level slot back
+        through Store/Load hops (``FlowVal.src_ref``, carried whole through Σ) and
+        single-input steps (``_step_inputs``). Fire when the chain starts at a zone
+        component with ``direction="both"`` (written or defaulted) and ``output`` ``edge``
+        / ``level``, or at ``SweepLevel(direction="both")`` under ``LevelStop(trail=True)``.
+        A record input (a composer: level plus buffer), a non-literal parameter or any
+        other producer ends the walk with no verdict. Python-only (catalog
+        ``ts_absent_reason``).
+        """
+        slot_param = _LEVEL_FACTORY_SLOT.get(call.name)
+        if slot_param is None:
+            return
+        sig = self.registry.get(call.name)
+        if sig is not None and "side" in sig.parameters:
+            if _effective_param(call, sig, "side") is not None:
+                return
+        slot = call.params.get(slot_param)
+        if not isinstance(slot, str):
+            return
+        entry = self.sigma.get(slot)
+        if entry is None:
+            return
+        trail = _effective_param(call, sig, "trail") if call.name == "LevelStop" else None
+        seen: set[int] = set()
+        cur = entry.val
+        while True:
+            ref = cur.src_ref
+            if not isinstance(ref, ComponentRef) or id(ref) in seen:
+                return
+            seen.add(id(ref))
+            rsig = self.registry.get(ref.name)
+            if ref.name in _ZONE_SIDE_COMPONENTS or ref.name == _LEVEL_SWEEP_PRODUCER:
+                if _effective_param(ref, rsig, "direction") != "both":
+                    return
+                if ref.name == _LEVEL_SWEEP_PRODUCER:
+                    if trail is not True:
+                        return
+                    what = "a sweep"
+                else:
+                    if _effective_param(ref, rsig, "output") not in _LEVEL_ZONE_OUTPUTS:
+                        return
+                    what = "a zone"
+                emit(
+                    self.issues,
+                    code="LEVEL_SIDE_UNSCOPED",
+                    location=_format_location(call.location),
+                    factory=call.name,
+                    slot=slot,
+                    producer=ref.name,
+                    what=what,
+                )
+                return
+            upstream = self._step_inputs.get(id(ref))
+            if upstream is None or not isinstance(upstream.tok, R.Pair):
+                return
+            cur = upstream
 
     def _emit_field_check(
         self,

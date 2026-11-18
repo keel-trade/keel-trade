@@ -32,6 +32,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from keel.api_path import seg
 from keel.errors import ConflictError, KeelError
 
 from . import register
@@ -138,7 +139,7 @@ def _status(result: dict, answered: bool) -> str:
 
 
 def _read_head(client: Any, strategy_id: str) -> dict:
-    payload = client.get(f"/v1/strategies/{strategy_id}/versions/HEAD/source")
+    payload = client.get(f"/v1/strategies/{seg(strategy_id)}/versions/HEAD/source")
     if not isinstance(payload, dict) or not isinstance(payload.get("source"), str):
         raise KeelError(
             f"Strategy {strategy_id} has no readable HEAD source to upgrade.",
@@ -236,7 +237,7 @@ def _apply(
         # valid ONLY at this lock; never let keel-api re-evolve the stored one.
         patch["component_lock"] = new_lock
     try:
-        saved = client.patch(f"/v1/strategies/{strategy_id}", json=patch)
+        saved = client.patch(f"/v1/strategies/{seg(strategy_id)}", json=patch)
     except ConflictError as exc:
         exc.suggestion = (
             "HEAD moved after this upgrade read it; nothing was written. Call "
@@ -272,6 +273,7 @@ STRATEGY_UPGRADE = register(
     OutcomeTool(
         name="keel_strategy_upgrade",
         required_action="strategy.update",
+        rate_tier="mutation",
         cli_path=("strategy", "upgrade"),
         toolset="backtest",
         # grounded-in: position-layer spec 04-R21 (one upgrade verb, MCP = CLI),

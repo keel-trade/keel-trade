@@ -153,7 +153,9 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
                 "tool_count": sum(
                     1
                     for t in all_tools()
-                    if is_tool_loaded(t.toolset, active, local_only=t.local_only, name=t.name)
+                    if is_tool_loaded(
+                        t.toolset, active, local_only=t.local_only, name=t.name, cli_only=t.cli_only
+                    )
                 ),
             },
         }

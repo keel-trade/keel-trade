@@ -11,21 +11,20 @@ always-on slots include files this wheel deliberately does not ship.
 
 from __future__ import annotations
 
-from importlib import resources
+from keel.data._bundled import MARKDOWN_FILES, read_bundled
 
 
 def load_section(name: str) -> str:
-    """Load a single knowledge section by filename (without .md extension)."""
-    ref = resources.files("keel.data").joinpath("knowledge", f"{name}.md")
-    try:
-        return ref.read_text()
-    except FileNotFoundError:
-        available = [
-            f.name.removesuffix(".md")
-            for f in resources.files("keel.data").joinpath("knowledge").iterdir()
-            if f.name.endswith(".md")
-        ]
-        raise FileNotFoundError(f"Unknown section '{name}'. Available: {available}")
+    """Load a single knowledge section by filename (without .md extension).
+
+    ``name`` may come from a caller (the ``keel://knowledge/{section}``
+    resource), so it is only ever a key into the bundled listing, never a
+    path (Q-3352, `keel.data._bundled`). An unknown name raises
+    ``NotFoundError`` naming the available sections and nothing else.
+    """
+    return read_bundled(
+        "keel.data", "knowledge", name, layout=MARKDOWN_FILES, kind="knowledge section"
+    )
 
 
 #: Sections whose FILE is not what an MCP surface serves. `operating_core.md`
@@ -63,7 +62,11 @@ def served_section(name: str) -> str:
     """
     if name in _BASE_DOCUMENT_SECTIONS:
         from keel.tools.outcomes import paper_deploy_loaded
-        from keel.tools.outcomes._toolsets import is_listed_profile, listed_paper_enabled
+        from keel.tools.outcomes._toolsets import (
+            is_listed_profile,
+            listed_paper_enabled,
+            listed_screens_enabled,
+        )
         from pipeline_engine.reference.system import assemble
 
         # The `paper` section is served only where the tool is loaded (S06
@@ -74,6 +77,7 @@ def served_section(name: str) -> str:
             profile=active_profile(),
             paper_loaded=paper_deploy_loaded(),
             paper_listed=is_listed_profile() and listed_paper_enabled(),
+            screens_listed=is_listed_profile() and listed_screens_enabled(),
         )
     return load_section(name)
 

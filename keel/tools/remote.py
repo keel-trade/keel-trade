@@ -15,11 +15,15 @@ def _client():
     return KeelClient()
 
 
-def strategy_compile(source: str, component_lock: dict[str, int] | None = None) -> dict[str, Any]:
+def strategy_compile(
+    source: str, component_lock: dict[str, int] | None = None, *, strategy_id: str | None = None
+) -> dict[str, Any]:
     """Compile a strategy via the remote API."""
     body: dict[str, Any] = {"source": source}
     if component_lock:
         body["component_lock"] = component_lock
+    if strategy_id is not None:
+        body["strategy_id"] = strategy_id
     client = _client()
     try:
         return client.post("/v1/strategies/compile", json=body)

@@ -21,6 +21,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from keel.api_path import seg
 from keel.errors import KeelError, NotFoundError
 
 from . import register
@@ -89,7 +90,7 @@ def _compare_metrics(ma: dict, mb: dict) -> tuple[dict, dict]:
 
 def _fetch_detail(client, backtest_id: str) -> dict:
     try:
-        detail = client.get(f"/v1/backtests/{backtest_id}")
+        detail = client.get(f"/v1/backtests/{seg(backtest_id)}")
     except NotFoundError:
         raise NotFoundError(
             f"Backtest {backtest_id} not found.",
@@ -530,7 +531,7 @@ def _fetch_source(client, detail: dict) -> str | None:
     commit_id = detail.get("commit_id")
     if not strategy_id or not commit_id:
         return None
-    resp = client.get(f"/v1/strategies/{strategy_id}/versions/{commit_id}/source")
+    resp = client.get(f"/v1/strategies/{seg(strategy_id)}/versions/{seg(commit_id)}/source")
     if isinstance(resp, dict):
         return resp.get("source")
     return None
@@ -841,7 +842,7 @@ def _fetch_message(client, detail: dict) -> str | None:
     if not strategy_id or not commit_id:
         return None
     try:
-        resp = client.get(f"/v1/strategies/{strategy_id}/versions/{commit_id}")
+        resp = client.get(f"/v1/strategies/{seg(strategy_id)}/versions/{seg(commit_id)}")
     except KeelError:
         return None
     return resp.get("message") if isinstance(resp, dict) else None
@@ -998,7 +999,7 @@ def _head_drift_next(client, strategy_id: Any, details: list[dict]) -> str | Non
     if len(versions) < 2:
         return None
     try:
-        meta = client.get(f"/v1/strategies/{strategy_id}")
+        meta = client.get(f"/v1/strategies/{seg(strategy_id)}")
     except Exception:  # noqa: BLE001 — a hint never fails the compare
         return None
     head = meta.get("current_sequence") if isinstance(meta, dict) else None

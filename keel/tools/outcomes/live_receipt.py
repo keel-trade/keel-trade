@@ -25,6 +25,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from keel.api_path import seg
 from keel.errors import KeelError, ValidationError
 
 from . import register
@@ -52,7 +53,7 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
     if version is not None:
         params["version"] = int(version)
 
-    path = f"/v1/deployments/{deployment_id}/executions/{session_id}/revisions/{intent_rev}/receipt"
+    path = f"/v1/deployments/{seg(deployment_id)}/executions/{seg(session_id)}/revisions/{seg(intent_rev)}/receipt"
     client = ctx.get_client()
     try:
         receipt = client.get(path, **params) if params else client.get(path)

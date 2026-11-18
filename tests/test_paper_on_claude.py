@@ -274,8 +274,8 @@ def test_paper_wall_slot_line_only_where_control_is_served(paper_sdk_released, b
         assert points == [*head["talking_points"], line]
     else:
         assert wall == head  # ChatGPT: HEAD's wall, byte for byte
-    # HEAD's concurrent-cap clause is kept on every form.
-    assert "does not reset on a clock" in wall["what_was_expected"]
+    # The cap's instruction (doc 07 §4) is kept on every form.
+    assert "before a slot frees" in wall["what_was_expected"]
     assert all("upgrade" not in p.lower() for p in points)
 
 
@@ -338,10 +338,7 @@ def test_plan_usage_paper_block_follows_the_host(paper_sdk_released, host):
             "used": 1,
             "remaining": 0,
         }
-        assert got["talking_points"][-1] == (
-            "Paper strategies: 1 of 1 in use. It limits how many run at once and does "
-            "not reset on a clock."
-        )
+        assert got["talking_points"][-1] == "Paper strategies: 1 of 1 running."
     else:
         assert got == head  # ChatGPT and unknown clients: HEAD's bytes
 

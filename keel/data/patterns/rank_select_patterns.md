@@ -1,7 +1,8 @@
-<!-- keywords: top, rank, select, rotation, TopNAssetSelector, SelectionToSignalConverter, screen, filter, universe -->
+<!-- keywords: top, rank, select, rotation, TopNAssetSelector, SelectionToSignalConverter, filter, universe -->
 <!-- pattern: screen_select -->
+<!-- topic: screen_select_patterns -->
 
-# Screen-Select-Allocate
+# Rank-Select-Allocate
 
 Select the top N assets by a ranking signal, hold for a period, then rebalance.
 Best for rotation strategies (momentum rotation, value rotation).

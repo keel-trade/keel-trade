@@ -70,7 +70,7 @@ Quick Start:
 from __future__ import annotations
 
 import re
-from datetime import timedelta
+from datetime import date, datetime, timedelta, timezone
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -380,3 +380,23 @@ def validate_alphabet(table: dict[str, int]) -> None:
 
 
 validate_alphabet(TIMEFRAME_MINUTES)
+
+
+# ─── Days ────────────────────────────────────────────────────────────────
+
+
+_ONE_MICROSECOND = timedelta(microseconds=1)
+
+
+def covered_day(close: datetime) -> date:
+    """The UTC day a bar closing at ``close`` covers: the date of ``close − 1 µs``.
+
+    The platform's one covered-day rule (LA-9/CS-16; Research 03 §0.1, 00 G16). Stored curves are close-labelled:
+    the ``1d`` bar labelled ``2026-09-23T00:00`` closes then and covers 2026-09-22, so a midnight label names the day
+    BEFORE it and any other close (a ``1d@12h`` close, an hourly close at 14:00) names its own day. An aware ``close``
+    is read in UTC; a naive one is taken as UTC. keel-api's slice and window readers and the research methods all call
+    this one function.
+    """
+    if close.tzinfo is not None and close.utcoffset() is not None:
+        close = close.astimezone(timezone.utc)
+    return (close - _ONE_MICROSECOND).date()

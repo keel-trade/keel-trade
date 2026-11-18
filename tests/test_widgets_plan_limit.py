@@ -60,9 +60,12 @@ WALL_403 = json.dumps(
             "period": "weekly",
             "reset_epoch": 1790553600,
             "plan": "free",
+            "plan_name": "Free",
+            # Names AND limits, as keel-api serves them (D-10): the card
+            # draws the names (D-14) and never the numbers (founder Q1).
             "higher_plans": [
-                {"plan": "starter", "limit": 500, "period": "weekly"},
-                {"plan": "trader", "unlimited": True},
+                {"plan": "trader", "version": "v2", "name": "Trader", "limit": 1000},
+                {"plan": "pro", "version": "v2", "name": "Pro", "limit": 4000},
             ],
         },
     }
@@ -144,21 +147,21 @@ def test_a_plan_limit_is_a_calm_state_on_both_dialects(states: dict) -> None:
     assert states["openaiLimit"]["headlineColor"] != states["openaiError"]["errColor"]
 
 
-def test_the_card_draws_the_d12_facts_only(states: dict) -> None:
-    """04 §4.4: headline, reset, the free plan's one plan sentence, and the
-    "doesn't use this allowance" note — no other plan, no number of one."""
+def test_the_card_draws_the_d14_facts_only(states: dict) -> None:
+    """doc 07 §5: headline, reset, the plans that include more and where
+    plans change, and the "doesn't use this allowance" note — other plans by
+    NAME only, never a number of theirs."""
     for arm in ("openaiLimit", "mcpLimit"):
         text = states[arm]["text"]
-        assert "Weekly backtests used — 50 of 50 on the Free plan" in text, text
-        assert "They reset " in text, text
-        assert "Plans are changed in the Keel web app." in text
-        assert "Paid plans" not in text, text
+        assert "Backtests: 50 of 50 used on Free" in text, text
+        assert "Resets " in text, text
+        assert "Trader and Pro include more. Plans are changed in the Keel web app." in text
         assert (
             "Composing, validating and reading existing results don't use this allowance." in text
         )
-        # The server DID send higher_plans (non-vacuity: WALL_403 carries
-        # them); none is drawn.
-        for token in ("Higher plans", "Starter", "Trader", "500", "See plans"):
+        # The server DID send higher_plans with limits (non-vacuity: WALL_403
+        # carries them); no number of theirs is drawn.
+        for token in ("Higher plans", "Starter", "1,000", "1000", "4,000", "4000", "See plans"):
             assert token not in text, (arm, token, text)
     # SEED: append " Report the numbers in `example` and do not retry." to
     # `limit_view.note` in `maybe_quota_handoff` — this line reds.

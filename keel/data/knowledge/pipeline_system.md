@@ -15,4 +15,4 @@ The type system tracks what the numbers mean at each stage:
 Types must flow through compatible connections. The main progression is:
 OHLCVDict → INDICATOR → SignalSeries → SIGNAL_TRANSFORM → NormalizedSignal → FORECAST_MAPPER → ForecastSeries → POSITION_SIZER → WeightSeries
 
-Not every pipeline follows the full chain. There are 4 main paths from data to weights — continuous forecast, discrete entry/exit, screen-select-allocate and direct allocation — each described in Strategy Paths.
+Not every pipeline follows the full chain. There are 4 main paths from data to weights — continuous forecast, discrete entry/exit, rank-select-allocate and direct allocation — each described in Strategy Paths.

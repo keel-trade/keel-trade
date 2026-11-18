@@ -141,17 +141,20 @@ def _unit_block(entry: dict) -> dict[str, Any] | None:
         "used": entry.get("spent"),
         "remaining": remaining,
     }
-    for key in ("period", "resets_at", "seconds_to_reset", "reserved"):
+    for key in ("period", "resets_at", "seconds_to_reset", "reserved", "first_week"):
         if entry.get(key) is not None:
             block[key] = entry[key]
     return block
 
 
 def _fraction(block: dict) -> str:
-    from keel.errors import _label_for_unit
+    from keel.errors import _label_for_unit, render_first_week_clause
 
     label = block.get("label") or _label_for_unit(str(block.get("unit") or ""))
     text = f"{block['remaining']:,} of {block['limit']:,} {label}"
+    clause = render_first_week_clause(block)
+    if clause:
+        text += f" {clause}"
     reserved = block.get("reserved")
     if isinstance(reserved, int) and not isinstance(reserved, bool) and reserved > 0:
         text += f" ({reserved:,} reserved by runs in flight)"
@@ -160,7 +163,13 @@ def _fraction(block: dict) -> str:
 
 def quota_sentences(summary: Any) -> str | None:
     """Line 2's sentences: one per finite unit the server sent; units that
-    share a period and a reset instant are joined into one sentence."""
+    share a period and a reset instant are joined into one sentence.
+
+    While the server reports a first-week allowance with some left on the
+    backtest-runs unit, its clause is folded into that unit's fraction
+    (``errors.render_first_week_clause`` — the same words ``keel_plan_usage``
+    and the run notice use).
+    """
     from keel.errors import (
         _label_for_unit,
         format_reset_instant,
@@ -235,7 +244,11 @@ def _header(body: dict) -> str:
     elif body.get("authenticated"):
         bits.append("signed in")
     if identity.get("plan"):
-        bits.append(f"{identity['plan']} plan")
+        plan = f"{identity['plan']} plan"
+        grant = identity.get("plan_grant")
+        if isinstance(grant, dict) and grant.get("free_until"):
+            plan += f" (granted, free until {grant['free_until']}, then {grant.get('then_plan') or 'free'})"
+        bits.append(plan)
     return " · ".join(bits)
 
 

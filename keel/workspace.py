@@ -21,6 +21,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from keel.api_path import seg
+
 
 if TYPE_CHECKING:
     from keel.errors import KeelError
@@ -145,7 +147,7 @@ def _fetch_latest_commit_id(client: Any, strategy_id: str) -> str | None:
     happy path. The mutation already succeeded by the time we get here.
     """
     try:
-        raw = client.get(f"/v1/strategies/{strategy_id}/versions", limit=1)
+        raw = client.get(f"/v1/strategies/{seg(strategy_id)}/versions", limit=1)
     except Exception:  # noqa: BLE001 — version fetch best-effort on the happy path → None on failure
         return None
     versions = _normalize_paginated_versions(raw)
@@ -438,7 +440,7 @@ def checkout(strategy_id: str, *, target_dir: str | Path | None = None) -> dict[
 
     client = KeelClient()
     try:
-        strategy = client.get(f"/v1/strategies/{strategy_id}")
+        strategy = client.get(f"/v1/strategies/{seg(strategy_id)}")
     finally:
         client.close()
 
@@ -554,7 +556,7 @@ def push(
     body["message"] = message
     try:
         try:
-            result = client.patch(f"/v1/strategies/{strategy_id}", json=body)
+            result = client.patch(f"/v1/strategies/{seg(strategy_id)}", json=body)
         except Exception as exc:
             from keel.errors import ConflictError
 
@@ -640,7 +642,7 @@ def pull(strategy_id: str | None = None) -> dict[str, Any]:
 
     client = KeelClient()
     try:
-        strategy = client.get(f"/v1/strategies/{strategy_id}")
+        strategy = client.get(f"/v1/strategies/{seg(strategy_id)}")
     finally:
         client.close()
 
@@ -713,7 +715,7 @@ def pull_force(strategy_id: str) -> dict[str, Any]:
 
     client = KeelClient()
     try:
-        strategy = client.get(f"/v1/strategies/{strategy_id}")
+        strategy = client.get(f"/v1/strategies/{seg(strategy_id)}")
     finally:
         client.close()
 
@@ -876,7 +878,7 @@ def _fetch_server_head_context(strategy_id: str) -> dict[str, Any]:
 
         client = KeelClient()
         try:
-            raw = client.get(f"/v1/strategies/{strategy_id}/versions", limit=1)
+            raw = client.get(f"/v1/strategies/{seg(strategy_id)}/versions", limit=1)
         finally:
             client.close()
         versions = _normalize_paginated_versions(raw)
@@ -1027,14 +1029,14 @@ def status(
 
         client = KeelClient()
         try:
-            strategy = client.get(f"/v1/strategies/{strategy_id}")
+            strategy = client.get(f"/v1/strategies/{seg(strategy_id)}")
             remote_hash = strategy.get("source_hash")
             remote_sequence = strategy.get("current_sequence")
             remote_name = strategy.get("name", meta.name)
             if recent_commits > 0:
                 try:
                     raw = client.get(
-                        f"/v1/strategies/{strategy_id}/versions",
+                        f"/v1/strategies/{seg(strategy_id)}/versions",
                         limit=recent_commits,
                     )
                     fetched_commits = [

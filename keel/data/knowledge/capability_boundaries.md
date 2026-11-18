@@ -45,7 +45,7 @@ the wrong series for it. The series that match it are the rolling
 ratio-of-sums recipe, the `VWAP` indicator (rolling proxy) and
 `SessionVWAP` (session/day-anchored proxy; `anchor="day"` is Pine's daily
 `vwap()`), each a proxy computed from typical-price × volume. `(close − VWAP) / ATR` is a `SignalRatio` over a
-close-minus-`SessionVWAP` `Crossover` branch and an `ATR` branch.
+close-minus-`SessionVWAP` `SignalDifference` branch and an `ATR` branch.
 Dollar volume is traded notional (sum of trade price × size) at every
 depth: `DollarVolumeLoader` serves it from the floor and splices the 15m
 candle `volume × close` in before it, naming the spliced bars in its
@@ -188,13 +188,14 @@ funding or OI is not a liquidation heatmap.
 Trader phrase → Keel mapping today:
 
 - "risk 1% per trade" (stop-distance sizing) → `RiskSizer(risk=0.01, distance=<stop distance slot>, max_weight=...)` — sized ONCE at the trade's entry bar and held; the cap is load-bearing. `RiskBudgetSizer` sizes to a VOLATILITY budget, a different rule.
-- "1R / 2R target", "1.5R stop" → R = `TradePnL()` ÷ `AtEntry(slot=<stop distance>)` (`SignalRatio`), thresholds −1 / +2 → `Exit()`. "TP at the SMA24, stop at 1.5RR": the unit is the distance to the target at entry, so the target rule is R ≥ 1 and the stop rule is R ≤ −1/1.5 (= −0.6667). Bar-close. `TradeReturn()` thresholds are fixed percentages, not R.
+- "1R / 2R target", "1.5R stop" → R = `TradePnL()` ÷ `AtEntry(slot=<stop distance>)` (`SignalRatio`), thresholds −1 / +2 → `Exit()`. "TP at the SMA24, stop at 1.5RR": the unit is the distance to the target at entry, so the target rule is R ≥ 1 and the stop rule is R ≤ −1/1.5 (= −0.6667). Bar-close. `TradeReturn()` thresholds are fixed percentages, not R. When the stop is a stored price level, `LevelStop(level=...)` + `RiskRewardTarget(stop_level=..., r=2.0)` is the short form; a target AT a price frozen at entry (the last swing low) is `LevelTakeProfit(level=...)`, and an exit at a level that keeps moving stays a market mask.
 - "daily loss limit", "pause after −3%" → **Per asset, expressible:** `RealizedPnL(window="1d") → AboveThresholdFilter(threshold=-0.03) → AllowEntry()` — no new entry on that asset for the rest of the UTC day once its realized loss reaches 3% (it does not close the open trade; `RealizedPnL` is a fraction). **Across the whole book at once: not expressible yet** — a cross-asset rule, a later portfolio-layer project. An execution-layer halt trigger (pause / flatten to cash) beside the existing halt machinery is not yet built. It is not a pipeline component; do not fake it with a signal.
 - "max N open positions", "one position at a time across BTC and ETH" → **Not expressible yet: cross-asset** concurrency is a later portfolio-layer project. Per asset, `EntryCount(window=...)` caps entries. Neither a sizer nor `TopNAssetSelector` (which caps entries only) expresses the cross-asset limit.
-- "trailing stop" → `GiveBack()` against a `Scale`d ATR, or `DrawdownFromPeak()` for a % trail, → `Exit()`; or `TrailingStop(...)` — supported under bar-close semantics.
+- "trailing stop" → `GiveBack()` against a `Scale`d ATR, or `DrawdownFromPeak()` for a % trail, → `Exit()`; or `TrailingStop(...)` — supported under bar-close semantics; a stop that only tightens with structure is `LevelStop(level=..., trail=True)`.
 - "flat by end of day" → `SessionCloseExit` stored → `[Load("bell"), Exit()]` — closes the trade at the final bar AND refuses an entry on it; `BarsHeld()` (N bars) is a different rule.
 - "move stop to breakeven" → a later-stage `SoldFraction()` rule, or `SinceEntry(agg="max")` on R.
 - "take half off" → `Reduce(fraction=0.5)` (of the initial size).
+- "buy the retest of X", "limit at the level" → `LevelEntry(level=..., side="long", reach="wick")` — enters on the bar that reaches the level, filled at that bar's close (no resting order); a breakout through a level is a different rule.
 - "DCA", "safety orders", "pyramid" → `ScaleIn(units=..., times=...)`.
 - "max N trades a day" → `EntryCount(window="1d")` with `AllowEntry()`.
 - "cooldown" → `BarsSinceExit()` or `Cooldown(...)` with `AllowEntry()`; `reentry="any_bar"` for a still-on signal.
@@ -207,16 +208,21 @@ ICT teaching). Keel does not adjudicate which is correct: each contested
 clause is a parameter with sourced options and a documented default. The SMC family IS
 registered — `SwingPivot`, `BreakOfStructure`, `ChangeOfCharacter`,
 `LiquiditySweep`, `PremiumDiscount`, `FairValueGap`, `OrderBlock`,
-`BreakerBlock`, `Displacement` — every contested clause a parameter with a
+`BreakerBlock`, `Displacement`, the signed entries `OrderBlockEntry` /
+`FairValueGapEntry` / `BreakerBlockEntry` and `SweepLevel` — every contested clause a parameter with a
 sourced default (`OrderBlock(candle_select, confirm, zone, mitigation)`,
 `FairValueGap(fill)`, `LiquiditySweep(target, reclaim_bars)`,
 `ChangeOfCharacter(which_pivot)`). Zones emit the signed ATR distance to
 the nearest ACTIVE zone (≤ 0 = inside; the bar that reaches a zone reports
-it, then it is gone under `touch`) or `output="edge"`, the far-edge PRICE
-for an `AtEntry(slot=...)` structure stop and `RiskSizer(distance=...)`.
+it, then it is gone under `touch`) or the PRICE of a zone line
+(`output="level"`, `at="proximal" | "midpoint" | "distal" | "top" | "bottom"`
+or a fraction; `distal` = `output="edge"`) for `LevelStop` /
+`RiskRewardTarget` and `RiskSizer(distance=...)`.
 All of it confirms with lag (no repaint), is bounded by `expiry_bars` (a
-Keel convention) and executes at bar close. "Enter the FVG / OB" is the
-zone → `BelowThresholdFilter(threshold=0.0, inclusive=True)` mask, gated
+Keel convention) and executes at bar close. "Enter the FVG / OB" is
+`FairValueGapEntry` / `OrderBlockEntry` (+1 bullish, −1 bearish: short by
+construction); the distance → `BelowThresholdFilter(threshold=0.0,
+inclusive=True)` mask enters long only, so it is for one bullish zone gated
 by the flow context the user names via `MaskAnd`.
 
 ### Grid / DCA bots and other different-engine asks

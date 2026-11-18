@@ -308,20 +308,22 @@ def test_mdx_text_escapes_jsx_but_not_code_spans():
 def test_numbers_arm_reds_a_typed_integer_and_passes_computed_ones():
     """Q-1468: any integer before tool/skill/component/topic must be a
     computed NUMBERS value. Seeds: the audit's stale 182 components, a 23-tool
-    surface, 9 skills, 12 topics — all red. Controls: every computed number in
+    surface, 11 skills, 12 topics — all red. Controls: every computed number in
     the same phrasings stays green, and prose with no number is silent."""
     checker = _load_checker()
     n = checker.compute_numbers()
     assert n["tool_count"] == len(checker.listed_tools())
     assert n["tools_registry"] > n["tools_local_default"] > n["tool_count"]
-    assert n["skills_bundled"] == n["skills_hosted"] + 1  # deploy-and-monitor excluded
+    # deploy-and-monitor, plus screen-creation until prod's screens flag is on.
+    withheld = 1 if checker.prod_listed_screens_all_hosts() else 2
+    assert n["skills_bundled"] == n["skills_hosted"] + withheld
     assert n["component_count"] > 100 and n["knowledge_topics"] > 0
     assert set(n["library"]) == set(checker.LIBRARY_NUMBER_SLUGS)
     for text in (
         "a typed 182-component DSL",
         "182 components, validated at compose time",
         "a 23-tool research/backtest/read surface",
-        "9 bundled agent skills",
+        "11 bundled agent skills",
         "12 knowledge topics",
         "**23-tool** research/backtest/read\nsurface",  # emphasis + wrap
     ):
@@ -345,13 +347,54 @@ def test_numbers_arm_reads_every_number_consumer():
     checker = _load_checker()
     n = checker.compute_numbers()
     consumers = checker.number_consumers()
-    assert "services/keel-site/src/app/mcp-hyperliquid/page.tsx" in consumers
+    assert "services/keel-site/src/app/chatgpt-hyperliquid/page.tsx" in consumers
     assert "services/keel-site/src/app/agents/page.tsx" in consumers
     assert checker.SKILLS_INDEX_TARGET in consumers
     for rel in consumers:
         path = checker.REPO_ROOT / rel
         assert path.exists(), rel
         assert checker.number_errors(rel, path.read_text(), n) == []
+
+
+def test_component_arm_walks_every_keel_site_page():
+    """Q-3122: a typed component count anywhere in keel-site reds, not only on
+    the listed number consumers. /how-it-works said 218, two quant pages 199,
+    the getting-started doc 182, against 251 — none was in the list.
+
+    Seeds: the four stale phrasings red through the component arm. Controls:
+    the computed count stays green, and the arm does not judge other nouns
+    (a page about another product's "23 tools" is not its business).
+    Non-vacuity: the walk reads hundreds of files, including the four pages
+    that typed counts, and is clean over the real site. Seeded red on the real
+    tree (recorded in the Q-3122 commit): restoring "199 registered components"
+    to /hyperliquid/python-backtest makes check_surface_routing.py name that
+    file."""
+    checker = _load_checker()
+    n = checker.compute_numbers()
+    only = {"component": checker.NUMBER_NOUNS["component"]}
+    for text in (
+        "The agent picks from 218 typed\n components and wires them together.",
+        "there are 199 registered components today",
+        "component catalog (182 components)",
+        "Each of the 218 components declares its input",
+    ):
+        assert checker.number_errors("x", text, n, only), text
+    assert checker.number_errors("x", f"{n['component_count']} typed components", n, only) == []
+    assert checker.number_errors("x", "a 23-tool surface and 9 skills", n, only) == []
+
+    files = checker.site_component_consumers()
+    assert len(files) > 100, len(files)
+    for rel in (
+        "services/keel-site/src/app/how-it-works/page.tsx",
+        "services/keel-site/public/how-it-works.md",
+        "services/keel-site/src/app/hyperliquid/python-backtest/page.tsx",
+        "services/keel-site/src/app/methodology/backtest-hyperliquid-strategy/page.tsx",
+        "services/keel-site/content/docs/getting-started/index.mdx",
+        "services/keel-site/public/docs/getting-started.md",
+    ):
+        assert rel in files, rel
+    assert not any("/__tests__/" in f for f in files)
+    assert checker.site_component_errors(n) == []
 
 
 def test_every_hosted_tool_has_a_group_title_and_read_only_flag():
@@ -455,7 +498,7 @@ def test_skills_index_and_tool_reference_are_whole_file_consumers(tmp_path, monk
     checker = _load_checker()
     skills = checker.render_skills_index()
     doc = __import__("json").loads(skills)
-    assert doc["hosted"]["excluded"] == ["deploy-and-monitor"]
+    assert doc["hosted"]["excluded"] == ["screen-creation", "deploy-and-monitor"]
     assert doc["install"]["hosted_endpoint"] == checker.load_agent_surface()["endpoint"]["hosted"]
     assert list(doc["install"])[:2] == ["hosted_endpoint", "hosted_setup"]  # hosted-first
     ref = checker.render_tool_reference(mdx=True)
@@ -521,8 +564,28 @@ def test_sdk_lane_runs_on_every_gated_path():
     workflow = yaml.safe_load((checker.REPO_ROOT / ".github/workflows/sdk-test.yml").read_text())
     triggers = workflow[True] if True in workflow else workflow["on"]  # PyYAML reads `on:` as True
     assert set(triggers) == {"workflow_dispatch"}, triggers
+    # Q-7585: the release lane list's owner is release_lane_selection.py
+    # (Q-7198's change-scoped release CI); prerelease_ci.py re-exports it and
+    # dispatches from it. Assert against the owner, and that the dispatcher
+    # still takes its set from there.
+    import sys
+
+    path = checker.REPO_ROOT / "infrastructure/ci/release_lane_selection.py"
+    spec = importlib.util.spec_from_file_location("_q7201_release_lane_selection", path)
+    assert spec is not None and spec.loader is not None
+    selection = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = selection  # its dataclasses resolve through sys.modules
+    try:
+        spec.loader.exec_module(selection)
+    finally:
+        sys.modules.pop(spec.name, None)
+    assert "sdk-test.yml" in selection.RELEASE_CI_WORKFLOWS, (
+        "make release-ci no longer dispatches the SDK lane"
+    )
     dispatcher = (checker.REPO_ROOT / "infrastructure/ci/prerelease_ci.py").read_text()
-    assert '"sdk-test.yml",' in dispatcher, "make release-ci no longer dispatches the SDK lane"
+    assert "RELEASE_CI_WORKFLOWS: tuple[str, ...] = rls.RELEASE_CI_WORKFLOWS" in dispatcher, (
+        "prerelease_ci.py no longer dispatches from release_lane_selection's lane set"
+    )
 
     # Non-vacuity: the gates still read a real, non-trivial set of paths.
     scanned = [
@@ -582,7 +645,7 @@ def test_canonical_table_matches_spec_07_rows():
     assert data["columns"] == ["You are…", "Default path (shown first)", "Also works"]
     rows = [(r["audience"], r["default_path"], r["also_works"]) for r in data["rows"]]
     # ONE hosted endpoint model (D1 2026-07-19): mcp.usekeel.io serves one
-    # 23-tool surface, added via paste-URL now (directory one-click coming);
+    # 23-tool surface, added from the official Claude/ChatGPT listing or by pasting the URL;
     # running a strategy is a Keel web-app handoff on every surface, reads
     # stay everywhere. There is no separate "full"/"listed" split any more.
     # The rows are held to the listing copy law (Q-1463, AS-14): the handoff
@@ -592,7 +655,7 @@ def test_canonical_table_matches_spec_07_rows():
     assert rows == [
         (
             "Using Claude/ChatGPT on web or phone",
-            "Hosted endpoint — paste the URL (directory one-click coming)",
+            "Official listing in Claude or ChatGPT (one click), or paste the hosted URL",
             "CLI + local MCP",
         ),
         (
@@ -637,10 +700,10 @@ def test_tool_inventory_names_every_registered_tool():
     checker = _load_checker()
     sys.path.insert(0, str(CHECKER_PATH.parent.parent))
     from keel.tools.outcomes import OUTCOMES, _bootstrap
-    from keel.tools.outcomes._toolsets import LISTED_PROFILE_TOOLS
 
     _bootstrap()
     assert len(OUTCOMES) > 40, "registry unexpectedly small — this arm would prove nothing"
+    hosted = checker.hosted_tool_names()
 
     block = checker.render_tool_inventory_block()
     bullets = re.findall(r"^- `(keel_[a-z0-9_]+)`(.*)$", block, flags=re.M)
@@ -651,13 +714,13 @@ def test_tool_inventory_names_every_registered_tool():
     for name, tool in OUTCOMES.items():
         if tool.local_only:
             assert marks[name] == " (local only)", name
-        elif name in LISTED_PROFILE_TOOLS:
+        elif name in hosted:
             assert marks[name] == " (hosted)", name
         else:
             assert marks[name] == "", name
 
     # Every hosted tool is marked hosted, and nothing else is.
-    assert {n for n, m in bullets if m == " (hosted)"} == set(LISTED_PROFILE_TOOLS)
+    assert {n for n, m in bullets if m == " (hosted)"} == set(hosted)
 
 
 def test_tool_inventory_is_published_and_reds_on_drift(tmp_path, monkeypatch):
@@ -669,6 +732,9 @@ def test_tool_inventory_is_published_and_reds_on_drift(tmp_path, monkeypatch):
     """
     checker = _load_checker()
     published = checker.render_tool_inventory_block()
+    # Read before REPO_ROOT moves to tmp_path: the hosted set reads prod's
+    # mcp-server values from the real repo.
+    tools = checker.registry_tools()
 
     # Control: the real repo file carries exactly this block.
     for rel in checker.TOOL_INVENTORY_TARGETS:
@@ -710,7 +776,6 @@ def test_tool_inventory_is_published_and_reds_on_drift(tmp_path, monkeypatch):
     assert _errs(f"# x\n\n{published}\n", published) == []  # control, in a tmp tree
 
     # Seed 1: a new tool joins the registry, nobody regenerates the file.
-    tools = checker.registry_tools()
     widened = checker.render_tool_inventory_block(
         tools
         + [{"name": "keel_new_thing", "toolset": "read-only", "local_only": False, "hosted": False}]
@@ -739,3 +804,55 @@ def test_tool_inventory_refuses_an_unplaced_toolset(monkeypatch):
             tools
             + [{"name": "keel_x", "toolset": "not-a-toolset", "local_only": False, "hosted": False}]
         )
+
+
+class _Sent(Exception):
+    """Raised by the recording client once a tool sent its first request (the route is all this test reads)."""
+
+
+class _Recorder:
+    def __init__(self) -> None:
+        self.sent: list[tuple[str, str]] = []
+
+    def _stop(self, method: str, path: str):
+        self.sent.append((method, path))
+        raise _Sent
+
+    def get(self, path, *, headers=None, **params):
+        self._stop("GET", path)
+
+    def post(self, path, json=None, *, headers=None, **params):  # a POST's query (``?card=full``, WL-SV-21)
+        self._stop("POST", path)
+
+    def _request(self, method, path, **kwargs):
+        self._stop(method.upper(), path)
+
+
+def test_ri168_research_tools_are_rendered_with_the_route_each_calls():
+    """RI-168: RESEARCH_TOOLS carries the three listed research tools, each with its CLI form and the keel-api route
+    its handler really sends (driven through a recording client, so a typed route that drifted reds here).
+
+    SEED (reversed): ``keel_research_run``'s route typed "/v1/research/run" -> this test reds on the run row."""
+    from keel.tools.outcomes import OUTCOMES, _bootstrap
+    from keel.tools.outcomes._base import ToolContext
+    from keel.tools.outcomes._toolsets import LISTED_RESEARCH_TOOLS, research_served_context
+
+    _bootstrap()
+    rows = _load_checker().research_tools()
+    assert [r["name"] for r in rows] == sorted(LISTED_RESEARCH_TOOLS) and len(rows) == 3  # non-vacuity
+    calls = {
+        "keel_research_plan": {"template": "check", "subjects": ['Strategy("str_a@1")']},
+        "keel_research_run": {"from_plan": "pln_" + "a" * 64, "max_runs": 10},
+        "keel_research_get": {"study_id": "stu_a"},
+    }
+    for row in rows:
+        assert row["cli"] == "keel research " + row["name"].removeprefix("keel_research_")
+        assert row["title"] and row["description"]
+        client = _Recorder()
+        with research_served_context(True), pytest.raises(_Sent):
+            OUTCOMES[row["name"]].handler(calls[row["name"]], ToolContext(api_client=client))
+        path = row["api"]["path"].replace("{study_id}", "stu_a")
+        assert client.sent == [(row["api"]["method"], path)], (row["name"], client.sent)
+    generated = (_load_checker().REPO_ROOT / "shared" / "agent-surface.generated.ts").read_text()
+    assert "export const RESEARCH_TOOLS: readonly AgentResearchTool[]" in generated
+    assert all(f'"name": "{r["name"]}"' in generated for r in rows)

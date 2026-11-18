@@ -33,6 +33,13 @@ Toolset = Literal[
 ]
 
 
+#: The hosted server's per-tool rate tier (Q-6789, research-lab spec 07 §5.2).
+#: mcp-server maps each to a ``rate_limiter`` tier: ``read`` → MCP_AGENT,
+#: ``mutation`` → MUTATION, ``backtest`` → BACKTEST, ``live`` → MUTATION.
+RateTierName = Literal["read", "mutation", "backtest", "live"]
+RATE_TIERS: frozenset[str] = frozenset({"read", "mutation", "backtest", "live"})
+
+
 @dataclass
 class ToolContext:
     """Per-call context passed to every outcome handler.
@@ -175,12 +182,56 @@ STRATEGY_NAME_FACT = (
 #: keel_strategy_notes_add's (a connector's note is the agent's);
 #: `permission` leaves keel_share_create's (derived from `include_source`).
 LISTED_SCHEMA_OMISSIONS: dict[str, frozenset[str]] = {
+    "keel_screener_run": frozenset({"source_file"}),
+    # The two booleans are the CLI's spelling of `scope`; the listed schema
+    # keeps the one `scope` enum (a frozen catalog that sends them is dropped).
+    "keel_screener_list": frozenset({"following", "keel"}),
     "keel_strategy_compose": frozenset({"source_file"}),
     "keel_backtest_run": frozenset(
         {"auto_push", "push_message", "commit_id", "config.leverage", "config.initial_capital"}
     ),
     "keel_strategy_fork": frozenset({"target_workspace_id"}),
     "keel_strategy_notes_add": frozenset({"role"}),
+    # Research 07 §2.2: the listed schema of keel_share_create does not change;
+    # a hosted agent shares a study through keel_app_link.
+    "keel_share_create": frozenset({"views", "show_author"}),
+}
+
+
+#: Research 00 §H14 (07 §8.5, D-20): the four listed Screens descriptions in
+#: the first-sentence form, served ONLY while the request serves Research
+#: (`_toolsets.research_served()`); otherwise the listed surface publishes each
+#: tool's listed copy byte for byte. Screens' share of F4 shrinks so the three
+#: research tools fit inside 15,000 / 17,000 characters.
+LISTED_RESEARCH_COPY: dict[str, str] = {
+    "keel_screener_run": (
+        "Use when the user asks which coins rank highest or lowest now; not for a strategy "
+        "backtest (keel_backtest_run). Runs a screen by strategy_id or unsaved source and "
+        "returns its ranked outputs at the last closed bar."
+    ),
+    "keel_screener_view": (
+        "Use when the user asks to see a screen's latest results; not for running it "
+        "(keel_screener_run). Reads the newest completed run, or one in flight; "
+        "include_view_source returns the view for keel_screener_view_set."
+    ),
+    "keel_screener_view_set": (
+        "Use when the user asks to change how a screen shows its outputs (a filter, sort, "
+        "title or top-N); not for what it computes (keel_strategy_compose). Saves the whole "
+        "view as a new revision; needs expected_revision."
+    ),
+    "keel_screener_list": (
+        "Use when the user asks which screens they have, follow, or Keel offers; not for "
+        "running one (keel_screener_run). Lists the user's screens with the strategy_id the "
+        "other screen tools take, and the total count."
+    ),
+    # WL-AG-06: every research answer's fallback call is keel_app_link, so with Research served it names studies.
+    "keel_app_link": (
+        "Returns a link to view and manage this strategy in the Keel web app. A strategy id "
+        "(`str_...`) links to the strategy editor, a backtest run id (`btr_...`) to the tearsheet, "
+        "a running strategy's id (`dep_...`) to its page, a study id (`stu_...`) to the study, and a "
+        "share id to its public page (a shared study's 23-character id to its snapshot). It returns "
+        "the link as `url`; nothing is opened."
+    ),
 }
 
 
@@ -303,6 +354,14 @@ class OutcomeTool:
     annotations: dict  # MCP annotations: readOnlyHint, destructiveHint, ...
     handler: Callable[[dict, ToolContext], OutcomeResult]
     required_action: str = ""  # platform_auth action string — empty → "read" by default
+    # The hosted server's rate tier (Q-6789, spec 07 §5.2), read by mcp-server
+    # from this registry exactly as it reads ``required_action``. A
+    # ``readOnlyHint: true`` tool resolves to ``"read"`` when unset. A hostable
+    # tool that is not read-only MUST declare a write tier: leaving it unset (or
+    # declaring ``"read"``) raises at construction, so a new write tool cannot
+    # fall to the read ceiling unnoticed. ``local_only`` and ``cli_only`` tools
+    # are never hosted and are exempt.
+    rate_tier: RateTierName | None = None
     cli_options_override: list = field(default_factory=list)
     confirm_in_cli: bool = False  # destructive tools: prompt unless --yes
     mcp_only: bool = False  # skip CLI registration (use when CLI surface is hand-rolled elsewhere)
@@ -341,8 +400,21 @@ class OutcomeTool:
     # the flag off the listed profile publishes `listed_*`, HEAD's copy.
     listed_paper_description: str | None = None
     listed_paper_input_schema: dict | None = None
+    # ── The listed screens flag's copy (screeners L13) ──
+    # Flag-on listed copy for an EXISTING listed tool (keel_strategy_compose
+    # learns screens): published on the listed profile only while
+    # `_toolsets.listed_screens_enabled()` is true; off, the listed profile
+    # publishes `listed_*`, the base's copy, byte for byte.
+    listed_screens_description: str | None = None
+    listed_screens_title: str | None = None
+    listed_screens_input_schema: dict | None = None
+    # A CLI command with no MCP registration on any profile (screeners L13
+    # §2b): the agent reaches the same outcome through another tool, so the
+    # tool list stays short. The inverse of `mcp_only`.
+    cli_only: bool = False
 
     def __post_init__(self) -> None:
+        self._resolve_rate_tier()
         object.__setattr__(self, "input_schema", normalize_input_schema(self.input_schema))
         if self.listed_input_schema is not None:
             object.__setattr__(
@@ -362,6 +434,12 @@ class OutcomeTool:
                 "listed_paper_input_schema",
                 normalize_input_schema(self.listed_paper_input_schema),
             )
+        if self.listed_screens_input_schema is not None:
+            object.__setattr__(
+                self,
+                "listed_screens_input_schema",
+                normalize_input_schema(self.listed_screens_input_schema),
+            )
         # The declared bounds are enforced wherever the handler is invoked
         # (Q-2270): CLI, MCP and a direct call all refuse an argument outside
         # a `minimum` / `maximum` / `maxLength` / `maxItems` the schema
@@ -369,6 +447,33 @@ class OutcomeTool:
         from ._declared_bounds import wrap_handler
 
         object.__setattr__(self, "handler", wrap_handler(self, self.handler))
+
+    @property
+    def hostable(self) -> bool:
+        """Whether a hosted MCP server can ever serve this tool."""
+        return not (self.local_only or self.cli_only)
+
+    def _resolve_rate_tier(self) -> None:
+        """One owner for the rate tier (Q-6789): no default for a write."""
+        tier = self.rate_tier
+        if tier is not None and tier not in RATE_TIERS:
+            raise ValueError(
+                f"OutcomeTool {self.name!r}: rate_tier={tier!r} is not one of {sorted(RATE_TIERS)}."
+            )
+        read_only = self.annotations.get("readOnlyHint") is True
+        if read_only:
+            if tier is None:
+                object.__setattr__(self, "rate_tier", "read")
+            return
+        if not self.hostable:
+            return
+        if tier is None or tier == "read":
+            raise ValueError(
+                f"OutcomeTool {self.name!r} is hostable and not read-only, so it must declare "
+                f"rate_tier as one of 'mutation', 'backtest' or 'live' (got {tier!r}). "
+                "The hosted server rate-limits by this tier; a write left at 'read' "
+                "runs at the read ceiling (Q-6789, research-lab spec 07 §5.2)."
+            )
 
 
 # Sentinel set of all toolset names (parsing helper). `paper` joins only once

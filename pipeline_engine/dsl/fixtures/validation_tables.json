@@ -1,4 +1,80 @@
 {
+  "use_ref_pattern": "^str_[0-9a-z]{26}@[1-9][0-9]*$",
+  "use_max_depth": 8,
+  "output_roles": [
+    "signal",
+    "filter",
+    "universe",
+    "event",
+    "regime"
+  ],
+  "output_shape_bases": {
+    "panel": "SignalSeries",
+    "single": "GlobalSeries"
+  },
+  "output_cross_sectional_components": [
+    "CrossSectionalZScore",
+    "QuantileRankTransform",
+    "RankTransform",
+    "TopNAssetSelector"
+  ],
+  "outputs_max": 3,
+  "output_name_pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+  "output_name_reserved": [
+    "AUX",
+    "COM1",
+    "COM2",
+    "COM3",
+    "COM4",
+    "COM5",
+    "COM6",
+    "COM7",
+    "COM8",
+    "COM9",
+    "CON",
+    "LPT1",
+    "LPT2",
+    "LPT3",
+    "LPT4",
+    "LPT5",
+    "LPT6",
+    "LPT7",
+    "LPT8",
+    "LPT9",
+    "NUL",
+    "PRN",
+    "constructor",
+    "hasOwnProperty",
+    "prototype",
+    "toString",
+    "valueOf"
+  ],
+  "output_units": [
+    "percent",
+    "fraction",
+    "rate_per_hour",
+    "rate_per_year",
+    "price",
+    "notional",
+    "count",
+    "score",
+    "rank",
+    "flag",
+    "unknown"
+  ],
+  "unit_words": {
+    "percent": "{output} is percent \u00d7 100: 5.0 = 5%",
+    "fraction": "{output} is a ratio: 0.05 = 5%",
+    "rate_per_hour": "{output} is a decimal per hour: 0.05 = 5% per hour",
+    "rate_per_year": "{output} is a decimal per year: 0.05 = 5% per year",
+    "price": "{output} is price in quote units",
+    "notional": "{output} is notional in quote units",
+    "count": "{output} is a count",
+    "score": "{output} is a dimensionless score",
+    "rank": "{output} is a rank or percentile in [0, 1]",
+    "flag": "{output} is a flag: 0 or 1, or \u22121, 0 or 1",
+    "unknown": "{output} is unknown units; no unit is declared or derivable"
+  },
   "type_transitions": {
     "None": {
       "data_loader": [

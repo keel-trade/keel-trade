@@ -14,6 +14,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from keel.api_path import seg
 from keel.errors import KeelError
 
 from . import register
@@ -177,7 +178,7 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
         client = ctx.get_client()
         try:
             result = client.post(
-                f"/v1/strategies/{strategy_id}/versions/diff",
+                f"/v1/strategies/{seg(strategy_id)}/versions/diff",
                 json={"ref_a": ref_a, "ref_b": ref_b},
             )
         except KeelError:
@@ -227,15 +228,33 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
         # so a Globals/Universe/Execution edit read "Identical". Both versions'
         # sources are read once and diffed with the same `_declarations` the
         # compose change view uses.
-        source_a = _version_source(client, strategy_id, ref_a)
-        source_b = _version_source(client, strategy_id, ref_b)
+        payload_a = _version_payload(client, strategy_id, ref_a)
+        source_a = _payload_source(payload_a)
+        # `ref_b` is the side the view draws, so it also brings its own
+        # verdict (Q-7610): absent, the view reads "valid" for any source.
+        payload_b = _version_payload(client, strategy_id, ref_b, include="validation")
+        source_b = _payload_source(payload_b)
         if source_a and source_b:
             _add_declarations(extra, source_a, source_b)
+        if not source_b:
+            # The diff above stands (keel-api resolved both refs); only the
+            # drawing of `ref_b` is missing, and the result says so rather
+            # than going quiet (Q-7657).
+            extra["source_error"] = (
+                f"Version {ref_b!r} was not read, so the change is not drawn; "
+                "the step diff above is complete."
+            )
         # `?compare=a..b` was never read by any page; `version` is a param the
         # editor genuinely honours, so the link opens the side it diffed TO.
         hero_url = app_url_for("strategy", strategy_id, ctx, query={"version": ref_b})
         view = _version_view(
-            source_b, ref_a, ref_b, extra, hero_url, name=_strategy_name(client, strategy_id)
+            source_b,
+            extra,
+            hero_url,
+            name=_strategy_name(client, strategy_id),
+            validation=payload_b.get("validation") if payload_b else None,
+            from_version=_payload_sequence(payload_a),
+            to_version=_payload_sequence(payload_b),
         )
         if view is not None:
             extra["view"] = view
@@ -294,14 +313,29 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
     )
 
 
-def _version_source(client: Any, strategy_id: str, ref: str) -> str | None:
-    """One version's DSL source, or None — advisory, never fails the diff."""
+def _version_payload(client: Any, strategy_id: str, ref: str, **params: Any) -> dict | None:
+    """keel-api's read of one version (`{source, ..., validation?}`), or
+    None — advisory, never fails the diff."""
     try:
-        payload = client.get(f"/v1/strategies/{strategy_id}/versions/{ref}/source")
+        payload = client.get(
+            f"/v1/strategies/{seg(strategy_id)}/versions/{seg(ref)}/source", **params
+        )
     except Exception:  # noqa: BLE001 — a render nicety never fails a tool call
         return None
+    return payload if isinstance(payload, dict) else None
+
+
+def _payload_source(payload: dict | None) -> str | None:
     source = payload.get("source") if isinstance(payload, dict) else None
     return source if isinstance(source, str) and source else None
+
+
+def _payload_sequence(payload: dict | None) -> int | None:
+    """The sequence number keel-api resolved a ref to (`3`, `v3`, a tag or a
+    commit id alike), so the view labels the version the server read rather
+    than re-parsing the ref (Q-7657: `v3` read no label)."""
+    seq = payload.get("sequence_number") if isinstance(payload, dict) else None
+    return seq if isinstance(seq, int) and not isinstance(seq, bool) else None
 
 
 def _add_declarations(extra: dict, source_a: str, source_b: str) -> None:
@@ -335,7 +369,7 @@ def _strategy_name(client: Any, strategy_id: str) -> str | None:
     """The strategy's name for the card title — advisory, never fails the
     diff (the card read "Untitled" because no name reached it, Q-2273)."""
     try:
-        row = client.get(f"/v1/strategies/{strategy_id}")
+        row = client.get(f"/v1/strategies/{seg(strategy_id)}")
     except Exception:  # noqa: BLE001 — a render nicety never fails a tool call
         return None
     name = row.get("name") if isinstance(row, dict) else None
@@ -344,18 +378,21 @@ def _strategy_name(client: Any, strategy_id: str) -> str | None:
 
 def _version_view(
     source: str | None,
-    ref_a: str,
-    ref_b: str,
     diff: dict,
     hero_url: str,
     *,
     name: str | None = None,
+    validation: Any = None,
+    from_version: int | None = None,
+    to_version: int | None = None,
 ) -> dict | None:
     """The view for a version-pair diff: `ref_b`'s own graph, marked up.
 
     `ref_b` is read explicitly rather than taken from the strategy's
     HEAD — a diff between two old versions must not draw the current
-    one and mark it with someone else's change.
+    one and mark it with someone else's change. `validation` is `ref_b`'s
+    own verdict as keel-api served it (Q-7610); absent, the header keeps
+    the documented "compiled, so valid" fallback.
     """
     if not source:
         return None
@@ -368,19 +405,21 @@ def _version_view(
         graph = spec_to_graph(parse_strategy(source)).to_dict()
     except Exception:  # noqa: BLE001 — a render nicety never fails a tool call
         return None
-    # A ref may be a sequence number, a tag, or a commit id. Only a
-    # sequence number is a VERSION a reader can be shown — a commit id
-    # in the header would be exactly the id the header must not carry.
-    numbered = ref_a.isdigit() and ref_b.isdigit()
+    # A ref may be a sequence number, `vN`, a tag, or a commit id; the
+    # header shows the VERSION keel-api resolved it to (its read's
+    # `sequence_number`), never the ref, so a commit id never reaches it.
+    numbered = from_version is not None and to_version is not None
     change = change_from_diff(
         diff,
         graph,
-        from_version=int(ref_a) if numbered else None,
-        to_version=int(ref_b) if numbered else None,
+        from_version=from_version if numbered else None,
+        to_version=to_version if numbered else None,
     )
-    metadata: dict[str, Any] = {"version": int(ref_b)} if ref_b.isdigit() else {}
+    metadata: dict[str, Any] = {"version": to_version} if to_version is not None else {}
     if name:
         metadata["name"] = name
+    if isinstance(validation, dict):
+        metadata["validation"] = validation
     return build_view(graph, metadata, change=change, url=hero_url)
 
 

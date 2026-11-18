@@ -1,0 +1,92 @@
+{
+  "_about": "The ONE golden pin for the first-week clause (Q-7601 fix round). Inputs are the shapes the 2026-11-16 staging probe captured as a Free v2 org (keel_plan_usage at the start, keel_backtest_run notices at 37 and 18 left, the wall at 75 of 75). Every other first-week test computes its expectation from its own data; this file pins the exact words. tests/test_plan_limits_first_week_golden.py reads it.",
+  "notice_with_extras": {
+    "block": {
+      "unit": "backtest_runs",
+      "label": "backtests",
+      "limit": 75,
+      "used": 38,
+      "remaining": 37,
+      "tier": "warn",
+      "resets_at": "2026-12-16T18:37:25.862724Z",
+      "first_week": {
+        "granted": 50,
+        "remaining": 12,
+        "ends_at": "2026-11-23T18:37:25Z",
+        "then_remaining": 25,
+        "then_limit": 25
+      },
+      "more_plans": ["Trader", "Pro"]
+    },
+    "expected": "37 of 75 backtests left (12 first-week extras until Mon 23 Nov); resets Wed 16 Dec. Trader and Pro include more."
+  },
+  "notice_extras_spent": {
+    "block": {
+      "unit": "backtest_runs",
+      "label": "backtests",
+      "limit": 75,
+      "used": 57,
+      "remaining": 18,
+      "tier": "critical",
+      "resets_at": "2026-12-16T18:37:25.862724Z",
+      "first_week": {
+        "granted": 50,
+        "remaining": 0,
+        "ends_at": "2026-11-23T18:37:25Z",
+        "then_remaining": 18,
+        "then_limit": 25
+      },
+      "more_plans": ["Trader", "Pro"]
+    },
+    "expected": "18 of 75 backtests left; resets Wed 16 Dec. Trader and Pro include more."
+  },
+  "wall_extras_spent": {
+    "quota": {
+      "kind": "insufficient",
+      "unit": "backtest_runs",
+      "label": "backtests",
+      "code": "quota_exhausted",
+      "limit": 75,
+      "used": 75,
+      "remaining": 0,
+      "period": "30d",
+      "reset_epoch": 1797446245,
+      "first_week_granted": 50,
+      "first_week_remaining": 0,
+      "first_week_ends_epoch": 1795459045,
+      "first_week_then_remaining": 0,
+      "first_week_then_limit": 25,
+      "plan": "free",
+      "plan_name": "Free",
+      "higher_plans": [
+        { "plan": "trader", "name": "Trader", "limit": 1000 },
+        { "plan": "pro", "name": "Pro", "limit": 4000 }
+      ]
+    },
+    "expected": "Backtests: 75 of 75 used on Free; resets Wed 16 Dec. Trader and Pro include more. Plans are changed in the Keel web app. Composing, validating and reading existing results don't use this allowance.",
+    "first_week": {
+      "granted": 50,
+      "remaining": 0,
+      "ends_at": "2026-11-23T18:37:25Z",
+      "then_remaining": 0,
+      "then_limit": 25
+    }
+  },
+  "plan_usage_start": {
+    "block": {
+      "unit": "backtest_runs",
+      "limit": 75,
+      "used": 0,
+      "remaining": 75,
+      "resets_at": "2026-12-16T18:37:25.862724Z",
+      "first_week": {
+        "granted": 50,
+        "remaining": 50,
+        "ends_at": "2026-11-23T18:37:25Z",
+        "then_remaining": 25,
+        "then_limit": 25
+      }
+    },
+    "expected": "Backtests: 75 of 75 left (50 first-week extras until Mon 23 Nov); resets Wed 16 Dec."
+  }
+}

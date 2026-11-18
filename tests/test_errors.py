@@ -1,5 +1,7 @@
 """Tests for keel.errors."""
 
+import json
+
 import pytest
 from keel.errors import (
     AuthError,
@@ -11,6 +13,8 @@ from keel.errors import (
     ValidationError,
     translate_http_error,
 )
+
+from . import _plan_catalog as cat
 
 
 # ── KeelError.to_dict() ─────────────────────────────────────────────────────
@@ -181,12 +185,13 @@ def test_translate_http_403_plan_limit_is_facts_with_no_destination():
     )
     e = translate_http_error(403, body)
     assert isinstance(e, EntitlementError)
-    # The message states what happened with the served numbers, names the
-    # reset, and stops. No plan named (the server sent none → the paid
-    # shape), no URL, and — since Q-1806 — no directive to the model: every
-    # card renders `message`. `retryable: false` carries the retry fact.
+    # The message states what happened with the served numbers and the
+    # reset date. The server named no plan and no `higher_plans`, so the wall
+    # says "this plan" and names no other (D-14: never guessed); no URL, and
+    # — since Q-1806 — no directive to the model: every card renders
+    # `message`. `retryable: false` carries the retry fact.
     assert str(e) == (
-        "Weekly backtests used — 50 of 50 on your plan. They reset Tue 22 Sep 00:00 UTC. "
+        "Backtests: 50 of 50 used on this plan; resets Tue 22 Sep. "
         "Composing, validating and reading existing results don't use this allowance."
     )
     for model_word in ("`example`", "docs_url", "do not retry", "Report"):
@@ -242,12 +247,14 @@ def test_translate_http_403_ai_messages_quota_plan_limit_path():
     assert env["example"]["label"] == "AI messages"
 
 
-def test_sdk_keeps_no_unit_label_table(monkeypatch):
-    """M0.6: the label is SERVED, so a label the SDK never heard of still
-    renders. Two hand-synced tables existed before and had diverged.
+def test_the_served_label_wins_and_the_unit_table_is_the_fallback(monkeypatch):
+    """M0.6, as D-14 amends it: the label is SERVED, so a label the SDK never
+    heard of still renders. The one SDK table (`LIMIT_UNITS`, doc 07 §6.1)
+    is the fallback for a server that sent none, pinned equal to
+    `platform_auth.quota.UNIT_LABELS` (test_limit_units_*).
 
-    Not vacuous: the unit is one no table in this repo contains, so a
-    surviving local table could not produce this string.
+    Not vacuous: the unit is one no table in this repo contains, so only the
+    served label could produce this string.
     """
     import json as _json
 
@@ -270,8 +277,12 @@ def test_sdk_keeps_no_unit_label_table(monkeypatch):
     e = translate_http_error(403, body)
     assert "quantum runs" in str(e).lower()
     assert e.input["label"] == "quantum runs"
-    # And the only local fallback is mechanical, not a table.
+    # The mechanical fallback stays (keel_account_status reads it); plan-limit
+    # copy reads the unit table's row first (`_unit_label`).
+    from keel.errors import _unit_label
+
     assert _label_for_unit("backtest_runs") == "backtest runs"
+    assert _unit_label({"unit": "backtest_runs"}) == "backtests"
     assert _label_for_unit("feature:priority_queue") == "priority queue"
 
 
@@ -381,7 +392,6 @@ def test_translate_http_404_empty_body():
     assert "Resource not found" in str(e)
 
 
-
 # ── paper_not_enabled (paper-trading-v2 S06 §3.2.4 (c), AC-06-28, PT2-12) ──
 #
 # Seeds: delete the arm ⇒ the code arm reds (the paper 404 is `not_found`
@@ -409,9 +419,9 @@ def test_translate_http_404_paper_not_enabled_is_typed_on_the_code(body):
     assert e.exit_code == 3
     env = e.to_envelope()
     assert env["code"] == "paper_not_enabled"
-    assert "suggested_next_action" not in env or not (
-        env["suggested_next_action"] or {}
-    ).get("reason")
+    assert "suggested_next_action" not in env or not (env["suggested_next_action"] or {}).get(
+        "reason"
+    )
 
 
 @pytest.mark.parametrize(
@@ -520,6 +530,40 @@ def test_422_expectation_is_specific_to_the_error_class():
     dsl = translate_http_error(422, body).to_envelope()
     assert "dry_run" in dsl["what_was_expected"]
     assert dsl["message"].startswith("Strategy has 1 validation error(s). (issues=")
+
+
+def test_a_run_size_refusal_names_the_three_fits_not_the_dates_or_the_dsl():
+    """Q-3316: keel-api refuses a backtest too large for one worker's memory.
+    The expectation names the three ways to fit; it is neither the window
+    family's "change the dates" nor the DSL dry-run advice.
+
+    # SEED (2026-10-28, reverted by reversing the edit): drop the
+    # RUN_SIZE_CODES branch in _expectation_for_422 — this test reds (the
+    # generic coded sentence comes back); the window and control arms of
+    # test_422_expectation_is_specific_to_the_error_class stay green.
+    """
+    msg = (
+        "This backtest is too large to run. Try one of: up to 98 symbols at 5min "
+        "over this window, 15min bars for all 197 symbols, or a shorter window of "
+        "up to 292 days (from 2026-01-09)."
+    )
+    env = translate_http_error(
+        422,
+        _coded_422(
+            "BACKTEST_TOO_LARGE",
+            msg,
+            remedy={"max_symbols": 98, "finest_fitting_timeframe": "15min"},
+        ),
+    ).to_envelope()
+    assert env["code"] == "BACKTEST_TOO_LARGE"
+    assert env["message"] == msg  # the server's sentence, verbatim
+    expected = env["what_was_expected"]
+    assert "fewer symbols" in expected and "coarser timeframe" in expected
+    assert "shorter window" in expected
+    assert "dry_run" not in expected and "start_date before end_date" not in expected
+    # Founder 2026-10-28: no internal context in user copy (Q-3316).
+    for internal in ("memory", "worker", "GiB", "cell"):
+        assert internal.lower() not in expected.lower(), internal
 
 
 def _issues_refusal(text: str, *codes: str) -> str:
@@ -711,7 +755,7 @@ def test_code_branches_without_reading_reason_strings():
     e = translate_http_error(403, body)
     assert e.recovery_tool is None, "a quota code must never route to re-auth"
     assert e.input["limit"] == 50 and e.input["used"] == 50
-    assert "Backtests used — 50 of 50" in str(e)
+    assert "Backtests: 50 of 50 used" in str(e)
 
 
 def test_non_quota_403_code_never_becomes_a_plan_limit():
@@ -772,123 +816,176 @@ def test_only_no_grant_kinds_may_say_the_plan_does_not_include_it():
             code="plan_feature_unavailable",
         ),
     )
-    assert "does not include" not in str(spent), (
+    assert "doesn't include" not in str(spent), (
         "someone who spent 50 of 50 must never be told the plan lacks the unit"
     )
-    assert "Backtests used — 50 of 50" in str(spent)
-    assert "Your plan does not include backtests." in str(never)
+    assert "Backtests: 50 of 50 used" in str(spent)
+    assert "This plan doesn't include backtests." in str(never)
 
 
-# ── D-12: the neutral wall (mcp-conversion 04 §4.1, exact copy) ─────────────
+# ── D-14: the wall names the plans that include more (doc 07 §4/§5) ─────────
 
 _WALL_QUOTA = {
     "kind": "insufficient",
     "unit": "backtest_runs",
     "label": "backtests",
     "code": "quota_exhausted",
-    "period": "weekly",
-    "reset_epoch": 1790640000,  # Tue 29 Sep 2026 00:00 UTC
-    # keel-api still serves the other plans (D-10) — the SDK must drop them.
-    "higher_plans": [
-        {"plan": "starter", "limit": 500, "period": "weekly"},
-        {"plan": "trader", "unlimited": True},
-    ],
+    "period": "30d",
+    "reset_epoch": 1796428800,  # Sat 5 Dec 2026 00:00 UTC
 }
 
 
+def _served_wall(plan: str, limit: int, *, higher: list | None = None) -> dict:
+    """The quota block keel-api serves on a v2 plan's backtest wall: the
+    catalog's plans that include more, with their limits (D-10) — the SDK
+    must project the names and drop the numbers."""
+    served = cat.higher_plans(plan, "backtest_runs") if higher is None else higher
+    for entry in served:
+        entry["limit"] = int(cat._value(entry["plan"], entry["version"], "backtest_runs"))
+        entry["period"] = "30d"
+    return {
+        **_WALL_QUOTA,
+        "plan": plan,
+        "plan_name": cat.display_name(plan),
+        "higher_plans": served,
+        "limit": limit,
+        "used": limit,
+        "remaining": 0,
+    }
+
+
 def _wall(plan: str, limit: int) -> str:
-    return str(
-        translate_http_error(
-            403,
-            _quota_403(**_WALL_QUOTA, plan=plan, limit=limit, used=limit, remaining=0),
-        )
-    )
+    return str(translate_http_error(403, _quota_403(**_served_wall(plan, limit))))
 
 
-def test_free_plan_wall_is_the_exact_d12_copy():
-    """04 §4.1 free plan, quote-level. The ONE other-plans sentence rides
-    here and only here.
+def test_free_plan_wall_is_the_exact_d14_copy():
+    """THE golden (doc 07 §5, Free v2): own numbers and plan, the reset date,
+    the plans that include more, where plans change, what keeps working.
 
-    SEEDS (run 2026-09-28, each reverted by reversing the edit):
-    * `quota_headline` back to the pre-D-12 `on_plan = f" on {plan}"` —
-      this and the paid-wall test red;
-    * the free gate removed from `quota_plans_line` — the paid-wall test
-      reds (the D-12 scan refuses "Paid plans" off the free plan) while
-      THIS test stays green: the control arm that proves the plan
-      sentence reacts to the plan and nothing else."""
-    from keel.errors import format_reset_instant, quota_reset_instant
-
-    assert format_reset_instant(quota_reset_instant(1790640000)) == "Tue 29 Sep 00:00 UTC"
-    assert _wall("free", 50) == (
-        "Weekly backtests used — 50 of 50 on the Free plan. They reset Tue 29 Sep 00:00 UTC. "
-        "Plans are changed in the Keel web app. "
+    SEEDS (run 2026-11-16, each reverted by reversing the edit):
+    * `quota_plans_line` returning None — this reds; the Pro control below
+      stays green (it never had a clause);
+    * `more_plan_names` reading every served entry's `plan` id instead of
+      its `name` — this reds on "trader and pro"."""
+    assert _wall("free", 25) == (
+        "Backtests: 25 of 25 used on Free; resets Sat 5 Dec. "
+        "Trader and Pro include more. Plans are changed in the Keel web app. "
         "Composing, validating and reading existing results don't use this allowance."
     )
-    assert "Paid plans" not in _wall("free", 50)
 
 
-def test_paid_plan_wall_states_the_limit_and_reset_only():
-    """04 §4.1 any paid plan: first + third sentence, "on your plan". No
-    plan sentence at all (Q2) — a paid user already knows plans exist."""
-    for plan in ("starter", "trader", "pro"):
-        text = _wall(plan, 500)
-        assert text == (
-            "Weekly backtests used — 500 of 500 on your plan. They reset Tue 29 Sep 00:00 UTC. "
-            "Composing, validating and reading existing results don't use this allowance."
-        ), plan
-        assert "Paid plans" not in text and "Plans are changed" not in text
-        assert "Starter" not in text
+@pytest.mark.parametrize("plan", ["free", "trader", "pro"])
+def test_every_v2_wall_names_exactly_the_catalog_plans_that_include_more(plan):
+    """Generated from plans.yaml (doc 07 §6.1): the clause lists exactly the
+    catalog's higher plans for this plan and unit; the top plan gets none,
+    and then no "Plans are changed" line either."""
+    from keel.errors import more_clause
+
+    limit = int(cat._value(plan, "v2", "backtest_runs"))
+    text = _wall(plan, limit)
+    expected = more_clause("consumable", cat.names(cat.higher_plans(plan, "backtest_runs")))
+    assert text.startswith(f"Backtests: {limit:,} of {limit:,} used on {cat.display_name(plan)};")
+    if expected is None:
+        assert "include" not in text and "Plans are changed" not in text, text
+    else:
+        assert f" {expected} Plans are changed in the Keel web app. " in text, text
+    others = [n for n in cat.all_plan_names() if n != cat.display_name(plan)]
+    for name in others:
+        if name not in cat.names(cat.higher_plans(plan, "backtest_runs")):
+            assert name not in text, (plan, name, text)
 
 
-def test_the_wall_never_carries_the_served_higher_plans():
-    """keel-api's `higher_plans` never reaches `example`, the message or
-    any sentence — on any plan. Non-vacuous: the body DOES carry them.
+def test_the_wall_carries_the_higher_plans_names_never_their_numbers():
+    """keel-api's `higher_plans` (with each plan's limit) never reaches
+    `example`, the message or any sentence; only the NAMES do, as
+    `more_plans` (founder Q1). Non-vacuous: the body DOES carry the limits.
 
-    SEED (run 2026-09-28): re-project `higher_plans` in `_quota_context`
-    — this reds; the paid-wall equality (control) stays green."""
+    SEED (run 2026-11-16): project `higher_plans` whole in `_quota_context`
+    — this reds on the key and on "1000"; the golden stays green."""
     import json as _json
 
-    assert _WALL_QUOTA["higher_plans"], "non-vacuity: the served block names other plans"
-    for plan in ("free", "starter"):
-        e = translate_http_error(
-            403, _quota_403(**_WALL_QUOTA, plan=plan, limit=50, used=50, remaining=0)
-        )
-        blob = _json.dumps(e.to_envelope())
-        assert "higher_plans" not in blob and "Starter" not in blob and "Trader" not in blob
-        assert e.input["plan"] == plan, "the caller's OWN plan is a fact the wall keeps"
+    served = _served_wall("free", 25)
+    assert [h["limit"] for h in served["higher_plans"]] == [1000, 4000], "non-vacuity"
+    e = translate_http_error(403, _quota_403(**served))
+    blob = _json.dumps(e.to_envelope())
+    assert "higher_plans" not in blob and "1000" not in blob and "4000" not in blob
+    assert e.input["more_plans"] == ["Trader", "Pro"]
+    assert e.input["plan"] == "free" and e.input["plan_name"] == "Free"
 
 
-def test_neutral_wall_guard_rejects_every_d12_family():
-    """The widened scan (D-12): each seeded sentence is one the wall HAS
-    carried. Control: the exact free-wall sentences pass on the free plan,
-    and the paid-plans sentence is refused off it."""
-    from keel.errors import assert_neutral_wall_text
+def test_an_old_server_without_higher_plans_gets_no_clause_and_no_guess():
+    """Absent `higher_plans` renders NO more clause (never guessed), and an
+    absent `plan_name` falls back to the served plan id capitalised — the
+    same identity, not a lookup."""
+    quota = {**_WALL_QUOTA, "plan": "free", "limit": 25, "used": 25, "remaining": 0}
+    text = str(translate_http_error(403, _quota_403(**quota)))
+    assert text.startswith("Backtests: 25 of 25 used on Free; resets Sat 5 Dec. ")
+    assert "include" not in text and "Plans are changed" not in text
+
+
+def test_plan_copy_guard_refuses_prices_links_and_pitch_words():
+    """D-14 §7: what stays banned. Each seed is copy Keel HAS shipped or a
+    pitch the spec names; the control arm is the D-14 wall's own lines and
+    plain-words references, which pass."""
+    from keel.errors import assert_plan_copy
 
     for pitch in (
-        "Higher plans include more backtests: Starter 500 a week, Trader unlimited.",
-        "See plans in Keel.",
-        "Plans are listed at https://app.usekeel.io/settings?tab=billing&from=agent.",
-        "Compare the plan tiers.",
-        "The builder fee is lower on Pro.",
-        "Prices are at usekeel.io/pricing.",
-        "`upgrade_options` lists them.",
+        "Trader is $49 a month.",
         "Starter is $29/month.",
+        "Plans are listed at https://app.usekeel.io/settings?tab=billing&from=agent.",
+        "Prices are at usekeel.io/pricing.",
+        "Pay through Stripe checkout.",
+        "Upgrade now to run more.",
+        "Unlock more backtests.",
+        "A limited offer.",
+        "Save with an annual plan.",
+        "A better deal on Pro.",
+        "`upgrade_options` lists them.",
+        "Higher plans include more backtests: Starter 500 a week, Trader unlimited.",
     ):
         with pytest.raises(ValueError):
-            assert_neutral_wall_text(pitch, free_plan=True)
-    from keel.errors import FREE_PLAN_SENTENCE
+            assert_plan_copy(pitch)
+    for kept in (
+        "Backtests: 25 of 25 used on Free; resets Sat 5 Dec.",
+        "Trader and Pro include more. Plans are changed in the Keel web app.",
+        "Pro includes more. Plans are changed in the Keel web app.",
+        "Keel's pricing page lists the plans.",
+        "Composing, validating and reading existing results don't use this allowance.",
+    ):
+        assert assert_plan_copy(kept) == kept
 
-    assert FREE_PLAN_SENTENCE == "Plans are changed in the Keel web app."
-    assert assert_neutral_wall_text(FREE_PLAN_SENTENCE, free_plan=True) == FREE_PLAN_SENTENCE
-    # The pre-fallback sentence stays admissible on the free plan by the scan
-    # (an entitlement fact, not a pitch) and refused off it — the guard is
-    # unchanged; the wall simply no longer says it.
-    allowed = "Paid plans include more backtests; plans are changed in the Keel web app."
-    assert assert_neutral_wall_text(allowed, free_plan=True) == allowed
-    with pytest.raises(ValueError, match="off the free plan"):
-        assert_neutral_wall_text(allowed, free_plan=False)
-    note = "Composing, validating and reading existing results don't use this allowance."
-    assert assert_neutral_wall_text(note, free_plan=False) == note
+
+def test_more_clause_matches_the_shared_parity_cases():
+    """doc 07 §6.2: the SDK renderer and libs/platform_auth's render every row
+    of the shared table identically — the clause, the wall's plan line, and
+    each unit's kind (a cap the plan does not grant at all is a feature).
+    Non-vacuous: every kind, unit rows and name-count rows, the empty case."""
+    from keel.errors import (
+        LIMIT_KINDS,
+        WEB_APP_SENTENCE,
+        limit_kind,
+        more_clause,
+        quota_plans_line,
+    )
+
+    table = cat.limit_copy_cases()
+    assert table["plans_changed"] == WEB_APP_SENTENCE
+    assert tuple(table["kinds"]) == LIMIT_KINDS
+    cases = table["cases"]
+    assert {c["kind"] for c in cases} == set(LIMIT_KINDS)
+    assert any(c["expected_more_clause"] is None for c in cases)
+    unit_rows = 0
+    for case in cases:
+        assert more_clause(case["kind"], case["names"]) == case["expected_more_clause"], case
+        if case["unit"] is None:
+            continue
+        unit_rows += 1
+        info = {"unit": case["unit"], "more_plans": case["names"]}
+        if case["kind"] == "feature":
+            info.update(kind="no_cap_grants", code="plan_feature_unavailable")
+        assert limit_kind(info) == case["kind"], case
+        assert quota_plans_line(info) == case["expected_wall_more"], case
+    assert unit_rows >= 30, unit_rows
 
 
 def test_errors_name_no_tool_absent_on_the_listed_profile(monkeypatch):
@@ -937,8 +1034,9 @@ def test_401_api_keys_url_also_resolves_from_the_environment(monkeypatch):
 
 
 def test_render_quota_sentence_states_both_halves_and_the_reset():
-    """M1.2: one factual line from the served block — facts and stop."""
-    from keel.errors import render_quota_sentence
+    """M1.2 / doc 07 §5: one count line from the served block — the date,
+    no window adjective; the notice adds the more clause from 75%."""
+    from keel.errors import render_quota_notice, render_quota_sentence
 
     line = render_quota_sentence(
         {
@@ -952,7 +1050,24 @@ def test_render_quota_sentence_states_both_halves_and_the_reset():
             "tier": "warn",
         }
     )
-    assert line == "6 of 50 backtests left this week; they reset Tue 22 Sep 00:00 UTC."
+    assert line == "6 of 50 backtests left; resets Tue 22 Sep."
+    block = {
+        "unit": "backtest_runs",
+        "label": "backtests",
+        "limit": 25,
+        "used": 21,
+        "remaining": 4,
+        "resets_at": "2026-12-05T00:00:00Z",
+        "higher_plans": cat.higher_plans("free", "backtest_runs"),
+    }
+    for tier in ("warn", "critical", "exhausted"):
+        assert render_quota_notice({**block, "tier": tier}) == (
+            "4 of 25 backtests left; resets Sat 5 Dec. Trader and Pro include more."
+        ), tier
+    # Control: the 50% notice stays a bare count (founder Q3).
+    assert render_quota_notice({**block, "tier": "notice"}) == (
+        "4 of 25 backtests left; resets Sat 5 Dec."
+    )
 
 
 def test_render_quota_sentence_omits_what_the_server_did_not_send():
@@ -980,3 +1095,258 @@ def test_reset_instant_never_fabricates_one():
     assert quota_reset_instant(True) is None, "a bool is not an epoch"
     assert quota_reset_instant(1790035200).year == 2026
     assert quota_reset_instant("2026-09-22T00:00:00Z").day == 22
+
+
+# ── The plan change: the 30-day cycle and the timeframe floor (spec 01 §C11) ─
+
+
+def test_the_30_day_cycle_reads_this_30_day_period_and_never_monthly():
+    """§C11: `30d` is "this 30-day period" in the sentence. The run notice and
+    the reset clause both come from the server; "monthly" (a billing cadence
+    the D-12 scan refuses) appears nowhere."""
+    from keel.errors import quota_period_phrase, render_quota_sentence
+
+    block = {
+        "unit": "backtest_runs",
+        "label": "backtests",
+        "limit": 25,
+        "used": 21,
+        "remaining": 4,
+        "period": "30d",
+        "resets_at": "2026-11-29T14:00:00Z",
+    }
+    assert quota_period_phrase(block) == " this 30-day period"
+    # D-14 rule 8: plan-limit copy names no window; the date carries it.
+    assert render_quota_sentence(block) == "4 of 25 backtests left; resets Sun 29 Nov."
+    # Control: the weekly unit keeps its phrase.
+    assert quota_period_phrase({**block, "period": "weekly"}) == " this week"
+
+
+def test_a_30_day_wall_headline_has_no_period_adjective():
+    """§C11 (no adjective entry): a `30d` wall reads "Backtests used — …",
+    never "Monthly backtests" (which the neutral-wall guard would refuse) and
+    never "Weekly backtests" (which would be false)."""
+    quota = {**_WALL_QUOTA, "period": "30d", "reset_epoch": 1795960800}
+    free = str(
+        translate_http_error(403, _quota_403(**quota, plan="free", limit=25, used=25, remaining=0))
+    )
+    assert free == (
+        "Backtests: 25 of 25 used on Free; resets Sun 29 Nov. "
+        "Composing, validating and reading existing results don't use this allowance."
+    )
+    paid = str(
+        translate_http_error(
+            403, _quota_403(**quota, plan="trader", limit=1000, used=1000, remaining=0)
+        )
+    )
+    assert paid.startswith("Backtests: 1,000 of 1,000 used on Trader;")
+    assert "Weekly" not in free + paid and "onthly" not in free + paid
+
+
+#: The §L7 sentence for the current Free plan's 1h floor, exactly.
+_FLOOR_1H = (
+    "This plan runs paper and live strategies at a 1-hour timeframe or longer; "
+    "this limit does not reset on a clock."
+)
+
+
+def test_the_timeframe_floor_refusal_is_the_floor_wall_with_structured_facts():
+    """§C10/§L7 + doc 07 §5: keel-api's 422 SERVING_CLOCK_BELOW_PLAN_FLOOR
+    keeps its code and `floor`/`requested` on `detail`; the message is the
+    floor wall naming the plans that run faster, generated from the catalog,
+    and `detail` carries them as names only (their floors never)."""
+    from keel.errors import PLAN_FLOOR_SUGGESTION, assert_plan_copy
+
+    faster = cat.faster_plans("free")
+    for entry in faster:
+        entry["floor"] = cat.floor_of(entry["plan"])
+    e = translate_http_error(
+        422,
+        _coded_422(
+            "SERVING_CLOCK_BELOW_PLAN_FLOOR",
+            _FLOOR_1H,
+            floor=cat.floor_of("free"),
+            requested="15min",
+            plan="free",
+            plan_name="Free",
+            higher_plans=faster,
+        ),
+    )
+    env = e.to_envelope()
+    assert isinstance(e, ValidationError)
+    assert env["code"] == "SERVING_CLOCK_BELOW_PLAN_FLOOR"
+    assert env["message"] == (
+        "Paper and live on Free need 1h or slower; this is 15min. "
+        "Change `target_timeframe` to 1h or slower. "
+        "Trader and Pro run faster. Plans are changed in the Keel web app."
+    )
+    assert env["detail"] == {
+        "code": "SERVING_CLOCK_BELOW_PLAN_FLOOR",
+        "floor": "1h",
+        "requested": "15min",
+        "plan": "free",
+        "plan_name": "Free",
+        "more_plans": cat.names(faster),
+    }
+    assert env["what_was_expected"] == PLAN_FLOOR_SUGGESTION
+    assert env["retryable"] is False
+    for text in (env["message"], env["what_was_expected"]):
+        assert assert_plan_copy(text) == text
+    # An old server (no plan, no higher plans): the floor wall, no clause.
+    old = translate_http_error(
+        422,
+        _coded_422("SERVING_CLOCK_BELOW_PLAN_FLOOR", _FLOOR_1H, floor="1h", requested="15min"),
+    )
+    assert str(old) == (
+        "Paper and live on this plan need 1h or slower; this is 15min. "
+        "Change `target_timeframe` to 1h or slower."
+    )
+    # Control: any other coded 422 keeps the generic coded advice.
+    other = translate_http_error(422, _coded_422("WINDOW_EMPTY", "empty")).to_envelope()
+    assert other["what_was_expected"] != PLAN_FLOOR_SUGGESTION
+
+
+# ── Both pots on the wall (plan change spec 01 §C6) ──────────────────────
+
+#: A week-1 compute wall on the current Free plan, exactly as keel-api serves
+#: it (test_plan_both_pots.py pins the server side): the first-week part is
+#: spent first, so it is empty, and the plan's own pot holds 19 s -- short
+#: of one submit's 20 s reservation.
+_BOTH_POTS_QUOTA = {
+    "kind": "insufficient",
+    "unit": "backtest_compute_seconds",
+    "label": "backtest compute time",
+    "code": "quota_exhausted",
+    "limit": 2250,
+    "used": 2231,
+    "remaining": 19,
+    "period": "30d",
+    "reset_epoch": 1795960800,  # Sun 29 Nov 2026 14:00 UTC
+    "first_week_remaining": 0,
+    "first_week_ends_epoch": 1793973600,  # Fri 6 Nov 2026 14:00 UTC
+    "first_week_granted": 1500,
+    "first_week_then_remaining": 19,
+    "first_week_then_limit": 750,
+    "plan": "free",
+}
+
+
+def test_both_pots_on_the_30_day_wall():
+    """`example` carries both pots as a `first_week` block (allow-listed
+    keys); the wall's words carry no first-week line (Q-7601 fix round: a
+    clause rides a backtests line only, and only while the first week has
+    some left; this compute wall's part is spent). The exact words are pinned
+    once, in test_plan_limits_first_week_golden.py.
+
+    SEED (run 2026-10-30): `first_week_from_reason` returning None reds this
+    test; the v1 control below stays green. Reverted by reversing the edit."""
+    e = translate_http_error(403, _quota_403(**_BOTH_POTS_QUOTA))
+    text = str(e)
+    assert "first-week" not in text and "period" not in text, text
+    assert text.startswith(
+        f"Backtest compute time: {_BOTH_POTS_QUOTA['remaining']} s of 2,250 s left on Free"
+    ), text
+    assert e.input["first_week"] == {
+        "granted": 1500,
+        "remaining": 0,
+        "ends_at": "2026-11-06T14:00:00Z",
+        "then_remaining": 19,
+        "then_limit": 750,
+    }
+
+
+def test_a_v1_first_week_wall_is_unchanged():
+    """Control: a v1 plan-first wall carries only the first-week pair (no
+    plan pot is served for it), so its lines and `example` are today's."""
+    quota = {
+        k: v
+        for k, v in _BOTH_POTS_QUOTA.items()
+        if k not in ("first_week_granted", "first_week_then_remaining", "first_week_then_limit")
+    }
+    e = translate_http_error(403, _quota_403(**quota))
+    assert "first-week" not in str(e)
+    assert "first_week" not in e.input
+
+
+# ─── RI-237: a research route's nested 403, and every other 403 unchanged ────
+# SEED (run 2026-11-14, reversed): drop the `_research_refusal(payload)` call in
+# `_translate_403` -> the two research arms red (the message is the raw body,
+# the code is None) while the byte-identical control stays green.
+
+#: Non-research 403 bodies: plain text, unparseable, the platform quota block,
+#: keel-api's nested non-research refusals (live sharing, a screen flag, the
+#: anon tier), provisioning, a nested quota code WITHOUT words, a string detail.
+_NON_RESEARCH_403 = [
+    "Forbidden",
+    "{not valid json",
+    json.dumps(
+        {"type": "about:blank", "title": "Forbidden", "status": 403, "detail": "Monthly backtests used.",
+         "code": "quota_exhausted", "unit": "backtests_per_month", "used": 50, "limit": 50,
+         "resets_at": "2026-12-01T00:00:00Z", "plan": "free"}
+    ),
+    json.dumps({"detail": {"code": "LIVE_SHARE_CREATION_DISABLED", "message": "Live Share creation and editing are not enabled."}}),
+    json.dumps({"detail": {"code": "LIVE_SHARE_CAPABILITY_DISABLED", "message": "Live Share capability is not enabled: x.", "capabilities": ["x"]}}),
+    json.dumps({"detail": {"code": "SCREENER_PUBLISH_DISABLED"}}),
+    json.dumps({"detail": {"error": "anon_tier_disabled", "message": "Anonymous access is not enabled on this environment."}}),
+    json.dumps({"status": 403, "detail": "no org", "code": "not_provisioned"}),
+    json.dumps({"detail": {"code": "quota_exhausted"}}),
+    json.dumps({"detail": "Organisation not found."}),
+]  # fmt: skip
+
+#: sha256 of every envelope above on both server kinds, computed by the code
+#: BEFORE RI-237 (the same on 3.13 and 3.11): the research arm moves none.
+_NON_RESEARCH_403_DIGEST = "5f66f5a18cae2fcdbbd4305faa143a8333039010ef2746532b6a37504aae30e4"
+
+
+def _envelopes_403(monkeypatch, bodies: list[str]) -> list[dict]:
+    import keel.errors as errors
+
+    out = []
+    for local in (True, False):
+        monkeypatch.setattr(errors, "_local_tools_registered", lambda v=local: v)
+        for body in bodies:
+            e = translate_http_error(403, body)
+            out.append(
+                {
+                    "local": local,
+                    "class": type(e).__name__,
+                    "recovery": [e.recovery_tool, e.recovery_tool_args],
+                    "env": e.to_envelope(),
+                }
+            )
+    return out
+
+
+def test_every_non_research_403_is_byte_identical_to_before_ri_237(monkeypatch):
+    import hashlib
+
+    envelopes = _envelopes_403(monkeypatch, _NON_RESEARCH_403)
+    assert len(envelopes) == 20  # non-vacuity: ten bodies on both server kinds
+    digest = hashlib.sha256(json.dumps(envelopes, sort_keys=True, default=str).encode()).hexdigest()
+    assert digest == _NON_RESEARCH_403_DIGEST
+
+
+@pytest.mark.parametrize(
+    "code,unit",
+    [("quota_exhausted", "research_studies"), ("quota_cap_reached", "research_backtests_max"),
+     ("plan_feature_unavailable", "feature:research_template_map")],
+)  # fmt: skip
+def test_a_research_403_serves_its_own_words_never_the_body_or_a_login(monkeypatch, code, unit):
+    words = "This study was not run and nothing was charged."
+    body = json.dumps({"detail": {"code": code, "message": words, "unit": unit}})
+    for item in _envelopes_403(monkeypatch, [body]):  # both server kinds alike
+        env = item["env"]
+        assert item["class"] == "EntitlementError" and item["recovery"] == [None, None]
+        assert env["message"] == words and env["code"] == "insufficient_entitlements"
+        assert env["detail"] == {"code": code, "unit": unit}
+        assert "live" not in env["what_was_expected"] and "login" not in env["what_was_expected"]
+
+
+def test_a_research_coded_403_keeps_its_own_code(monkeypatch):
+    words = "Sign in to keep studies."
+    body = json.dumps({"detail": {"code": "RESEARCH_SIGN_IN_REQUIRED", "message": words}})
+    for item in _envelopes_403(monkeypatch, [body]):
+        assert (
+            item["env"]["code"] == "RESEARCH_SIGN_IN_REQUIRED" and item["env"]["message"] == words
+        )
+        assert item["env"]["detail"] == {"code": "RESEARCH_SIGN_IN_REQUIRED"}

@@ -1932,18 +1932,24 @@ def validate_factory_expansion(cls_name: str, template: Any, parameters: Iterabl
             )
             if "$when" in st:
                 _need(
-                    set(st) == {"$when", "set", "unset"},
+                    set(st) in ({"$when", "set", "unset"}, {"$when", "equals", "set", "unset"}),
                     cls_name,
-                    "a '$when' step is {'$when', 'set', 'unset'}",
+                    "a '$when' step is {'$when', ['equals',] 'set', 'unset'}",
                 )
                 _need(
                     st["$when"] in params,
                     cls_name,
                     f"'$when' names {st['$when']!r}, not a parameter",
                 )
-                out.append(
-                    {"$when": st["$when"], "set": steps(st["set"]), "unset": steps(st["unset"])}
-                )
+                when = {"$when": st["$when"], "set": steps(st["set"]), "unset": steps(st["unset"])}
+                if "equals" in st:
+                    _need(
+                        isinstance(st["equals"], (bool, int, float, str)),
+                        cls_name,
+                        f"'$when' equals must be a JSON scalar, got {st['equals']!r}",
+                    )
+                    when["equals"] = st["equals"]
+                out.append(when)
             elif "parallel" in st:
                 _need(
                     set(st) == {"parallel"},
@@ -2005,6 +2011,11 @@ def expand_factory(
     Returns plain steps: ``{"component", "params"}``, ``{"load": slot}`` or
     ``{"parallel": {branch: [steps]}}``. A parameter whose resolved value is
     ``None`` is omitted from the expanded step (it takes its default).
+    A ``$when`` step takes its ``set`` branch when the parameter is given
+    and is not ``False`` (an on/off switch such as ``LevelStop(trail=)``
+    reads ``False`` as off); otherwise ``unset``. A ``$when`` with
+    ``equals`` takes ``set`` only when the argument is exactly that literal
+    (``LevelStop(side="long")`` picks ``IsLong`` over ``IsShort``).
     """
 
     def value(v: Any) -> Any:
@@ -2055,7 +2066,15 @@ def expand_factory(
         out: list[dict] = []
         for st in seq:
             if "$when" in st:
-                out.extend(steps(st["set"] if args.get(st["$when"]) is not None else st["unset"]))
+                # Set = given and not False: an explicit ``trail=False`` means
+                # what leaving the switch out means (TS twin: binding.ts). With
+                # ``equals``, set = the argument IS that literal (``side="long"``).
+                w = args.get(st["$when"])
+                if "equals" in st:
+                    hit = w is not None and type(w) is type(st["equals"]) and w == st["equals"]
+                else:
+                    hit = w is not None and w is not False
+                out.extend(steps(st["set"] if hit else st["unset"]))
             elif "parallel" in st:
                 out.append({"parallel": {n: steps(b) for n, b in st["parallel"].items()}})
             elif "load" in st:

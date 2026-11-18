@@ -1,0 +1,1301 @@
+{
+  "_meta": {
+    "keel/card": {
+      "card_data": {
+        "charts": [
+          {
+            "chart": {
+              "cat": null,
+              "cats": [],
+              "enc": "b64x2",
+              "family": "Scatter",
+              "kind": "scatter",
+              "legend": null,
+              "marks": [],
+              "more_words": null,
+              "note_words": "Showing 300 of 384 points",
+              "pts": "bU-KNpoefs6poOfsePTgsrRjjey8oOcfjGgIapiHGjkNmzePfkbxcf0q3g28H4h0gPWxVReVXkTgwbQyXQapWIgKqYfkVXfsAAg63iWIn0WxiaYcwbYsfke8Gjje6pDvbxgz2Ry8Rj85gfG-DRXk-z6peVfYoeT46pe8ha__tvRjoVTgdz85DvEzndgfh7oOT9iHgPIvDRPfDRiHmo__cfTgCnmzIv85g6T9Pfoeu8cf0q-KfEsrfDeneV3gRSsrgFnAG-YAoe85VXLtTgoedz6pGj-zjGfZRj4Eg6jeh73iRjDRoOwbTegzLtgKn0engPgAmzVRcfoObxXkG-IvdzjGT9y8eVTeieLtfYsre8IvDRfD2RfsIvbiEzQ_28iHIyfZfkndWINdte__fZXk3gQygVT9enRj3gfsGjkDIyIyapf9YsT4TeH44ET4gfYAIvtvfsIvnddzeVftoOzKteg6g6XQdmjGqYoVnAQ_GjNpgKYAoOjGUGgPmzQydzmoYcgKkDXQbU3iteh0moRbn08lfD853iu8QynAeVu80qT4T9eVQ_DRVXIy3ifsYsIveVTgmzn0XkieYsAAjG6pAARj1vPCyFpGkTVgvXkTzyxjy-uh4KvdvX-v2ktJqIzmhNvE0ZzytXce-vzkYDAAsAvk9Gth1Rop1pxjYPwLruqI723Ae8tXrKkTrw6qjG72umthkL__YPvOtXj_hN4KVgOkce03hGvduhXdoda2nX1pzAVgopwypGgaVgj_9juBiiuhtzxjxEXdOkbH2GYp8WvXuczm9GWunX9bnXzm_JuB-vxjc50ZWuXd6quc9bpGFr-vzkPCjpy-iisUopYDtqy-4A2Oa2rUpGXdrKkKxjpGxEVghNzA2kucuhcp6q4K8WjGuhnXvXYP9X03kK3AumsU9Gtn0Z1R-vvXce1pa2WuxE2kucvdop9X2_kKwyy-j_WunXiihGkTWumBbHsdAAzmeductX2G72u_1_uBuc1pYDwLxducsUuhYDkThNueededqImmvOga9XsAcpgaodrUWuiikTWu2GxEopi1vXv11_6q6qru-52ke8tz2OsdhNyF3ArUvX2kv89G0ZwLxE_J__3Aueru1vjG1_vk_J2eumvjiiXdjGFrwL2OopFrzkgaucopsdnXrKedjGkTvOWuopxj0Zum1p2_vOrw2kVgrwuh",
+              "read": null,
+              "series": [],
+              "title": "Before vs after the split",
+              "x": {
+                "label": "Sharpe before the split",
+                "n": null,
+                "pos": null,
+                "ticks": [
+                  {
+                    "at": 620,
+                    "w": "−2.00"
+                  },
+                  {
+                    "at": 1648,
+                    "w": "−1.00"
+                  },
+                  {
+                    "at": 2676,
+                    "w": "0.00"
+                  },
+                  {
+                    "at": 3704,
+                    "w": "1.00"
+                  }
+                ]
+              },
+              "y": {
+                "label": "Sharpe after the split",
+                "n": null,
+                "pos": null,
+                "ticks": [
+                  {
+                    "at": 628,
+                    "w": "0.00"
+                  },
+                  {
+                    "at": 2360,
+                    "w": "1.00"
+                  },
+                  {
+                    "at": 4091,
+                    "w": "2.00"
+                  }
+                ]
+              }
+            },
+            "family": "Scatter",
+            "form": "chart",
+            "index": 1,
+            "lead": null,
+            "state_words": null,
+            "thumb": null,
+            "title": "Before vs after the split",
+            "v": "Before%20vs%20after%20the%20split"
+          },
+          {
+            "chart": {
+              "bins": "DohzPsIdOfytxg7K4v__reOfmoAAK3",
+              "enc": "b64x2",
+              "family": "Distribution",
+              "kind": "dist",
+              "legend": null,
+              "marker": {
+                "at": 2576,
+                "w": "Momentum rotation 0.29"
+              },
+              "marks": [],
+              "more_words": null,
+              "note_words": null,
+              "overlays": [],
+              "read": {
+                "band": null,
+                "bins": "−1.55 to −1.36: 3|−1.36 to −1.16: 28|−1.16 to −0.97: 13|−0.97 to −0.77: 7|−0.77 to −0.57: 12|−0.57 to −0.38: 42|−0.38 to −0.18: 41|−0.18 to 0.013: 49|0.013 to 0.21: 47|0.21 to 0.40: 53|0.40 to 0.60: 36|0.60 to 0.80: 12|0.80 to 0.99: 32|0.99 to 1.19: 0|1.19 to 1.38: 9",
+                "cells": null,
+                "ring_words": null,
+                "sel": null,
+                "sel_rows": null,
+                "withheld": null,
+                "x": null,
+                "y": []
+              },
+              "series": [],
+              "title": "Every setting",
+              "x": {
+                "label": "Sharpe",
+                "n": 15,
+                "pos": null,
+                "ticks": [
+                  {
+                    "at": 771,
+                    "w": "−1.00"
+                  },
+                  {
+                    "at": 2166,
+                    "w": "0.00"
+                  },
+                  {
+                    "at": 3561,
+                    "w": "1.00"
+                  }
+                ]
+              },
+              "y": null
+            },
+            "family": "Distribution",
+            "form": "chart",
+            "index": 2,
+            "lead": null,
+            "state_words": null,
+            "thumb": null,
+            "title": "Every setting",
+            "v": "Every%20setting"
+          },
+          {
+            "chart": {
+              "enc": "b64x2",
+              "family": "Curve",
+              "kind": "line",
+              "legend": null,
+              "marks": [],
+              "more_words": "+16 more results in Keel",
+              "note_words": null,
+              "read": {
+                "band": null,
+                "bins": null,
+                "cells": null,
+                "ring_words": null,
+                "sel": null,
+                "sel_rows": null,
+                "withheld": null,
+                "x": "1|2|3|4|5|6|7|8|10|12|14|16|20|24|28|30",
+                "y": [
+                  "−0.023|0.90|0.90|−0.62|0.34|−0.092|0.84|−0.012|0.42|−0.092|0.076|0.15|−0.39|0.62|−0.51|0.33",
+                  "−1.28|0.85|0.42|0.16|0.30|−0.51|0.035|−0.20|0.23|0.47|−1.16|0.25|0.43|0.076|−0.62|−0.0008",
+                  "−0.34|0.16|1.25|0.98|0.74|0.43|−0.95|−0.42|0.16|0.29|−0.31|−0.42|−0.29|−0.069|−0.19|−0.39",
+                  "−1.20|0.45|−0.51|−0.32|0.19|−0.20|−0.15|0.15|0.29|−0.51|−0.0008|−0.41|−0.092|−1.28|−0.23|0.23",
+                  "0.88|−0.15|0.47|0.40|−0.31|0.021|−0.0015|−1.55|0.45|−0.20|−0.0008|0.47|−0.11|−1.16|0.33|0.84",
+                  "−1.10|−1.48|−0.34|0.19|0.23|0.81|0.85|−0.51|0.95|0.41|−0.0028|−1.23|−1.20|0.16|−0.19|1.38",
+                  "0.84|−0.069|−0.15|0.065|0.34|−0.61|0.84|−0.19|−0.11|0.34|1.37|−0.19|0.48|−0.51|0.41|−0.39",
+                  "0.17|0.017|0.95|−1.48|0.076|−1.29|0.47|−0.19|0.33|0.45|0.42|−0.44|0.23|−0.13|0.29|−1.19"
+                ]
+              },
+              "series": [
+                {
+                  "c": 1,
+                  "hi": null,
+                  "lo": null,
+                  "name": "2",
+                  "ref": false,
+                  "y": "hW1Z1ZUWpUf20Ghmq8f2jglIZWvaWoo9"
+                },
+                {
+                  "c": 2,
+                  "hi": null,
+                  "lo": null,
+                  "name": "3",
+                  "ref": false,
+                  "y": "F_0Tq8lYodWoimdlm0sMInnYrPjgUWh1"
+                },
+                {
+                  "c": 3,
+                  "hi": null,
+                  "lo": null,
+                  "name": "4",
+                  "ref": false,
+                  "y": "aglY9C3KyDrPNEYplcoQbNYpbegWdvZW"
+                },
+                {
+                  "c": 4,
+                  "hi": null,
+                  "lo": null,
+                  "name": "5",
+                  "ref": false,
+                  "y": "HrrwWta9l6dleelIoOWoh1Y8f2F_c5mx"
+                },
+                {
+                  "c": 5,
+                  "hi": null,
+                  "lo": null,
+                  "name": "6",
+                  "ref": false,
+                  "y": "1FeesMqnbNiUh0AArwdbh1sMfWIno90G"
+                },
+                {
+                  "c": 6,
+                  "hi": null,
+                  "lo": null,
+                  "name": "7",
+                  "ref": false,
+                  "y": "J1Bkagl6m-za0TWo2mqvhyHDHrlYdv__"
+                },
+                {
+                  "c": 7,
+                  "hi": null,
+                  "lo": null,
+                  "name": "8",
+                  "ref": false,
+                  "y": "0GgWeejRpUUj0GdufWpW_qdvsTWoqvZW"
+                },
+                {
+                  "c": 8,
+                  "hi": null,
+                  "lo": null,
+                  "name": "10",
+                  "ref": false,
+                  "y": "lfiO2mBkjgFzsMduo_rwq8YUm0e_oQH_"
+                }
+              ],
+              "title": "Across holds",
+              "x": {
+                "label": "hold",
+                "n": 16,
+                "pos": "AACNEaGoI1LCNPPcT3YRcshGp7yw7l__",
+                "ticks": [
+                  {
+                    "at": 0,
+                    "w": "1"
+                  },
+                  {
+                    "at": 424,
+                    "w": "4"
+                  },
+                  {
+                    "at": 847,
+                    "w": "7"
+                  },
+                  {
+                    "at": 1553,
+                    "w": "12"
+                  },
+                  {
+                    "at": 2683,
+                    "w": "20"
+                  },
+                  {
+                    "at": 4095,
+                    "w": "30"
+                  }
+                ]
+              },
+              "y": {
+                "label": "Sharpe",
+                "n": null,
+                "pos": null,
+                "ticks": [
+                  {
+                    "at": 771,
+                    "w": "−1.00"
+                  },
+                  {
+                    "at": 2166,
+                    "w": "0.00"
+                  },
+                  {
+                    "at": 3561,
+                    "w": "1.00"
+                  }
+                ]
+              }
+            },
+            "family": "Curve",
+            "form": "chart",
+            "index": 3,
+            "lead": null,
+            "state_words": null,
+            "thumb": null,
+            "title": "Across holds",
+            "v": "Across%20holds"
+          }
+        ],
+        "checks": null,
+        "chips": [],
+        "copy": {
+          "charts": "Charts",
+          "failed_cell": "Didn't finish",
+          "full_chart_in_keel": "Open in Keel for the full chart",
+          "highest": "Highest",
+          "hint_pointer": "Hover or tap the chart for values",
+          "hint_touch": "Tap the chart for values",
+          "locked": "not included in this account's plan",
+          "lowest": "Lowest",
+          "met": "met",
+          "more_charts": "",
+          "not_measured": "not measured",
+          "not_met": "not met",
+          "not_run": "Not run yet",
+          "not_valid": "Not a valid setting",
+          "numbers": "The numbers",
+          "open_bar": "Open this bar in Keel",
+          "open_chart": "Open this chart in Keel",
+          "open_setting": "Open this setting in Keel",
+          "points_in_keel": "Open in Keel to read each point",
+          "steps": "Steps",
+          "yours": "Yours"
+        },
+        "focus": {
+          "index": 0,
+          "rows_words": null,
+          "sel": null
+        },
+        "head_words": null,
+        "key": {
+          "cols": 16,
+          "d": "gqqakfpglfhicnbk3plikbhejl4jlhagdiurol6cikdcdgec4lbdiefijbgcf3ejqflldhg0leglf4kp51dijppbqlg34ievpgfhkapefkvelblcihq1h3lekllcjfk44ca4jmvjic2ql4qjgcckfiirqifnfcggoaknil63dkqic7ckbhp44vkhbapjk7kqb4hlleji7ilggkhkldildde342hkcjpgejg7hncf44fhpf4le3bl3j5hjglf9iovhegobhhcgbojf4jk55eggeaeh6paged4lfe4lhegflqvojjjdikjdllb44aidalkccklbhnmgijbdgqeoimc5lufdqqib5lgikracgkb4cq5qfee4gclvlejie3kp93b",
+          "enc": "b64x2",
+          "family": "Heatmap",
+          "kind": "heat",
+          "legend": {
+            "hi": "1.38",
+            "lo": "−1.55",
+            "ramp": "div"
+          },
+          "marks": [],
+          "more_words": null,
+          "note_words": "Marked: the 3 best and the 3 worst; the cell you pick is outlined too",
+          "outline": {
+            "high": [372, 181, 95],
+            "low": [71, 81, 115]
+          },
+          "read": {
+            "band": null,
+            "bins": null,
+            "cells": "−0.023|0.90|0.90|−0.62|0.34|−0.092|0.84|−0.012|0.42|−0.092|0.076|0.15|−0.39|0.62|−0.51|0.33|−1.28|0.85|0.42|0.16|0.30|−0.51|0.035|−0.20|0.23|0.47|−1.16|0.25|0.43|0.076|−0.62|−0.0008|−0.34|0.16|1.25|0.98|0.74|0.43|−0.95|−0.42|0.16|0.29|−0.31|−0.42|−0.29|−0.069|−0.19|−0.39|−1.20|0.45|−0.51|−0.32|0.19|−0.20|−0.15|0.15|0.29|−0.51|−0.0008|−0.41|−0.092|−1.28|−0.23|0.23|0.88|−0.15|0.47|0.40|−0.31|0.021|−0.0015|−1.55|0.45|−0.20|−0.0008|0.47|−0.11|−1.16|0.33|0.84|−1.10|−1.48|−0.34|0.19|0.23|0.81|0.85|−0.51|0.95|0.41|−0.0028|−1.23|−1.20|0.16|−0.19|1.38|0.84|−0.069|−0.15|0.065|0.34|−0.61|0.84|−0.19|−0.11|0.34|1.37|−0.19|0.48|−0.51|0.41|−0.39|0.17|0.017|0.95|−1.48|0.076|−1.29|0.47|−0.19|0.33|0.45|0.42|−0.44|0.23|−0.13|0.29|−1.19|−1.20|−0.40|−0.62|−1.20|0.23|0.53|1.37|0.23|0.16|−0.39|−1.34|0.95|0.43|−1.19|0.95|0.23|−0.069|−0.44|−0.40|0.34|−0.15|0.16|0.16|0.98|0.90|0.19|−0.10|0.62|−0.13|−0.39|−0.012|−0.069|0.74|−0.57|0.33|0.62|0.17|0.45|−0.95|−1.23|−0.28|0.34|0.95|0.15|−0.41|−0.91|−0.39|0.34|−0.51|0.017|0.84|−1.16|−1.19|1.38|0.30|0.014|−0.51|−0.62|0.82|0.23|0.33|−0.91|0.33|0.88|−0.51|−1.20|0.045|0.42|0.45|−0.26|0.25|0.19|−0.91|0.15|0.40|−0.0015|−0.012|0.29|0.045|0.34|0.43|−0.29|0.16|0.42|−0.34|−0.34|−0.19|−1.23|−1.19|−1.34|0.017|0.30|−0.44|0.23|0.85|−0.069|−0.26|0.28|−0.012|−0.91|0.065|0.62|−0.42|−0.11|−1.19|−1.20|−0.13|0.083|0.81|−0.092|−1.19|0.45|−0.23|−1.29|−0.56|0.43|−1.23|0.23|−1.10|0.014|0.23|−0.0008|0.47|−0.15|−0.69|0.17|0.71|1.37|0.014|−0.19|−0.037|0.74|−0.51|0.083|0.017|−0.44|−0.012|−0.51|0.74|0.29|−0.092|−1.16|0.23|0.33|−1.10|−1.10|−0.20|−0.037|−0.069|−0.20|−0.61|−0.26|0.083|−0.95|0.82|−0.61|−0.0028|−0.23|−0.28|−1.19|0.48|−0.092|−0.19|−1.19|0.47|0.017|−0.26|−0.069|−0.091|0.42|0.87|1.37|0.71|0.23|0.23|0.23|−0.32|0.19|0.30|0.29|−0.29|0.41|0.45|−0.56|−1.16|−1.16|−0.62|0.15|−0.28|−0.62|0.42|0.30|−0.39|−0.44|0.29|0.43|−0.51|0.017|0.62|0.53|−0.0015|0.15|0.23|−0.51|−0.32|−0.023|0.88|−0.23|0.71|0.16|0.53|−0.42|−1.09|0.40|1.25|−0.13|−0.32|0.95|0.88|0.16|−0.51|−1.10|0.45|−0.069|0.16|0.30|0.98|−0.61|−0.44|−0.069|0.34|−0.56|−1.20|−0.41|0.90|−1.10|0.88|−0.092|−0.20|−0.19|−1.19|−0.069|−0.39|0.43|1.38|0.40|−0.19|0.28|0.16|−0.20|−1.28|0.30|0.84|−0.69|−1.28|−0.51",
+            "ring_words": null,
+            "sel": "hold:1|hold:2|hold:3|hold:4|hold:5|hold:6|hold:7|hold:8|hold:10|hold:12|hold:14|hold:16|hold:20|hold:24|hold:28|hold:30",
+            "sel_rows": "lookback:2|lookback:3|lookback:4|lookback:5|lookback:6|lookback:7|lookback:8|lookback:10|lookback:12|lookback:14|lookback:16|lookback:18|lookback:21|lookback:24|lookback:28|lookback:32|lookback:36|lookback:42|lookback:48|lookback:56|lookback:64|lookback:72|lookback:80|lookback:90",
+            "withheld": null,
+            "x": "1|2|3|4|5|6|7|8|10|12|14|16|20|24|28|30",
+            "y": [
+              "2|3|4|5|6|7|8|10|12|14|16|18|21|24|28|32|36|42|48|56|64|72|80|90"
+            ]
+          },
+          "ring": null,
+          "rows": 24,
+          "series": [],
+          "title": "Lookback × hold",
+          "values_in_cells": false,
+          "x": {
+            "label": "Hold",
+            "n": 16,
+            "pos": null,
+            "ticks": [
+              {
+                "at": 128,
+                "w": "1"
+              },
+              {
+                "at": 896,
+                "w": "4"
+              },
+              {
+                "at": 1664,
+                "w": "7"
+              },
+              {
+                "at": 2431,
+                "w": "12"
+              },
+              {
+                "at": 3199,
+                "w": "20"
+              },
+              {
+                "at": 3967,
+                "w": "30"
+              }
+            ]
+          },
+          "y": {
+            "label": "Lookback",
+            "n": 24,
+            "pos": null,
+            "ticks": [
+              {
+                "at": 85,
+                "w": "2"
+              },
+              {
+                "at": 938,
+                "w": "7"
+              },
+              {
+                "at": 1621,
+                "w": "14"
+              },
+              {
+                "at": 2474,
+                "w": "28"
+              },
+              {
+                "at": 3157,
+                "w": "48"
+              },
+              {
+                "at": 4010,
+                "w": "90"
+              }
+            ]
+          }
+        },
+        "key_v": "Lookback%20%C3%97%20hold",
+        "links": {
+          "chart": "https://app.usekeel.io/research/stu_000005?v={v}",
+          "select": "https://app.usekeel.io/research/stu_000005?v={v}&sel={sel}",
+          "study": "https://app.usekeel.io/research/stu_000005"
+        },
+        "method_line": "Measured with Neighbours v1, SplitCompare v1",
+        "more_charts_total": 0,
+        "more_words": null,
+        "notes": {
+          "draft": null,
+          "linked": null,
+          "not_measured": [],
+          "saved": null,
+          "stale": ["Momentum rotation v3 has a newer version, v4."]
+        },
+        "rows": null,
+        "schema": "keel.research.card-data/2",
+        "steps": [],
+        "top": {
+          "lines": [
+            "Highest: hold 30 · lookback 7 at 1.38",
+            "Lowest: hold 8 · lookback 6 at −1.55"
+          ]
+        }
+      },
+      "data": [
+        {
+          "cagr": -0.03234525649626718,
+          "cell": "lookback 2 · hold 1",
+          "days": 585,
+          "hold": 1,
+          "lookback": 2,
+          "max_drawdown": -0.25786689331111934,
+          "result": "Momentum rotation",
+          "sharpe": -0.02313463704016472,
+          "sharpe_after": 1.623424500064559,
+          "sharpe_before": -0.902752840143695,
+          "status": "computed",
+          "total_return": -0.05133349783693886,
+          "turnover": null,
+          "words": {
+            "cagr": "−3.2%",
+            "max_drawdown": "−25.8%",
+            "sharpe": "−0.023",
+            "sharpe_after": "1.62",
+            "sharpe_before": "−0.90",
+            "total_return": "−5.1%",
+            "turnover": "not measured"
+          }
+        },
+        {
+          "cagr": 0.25056544670302516,
+          "cell": "lookback 2 · hold 2",
+          "days": 585,
+          "hold": 2,
+          "lookback": 2,
+          "max_drawdown": -0.2652670743144092,
+          "result": "Momentum rotation",
+          "sharpe": 0.8966500936777462,
+          "sharpe_after": 0.19288034574257729,
+          "sharpe_before": 1.2671864048896972,
+          "status": "computed",
+          "total_return": 0.4309890971184396,
+          "turnover": null,
+          "words": {
+            "cagr": "25.1%",
+            "max_drawdown": "−26.5%",
+            "sharpe": "0.90",
+            "sharpe_after": "0.19",
+            "sharpe_before": "1.27",
+            "total_return": "43.1%",
+            "turnover": "not measured"
+          }
+        },
+        {
+          "cagr": 0.25056544670302516,
+          "cell": "lookback 2 · hold 3",
+          "days": 585,
+          "hold": 3,
+          "lookback": 2,
+          "max_drawdown": -0.2652670743144092,
+          "result": "Momentum rotation",
+          "sharpe": 0.8966500936777462,
+          "sharpe_after": 0.19288034574257729,
+          "sharpe_before": 1.2671864048896972,
+          "status": "computed",
+          "total_return": 0.4309890971184396,
+          "turnover": null,
+          "words": {
+            "cagr": "25.1%",
+            "max_drawdown": "−26.5%",
+            "sharpe": "0.90",
+            "sharpe_after": "0.19",
+            "sharpe_before": "1.27",
+            "total_return": "43.1%",
+            "turnover": "not measured"
+          }
+        },
+        {
+          "cagr": -0.11408480121657505,
+          "cell": "lookback 2 · hold 4",
+          "days": 585,
+          "hold": 4,
+          "lookback": 2,
+          "max_drawdown": -0.344772483282357,
+          "result": "Momentum rotation",
+          "sharpe": -0.6196203384270811,
+          "sharpe_after": 1.4883928095582697,
+          "sharpe_before": -1.7540920071651227,
+          "status": "computed",
+          "total_return": -0.1764626265474749,
+          "turnover": null,
+          "words": {
+            "cagr": "−11.4%",
+            "max_drawdown": "−34.5%",
+            "sharpe": "−0.62",
+            "sharpe_after": "1.49",
+            "sharpe_before": "−1.75",
+            "total_return": "−17.6%",
+            "turnover": "not measured"
+          }
+        },
+        {
+          "cagr": 0.04695825036661283,
+          "cell": "lookback 2 · hold 5",
+          "days": 585,
+          "hold": 5,
+          "lookback": 2,
+          "max_drawdown": -0.18868510630894753,
+          "result": "Momentum rotation",
+          "sharpe": 0.34208997347543296,
+          "sharpe_after": 1.1559675353441474,
+          "sharpe_before": -0.0830639926849917,
+          "status": "computed",
+          "total_return": 0.0763204274253988,
+          "turnover": null,
+          "words": {
+            "cagr": "4.7%",
+            "max_drawdown": "−18.9%",
+            "sharpe": "0.34",
+            "sharpe_after": "1.16",
+            "sharpe_before": "−0.083",
+            "total_return": "7.6%",
+            "turnover": "not measured"
+          }
+        },
+        {
+          "cagr": -0.02837660200626657,
+          "cell": "lookback 2 · hold 6",
+          "days": 585,
+          "hold": 6,
+          "lookback": 2,
+          "max_drawdown": -0.18930796940160155,
+          "result": "Momentum rotation",
+          "sharpe": -0.09180410854743158,
+          "sharpe_after": 0.9788957988678653,
+          "sharpe_before": -0.6299388171659804,
+          "status": "computed",
+          "total_return": -0.04508989025392396,
+          "turnover": null,
+          "words": {
+            "cagr": "−2.8%",
+            "max_drawdown": "−18.9%",
+            "sharpe": "−0.092",
+            "sharpe_after": "0.98",
+            "sharpe_before": "−0.63",
+            "total_return": "−4.5%",
+            "turnover": "not measured"
+          }
+        },
+        {
+          "cagr": 0.1876030991837352,
+          "cell": "lookback 2 · hold 7",
+          "days": 585,
+          "hold": 7,
+          "lookback": 2,
+          "max_drawdown": -0.2292950169762784,
+          "result": "Momentum rotation",
+          "sharpe": 0.8368989210472245,
+          "sharpe_after": 0.43216529133168946,
+          "sharpe_before": 1.0477488218080027,
+          "status": "computed",
+          "total_return": 0.31728180934408834,
+          "turnover": null,
+          "words": {
+            "cagr": "18.8%",
+            "max_drawdown": "−22.9%",
+            "sharpe": "0.84",
+            "sharpe_after": "0.43",
+            "sharpe_before": "1.05",
+            "total_return": "31.7%",
+            "turnover": "not measured"
+          }
+        },
+        {
+          "cagr": -0.013483463624862413,
+          "cell": "lookback 2 · hold 8",
+          "days": 585,
+          "hold": 8,
+          "lookback": 2,
+          "max_drawdown": -0.19975306536655302,
+          "result": "Momentum rotation",
+          "sharpe": -0.011767180779925751,
+          "sharpe_after": 1.275274443495172,
+          "sharpe_before": -0.6974734168747915,
+          "status": "computed",
+          "total_return": -0.02152251085773671,
+          "turnover": null,
+          "words": {
+            "cagr": "−1.3%",
+            "max_drawdown": "−20.0%",
+            "sharpe": "−0.012",
+            "sharpe_after": "1.28",
+            "sharpe_before": "−0.70",
+            "total_return": "−2.2%",
+            "turnover": "not measured"
+          }
+        },
+        {
+          "cagr": 0.08370399537410855,
+          "cell": "lookback 2 · hold 10",
+          "days": 585,
+          "hold": 10,
+          "lookback": 2,
+          "max_drawdown": -0.2832963197118551,
+          "result": "Momentum rotation",
+          "sharpe": 0.4169736616669188,
+          "sharpe_after": 1.3880653334240285,
+          "sharpe_before": -0.09921521073902494,
+          "status": "computed",
+          "total_return": 0.13750345624215798,
+          "turnover": null,
+          "words": {
+            "cagr": "8.4%",
+            "max_drawdown": "−28.3%",
+            "sharpe": "0.42",
+            "sharpe_after": "1.39",
+            "sharpe_before": "−0.099",
+            "total_return": "13.8%",
+            "turnover": "not measured"
+          }
+        },
+        {
+          "cagr": -0.02837660200626657,
+          "cell": "lookback 2 · hold 12",
+          "days": 585,
+          "hold": 12,
+          "lookback": 2,
+          "max_drawdown": -0.18930796940160155,
+          "result": "Momentum rotation",
+          "sharpe": -0.09180410854743158,
+          "sharpe_after": 0.9788957988678653,
+          "sharpe_before": -0.6299388171659804,
+          "status": "computed",
+          "total_return": -0.04508989025392396,
+          "turnover": null,
+          "words": {
+            "cagr": "−2.8%",
+            "max_drawdown": "−18.9%",
+            "sharpe": "−0.092",
+            "sharpe_after": "0.98",
+            "sharpe_before": "−0.63",
+            "total_return": "−4.5%",
+            "turnover": "not measured"
+          }
+        },
+        {
+          "cagr": -0.0003528039928364368,
+          "cell": "lookback 2 · hold 14",
+          "days": 585,
+          "hold": 14,
+          "lookback": 2,
+          "max_drawdown": -0.21311279982854514,
+          "result": "Momentum rotation",
+          "sharpe": 0.07589860511598424,
+          "sharpe_after": 1.5513219269354668,
+          "sharpe_before": -0.7206018491457041,
+          "status": "computed",
+          "total_return": -0.0005653928505112704,
+          "turnover": null,
+          "words": {
+            "cagr": "> −0.1%",
+            "max_drawdown": "−21.3%",
+            "sharpe": "0.076",
+            "sharpe_after": "1.55",
+            "sharpe_before": "−0.72",
+            "total_return": "−0.1%",
+            "turnover": "not measured"
+          }
+        },
+        {
+          "cagr": 0.011337874510990886,
+          "cell": "lookback 2 · hold 16",
+          "days": 585,
+          "hold": 16,
+          "lookback": 2,
+          "max_drawdown": -0.17295455619209532,
+          "result": "Momentum rotation",
+          "sharpe": 0.150048884112799,
+          "sharpe_after": 1.6699597209620467,
+          "sharpe_before": -0.6004293596102236,
+          "status": "computed",
+          "total_return": 0.01823365967094559,
+          "turnover": null,
+          "words": {
+            "cagr": "1.1%",
+            "max_drawdown": "−17.3%",
+            "sharpe": "0.15",
+            "sharpe_after": "1.67",
+            "sharpe_before": "−0.60",
+            "total_return": "1.8%",
+            "turnover": "not measured"
+          }
+        },
+        {
+          "cagr": -0.07526138600104515,
+          "cell": "lookback 2 · hold 20",
+          "days": 585,
+          "hold": 20,
+          "lookback": 2,
+          "max_drawdown": -0.284059583677054,
+          "result": "Momentum rotation",
+          "sharpe": -0.390058715829444,
+          "sharpe_after": 1.4684603438316948,
+          "sharpe_before": -1.3885174100467461,
+          "status": "computed",
+          "total_return": -0.11786045830031133,
+          "turnover": null,
+          "words": {
+            "cagr": "−7.5%",
+            "max_drawdown": "−28.4%",
+            "sharpe": "−0.39",
+            "sharpe_after": "1.47",
+            "sharpe_before": "−1.39",
+            "total_return": "−11.8%",
+            "turnover": "not measured"
+          }
+        },
+        {
+          "cagr": 0.1466814159656098,
+          "cell": "lookback 2 · hold 24",
+          "days": 585,
+          "hold": 24,
+          "lookback": 2,
+          "max_drawdown": -0.3230970749016068,
+          "result": "Momentum rotation",
+          "sharpe": 0.622138414103448,
+          "sharpe_after": 1.5213706077074058,
+          "sharpe_before": 0.17861693815538132,
+          "status": "computed",
+          "total_return": 0.24529227890555227,
+          "turnover": null,
+          "words": {
+            "cagr": "14.7%",
+            "max_drawdown": "−32.3%",
+            "sharpe": "0.62",
+            "sharpe_after": "1.52",
+            "sharpe_before": "0.18",
+            "total_return": "24.5%",
+            "turnover": "not measured"
+          }
+        },
+        {
+          "cagr": -0.11850023609616656,
+          "cell": "lookback 2 · hold 28",
+          "days": 585,
+          "hold": 28,
+          "lookback": 2,
+          "max_drawdown": -0.37176336005986144,
+          "result": "Momentum rotation",
+          "sharpe": -0.5146625183204331,
+          "sharpe_after": 1.3564365821837108,
+          "sharpe_before": -1.5107101692881564,
+          "status": "computed",
+          "total_return": -0.18303125045370328,
+          "turnover": null,
+          "words": {
+            "cagr": "−11.9%",
+            "max_drawdown": "−37.2%",
+            "sharpe": "−0.51",
+            "sharpe_after": "1.36",
+            "sharpe_before": "−1.51",
+            "total_return": "−18.3%",
+            "turnover": "not measured"
+          }
+        },
+        {
+          "cagr": 0.03795632504536872,
+          "cell": "lookback 2 · hold 30",
+          "days": 585,
+          "hold": 30,
+          "lookback": 2,
+          "max_drawdown": -0.15591937280385126,
+          "result": "Momentum rotation",
+          "sharpe": 0.32619032728929326,
+          "sharpe_after": 1.7130461969243753,
+          "sharpe_before": -0.3946638642793899,
+          "status": "computed",
+          "total_return": 0.0615265328027812,
+          "turnover": null,
+          "words": {
+            "cagr": "3.8%",
+            "max_drawdown": "−15.6%",
+            "sharpe": "0.33",
+            "sharpe_after": "1.71",
+            "sharpe_before": "−0.39",
+            "total_return": "6.2%",
+            "turnover": "not measured"
+          }
+        },
+        {
+          "cagr": -0.3290479361136486,
+          "cell": "lookback 3 · hold 1",
+          "days": 585,
+          "hold": 1,
+          "lookback": 3,
+          "max_drawdown": -0.6103134086416458,
+          "result": "Momentum rotation",
+          "sharpe": -1.2780529195857202,
+          "sharpe_after": 1.254449787177507,
+          "sharpe_before": -2.602884296311857,
+          "status": "computed",
+          "total_return": -0.4724889381124723,
+          "turnover": null,
+          "words": {
+            "cagr": "−32.9%",
+            "max_drawdown": "−61.0%",
+            "sharpe": "−1.28",
+            "sharpe_after": "1.25",
+            "sharpe_before": "−2.60",
+            "total_return": "−47.2%",
+            "turnover": "not measured"
+          }
+        },
+        {
+          "cagr": 0.20178173508469688,
+          "cell": "lookback 3 · hold 2",
+          "days": 585,
+          "hold": 2,
+          "lookback": 3,
+          "max_drawdown": -0.2419410176964224,
+          "result": "Momentum rotation",
+          "sharpe": 0.8465787506063668,
+          "sharpe_after": 1.3914052954347567,
+          "sharpe_before": 0.5683434628254849,
+          "status": "computed",
+          "total_return": 0.3425784100936242,
+          "turnover": null,
+          "words": {
+            "cagr": "20.2%",
+            "max_drawdown": "−24.2%",
+            "sharpe": "0.85",
+            "sharpe_after": "1.39",
+            "sharpe_before": "0.57",
+            "total_return": "34.3%",
+            "turnover": "not measured"
+          }
+        },
+        {
+          "cagr": 0.08370399537410855,
+          "cell": "lookback 3 · hold 3",
+          "days": 585,
+          "hold": 3,
+          "lookback": 3,
+          "max_drawdown": -0.2832963197118551,
+          "result": "Momentum rotation",
+          "sharpe": 0.4169736616669188,
+          "sharpe_after": 1.3880653334240285,
+          "sharpe_before": -0.09921521073902494,
+          "status": "computed",
+          "total_return": 0.13750345624215798,
+          "turnover": null,
+          "words": {
+            "cagr": "8.4%",
+            "max_drawdown": "−28.3%",
+            "sharpe": "0.42",
+            "sharpe_after": "1.39",
+            "sharpe_before": "−0.099",
+            "total_return": "13.8%",
+            "turnover": "not measured"
+          }
+        },
+        {
+          "cagr": 0.013127622467212108,
+          "cell": "lookback 3 · hold 4",
+          "days": 585,
+          "hold": 4,
+          "lookback": 3,
+          "max_drawdown": -0.19278834146608403,
+          "result": "Momentum rotation",
+          "sharpe": 0.1614188182635422,
+          "sharpe_after": 1.9563007658836942,
+          "sharpe_before": -0.8292821377521884,
+          "status": "computed",
+          "total_return": 0.021123258551095425,
+          "turnover": null,
+          "words": {
+            "cagr": "1.3%",
+            "max_drawdown": "−19.3%",
+            "sharpe": "0.16",
+            "sharpe_after": "1.96",
+            "sharpe_before": "−0.83",
+            "total_return": "2.1%",
+            "turnover": "not measured"
+          }
+        },
+        {
+          "cagr": 0.03523848745992231,
+          "cell": "lookback 3 · hold 5",
+          "days": 585,
+          "hold": 5,
+          "lookback": 3,
+          "max_drawdown": -0.1603959949131485,
+          "result": "Momentum rotation",
+          "sharpe": 0.3029035138387293,
+          "sharpe_after": 1.653749239673714,
+          "sharpe_before": -0.4182114049628324,
+          "status": "computed",
+          "total_return": 0.05707514624223853,
+          "turnover": null,
+          "words": {
+            "cagr": "3.5%",
+            "max_drawdown": "−16.0%",
+            "sharpe": "0.30",
+            "sharpe_after": "1.65",
+            "sharpe_before": "−0.42",
+            "total_return": "5.7%",
+            "turnover": "not measured"
+          }
+        },
+        {
+          "cagr": -0.10962925484607888,
+          "cell": "lookback 3 · hold 6",
+          "days": 585,
+          "hold": 6,
+          "lookback": 3,
+          "max_drawdown": -0.3358010213476714,
+          "result": "Momentum rotation",
+          "sharpe": -0.5148831889968556,
+          "sharpe_after": 1.2790100126400232,
+          "sharpe_before": -1.4564575076171458,
+          "status": "computed",
+          "total_return": -0.16981429839054407,
+          "turnover": null,
+          "words": {
+            "cagr": "−11.0%",
+            "max_drawdown": "−33.6%",
+            "sharpe": "−0.51",
+            "sharpe_after": "1.28",
+            "sharpe_before": "−1.46",
+            "total_return": "−17.0%",
+            "turnover": "not measured"
+          }
+        },
+        {
+          "cagr": -0.005260573034481242,
+          "cell": "lookback 3 · hold 7",
+          "days": 585,
+          "hold": 7,
+          "lookback": 3,
+          "max_drawdown": -0.17728250985283522,
+          "result": "Momentum rotation",
+          "sharpe": 0.03450054292574793,
+          "sharpe_after": 1.305628789020729,
+          "sharpe_before": -0.6026268743387488,
+          "status": "computed",
+          "total_return": -0.008417953209868823,
+          "turnover": null,
+          "words": {
+            "cagr": "−0.5%",
+            "max_drawdown": "−17.7%",
+            "sharpe": "0.035",
+            "sharpe_after": "1.31",
+            "sharpe_before": "−0.60",
+            "total_return": "−0.8%",
+            "turnover": "not measured"
+          }
+        },
+        {
+          "cagr": -0.03977976096262403,
+          "cell": "lookback 3 · hold 8",
+          "days": 585,
+          "hold": 8,
+          "lookback": 3,
+          "max_drawdown": -0.2194333566647143,
+          "result": "Momentum rotation",
+          "sharpe": -0.19597718393698374,
+          "sharpe_after": 1.1945016638688188,
+          "sharpe_before": -0.944558692889084,
+          "status": "computed",
+          "total_return": -0.06298817886657893,
+          "turnover": null,
+          "words": {
+            "cagr": "−4.0%",
+            "max_drawdown": "−21.9%",
+            "sharpe": "−0.20",
+            "sharpe_after": "1.19",
+            "sharpe_before": "−0.94",
+            "total_return": "−6.3%",
+            "turnover": "not measured"
+          }
+        },
+        {
+          "cagr": 0.026337294763512764,
+          "cell": "lookback 3 · hold 10",
+          "days": 585,
+          "hold": 10,
+          "lookback": 3,
+          "max_drawdown": -0.2062761791455192,
+          "result": "Momentum rotation",
+          "sharpe": 0.22792919344521598,
+          "sharpe_after": 1.544508433223175,
+          "sharpe_before": -0.4791408771183225,
+          "status": "computed",
+          "total_return": 0.04254571725660328,
+          "turnover": null,
+          "words": {
+            "cagr": "2.6%",
+            "max_drawdown": "−20.6%",
+            "sharpe": "0.23",
+            "sharpe_after": "1.54",
+            "sharpe_before": "−0.48",
+            "total_return": "4.3%",
+            "turnover": "not measured"
+          }
+        }
+      ]
+    },
+    "ui": {
+      "resourceUri": "ui://keel/cards/study.html"
+    }
+  },
+  "content": [
+    {
+      "text": "card: where the host draws Keel cards, the user sees what follows as a card carrying its name, links and ids, so a reply can call it by name; the ids and links here serve tool calls and hosts without cards.\n\nLookback × hold (version 1)\nRows 1–25 of 384 (384 computed)\n| result | lookback | hold | status | cell | Sharpe (sharpe) | CAGR (cagr) | Max drawdown (max_drawdown) | Total return (total_return) | days | Turnover (turnover) | Sharpe before the split (sharpe_before) | Sharpe after the split (sharpe_after) |\n|---|---|---|---|---|---|---|---|---|---|---|---|---|\n| Momentum rotation | 2 | 1 | computed | lookback 2 · hold 1 | −0.023 | −3.2% | −25.8% | −5.1% | 585 | not measured | −0.90 | 1.62 |\n| Momentum rotation | 2 | 2 | computed | lookback 2 · hold 2 | 0.90 | 25.1% | −26.5% | 43.1% | 585 | not measured | 1.27 | 0.19 |\n| Momentum rotation | 2 | 3 | computed | lookback 2 · hold 3 | 0.90 | 25.1% | −26.5% | 43.1% | 585 | not measured | 1.27 | 0.19 |\n| Momentum rotation | 2 | 4 | computed | lookback 2 · hold 4 | −0.62 | −11.4% | −34.5% | −17.6% | 585 | not measured | −1.75 | 1.49 |\n| Momentum rotation | 2 | 5 | computed | lookback 2 · hold 5 | 0.34 | 4.7% | −18.9% | 7.6% | 585 | not measured | −0.083 | 1.16 |\n| Momentum rotation | 2 | 6 | computed | lookback 2 · hold 6 | −0.092 | −2.8% | −18.9% | −4.5% | 585 | not measured | −0.63 | 0.98 |\n| Momentum rotation | 2 | 7 | computed | lookback 2 · hold 7 | 0.84 | 18.8% | −22.9% | 31.7% | 585 | not measured | 1.05 | 0.43 |\n| Momentum rotation | 2 | 8 | computed | lookback 2 · hold 8 | −0.012 | −1.3% | −20.0% | −2.2% | 585 | not measured | −0.70 | 1.28 |\n| Momentum rotation | 2 | 10 | computed | lookback 2 · hold 10 | 0.42 | 8.4% | −28.3% | 13.8% | 585 | not measured | −0.099 | 1.39 |\n| Momentum rotation | 2 | 12 | computed | lookback 2 · hold 12 | −0.092 | −2.8% | −18.9% | −4.5% | 585 | not measured | −0.63 | 0.98 |\n| Momentum rotation | 2 | 14 | computed | lookback 2 · hold 14 | 0.076 | > −0.1% | −21.3% | −0.1% | 585 | not measured | −0.72 | 1.55 |\n| Momentum rotation | 2 | 16 | computed | lookback 2 · hold 16 | 0.15 | 1.1% | −17.3% | 1.8% | 585 | not measured | −0.60 | 1.67 |\n| Momentum rotation | 2 | 20 | computed | lookback 2 · hold 20 | −0.39 | −7.5% | −28.4% | −11.8% | 585 | not measured | −1.39 | 1.47 |\n| Momentum rotation | 2 | 24 | computed | lookback 2 · hold 24 | 0.62 | 14.7% | −32.3% | 24.5% | 585 | not measured | 0.18 | 1.52 |\n| Momentum rotation | 2 | 28 | computed | lookback 2 · hold 28 | −0.51 | −11.9% | −37.2% | −18.3% | 585 | not measured | −1.51 | 1.36 |\n| Momentum rotation | 2 | 30 | computed | lookback 2 · hold 30 | 0.33 | 3.8% | −15.6% | 6.2% | 585 | not measured | −0.39 | 1.71 |\n| Momentum rotation | 3 | 1 | computed | lookback 3 · hold 1 | −1.28 | −32.9% | −61.0% | −47.2% | 585 | not measured | −2.60 | 1.25 |\n| Momentum rotation | 3 | 2 | computed | lookback 3 · hold 2 | 0.85 | 20.2% | −24.2% | 34.3% | 585 | not measured | 0.57 | 1.39 |\n| Momentum rotation | 3 | 3 | computed | lookback 3 · hold 3 | 0.42 | 8.4% | −28.3% | 13.8% | 585 | not measured | −0.099 | 1.39 |\n| Momentum rotation | 3 | 4 | computed | lookback 3 · hold 4 | 0.16 | 1.3% | −19.3% | 2.1% | 585 | not measured | −0.83 | 1.96 |\n| Momentum rotation | 3 | 5 | computed | lookback 3 · hold 5 | 0.30 | 3.5% | −16.0% | 5.7% | 585 | not measured | −0.42 | 1.65 |\n| Momentum rotation | 3 | 6 | computed | lookback 3 · hold 6 | −0.51 | −11.0% | −33.6% | −17.0% | 585 | not measured | −1.46 | 1.28 |\n| Momentum rotation | 3 | 7 | computed | lookback 3 · hold 7 | 0.035 | −0.5% | −17.7% | −0.8% | 585 | not measured | −0.60 | 1.31 |\n| Momentum rotation | 3 | 8 | computed | lookback 3 · hold 8 | −0.20 | −4.0% | −21.9% | −6.3% | 585 | not measured | −0.94 | 1.19 |\n| Momentum rotation | 3 | 10 | computed | lookback 3 · hold 10 | 0.23 | 2.6% | −20.6% | 4.3% | 585 | not measured | −0.48 | 1.54 |\nAcross all 384 rows: sharpe -1.552700136773385 to 1.3823968065314913; 195 below zero\nAcross all 384 rows: cagr -0.36776757121954384 to 0.38957340727839584; 213 below zero\nAcross all 384 rows: max_drawdown -0.6473922910963097 to -0.11604815867609053; 384 below zero\nAcross all 384 rows: total_return -0.5204241713282152 to 0.6943450062734353; 213 below zero\nAcross all 384 rows: sharpe_before -2.602884296311857 to 1.3807814586632123; 316 below zero\nAcross all 384 rows: sharpe_after -0.36262708217075285 to 2.002240719214513; 5 below zero\nMore: keel_research_get(study_id=\"stu_000005\", view=0, cursor=\"cursor000001\")\nView in Keel: https://app.usekeel.io/research/stu_000005",
+      "type": "text"
+    }
+  ],
+  "structuredContent": {
+    "facts": {
+      "axes": [
+        {
+          "address": "step[7].branch[max_hold].step[1].threshold",
+          "kind": "param",
+          "label": "hold",
+          "many": "hold values",
+          "name": "hold",
+          "one": "hold value",
+          "role": "ordered",
+          "values": 16
+        },
+        {
+          "address": "step[2].period",
+          "kind": "param",
+          "label": "lookback",
+          "many": "lookback values",
+          "name": "lookback",
+          "one": "lookback value",
+          "role": "ordered",
+          "values": 24
+        }
+      ],
+      "cells": {
+        "computed": 384
+      },
+      "measures": [
+        {
+          "interval": false,
+          "label": "Sharpe",
+          "name": "sharpe",
+          "precision": "exact",
+          "sign": "signed",
+          "signed": true,
+          "unit": "ratio"
+        },
+        {
+          "interval": false,
+          "label": "CAGR",
+          "name": "cagr",
+          "precision": "exact",
+          "sign": "signed",
+          "signed": true,
+          "unit": "fraction"
+        },
+        {
+          "interval": false,
+          "label": "Max drawdown",
+          "name": "max_drawdown",
+          "precision": "exact",
+          "sign": "nonpositive",
+          "signed": false,
+          "unit": "fraction"
+        },
+        {
+          "interval": false,
+          "label": "Total return",
+          "name": "total_return",
+          "precision": "exact",
+          "sign": "signed",
+          "signed": true,
+          "unit": "fraction"
+        },
+        {
+          "interval": false,
+          "label": "Turnover",
+          "name": "turnover",
+          "precision": "exact",
+          "sign": "nonnegative",
+          "signed": false,
+          "unit": "fraction"
+        },
+        {
+          "interval": false,
+          "label": "Sharpe before the split",
+          "name": "sharpe_before",
+          "precision": "exact",
+          "sign": "signed",
+          "signed": true,
+          "unit": "ratio"
+        },
+        {
+          "interval": false,
+          "label": "Sharpe after the split",
+          "name": "sharpe_after",
+          "precision": "exact",
+          "sign": "signed",
+          "signed": true,
+          "unit": "ratio"
+        }
+      ],
+      "ranges": {
+        "cagr": {
+          "below_zero": 213,
+          "high": {
+            "at": {
+              "hold": 14,
+              "lookback": 8
+            },
+            "value": 0.38957340727839584
+          },
+          "low": {
+            "at": {
+              "hold": 2,
+              "lookback": 7
+            },
+            "value": -0.36776757121954384
+          }
+        },
+        "max_drawdown": {
+          "below_zero": 384,
+          "high": {
+            "at": {
+              "hold": 6,
+              "lookback": 16
+            },
+            "value": -0.11604815867609053
+          },
+          "low": {
+            "at": {
+              "hold": 2,
+              "lookback": 7
+            },
+            "value": -0.6473922910963097
+          }
+        },
+        "sharpe": {
+          "below_zero": 195,
+          "high": {
+            "at": {
+              "hold": 30,
+              "lookback": 7
+            },
+            "value": 1.3823968065314913
+          },
+          "low": {
+            "at": {
+              "hold": 8,
+              "lookback": 6
+            },
+            "value": -1.552700136773385
+          }
+        },
+        "sharpe_after": {
+          "below_zero": 5,
+          "high": {
+            "at": {
+              "hold": 7,
+              "lookback": 6
+            },
+            "value": 2.002240719214513
+          },
+          "low": {
+            "at": {
+              "hold": 6,
+              "lookback": 4
+            },
+            "value": -0.36262708217075285
+          }
+        },
+        "sharpe_before": {
+          "below_zero": 316,
+          "high": {
+            "at": {
+              "hold": 14,
+              "lookback": 8
+            },
+            "value": 1.3807814586632123
+          },
+          "low": {
+            "at": {
+              "hold": 1,
+              "lookback": 3
+            },
+            "value": -2.602884296311857
+          }
+        },
+        "total_return": {
+          "below_zero": 213,
+          "high": {
+            "at": {
+              "hold": 14,
+              "lookback": 8
+            },
+            "value": 0.6943450062734353
+          },
+          "low": {
+            "at": {
+              "hold": 2,
+              "lookback": 7
+            },
+            "value": -0.5204241713282152
+          }
+        }
+      },
+      "rows_total": 384,
+      "split_pairs": [
+        {
+          "after": "sharpe_after",
+          "before": "sharpe_before",
+          "measure": "sharpe"
+        }
+      ]
+    },
+    "hero_url": "https://app.usekeel.io/research/stu_000005",
+    "links": {
+      "app": "https://app.usekeel.io/research/stu_000005"
+    },
+    "pagination": {
+      "cursor": "cursor000001",
+      "has_more": true
+    },
+    "study": {
+      "archived": false,
+      "can_delete": false,
+      "evidence_hash": "b351b78da4ef4314590c9d6503b40d821b040901cbe85c139f24a92dccfd43cf",
+      "kind_label": {
+        "key": "map",
+        "name": "Map a strategy's settings",
+        "short": "Settings map"
+      },
+      "linked_to": [],
+      "linked_to_total": 0,
+      "presentation_hash": "d3e7a3cbbfd605cb7c091726b817906854f01a87e1b097391a34b36af00de0df",
+      "revision": 1,
+      "run_set_id": "rus_000005",
+      "set_aside": false,
+      "state": "completed",
+      "study_id": "stu_000005",
+      "title": "Lookback × hold",
+      "version": 1
+    },
+    "url_line": "View in Keel: https://app.usekeel.io/research/stu_000005",
+    "view": {
+      "at": "2026-11-17T00:00:08.000Z",
+      "kind": "study",
+      "mode": "chart",
+      "object": "stu_000005",
+      "seq": 9,
+      "size": "view",
+      "version": 1
+    }
+  }
+}

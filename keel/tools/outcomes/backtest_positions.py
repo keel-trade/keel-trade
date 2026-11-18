@@ -42,6 +42,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
+from keel.api_path import seg
 from keel.errors import KeelError, NotFoundError, ValidationError
 
 from . import register
@@ -91,7 +92,7 @@ def _parse(ts: Any) -> datetime | None:
 
 def _fetch(client, backtest_id: str, params: dict) -> dict:
     try:
-        return client.get(f"/v1/backtests/{backtest_id}/trades", **params)
+        return client.get(f"/v1/backtests/{seg(backtest_id)}/trades", **params)
     except NotFoundError:
         raise NotFoundError(
             f"Backtest {backtest_id} not found.",

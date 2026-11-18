@@ -56,6 +56,7 @@ from __future__ import annotations
 
 import re
 from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass, field, replace
 from enum import Enum
 from string import Formatter
@@ -97,6 +98,60 @@ class Surface(str, Enum):
     TS_EDITOR = "ts_editor"  # browser validator (Layer B)
     RUNTIME = "runtime"  # Layer C/D structured codes
     GATE = "gate"  # minted by an API gate (PARSE_ERROR, LOCK_ERROR, ...)
+
+
+# File-kind and view-document axes (screeners spec 01 section 3).
+FILE_KINDS: tuple[str, ...] = ("strategy", "screener")
+USE_CODES: tuple[str, ...] = (
+    "USE_REF_MALFORMED",
+    "USE_BLOCK_NOT_FOUND",
+    "USE_VERSION_NOT_FOUND",
+    "USE_OUTPUT_NOT_FOUND",
+    "USE_OUTPUT_NOT_COMPUTED",
+    "USE_SOURCE_NOT_SHOWN",
+    "USE_AS_MISMATCH",
+    "USE_EXPANSION_NOT_SELF_CONTAINED",
+    "USE_EXPANSION_DRIFT",
+    "USE_SELF",
+    "USE_DEPTH_EXCEEDED",
+    "USE_NEWER_VERSION",
+    "USE_PIN_DIFFERS",
+    "USE_SOURCE_REMOVED",
+    "USE_UNIVERSE_SENSITIVE",
+)
+VIEW_CODES: tuple[str, ...] = (
+    "VIEW_UNKNOWN_OUTPUT",
+    "VIEW_CHANNEL_REQUIRED",
+    "VIEW_CHANNEL_UNKNOWN",
+    "VIEW_TRANSFORM_NOT_ALLOWED",
+    "VIEW_AXIS_MISMATCH",
+    "VIEW_LIMIT",
+    "VIEW_CONTROL_PATH",
+    "VIEW_CONTROL_RANGE",
+    "VIEW_CONTROL_DUPLICATE",
+    "VIEW_CONTROL_UNKNOWN",
+    "VIEW_UNIT_MISMATCH",
+    "VIEW_CONTROL_RESERVED",
+    "VIEW_ID_DUPLICATE",
+    "VIEW_PAGE_INVALID",
+    "VIEW_DUPLICATE_AXIS",
+    "VIEW_SORT_NOT_BOUND",
+    "VIEW_SYNTAX",
+    "VIEW_COLUMN_MISSING",
+    "VIEW_OPTION_UNAVAILABLE",
+    "VIEW_INSTANT_OUT_OF_RANGE",
+    "VIEW_SELECTION_NOT_IN_UNIVERSE",
+)
+SCREENER_ONLY_CODES: tuple[str, ...] = (
+    "OUTPUT_NOT_STORED",
+    "OUTPUT_NOT_DRAWABLE",
+    "OUTPUT_CLOCK_MISMATCH",
+    "OUTPUTS_TOO_MANY",
+    "SCREENER_DECLARATION_MISSING",
+    "SCREENER_NOT_A_STRATEGY",
+    "SCREENER_AUTHORING_DISABLED",
+    "SCREENER_VISIBILITY_RESET",
+)
 
 
 #: Category → severity policy (spec 02 §5.1). Hygiene is warning per the
@@ -303,6 +358,9 @@ class Rule:
     #                           COMPONENT_UNREGISTERED); pinned by
     #                           catalog_test.py's platform-intervention test
 
+    applies_to: tuple[str, ...] = FILE_KINDS
+    tier: str = ""
+
 
 def severity_for(
     rule: Rule,
@@ -410,13 +468,23 @@ _RESERVED_MUST_BE_EMPTY = (
 )
 
 
-def validate_rules(rules: Iterable[Rule]) -> dict[str, Rule]:
+def validate_rules(rules: Iterable[Rule], kinds: tuple[str, ...] = FILE_KINDS) -> dict[str, Rule]:
     """Self-check a rule collection and return it keyed by code.
 
     Raises :class:`CatalogError` on the first violation. Called at module
     import on :data:`RULES`; also called directly by unit tests with
     deliberately malformed entries.
+
+    ``kinds`` is the file-kind vocabulary the collection's ``applies_to``
+    must be drawn from, in order (Research 00 §G13, RL-88 §2): the default is
+    the pipeline catalog's :data:`FILE_KINDS`, so every existing call is
+    unchanged; another rule set (the study catalog, ``kinds=("study",)``)
+    passes its own and runs through this one machine rather than a copy.
+    A reserved tombstone keeps the full ``kinds`` tuple, as today it keeps
+    ``FILE_KINDS``.
     """
+    if not kinds or not isinstance(kinds, tuple) or len(set(kinds)) != len(kinds):
+        raise CatalogError(f"kinds must be a non-empty tuple of unique names: {kinds!r}")
     out: dict[str, Rule] = {}
     for rule in rules:
         if rule.code in out:
@@ -425,6 +493,24 @@ def validate_rules(rules: Iterable[Rule]) -> dict[str, Rule]:
             raise CatalogError(f"Rule code must be non-empty UPPER_SNAKE: {rule.code!r}")
         if rule.status not in _VALID_STATUSES:
             raise CatalogError(f"{rule.code}: unknown status {rule.status!r}")
+
+        if (
+            not rule.applies_to
+            or not isinstance(rule.applies_to, tuple)
+            or any(kind not in kinds for kind in rule.applies_to)
+            or rule.applies_to != tuple(kind for kind in kinds if kind in rule.applies_to)
+        ):
+            raise CatalogError(
+                f"{rule.code}: applies_to must be a non-empty, unique tuple in "
+                f"{'FILE_KINDS' if kinds == FILE_KINDS else repr(kinds)} order"
+            )
+        if rule.status == "reserved" and rule.applies_to != kinds:
+            raise CatalogError(f"{rule.code}: reserved tombstones must retain default applies_to")
+        if rule.code in VIEW_CODES:
+            if rule.tier not in {"gate", "runtime"}:
+                raise CatalogError(f"{rule.code}: a view rule requires tier='gate' or 'runtime'")
+        elif rule.tier:
+            raise CatalogError(f"{rule.code}: tier is only valid on VIEW_CODES")
 
         if rule.status == "reserved":
             # Reserved = a retired code name that may never be re-minted
@@ -810,6 +896,8 @@ def rules_to_jsonable(
             "staged_by": r.staged_by,
             "severity_ceiling": r.severity_ceiling,
             "recoverable": r.recoverable,
+            "applies_to": list(r.applies_to),
+            "tier": r.tier,
         }
         out[code] = entry
     out["staged_changes"] = staged_changes_to_jsonable(staged)
@@ -1264,9 +1352,9 @@ _POSITION_LAYER_RULES: tuple[Rule, ...] = (
         summary="Deprecated position components can be upgraded to TradeManager.",
         message_template=(
             "'{manager}' and its exits use deprecated position components "
-            "({components}){known_issue_note}. A {mode} upgrade to TradeManager is available."
+            "({components}){known_issue_note}. A {mode} upgrade to {target} is available."
         ),
-        template_params=("manager", "components", "known_issue_note", "mode"),
+        template_params=("manager", "components", "known_issue_note", "mode", "target"),
         explain=(
             "One issue per position group (spec 04-R9, D-19/D-29): a deprecated "
             "position manager (PositionStateMachine, TradeLevelRiskExit, "
@@ -1277,7 +1365,10 @@ _POSITION_LAYER_RULES: tuple[Rule, ...] = (
             "fires per instance. The upgrade planner (dsl/upgrade.py) classifies "
             "the group as mechanical (machine-applicable: the issue carries the "
             "rewritten source), assisted (questions to answer) or manual. The "
-            "suggestion names no tool; each surface adds its own."
+            "suggestion names no tool; each surface adds its own. The upgrade target is "
+            "TradeManager for a position group and the successor's name for a "
+            "deprecated component upgraded by a rename (LevelTarget -> "
+            "RiskRewardTarget, OB-levels P4), whose group is that one instance."
         ),
         passes=("4u",),
         surfaces=_PY_ONLY,
@@ -1457,6 +1548,92 @@ _ALL_RULES: tuple[Rule, ...] = (
         ts_mirrored=True,
         suggestion_template="Rename '{name}' to avoid the collision.",
         applicability=Applicability.MAYBE_INCORRECT,
+    ),
+    Rule(
+        code="NAME_DEFINED_TWICE",
+        category=RuleCategory.SUSPICIOUS,
+        summary="A variable, factory or branch key is defined more than once.",
+        message_template="{kind} '{name}' is defined more than once; only the last definition is used.",
+        template_params=("kind", "name"),
+        explain=(
+            "Q-7153 (RL-90 §3). A name written twice names two places: the "
+            "engine keeps the LAST definition (as Python rebinds a name, and "
+            "as a dict literal keeps a repeated key's last value), so the "
+            "earlier one is silently dead while it still looks live in the "
+            "source, and a tool that edits by path cannot tell which one it "
+            "names. Reported at each later definition. An error when saving "
+            "(the `pre_save` context, which the compose dry run and Research "
+            "pass; keel-api's save refuses it) and a warning when a stored "
+            "strategy is re-validated, never promoted by production mode, so "
+            "nothing already saved stops validating (the census found none "
+            "stored). What compiles does not change: the last definition "
+            "still wins. Research's STUDY_SUBJECT_AMBIGUOUS cites this code."
+        ),
+        passes=("2",),
+        surfaces=_PY_TS,
+        ts_mirrored=True,
+        severity_context_overrides={"pre_save": "error"},
+        suggestion_template="Rename or delete one of the definitions of '{name}'.",
+        applicability=Applicability.MAYBE_INCORRECT,
+    ),
+    Rule(
+        code="ISSUES_TRUNCATED",
+        category=RuleCategory.HYGIENE,
+        summary="The issue list was cut at its limit; the total says how many there were.",
+        message_template=(
+            "Showing the first {shown} of {total} issues. Fix these and validate again to see the rest."
+        ),
+        template_params=("shown", "total"),
+        explain=(
+            "Q-7067 (RV-S §B-12). One validation returns at most 200 issues: "
+            "errors first, then warnings, then information, with this notice "
+            "last. Before the cap a mistyped 1,000-step chain returned 999 "
+            "issues in one response. Real strategies produce far fewer (the "
+            "most in the corpus and on staging is 25). The verdict is decided "
+            "over every issue before the list is cut, so a cut list never "
+            "turns an invalid strategy valid. severity_override=info: it is a "
+            "notice that the list was cut, not an authoring mistake."
+        ),
+        passes=("cap",),
+        surfaces=_PY_TS,
+        ts_mirrored=True,
+        severity_override="info",
+    ),
+    Rule(
+        code="PIPELINE_TOO_LARGE",
+        category=RuleCategory.CORRECTNESS,
+        summary="The strategy expands past a size ceiling (steps, nesting, branches or Use references).",
+        message_template="This strategy has {value} {what}; the limit is {limit}.",
+        template_params=("value", "what", "limit"),
+        explain=(
+            "Q-7058 (RV-S §B-1). A factory call or a reference to a pipeline "
+            "variable counts its body once per use, so a short source can name "
+            "an enormous pipeline: a 1 KB source of nested factory calls "
+            "expanded to 100,000 steps and validated before this rule. Four "
+            "ceilings, each far above any real strategy (the largest Library "
+            "strategy has 25 component steps; the largest stored one 171): "
+            "5,000 component steps once factories and pipeline variables are "
+            "expanded, 64 levels of nested pipelines and parallel blocks, 256 "
+            "branches in one parallel block, and 64 Use references. The "
+            "validator counts from the written definitions before expanding "
+            "anything, and the resolver refuses the same source, so no "
+            "surface builds it."
+        ),
+        passes=("2b",),
+        surfaces=_PY_ONLY,
+        ts_mirrored=False,
+        ts_absent_reason=(
+            "A size ceiling protects the server's CPU and memory: the browser "
+            "editor expands only its author's graph on the author's machine, "
+            "and every save, compose, validate and run reaches the Python "
+            "validator, which refuses the source."
+        ),
+        suggestion_template=(
+            "Make the strategy smaller: call factories and pipeline variables "
+            "fewer times, use fewer branches or less nesting, or split it into "
+            "separate strategies."
+        ),
+        applicability=Applicability.HAS_PLACEHOLDERS,
     ),
     # ═══════════════════════════════════════════════════════════════════════
     # Pass 3: factory expansion
@@ -2334,6 +2511,26 @@ _ALL_RULES: tuple[Rule, ...] = (
         ts_mirrored=True,
     ),
     Rule(
+        code="UNIVERSE_TOO_LARGE",
+        category=RuleCategory.CORRECTNESS,
+        summary="A Universe names more coins than the limit.",
+        message_template="Universe {field} names {count} coins; the limit is {limit}.",
+        template_params=("field", "count", "limit"),
+        explain=(
+            "Q-7068 (RV-S §B-13). A Universe's `symbols`, `resolved` and "
+            "`top_n` each name at most 500 coins, Research's coin limit per "
+            "study and above every perp Hyperliquid lists. Before this rule a "
+            "basket of 5,000 unknown names and `top_n=100000` both validated, "
+            "and the real bound was the venue's listings, found only at data "
+            "load. The largest stored universe resolves 226 coins."
+        ),
+        passes=("9",),
+        surfaces=_PY_TS,
+        ts_mirrored=True,
+        suggestion_template="Use at most {limit} coins in {field}.",
+        applicability=Applicability.HAS_PLACEHOLDERS,
+    ),
+    Rule(
         code="EMPTY_UNIVERSE",
         category=RuleCategory.CORRECTNESS,
         summary="Resolved universe is empty.",
@@ -2523,7 +2720,39 @@ _ALL_RULES: tuple[Rule, ...] = (
         ts_mirrored=True,
     ),
     Rule(
+        code="EXECUTION_FIELD_VARIABLE",
+        category=RuleCategory.SUSPICIOUS,
+        summary="An Execution field is written as a variable instead of a value.",
+        message_template=(
+            "Execution {field} is set to the variable '{variable}'. Execution fields take a written value."
+        ),
+        template_params=("field", "variable"),
+        explain=(
+            "Q-7155 (RL-90 §5). `Execution(...)` keywords are read as written "
+            "values: the resolver copies them into the compiled policy as they "
+            "are, so a variable there reached the policy unresolved. A field "
+            "the strategy's mode reads then failed to compile; a field it does "
+            "not read was dead; and `rebalance`, `buffer_mode` or "
+            "`rebalance_method` bound to a variable crashed validation. The "
+            "save refuses it (keel-api), and so does the compose dry run "
+            "(`pre_save`, an error there). A stored strategy re-validated gets "
+            "a warning, so nothing already saved stops validating; the census "
+            "found none stored. Production mode does not promote it."
+        ),
+        passes=("9",),
+        surfaces=_PY_ONLY,
+        ts_mirrored=False,
+        ts_absent_reason=(
+            "The graph's Execution holds written values only; a variable "
+            "binding exists only in DSL text, which the Python validator reads."
+        ),
+        severity_context_overrides={"pre_save": "error"},
+        suggestion_template="Write the value itself: {field}=<value> in Execution(...).",
+        applicability=Applicability.HAS_PLACEHOLDERS,
+    ),
+    Rule(
         code="INVALID_EXECUTION",
+        applies_to=("strategy",),
         category=RuleCategory.CORRECTNESS,
         summary="Execution declaration value not in its valid option set.",
         message_template="Invalid {param} '{value}'. Must be one of: {options}",
@@ -2542,6 +2771,7 @@ _ALL_RULES: tuple[Rule, ...] = (
     ),
     Rule(
         code="MISSING_EXECUTION_PARAM",
+        applies_to=("strategy",),
         category=RuleCategory.CORRECTNESS,
         summary="Execution param required by the selected mode is missing.",
         message_template="{param} is required when rebalance='{rebalance}'",
@@ -2558,6 +2788,7 @@ _ALL_RULES: tuple[Rule, ...] = (
     ),
     Rule(
         code="IRRELEVANT_EXECUTION_PARAM",
+        applies_to=("strategy",),
         category=RuleCategory.SUSPICIOUS,
         summary="Execution param explicitly set in a mode where it has no effect.",
         message_template="{param} has no effect when rebalance='{rebalance}'",
@@ -2990,6 +3221,7 @@ _ALL_RULES: tuple[Rule, ...] = (
     ),
     Rule(
         code="TERMINAL_CLOCK_MISMATCH",
+        applies_to=("strategy",),
         category=RuleCategory.CORRECTNESS,
         summary="The pipeline's terminal clock is not the declared execution clock.",
         message_template=(
@@ -4142,6 +4374,7 @@ _ALL_RULES: tuple[Rule, ...] = (
     ),
     Rule(
         code="PIPELINE_NOT_BACKTEST_READY",
+        applies_to=("strategy",),
         category=RuleCategory.CORRECTNESS,
         summary="A valid pipeline that cannot produce weights, refused at the run gate.",
         message_template="{detail}",
@@ -4658,6 +4891,7 @@ _ALL_RULES: tuple[Rule, ...] = (
     ),
     Rule(
         code="NONDENSE_TERMINAL_WEIGHTS",
+        applies_to=("strategy",),
         category=RuleCategory.SUSPICIOUS,
         summary="A universe-mask strategy's terminal weights can be NaN (no terminal densifier).",
         message_template=(
@@ -4778,6 +5012,7 @@ _ALL_RULES: tuple[Rule, ...] = (
     ),
     Rule(
         code="PRICE_MARKS_AUTO",
+        applies_to=("strategy",),
         category=RuleCategory.SUSPICIOUS,
         summary="No PriceDataLoader declared — the signal reads no prices (notice).",
         message_template=(
@@ -4892,6 +5127,7 @@ _ALL_RULES: tuple[Rule, ...] = (
     ),
     Rule(
         code="NORMALIZER_BEFORE_CONCAT",
+        applies_to=("strategy",),
         category=RuleCategory.CORRECTNESS,
         summary="Concatenated branch targets sum past a fully-invested book.",
         message_template=(
@@ -4944,6 +5180,7 @@ _ALL_RULES: tuple[Rule, ...] = (
     ),
     Rule(
         code="FIXED_WEIGHT_UNCAPPED",
+        applies_to=("strategy",),
         category=RuleCategory.SUSPICIOUS,
         summary="A fixed per-position weight with no leverage cap after it.",
         message_template=(
@@ -5073,6 +5310,119 @@ _ALL_RULES: tuple[Rule, ...] = (
         applicability=Applicability.HAS_PLACEHOLDERS,
         recoverable=True,
     ),
+    Rule(
+        code="ZONE_SIDE_DROPPED",
+        category=RuleCategory.SUSPICIOUS,
+        summary=(
+            "An OrderBlock, FairValueGap or BreakerBlock that tracks bearish zones reaches "
+            "TradeManager as a long-only 0/1 mask."
+        ),
+        message_template=(
+            "{producer}(direction='{direction}') reaches TradeManager's "
+            "'{slot}' slot as a 0/1 mask, so this strategy opens a LONG at "
+            "{zones}."
+        ),
+        template_params=("producer", "direction", "zones", "entry_component", "slot"),
+        explain=(
+            "OrderBlock, FairValueGap and BreakerBlock emit a number with no "
+            "side (the distance to the nearest zone, or its edge price); "
+            "`direction` only chooses which zones they track, and its default "
+            "is `both`. A filter such as RangeSelector turns 'inside the "
+            "zone' into a 0/1 mask, and TradeManager reads +1 as a LONG "
+            "entry. So a bearish (supply) zone, or the default `both` that "
+            "includes them, wired straight into the entries slot buys where a "
+            "trader sells, validates clean, and backtests and deploys as a "
+            "long strategy (Q-3308).\n\n"
+            "**How the verdict is computed.** At TradeManager the rule reads "
+            "the value in the entries slot. It fires only when that value is "
+            "PROVEN a non-negative 0/1 mask (its domain is a subset of "
+            "{0, 1}) and its producer chain, walked back through single-input "
+            "steps and Store/Load hops, starts at OrderBlock, FairValueGap or "
+            "BreakerBlock whose `direction` is `bearish` or `both` (written "
+            "or defaulted). Any step that can produce -1 on the way "
+            "(NegateTransform, ThresholdCross with `short_only`, a negative "
+            "Scale, which proves nothing) takes the value out of the mask "
+            "domain, so the rule is silent. `direction='bullish'` is the "
+            "long-only shape and never fires; a Parallel or composer on the "
+            "path, or a non-literal `direction`, gives no verdict. The three "
+            "components are named in the rule on purpose: there is no general "
+            "direction concept, and no other component is checked.\n\n"
+            "**Warning, permanently.** The strategy runs; it trades the wrong "
+            "side. The fixes: the zone's entry component emits +1 at bullish "
+            "zones and -1 at bearish ones; `direction='bullish'` makes the "
+            "mask honestly long-only; for a bearish-only zone, "
+            "NegateTransform() after the mask turns 1 into -1."
+        ),
+        passes=("8",),
+        surfaces=_PY_ONLY,
+        ts_mirrored=False,
+        ts_absent_reason=(
+            "The TS editor walk carries no multi-hop producer provenance (no "
+            "back-edge from a step to the value it received), which the "
+            "producer-chain walk needs. The Python validator gates every save "
+            "and MCP compose and klocal run Python, so the warning reaches "
+            "users there; mirror when the TS walk gains provenance."
+        ),
+        suggestion_template=(
+            "Use {entry_component}(direction='{direction}') for signed entries "
+            "(-1 at bearish zones), set direction='bullish' for long-only "
+            "entries, or add NegateTransform() after the mask of a "
+            "bearish-only zone."
+        ),
+        applicability=Applicability.HAS_PLACEHOLDERS,
+        recoverable=True,
+    ),
+    Rule(
+        code="LEVEL_SIDE_UNSCOPED",
+        category=RuleCategory.SUSPICIOUS,
+        summary=(
+            "A LevelStop, LevelTakeProfit or RiskRewardTarget with no side= reads a level that "
+            "an OrderBlock, FairValueGap, BreakerBlock or SweepLevel with direction='both' produced."
+        ),
+        message_template=(
+            "{factory} reads '{slot}' from {producer}(direction='both'), which can be {what} on "
+            "either side of the trade, so a long can get a short's level."
+        ),
+        template_params=("factory", "slot", "producer", "what"),
+        explain=(
+            "The zone components pick the NEAREST active zone of either side when "
+            "`direction` is `both` (their default), and their `edge` / `level` output is "
+            "that zone's line: under price for a bullish zone, over it for a bearish one. "
+            "A level factory freezes that line at entry and assumes it sits on the stop "
+            "side (or, for a target, the profit side) of the trade, so a long whose nearest "
+            "zone was bearish gets a stop above its entry and exits on its first bar "
+            "(Q-3333). `SweepLevel(direction='both')` has the same shape when a trailing "
+            "stop reads it live: a later sweep of the other side becomes the level.\n\n"
+            "**How the verdict is computed.** At a `LevelStop`, `LevelTakeProfit`, "
+            "`RiskRewardTarget` (or deprecated `LevelTarget`) call with no `side=`, the rule "
+            "walks the value in its `level` / `stop_level` slot back through Store/Load hops "
+            "and single-input steps. It fires when the chain starts at `OrderBlock`, "
+            "`FairValueGap` or `BreakerBlock` with `direction` `both` (written or defaulted) "
+            "and `output` `edge` or `level`, or at `SweepLevel` with `direction` `both` under "
+            "`LevelStop(trail=True)`. A composer on the path (a level plus a buffer), a "
+            "non-literal parameter or any other producer gives no verdict. The four "
+            "components are named in the rule on purpose: there is no general direction "
+            "concept.\n\n"
+            "**Warning, permanently.** The strategy runs; its exits can fire on the wrong "
+            "side. The fix: give each side its own level, a bullish zone for the longs' stop "
+            "and a bearish one for the shorts', each read by its own rule with `side='long'` "
+            "/ `side='short'`; or make the zone one-sided."
+        ),
+        passes=("8",),
+        surfaces=_PY_ONLY,
+        ts_mirrored=False,
+        ts_absent_reason=(
+            "The TS editor walk carries no multi-hop producer provenance (the same gap as "
+            "ZONE_SIDE_DROPPED), which the level-slot walk needs. The Python validator gates "
+            "every save, MCP compose and klocal run; mirror when the TS walk gains provenance."
+        ),
+        suggestion_template=(
+            "Give longs and shorts their own levels: a bullish and a bearish {producer} in two "
+            "slots, read by {factory}(..., side='long') and {factory}(..., side='short')."
+        ),
+        applicability=Applicability.HAS_PLACEHOLDERS,
+        recoverable=True,
+    ),
     # ═══════════════════════════════════════════════════════════════════════
     # Terminal + declaration completeness (Q-1694, W4 §1.1-§1.3), 2026-09-22.
     #
@@ -5105,6 +5455,7 @@ _ALL_RULES: tuple[Rule, ...] = (
     # absence, so the WIP argument above does not apply to it.
     Rule(
         code="TERMINAL_NOT_WEIGHTS",
+        applies_to=("strategy",),
         category=RuleCategory.SUSPICIOUS,
         summary="The pipeline does not reach the weight carrier the engines trade.",
         message_template=(
@@ -5169,6 +5520,7 @@ _ALL_RULES: tuple[Rule, ...] = (
     ),
     Rule(
         code="TERMINAL_DICT_NOT_CONSUMED",
+        applies_to=("strategy",),
         category=RuleCategory.SUSPICIOUS,
         summary="The pipeline ends at a Parallel block; a dict is not tradable.",
         message_template=(
@@ -5213,6 +5565,7 @@ _ALL_RULES: tuple[Rule, ...] = (
     ),
     Rule(
         code="MISSING_UNIVERSE",
+        applies_to=("strategy",),
         category=RuleCategory.CORRECTNESS,
         summary="No Universe(...) declaration: every strategy must name the assets it trades.",
         message_template=(
@@ -5283,8 +5636,711 @@ _ALL_RULES: tuple[Rule, ...] = (
 )
 
 
+# Screeners contracts: emission and conformance consumers land in their lanes.
+_SCREENERS_RULES: tuple[Rule, ...] = (
+    Rule(
+        code="DECLARATION_CONFLICT",
+        category=RuleCategory.CORRECTNESS,
+        summary="{detail}",
+        message_template="{detail}",
+        template_params=("detail",),
+        explain="Screeners spec 01 section 3; foundation sections 4 and 5. {detail}",
+        passes=("0",),
+        surfaces=_PY_ONLY,
+        ts_mirrored=False,
+        ts_absent_reason="Parse-tier code. The editor never parses DSL, so no TS validator pass mints it; validate() renders it only as a guard when a GraphModel carries both outputs and execution, a state no TS writer produces. No parity fixture exercises that path.",
+        suggestion_template="Keep Execution(...) to trade the pipeline as a strategy, or Outputs(slots=[...]) to persist its stored series as a screener; delete the other.",
+        applicability=Applicability.HAS_PLACEHOLDERS,
+    ),
+    Rule(
+        code="OUTPUT_NOT_STORED",
+        category=RuleCategory.CORRECTNESS,
+        summary="Outputs names '{slot}', but no Store('{slot}') is reached by the pipeline.",
+        message_template="Outputs names '{slot}', but no Store('{slot}') is reached by the pipeline.",
+        template_params=("slot",),
+        explain="Screeners spec 01 section 3; foundation sections 4 and 5. Outputs names '{slot}', but no Store('{slot}') is reached by the pipeline.",
+        passes=("8",),
+        surfaces=_PY_TS,
+        ts_mirrored=True,
+        suggestion_template="Add Store('{slot}') right after the step whose value '{slot}' should hold, or remove '{slot}' from Outputs(slots=[...]).",
+        applicability=Applicability.HAS_PLACEHOLDERS,
+        applies_to=("screener",),
+    ),
+    Rule(
+        code="OUTPUT_NOT_DRAWABLE",
+        category=RuleCategory.CORRECTNESS,
+        summary="Output '{slot}' holds {value_type}, which no view can draw: an output must be a per-asset signal or one market-wide series.",
+        message_template="Output '{slot}' holds {value_type}, which no view can draw: an output must be a per-asset signal or one market-wide series.",
+        template_params=("slot", "value_type"),
+        explain="Screeners spec 01 section 3; foundation sections 4 and 5. Output '{slot}' holds {value_type}, which no view can draw: an output must be a per-asset signal or one market-wide series.",
+        passes=("7",),
+        surfaces=_PY_TS,
+        ts_mirrored=True,
+        suggestion_template="Store a series in '{slot}': for price, ExtractSeries(series_name='close') before the Store; for one branch of a Parallel, Extract('<branch>'); weights belong to a strategy, not a screener.",
+        applicability=Applicability.HAS_PLACEHOLDERS,
+        applies_to=("screener",),
+    ),
+    Rule(
+        code="OUTPUT_CLOCK_MISMATCH",
+        category=RuleCategory.CORRECTNESS,
+        summary="Output '{slot}' is on {actual_clock}, but Globals(target_timeframe='{declared_tf}') puts this screener on {expected_clock}; every output shares one time index.",
+        message_template="Output '{slot}' is on {actual_clock}, but Globals(target_timeframe='{declared_tf}') puts this screener on {expected_clock}; every output shares one time index.",
+        template_params=("slot", "actual_clock", "declared_tf", "expected_clock", "fix"),
+        explain="Screeners spec 01 section 3; foundation sections 4 and 5. Output '{slot}' is on {actual_clock}, but Globals(target_timeframe='{declared_tf}') puts this screener on {expected_clock}; every output shares one time index.",
+        passes=("7",),
+        surfaces=_PY_TS,
+        ts_mirrored=True,
+        suggestion_template="{fix}",
+        applicability=Applicability.HAS_PLACEHOLDERS,
+        applies_to=("screener",),
+    ),
+    Rule(
+        code="OUTPUTS_TOO_MANY",
+        category=RuleCategory.CORRECTNESS,
+        summary="Outputs(slots=[...]) names {count} slots; a screen may declare at most {limit}.",
+        message_template="Outputs(slots=[...]) names {count} slots; a screen may declare at most {limit}.",
+        template_params=("count", "limit"),
+        explain="Screeners spec 01 section 3; foundation sections 4 and 5. Outputs(slots=[...]) names {count} slots; a screen may declare at most {limit}.",
+        passes=("9",),
+        surfaces=_PY_TS,
+        ts_mirrored=True,
+        suggestion_template="Keep the {limit} outputs you want to see; a Store that is not an output still feeds the pipeline.",
+        applicability=Applicability.HAS_PLACEHOLDERS,
+        applies_to=("screener",),
+    ),
+    Rule(
+        code="SCREENER_DECLARATION_MISSING",
+        category=RuleCategory.CORRECTNESS,
+        summary="A screener must declare {declaration}; this file does not.",
+        message_template="A screener must declare {declaration}; this file does not.",
+        template_params=("declaration", "why"),
+        explain="Screeners spec 01 section 3; foundation sections 4 and 5. A screener must declare {declaration}; this file does not.",
+        passes=("9",),
+        surfaces=_PY_TS,
+        ts_mirrored=True,
+        suggestion_template="Add {declaration} above Outputs(...): {why}.",
+        applicability=Applicability.HAS_PLACEHOLDERS,
+        applies_to=("screener",),
+    ),
+    Rule(
+        code="ROLE_MISMATCH",
+        category=RuleCategory.CORRECTNESS,
+        summary="Output '{slot}' declares role '{role}', but {value_type} (shape={shape}, domain={domain}, universe_sensitive={universe_sensitive}) infers '{inferred}'.",
+        message_template="Output '{slot}' declares role '{role}', but {value_type} (shape={shape}, domain={domain}, universe_sensitive={universe_sensitive}) infers '{inferred}'.",
+        template_params=(
+            "slot",
+            "role",
+            "value_type",
+            "shape",
+            "domain",
+            "universe_sensitive",
+            "inferred",
+        ),
+        explain="Screeners spec 01 section 3; foundation sections 4 and 5. Output '{slot}' declares role '{role}', but {value_type} (shape={shape}, domain={domain}, universe_sensitive={universe_sensitive}) infers '{inferred}'.",
+        passes=("7",),
+        surfaces=_PY_TS,
+        ts_mirrored=True,
+        suggestion_template="Declare a role that fits these output keys, or convert the output before storing it.",
+        applicability=Applicability.HAS_PLACEHOLDERS,
+    ),
+    Rule(
+        code="USE_REF_MALFORMED",
+        category=RuleCategory.CORRECTNESS,
+        summary="Use reference '{ref}' is malformed; expected str_<26 lowercase letters or digits>@<positive version>.",
+        message_template="Use reference '{ref}' is malformed; expected str_<26 lowercase letters or digits>@<positive version>.",
+        template_params=("ref",),
+        explain="Screeners spec 01 section 3; foundation sections 4 and 5. Use reference '{ref}' is malformed; expected str_<26 lowercase letters or digits>@<positive version>.",
+        passes=("0", "3"),
+        surfaces=_PY_TS,
+        ts_mirrored=True,
+        suggestion_template="Use a pinned reference such as str_00000000000000000000000000@1.",
+        applicability=Applicability.HAS_PLACEHOLDERS,
+    ),
+    Rule(
+        code="USE_BLOCK_NOT_FOUND",
+        category=RuleCategory.CORRECTNESS,
+        summary="Block '{ref}' was not found.",
+        message_template="Block '{ref}' was not found.",
+        template_params=("ref",),
+        explain="Screeners spec 01 section 3; foundation sections 4 and 5. Block '{ref}' was not found.",
+        passes=(),
+        surfaces=_GATE_ONLY,
+        ts_mirrored=False,
+        ts_absent_reason="Link-time or view-document code: resolved outside the pipeline validator and returned as a structured issue.",
+        suggestion_template="Choose an existing block you can read.",
+        applicability=Applicability.HAS_PLACEHOLDERS,
+    ),
+    Rule(
+        code="USE_VERSION_NOT_FOUND",
+        category=RuleCategory.CORRECTNESS,
+        summary="Version '{ref}' was not found. Available versions: {valid}.",
+        message_template="Version '{ref}' was not found. Available versions: {valid}.",
+        template_params=("ref", "valid"),
+        explain="Screeners spec 01 section 3; foundation sections 4 and 5. Version '{ref}' was not found. Available versions: {valid}.",
+        passes=(),
+        surfaces=_GATE_ONLY,
+        ts_mirrored=False,
+        ts_absent_reason="Link-time or view-document code: resolved outside the pipeline validator and returned as a structured issue.",
+        suggestion_template="Choose one of the available versions.",
+        applicability=Applicability.HAS_PLACEHOLDERS,
+    ),
+    Rule(
+        code="USE_OUTPUT_NOT_FOUND",
+        category=RuleCategory.CORRECTNESS,
+        summary="Output '{output}' is not declared by '{ref}'. {available}",
+        message_template="Output '{output}' is not declared by '{ref}'. {available}",
+        template_params=("output", "ref", "available"),
+        explain="Screeners spec 01 section 3; foundation sections 4 and 5. Output '{output}' is not declared by '{ref}'. {available}",
+        passes=(),
+        surfaces=_GATE_ONLY,
+        ts_mirrored=False,
+        ts_absent_reason="Link-time or view-document code: resolved outside the pipeline validator and returned as a structured issue.",
+        suggestion_template="Choose one of the declared outputs.",
+        applicability=Applicability.HAS_PLACEHOLDERS,
+    ),
+    Rule(
+        code="USE_OUTPUT_NOT_COMPUTED",
+        category=RuleCategory.CORRECTNESS,
+        summary="Output '{output}' in '{ref}' has an empty computed slice.",
+        message_template="Output '{output}' in '{ref}' has an empty computed slice.",
+        template_params=("output", "ref"),
+        explain="Screeners spec 01 section 3; foundation sections 4 and 5. Output '{output}' in '{ref}' has an empty computed slice.",
+        passes=(),
+        surfaces=_GATE_ONLY,
+        ts_mirrored=False,
+        ts_absent_reason="Link-time or view-document code: resolved outside the pipeline validator and returned as a structured issue.",
+        suggestion_template="Use an output computed by the source pipeline.",
+        applicability=Applicability.HAS_PLACEHOLDERS,
+    ),
+    Rule(
+        code="USE_SOURCE_NOT_SHOWN",
+        category=RuleCategory.CORRECTNESS,
+        summary="The author of '{ref}' does not show its code.",
+        message_template="The author of '{ref}' does not show its code.",
+        template_params=("ref",),
+        explain="Screeners spec 01 section 3; foundation sections 4 and 5. The author of '{ref}' does not show its code.",
+        passes=(),
+        surfaces=_GATE_ONLY,
+        ts_mirrored=False,
+        ts_absent_reason="Link-time or view-document code: resolved outside the pipeline validator and returned as a structured issue.",
+        suggestion_template="Choose a source whose author shows the code.",
+        applicability=Applicability.HAS_PLACEHOLDERS,
+    ),
+    Rule(
+        code="USE_AS_MISMATCH",
+        category=RuleCategory.CORRECTNESS,
+        summary="Use output '{output}' has role '{role}', which does not fit '{as_}'. {fits}",
+        message_template="Use output '{output}' has role '{role}', which does not fit '{as_}'. {fits}",
+        template_params=("output", "role", "as_", "fits"),
+        explain="Screeners spec 01 section 3; foundation sections 4 and 5. Use output '{output}' has role '{role}', which does not fit '{as_}'. {fits}",
+        passes=("3",),
+        surfaces=_PY_TS,
+        ts_mirrored=True,
+        suggestion_template="Choose an output whose role fits, or add a converting step.",
+        applicability=Applicability.HAS_PLACEHOLDERS,
+    ),
+    Rule(
+        code="USE_EXPANSION_NOT_SELF_CONTAINED",
+        category=RuleCategory.CORRECTNESS,
+        summary="Use '{ref}' loads '{slot}' without a Store inside its slice.",
+        message_template="Use '{ref}' loads '{slot}' without a Store inside its slice.",
+        template_params=("ref", "slot"),
+        explain="Screeners spec 01 section 3; foundation sections 4 and 5. Use '{ref}' loads '{slot}' without a Store inside its slice.",
+        passes=("3",),
+        surfaces=_PY_TS,
+        ts_mirrored=True,
+        suggestion_template="Include the producer of that slot in the source output.",
+        applicability=Applicability.HAS_PLACEHOLDERS,
+    ),
+    Rule(
+        code="USE_EXPANSION_DRIFT",
+        category=RuleCategory.CORRECTNESS,
+        summary="Use '{ref}' expansion differs from its stored slice hash.",
+        message_template="Use '{ref}' expansion differs from its stored slice hash.",
+        template_params=("ref",),
+        explain="Screeners spec 01 section 3; foundation sections 4 and 5. Use '{ref}' expansion differs from its stored slice hash.",
+        passes=(),
+        surfaces=_GATE_ONLY,
+        ts_mirrored=False,
+        ts_absent_reason="Link-time or view-document code: resolved outside the pipeline validator and returned as a structured issue.",
+        suggestion_template="Re-fetch the pinned source expansion before linking.",
+        applicability=Applicability.HAS_PLACEHOLDERS,
+    ),
+    Rule(
+        code="USE_SELF",
+        category=RuleCategory.CORRECTNESS,
+        summary="A block cannot Use itself ('{ref}'), at any version.",
+        message_template="A block cannot Use itself ('{ref}'), at any version.",
+        template_params=("ref",),
+        explain="Screeners spec 01 section 3; foundation sections 4 and 5. A block cannot Use itself ('{ref}'), at any version.",
+        passes=("3",),
+        surfaces=_PY_TS,
+        ts_mirrored=True,
+        suggestion_template="Fork the block to reuse an earlier version.",
+        applicability=Applicability.HAS_PLACEHOLDERS,
+    ),
+    Rule(
+        code="USE_DEPTH_EXCEEDED",
+        category=RuleCategory.CORRECTNESS,
+        summary="Use '{ref}' exceeds the nesting depth limit of {limit}.",
+        message_template="Use '{ref}' exceeds the nesting depth limit of {limit}.",
+        template_params=("ref", "limit"),
+        explain="Screeners spec 01 section 3; foundation sections 4 and 5. Use '{ref}' exceeds the nesting depth limit of {limit}.",
+        passes=("3",),
+        surfaces=_PY_TS,
+        ts_mirrored=True,
+        suggestion_template="Flatten or detach a nested Use.",
+        applicability=Applicability.HAS_PLACEHOLDERS,
+    ),
+    Rule(
+        code="USE_NEWER_VERSION",
+        category=RuleCategory.SUSPICIOUS,
+        summary="A newer version of '{ref}' exists: {latest}.",
+        message_template="A newer version of '{ref}' exists: {latest}.",
+        template_params=("ref", "latest"),
+        explain="Screeners spec 01 section 3; foundation sections 4 and 5. A newer version of '{ref}' exists: {latest}. severity_override=\"info\": this reports source or platform state, not a suspected authoring mistake.",
+        passes=(),
+        surfaces=_GATE_ONLY,
+        ts_mirrored=False,
+        ts_absent_reason="Link-time or view-document code: resolved outside the pipeline validator and returned as a structured issue.",
+        suggestion_template="Preview the difference before upgrading the pin.",
+        applicability=Applicability.HAS_PLACEHOLDERS,
+        severity_override="info",
+    ),
+    Rule(
+        code="USE_PIN_DIFFERS",
+        category=RuleCategory.SUSPICIOUS,
+        summary="Use '{ref}' was written against different component versions.",
+        message_template="Use '{ref}' was written against different component versions.",
+        template_params=("ref",),
+        explain="Screeners spec 01 section 3; foundation sections 4 and 5. Use '{ref}' was written against different component versions. severity_override=\"info\": this reports source or platform state, not a suspected authoring mistake.",
+        passes=(),
+        surfaces=_GATE_ONLY,
+        ts_mirrored=False,
+        ts_absent_reason="Link-time or view-document code: resolved outside the pipeline validator and returned as a structured issue.",
+        suggestion_template="Review the dry-run difference under the consumer lock.",
+        applicability=Applicability.HAS_PLACEHOLDERS,
+        severity_override="info",
+    ),
+    Rule(
+        code="USE_SOURCE_REMOVED",
+        category=RuleCategory.SUSPICIOUS,
+        summary="Source '{ref}' was removed; its pinned copy is unchanged.",
+        message_template="Source '{ref}' was removed; its pinned copy is unchanged.",
+        template_params=("ref",),
+        explain="Screeners spec 01 section 3; foundation sections 4 and 5. Source '{ref}' was removed; its pinned copy is unchanged. severity_override=\"info\": this reports source or platform state, not a suspected authoring mistake.",
+        passes=(),
+        surfaces=_GATE_ONLY,
+        ts_mirrored=False,
+        ts_absent_reason="Link-time or view-document code: resolved outside the pipeline validator and returned as a structured issue.",
+        severity_override="info",
+    ),
+    Rule(
+        code="USE_UNIVERSE_SENSITIVE",
+        category=RuleCategory.SUSPICIOUS,
+        summary="Use '{ref}' ranks within the consumer's coins.",
+        message_template="Use '{ref}' ranks within the consumer's coins.",
+        template_params=("ref",),
+        explain="Screeners spec 01 section 3; foundation sections 4 and 5. Use '{ref}' ranks within the consumer's coins. severity_override=\"info\": this reports source or platform state, not a suspected authoring mistake.",
+        passes=("3",),
+        surfaces=_PY_TS,
+        ts_mirrored=True,
+        suggestion_template="Review the consumer universe before using this output.",
+        applicability=Applicability.HAS_PLACEHOLDERS,
+        severity_override="info",
+    ),
+    Rule(
+        code="SCREENER_NOT_A_STRATEGY",
+        category=RuleCategory.CORRECTNESS,
+        summary="{detail}",
+        message_template="{detail}",
+        template_params=("detail",),
+        explain="Screeners spec 01 section 3; foundation sections 4 and 5. {detail}",
+        passes=(),
+        surfaces=_GATE_ONLY,
+        ts_mirrored=False,
+        ts_absent_reason="Link-time or view-document code: resolved outside the pipeline validator and returned as a structured issue.",
+        suggestion_template="A screener runs as a screener. To trade one of its outputs, use Test as a strategy: it forks the screener into a strategy with Execution(...) and a weight tail.",
+        applicability=Applicability.HAS_PLACEHOLDERS,
+        applies_to=("screener",),
+        fixture_waiver="services/keel-api/tests/test_screener_gates.py::TestScreenerIsRefusedAsStrategy — gate code, exercised at the API boundary.",
+    ),
+    Rule(
+        code="SCREENER_AUTHORING_DISABLED",
+        category=RuleCategory.CORRECTNESS,
+        summary="{detail}",
+        message_template="{detail}",
+        template_params=("detail",),
+        explain="Screeners spec 01 section 3; foundation sections 4 and 5. {detail}",
+        passes=(),
+        surfaces=_GATE_ONLY,
+        ts_mirrored=False,
+        ts_absent_reason="Link-time or view-document code: resolved outside the pipeline validator and returned as a structured issue.",
+        suggestion_template="Screeners are not enabled for this account yet, so this file was not saved. Remove Outputs(...) to save it as a strategy draft.",
+        applicability=Applicability.HAS_PLACEHOLDERS,
+        applies_to=("screener",),
+        fixture_waiver="services/keel-api/tests/test_screener_gates.py::TestScreenerAuthoringDisabled — gate code, exercised at the API boundary.",
+    ),
+    Rule(
+        code="SCREENER_VISIBILITY_RESET",
+        category=RuleCategory.SUSPICIOUS,
+        summary="{detail}",
+        message_template="{detail}",
+        template_params=("detail",),
+        explain='Screeners spec 01 section 3; foundation sections 4 and 5. {detail} severity_override="info": this reports source or platform state, not a suspected authoring mistake.',
+        passes=(),
+        surfaces=_GATE_ONLY,
+        ts_mirrored=False,
+        ts_absent_reason="Link-time or view-document code: resolved outside the pipeline validator and returned as a structured issue.",
+        applies_to=("screener",),
+        severity_override="info",
+        fixture_waiver="services/keel-api/tests/test_screener_gates.py::TestScreenerVisibilityReset — gate code, exercised at the API boundary.",
+    ),
+    Rule(
+        code="VIEW_UNKNOWN_OUTPUT",
+        category=RuleCategory.CORRECTNESS,
+        summary="{path}: output '{column}' is not available. Available: {available}. {near_miss}",
+        message_template="{path}: output '{column}' is not available. Available: {available}. {near_miss}",
+        template_params=("path", "column", "available", "near_miss"),
+        explain="Screeners spec 01 section 3; foundation sections 4 and 5. {path}: output '{column}' is not available. Available: {available}. {near_miss}",
+        passes=(),
+        surfaces=_GATE_ONLY,
+        ts_mirrored=False,
+        ts_absent_reason="Link-time or view-document code: resolved outside the pipeline validator and returned as a structured issue.",
+        suggestion_template="Choose an available output.",
+        applicability=Applicability.HAS_PLACEHOLDERS,
+        applies_to=("screener",),
+        tier="gate",
+    ),
+    Rule(
+        code="VIEW_CHANNEL_REQUIRED",
+        category=RuleCategory.CORRECTNESS,
+        summary="{path}: {kind} requires channel '{channel}'. Required channels: {required}.",
+        message_template="{path}: {kind} requires channel '{channel}'. Required channels: {required}.",
+        template_params=("path", "kind", "channel", "required"),
+        explain="Screeners spec 01 section 3; foundation sections 4 and 5. {path}: {kind} requires channel '{channel}'. Required channels: {required}.",
+        passes=(),
+        surfaces=_GATE_ONLY,
+        ts_mirrored=False,
+        ts_absent_reason="Link-time or view-document code: resolved outside the pipeline validator and returned as a structured issue.",
+        suggestion_template="Bind every required channel.",
+        applicability=Applicability.HAS_PLACEHOLDERS,
+        applies_to=("screener",),
+        tier="gate",
+    ),
+    Rule(
+        code="VIEW_CHANNEL_UNKNOWN",
+        category=RuleCategory.CORRECTNESS,
+        summary="{path}: {kind} does not accept channel '{channel}'. Accepted: {accepted}.",
+        message_template="{path}: {kind} does not accept channel '{channel}'. Accepted: {accepted}.",
+        template_params=("path", "kind", "channel", "accepted"),
+        explain="Screeners spec 01 section 3; foundation sections 4 and 5. {path}: {kind} does not accept channel '{channel}'. Accepted: {accepted}.",
+        passes=(),
+        surfaces=_GATE_ONLY,
+        ts_mirrored=False,
+        ts_absent_reason="Link-time or view-document code: resolved outside the pipeline validator and returned as a structured issue.",
+        suggestion_template="Remove the unknown channel.",
+        applicability=Applicability.HAS_PLACEHOLDERS,
+        applies_to=("screener",),
+        tier="gate",
+    ),
+    Rule(
+        code="VIEW_TRANSFORM_NOT_ALLOWED",
+        category=RuleCategory.CORRECTNESS,
+        summary="{path}: {transform} cannot use '{column}' with unit '{unit}'. Valid transforms: {valid}.",
+        message_template="{path}: {transform} cannot use '{column}' with unit '{unit}'. Valid transforms: {valid}.",
+        template_params=("path", "transform", "column", "unit", "valid", "fix"),
+        explain="Screeners spec 01 section 3; foundation sections 4 and 5. {path}: {transform} cannot use '{column}' with unit '{unit}'. Valid transforms: {valid}.",
+        passes=(),
+        surfaces=_GATE_ONLY,
+        ts_mirrored=False,
+        ts_absent_reason="Link-time or view-document code: resolved outside the pipeline validator and returned as a structured issue.",
+        suggestion_template="{fix}",
+        applicability=Applicability.HAS_PLACEHOLDERS,
+        applies_to=("screener",),
+        tier="gate",
+    ),
+    Rule(
+        code="VIEW_AXIS_MISMATCH",
+        category=RuleCategory.CORRECTNESS,
+        summary="{path}: {kind} needs {needs}; this result has {has}.",
+        message_template="{path}: {kind} needs {needs}; this result has {has}.",
+        template_params=("path", "kind", "needs", "has"),
+        explain="Screeners spec 01 section 3; foundation sections 4 and 5. {path}: {kind} needs {needs}; this result has {has}.",
+        passes=(),
+        surfaces=_GATE_ONLY,
+        ts_mirrored=False,
+        ts_absent_reason="Link-time or view-document code: resolved outside the pipeline validator and returned as a structured issue.",
+        suggestion_template="Choose a kind that accepts the result axes.",
+        applicability=Applicability.HAS_PLACEHOLDERS,
+        applies_to=("screener",),
+        tier="gate",
+    ),
+    Rule(
+        code="VIEW_LIMIT",
+        category=RuleCategory.CORRECTNESS,
+        summary="{path}: {what} is {value}, outside {lo}–{hi}.",
+        message_template="{path}: {what} is {value}, outside {lo}–{hi}.",
+        template_params=("path", "what", "value", "lo", "hi"),
+        explain="Screeners spec 01 section 3; foundation sections 4 and 5. {path}: {what} is {value}, outside {lo}–{hi}.",
+        passes=(),
+        surfaces=_GATE_ONLY,
+        ts_mirrored=False,
+        ts_absent_reason="Link-time or view-document code: resolved outside the pipeline validator and returned as a structured issue.",
+        suggestion_template="Choose a value in the allowed range.",
+        applicability=Applicability.HAS_PLACEHOLDERS,
+        applies_to=("screener",),
+        tier="gate",
+    ),
+    Rule(
+        code="VIEW_CONTROL_PATH",
+        category=RuleCategory.CORRECTNESS,
+        summary="{path}: control '{control}' has no usable target: {detail}",
+        message_template="{path}: control '{control}' has no usable target: {detail}",
+        template_params=("path", "control", "detail"),
+        explain="Screeners spec 01 section 3; foundation sections 4 and 5. {path}: control '{control}' has no usable target: {detail}",
+        passes=(),
+        surfaces=_GATE_ONLY,
+        ts_mirrored=False,
+        ts_absent_reason="Link-time or view-document code: resolved outside the pipeline validator and returned as a structured issue.",
+        suggestion_template="Bind the control to an existing number or option.",
+        applicability=Applicability.HAS_PLACEHOLDERS,
+        applies_to=("screener",),
+        tier="gate",
+    ),
+    Rule(
+        code="VIEW_CONTROL_RANGE",
+        category=RuleCategory.CORRECTNESS,
+        summary="{path}: control '{control}' defaults to {default}, outside {lo}–{hi}.",
+        message_template="{path}: control '{control}' defaults to {default}, outside {lo}–{hi}.",
+        template_params=("path", "control", "default", "lo", "hi"),
+        explain="Screeners spec 01 section 3; foundation sections 4 and 5. {path}: control '{control}' defaults to {default}, outside {lo}–{hi}.",
+        passes=(),
+        surfaces=_GATE_ONLY,
+        ts_mirrored=False,
+        ts_absent_reason="Link-time or view-document code: resolved outside the pipeline validator and returned as a structured issue.",
+        suggestion_template="Choose a default inside the control range.",
+        applicability=Applicability.HAS_PLACEHOLDERS,
+        applies_to=("screener",),
+        tier="gate",
+    ),
+    Rule(
+        code="VIEW_CONTROL_DUPLICATE",
+        category=RuleCategory.CORRECTNESS,
+        summary="{path}: control '{control}' was already declared at {first_path}.",
+        message_template="{path}: control '{control}' was already declared at {first_path}.",
+        template_params=("path", "control", "first_path"),
+        explain="Screeners spec 01 section 3; foundation sections 4 and 5. {path}: control '{control}' was already declared at {first_path}.",
+        passes=(),
+        surfaces=_GATE_ONLY,
+        ts_mirrored=False,
+        ts_absent_reason="Link-time or view-document code: resolved outside the pipeline validator and returned as a structured issue.",
+        suggestion_template="Use a bare Control reference after its first declaration.",
+        applicability=Applicability.HAS_PLACEHOLDERS,
+        applies_to=("screener",),
+        tier="gate",
+    ),
+    Rule(
+        code="VIEW_CONTROL_UNKNOWN",
+        category=RuleCategory.CORRECTNESS,
+        summary="{path}: control '{control}' is undeclared. Declared controls: {declared}.",
+        message_template="{path}: control '{control}' is undeclared. Declared controls: {declared}.",
+        template_params=("path", "control", "declared"),
+        explain="Screeners spec 01 section 3; foundation sections 4 and 5. {path}: control '{control}' is undeclared. Declared controls: {declared}.",
+        passes=(),
+        surfaces=_GATE_ONLY,
+        ts_mirrored=False,
+        ts_absent_reason="Link-time or view-document code: resolved outside the pipeline validator and returned as a structured issue.",
+        suggestion_template="Declare the control before referencing it.",
+        applicability=Applicability.HAS_PLACEHOLDERS,
+        applies_to=("screener",),
+        tier="gate",
+    ),
+    Rule(
+        code="VIEW_UNIT_MISMATCH",
+        category=RuleCategory.CORRECTNESS,
+        summary="{path}: column '{column}' declares unit '{view_unit}', but its output has unit '{descriptor_unit}'.",
+        message_template="{path}: column '{column}' declares unit '{view_unit}', but its output has unit '{descriptor_unit}'.",
+        template_params=("path", "column", "view_unit", "descriptor_unit"),
+        explain="Screeners spec 01 section 3; foundation sections 4 and 5. {path}: column '{column}' declares unit '{view_unit}', but its output has unit '{descriptor_unit}'.",
+        passes=(),
+        surfaces=_GATE_ONLY,
+        ts_mirrored=False,
+        ts_absent_reason="Link-time or view-document code: resolved outside the pipeline validator and returned as a structured issue.",
+        suggestion_template="Use the output unit in Columns(unit=...).",
+        applicability=Applicability.HAS_PLACEHOLDERS,
+        applies_to=("screener",),
+        tier="gate",
+    ),
+    Rule(
+        code="VIEW_CONTROL_RESERVED",
+        category=RuleCategory.CORRECTNESS,
+        summary="'{name}' can't be a control name: the page's links already use it.",
+        message_template="'{name}' can't be a control name: the page's links already use it.",
+        template_params=("name", "rename", "reserved"),
+        explain="Screeners spec 01 section 3; foundation sections 4 and 5. '{name}' can't be a control name: the page's links already use it.",
+        passes=(),
+        surfaces=_GATE_ONLY,
+        ts_mirrored=False,
+        ts_absent_reason="Link-time or view-document code: resolved outside the pipeline validator and returned as a structured issue.",
+        suggestion_template="Rename the control, for example to '{rename}'. Reserved names: {reserved}.",
+        applicability=Applicability.HAS_PLACEHOLDERS,
+        applies_to=("screener",),
+        tier="gate",
+    ),
+    Rule(
+        code="VIEW_ID_DUPLICATE",
+        category=RuleCategory.CORRECTNESS,
+        summary="Two views share the id '{view_id}'.",
+        message_template="Two views share the id '{view_id}'.",
+        template_params=("view_id",),
+        explain="Screeners spec 01 section 3; foundation sections 4 and 5. Two views share the id '{view_id}'.",
+        passes=(),
+        surfaces=_GATE_ONLY,
+        ts_mirrored=False,
+        ts_absent_reason="Link-time or view-document code: resolved outside the pipeline validator and returned as a structured issue.",
+        suggestion_template="Give each view a distinct id.",
+        applicability=Applicability.HAS_PLACEHOLDERS,
+        applies_to=("screener",),
+        tier="gate",
+    ),
+    Rule(
+        code="VIEW_PAGE_INVALID",
+        category=RuleCategory.CORRECTNESS,
+        summary="{field} is not usable: {detail}",
+        message_template="{field} is not usable: {detail}",
+        template_params=("field", "detail", "fix"),
+        explain="Screeners spec 01 section 3; foundation sections 4 and 5. {field} is not usable: {detail}",
+        passes=(),
+        surfaces=_GATE_ONLY,
+        ts_mirrored=False,
+        ts_absent_reason="Link-time or view-document code: resolved outside the pipeline validator and returned as a structured issue.",
+        suggestion_template="{fix}",
+        applicability=Applicability.HAS_PLACEHOLDERS,
+        applies_to=("screener",),
+        tier="gate",
+    ),
+    Rule(
+        code="VIEW_DUPLICATE_AXIS",
+        category=RuleCategory.CORRECTNESS,
+        summary="View '{view_id}' uses '{output}' twice ({channels}).",
+        message_template="View '{view_id}' uses '{output}' twice ({channels}).",
+        template_params=("view_id", "output", "channels"),
+        explain="Screeners spec 01 section 3; foundation sections 4 and 5. View '{view_id}' uses '{output}' twice ({channels}).",
+        passes=(),
+        surfaces=_GATE_ONLY,
+        ts_mirrored=False,
+        ts_absent_reason="Link-time or view-document code: resolved outside the pipeline validator and returned as a structured issue.",
+        suggestion_template="Bind a different output to one of {channels}.",
+        applicability=Applicability.HAS_PLACEHOLDERS,
+        applies_to=("screener",),
+        tier="gate",
+    ),
+    Rule(
+        code="VIEW_SORT_NOT_BOUND",
+        category=RuleCategory.CORRECTNESS,
+        summary="View '{view_id}' sorts by '{output}', which is not one of its columns.",
+        message_template="View '{view_id}' sorts by '{output}', which is not one of its columns.",
+        template_params=("view_id", "output", "columns"),
+        explain="Screeners spec 01 section 3; foundation sections 4 and 5. View '{view_id}' sorts by '{output}', which is not one of its columns.",
+        passes=(),
+        surfaces=_GATE_ONLY,
+        ts_mirrored=False,
+        ts_absent_reason="Link-time or view-document code: resolved outside the pipeline validator and returned as a structured issue.",
+        suggestion_template="Add '{output}' to columns, or sort by one of: {columns}.",
+        applicability=Applicability.HAS_PLACEHOLDERS,
+        applies_to=("screener",),
+        tier="gate",
+    ),
+    Rule(
+        # INV-29 / audit D-03: a view source the parser cannot read. Before
+        # this code every parse failure arrived as VIEW_CONTROL_PATH, which
+        # steered repairs toward controls; the parser now owns this code and
+        # carries a concrete fix in `suggestion`.
+        code="VIEW_SYNTAX",
+        category=RuleCategory.CORRECTNESS,
+        summary="{path}: the view source cannot be read: {detail}",
+        message_template="{path}: the view source cannot be read: {detail}",
+        template_params=("path", "detail", "fix"),
+        explain="Screeners spec 00 sections 5.2 and 5.10; spec 05 section D3.1. {path}: the view source cannot be read: {detail}",
+        passes=(),
+        surfaces=_GATE_ONLY,
+        ts_mirrored=False,
+        ts_absent_reason="Link-time or view-document code: resolved outside the pipeline validator and returned as a structured issue.",
+        suggestion_template="{fix}",
+        applicability=Applicability.HAS_PLACEHOLDERS,
+        applies_to=("screener",),
+        tier="gate",
+    ),
+    Rule(
+        # INV-22 / audit E-03: a view draws a general series (price, dollar
+        # volume) its Columns never declared. Labels and units come from
+        # Columns and nowhere else (R-084), so the editor and chat ask the
+        # author for the entry instead of any surface guessing a word.
+        code="VIEW_COLUMN_MISSING",
+        category=RuleCategory.CORRECTNESS,
+        summary="{path}: '{column}' is drawn but Columns does not declare it, so it has no label or unit.",
+        message_template="{path}: '{column}' is drawn but Columns does not declare it, so it has no label or unit.",
+        template_params=("path", "column", "unit"),
+        explain="Screeners spec 00 section 5.3 (R-084); spec 07 section D5.1. {path}: '{column}' is drawn but Columns does not declare it, so it has no label or unit.",
+        passes=(),
+        surfaces=_GATE_ONLY,
+        ts_mirrored=False,
+        ts_absent_reason="Link-time or view-document code: resolved outside the pipeline validator and returned as a structured issue.",
+        suggestion_template='Add {column}=Column("<label>", unit="{unit}") to Columns.',
+        applicability=Applicability.HAS_PLACEHOLDERS,
+        applies_to=("screener",),
+        tier="gate",
+    ),
+    Rule(
+        code="VIEW_OPTION_UNAVAILABLE",
+        category=RuleCategory.CORRECTNESS,
+        summary="View '{view_id}': {option}={value} cannot be drawn for this run ({reason}).",
+        message_template="View '{view_id}': {option}={value} cannot be drawn for this run ({reason}).",
+        template_params=("view_id", "option", "value", "reason", "fix"),
+        explain="Screeners spec 01 section 3; foundation sections 4 and 5. View '{view_id}': {option}={value} cannot be drawn for this run ({reason}).",
+        passes=(),
+        surfaces=_GATE_ONLY,
+        ts_mirrored=False,
+        ts_absent_reason="Link-time or view-document code: resolved outside the pipeline validator and returned as a structured issue.",
+        suggestion_template="{fix}",
+        applicability=Applicability.HAS_PLACEHOLDERS,
+        applies_to=("screener",),
+        tier="runtime",
+    ),
+    Rule(
+        code="VIEW_INSTANT_OUT_OF_RANGE",
+        category=RuleCategory.SUSPICIOUS,
+        summary="{field} {instant} is outside this run's bars ({first} – {last}); showing {snapped}.",
+        message_template="{field} {instant} is outside this run's bars ({first} – {last}); showing {snapped}.",
+        template_params=("field", "instant", "first", "last", "snapped"),
+        explain="Screeners spec 01 section 3; foundation sections 4 and 5. {field} {instant} is outside this run's bars ({first} – {last}); showing {snapped}.",
+        passes=(),
+        surfaces=_GATE_ONLY,
+        ts_mirrored=False,
+        ts_absent_reason="Link-time or view-document code: resolved outside the pipeline validator and returned as a structured issue.",
+        applies_to=("screener",),
+        tier="runtime",
+    ),
+    Rule(
+        code="VIEW_SELECTION_NOT_IN_UNIVERSE",
+        category=RuleCategory.SUSPICIOUS,
+        summary="Selected asset '{asset}' is not in this run's universe; it is listed, not drawn.",
+        message_template="Selected asset '{asset}' is not in this run's universe; it is listed, not drawn.",
+        template_params=("asset",),
+        explain="Screeners spec 01 section 3; foundation sections 4 and 5. Selected asset '{asset}' is not in this run's universe; it is listed, not drawn.",
+        passes=(),
+        surfaces=_GATE_ONLY,
+        ts_mirrored=False,
+        ts_absent_reason="Link-time or view-document code: resolved outside the pipeline validator and returned as a structured issue.",
+        applies_to=("screener",),
+        tier="runtime",
+    ),
+)
+
+
 #: The catalog. Keyed by code; validated at import (raises CatalogError).
-RULES: dict[str, Rule] = validate_rules(_ALL_RULES)
+RULES: dict[str, Rule] = validate_rules((*_ALL_RULES, *_SCREENERS_RULES))
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -5741,7 +6797,10 @@ _ALL_STAGED_CHANGES: tuple[StagedChange, ...] = (
         stage=Stage.PROMOTED,  # GATE-2 flip (K18, T-M4f-5)
         terminal_stage=Stage.PROMOTED,
         target_milestone="M4",
-        evidence=_ERROR_PROMOTION_EVIDENCE,
+        evidence=_ERROR_PROMOTION_EVIDENCE
+        + (
+            "screener_scoping: TERMINAL_CLOCK_MISMATCH carry applies_to=('strategy',); promotion re-runs accept_screener_outputs under the terminal stage (screeners spec 01 section 3.3).",
+        ),
         log=(
             (
                 "2026-07-26",
@@ -6032,7 +7091,10 @@ _ALL_STAGED_CHANGES: tuple[StagedChange, ...] = (
         stage=Stage.PROMOTED,
         terminal_stage=Stage.PROMOTED,
         target_milestone="M5",
-        evidence=_ERROR_PROMOTION_EVIDENCE,
+        evidence=_ERROR_PROMOTION_EVIDENCE
+        + (
+            "screener_scoping: NONDENSE_TERMINAL_WEIGHTS carry applies_to=('strategy',); promotion re-runs accept_screener_outputs under the terminal stage (screeners spec 01 section 3.3).",
+        ),
         log=(
             (
                 "2026-08-02",
@@ -6379,7 +7441,10 @@ _ALL_STAGED_CHANGES: tuple[StagedChange, ...] = (
         stage=Stage.WARNING,
         terminal_stage=Stage.WARNING,
         target_milestone="M5",
-        evidence=_WARNING_FLIP_EVIDENCE,
+        evidence=_WARNING_FLIP_EVIDENCE
+        + (
+            "screener_scoping: FIXED_WEIGHT_UNCAPPED carry applies_to=('strategy',); promotion re-runs accept_screener_outputs under the terminal stage (screeners spec 01 section 3.3).",
+        ),
         log=(
             (
                 "2026-09-22",
@@ -6424,7 +7489,10 @@ _ALL_STAGED_CHANGES: tuple[StagedChange, ...] = (
         stage=Stage.WARNING,
         terminal_stage=Stage.PROMOTED,
         target_milestone="M5",
-        evidence=_ERROR_PROMOTION_EVIDENCE,
+        evidence=_ERROR_PROMOTION_EVIDENCE
+        + (
+            "screener_scoping: NORMALIZER_BEFORE_CONCAT carry applies_to=('strategy',); promotion re-runs accept_screener_outputs under the terminal stage (screeners spec 01 section 3.3).",
+        ),
         log=(
             (
                 "2026-09-22",
@@ -6494,7 +7562,10 @@ _ALL_STAGED_CHANGES: tuple[StagedChange, ...] = (
         stage=Stage.WARNING,
         terminal_stage=Stage.PROMOTED,
         target_milestone="M5",
-        evidence=_ERROR_PROMOTION_EVIDENCE,
+        evidence=_ERROR_PROMOTION_EVIDENCE
+        + (
+            "screener_scoping: TERMINAL_NOT_WEIGHTS carry applies_to=('strategy',); promotion re-runs accept_screener_outputs under the terminal stage (screeners spec 01 section 3.3).",
+        ),
         log=(
             (
                 "2026-09-22",
@@ -6550,7 +7621,10 @@ _ALL_STAGED_CHANGES: tuple[StagedChange, ...] = (
         stage=Stage.WARNING,
         terminal_stage=Stage.PROMOTED,
         target_milestone="M5",
-        evidence=_ERROR_PROMOTION_EVIDENCE,
+        evidence=_ERROR_PROMOTION_EVIDENCE
+        + (
+            "screener_scoping: TERMINAL_DICT_NOT_CONSUMED carry applies_to=('strategy',); promotion re-runs accept_screener_outputs under the terminal stage (screeners spec 01 section 3.3).",
+        ),
         log=(
             (
                 "2026-09-22",
@@ -6595,7 +7669,10 @@ _ALL_STAGED_CHANGES: tuple[StagedChange, ...] = (
         stage=Stage.PROMOTED,
         terminal_stage=Stage.PROMOTED,
         target_milestone="M5",
-        evidence=_ERROR_PROMOTION_EVIDENCE,
+        evidence=_ERROR_PROMOTION_EVIDENCE
+        + (
+            "screener_scoping: MISSING_UNIVERSE carry applies_to=('strategy',); promotion re-runs accept_screener_outputs under the terminal stage (screeners spec 01 section 3.3).",
+        ),
         log=(
             (
                 "2026-09-22",
@@ -6703,6 +7780,14 @@ def staged_stage_override(key: str, stage: Stage | str):
 
 
 __all__ = [
+    "active_file_kind",
+    "file_kind_scope",
+    "rule_applies",
+    "applies_to_override",
+    "FILE_KINDS",
+    "USE_CODES",
+    "VIEW_CODES",
+    "SCREENER_ONLY_CODES",
     "Applicability",
     "CatalogError",
     "CURRENT_MILESTONE",
@@ -6724,3 +7809,40 @@ __all__ = [
     "validate_rules",
     "validate_staged_changes",
 ]
+
+
+_active_file_kind: ContextVar[str | None] = ContextVar("dsl_file_kind", default=None)
+
+
+def active_file_kind() -> str | None:
+    return _active_file_kind.get()
+
+
+@contextmanager
+def file_kind_scope(kind: str):
+    """Nestable, task-local scope: reset even when validation raises."""
+    if kind not in FILE_KINDS:
+        raise CatalogError(f"Unknown file kind: {kind!r}")
+    token = _active_file_kind.set(kind)
+    try:
+        yield
+    finally:
+        _active_file_kind.reset(token)
+
+
+def rule_applies(code: str) -> bool:
+    kind = active_file_kind()
+    return kind is None or kind in RULES[code].applies_to
+
+
+@contextmanager
+def applies_to_override(code: str, kinds: tuple[str, ...]):
+    """Test-only scoped mutation, like staged_stage_override."""
+    original = RULES[code]
+    candidate = replace(original, applies_to=kinds)
+    validate_rules([candidate])
+    RULES[code] = candidate
+    try:
+        yield
+    finally:
+        RULES[code] = original
