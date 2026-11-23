@@ -1,20 +1,27 @@
 # Changelog
 
-## 0.10.0
-
-- Add full-profile screen run, view, passing and management commands, reusable block discovery, Use preview/upgrade/detach, and view catalog descriptions.
-- Render bounded screen results across text hosts and MCP Apps; passing lists remain text-only. Existing hosted listed tools are unchanged.
-- Preserve view revision checks and dry-run requests; screen refresh selects the published commit when present.
-
 All notable changes to `keel-trade` are documented here. Versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html), and the format
 loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-Research. Ships in the `sdk-v*` tagged from the release commit; every
-research verb calls keel-api, which answers "Research is paused." while
-`research.enabled` is off.
+## [0.11.0] — 2026-11-21 (unreleased)
+
+Release candidate; unreleased until the founder creates the SDK release tag.
+The release commit dates this heading and drops "(unreleased)" from it.
+
+Research. A study measures a strategy or signal you already have: what costs
+and delay do to it, how much of it could be chance, how well a signal ranks
+coins, how it compares with others, a map of a strategy's settings, and returns
+around its entries and exits. Your agent can plan a study and see what it would
+run and spend before anything runs, then run it and read the results. Studies
+are the same ones you open in the Keel app.
+
+Research appears in the CLI and in a local `keel mcp serve` only for accounts
+that have it: both read your account (refreshed every 5 minutes) and show no
+research command, tool, help topic or card until it is turned on for you. A
+research call made before then answers "Research isn't available yet."
 
 - Research tools: `keel_research_plan` (what would run, what is reused and what
   it spends; nothing runs), `keel_research_run` (saves the study and runs what is
@@ -44,10 +51,7 @@ delete | shares`.
   canonical grammar (`pipeline.step[i].branch[name]…`), the same one research
   addresses use.
 
-## [0.10.0] — 2026-11-02 (unreleased)
-
-Release candidate; unreleased until the founder creates the SDK release tag.
-The release commit drops "(unreleased)" from this heading.
+## [0.10.0] — 2026-11-18
 
 - Adds full-profile Screeners and reusable-output commands. The listed tool
   catalogue and existing strategy/paper wire contracts remain unchanged.
@@ -65,6 +69,11 @@ The release commit drops "(unreleased)" from this heading.
   `keel_screener_view`, `keel_screener_view_set` and `keel_help`.
 - The strategy pattern "screen-select" is now "rank-and-select"
   (`rank_select_patterns`; the old topic name still resolves).
+- Reusable outputs: `keel blocks search | get`, `keel use preview | upgrade |
+detach` and `keel view describe`. A screen view edit keeps its revision check
+  and `--dry-run`, and a screen refresh runs the published commit when there is
+  one. Screen results render bounded in text hosts and MCP Apps; passing lists
+  stay text-only.
 
 ### Fixed
 

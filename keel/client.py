@@ -70,7 +70,7 @@ def _env_key_rejected(api_url: str) -> AuthError:
         "uses only that key; the stored login in ~/.keel/config.yaml is not "
         "used. Set a valid key, or unset KEEL_API_KEY to use `keel auth login`.",
         suggestion="Replace KEEL_API_KEY with a valid key, or unset it to use the stored login.",
-        docs_url="https://app.usekeel.io/settings?tab=api-keys",
+        docs_url=_api_keys_url(),
     )
     # `keel_auth_login` writes the stored login, which this process ignores
     # while KEEL_API_KEY is set — pointing an agent at it would loop.
@@ -138,7 +138,7 @@ class KeelClient:
                         "Run `keel auth login` (browser) or `keel auth login "
                         "--key <token>` for CI/SSH/Codespaces.",
                         suggestion="Run `keel auth login`.",
-                        docs_url="https://app.usekeel.io/settings?tab=api-keys",
+                        docs_url=_api_keys_url(),
                     ) from anon_err
                 self._config = updated
                 self._client.headers["Authorization"] = f"Bearer {updated.api_key}"
@@ -149,11 +149,11 @@ class KeelClient:
                 "a browser and persists tokens automatically. "
                 "From a terminal: run `keel auth login` (browser) or "
                 "`keel auth login --key <token>` for CI/SSH/Codespaces (token "
-                "from https://app.usekeel.io/settings?tab=api-keys).",
+                f"from {_api_keys_url()}).",
                 suggestion=(
                     "Call MCP tool `keel_auth_login` (or run `keel auth login` in a terminal)."
                 ),
-                docs_url="https://app.usekeel.io/settings?tab=api-keys",
+                docs_url=_api_keys_url(),
             )
 
     def get(self, path: str, *, headers: dict[str, str] | None = None, **params: Any) -> Any:
@@ -419,3 +419,10 @@ class KeelClient:
 
     def __exit__(self, *args: Any) -> None:
         self.close()
+
+
+def _api_keys_url() -> str:
+    """The API-keys page on the app this process links (``keel.config.api_keys_url``)."""
+    from keel.config import api_keys_url
+
+    return api_keys_url()

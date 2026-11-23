@@ -63,10 +63,25 @@ JSON.
   `keel auth login --key <token>`). Config lives in `~/.keel/config.yaml`.
   <!-- /profile -->
 - **A plan-limit refusal** (`quota_exhausted`, `quota_cap_reached`,
-  `plan_feature_unavailable`) → the refusal carries `limit_details` (the unit,
-  and for a quota the used, limit and reset numbers) and `resume.verify_call`
-  (the exact blocked call, every argument kept). Report the limit and the reset
-  in words; a plan-limit refusal is not retried; it lifts at the reset.
+  `plan_feature_unavailable`, `SCREEN_COINS_OVER_PLAN`,
+  `SERVING_CLOCK_BELOW_PLAN_FLOOR`) is not an error: say what was built and
+  then the limit, in one line, with the user's number, the reset date and
+  the plans the refusal names (never a price or a link). It carries
+  `limit_details` or `detail` (the numbers and the `remedy`) and, for a
+  quota, `resume.verify_call` (the exact blocked call, every argument kept).
+  A plan-limit refusal is not retried unchanged; for a quota,
+  it lifts at the reset.
+  - The coin limit (`SCREEN_COINS_OVER_PLAN`): `suggested_next_action` is the
+    same call with `remedy.apply` (`narrow_to_plan: true`), which keeps the
+    highest-volume coins the plan covers; make it without asking first, then
+    say what was kept. Don't split the screen into several runs to get past
+    the limit.
+  - Paper or live strategies at the cap (`remedy.kind: stop_one`): ask the
+    user which running one to stop; a newer version of a running strategy is
+    an update, not a new run. Never stop one unasked.
+  - A paper or live timeframe (`remedy.kind: slower_clock`): offer the
+    admitted timeframe (`remedy.admitted`); the backtest stays as it is.
+    Never suggest live trading to get around a paper limit.
 - **`handoff_required`** is not an error: it names a step the user completes
   in the Keel web app.
 - **`not_found` on a help topic / skill** → the error lists the closest names.

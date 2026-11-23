@@ -74,6 +74,8 @@ pipeline_engine/dsl/fixtures/*.json
 # reads to assemble the MCP server instructions. Public text the server
 # already serves; exact path, so any other markdown there still reddens G1.
 pipeline_engine/reference/screens_core.md
+# The Research line's source (AGENT-KNOWLEDGE dcc25eba20), copied beside the vendored builder like screens_core.md.
+pipeline_engine/reference/research_core.md
 scripts/*.py
 scripts/icon.png
 scripts/manifest.template.json
@@ -117,6 +119,8 @@ tests/fixtures/listed_*_head.json
 tests/fixtures/plan_limits_first_week_golden.json
 # Gate S's golden transcripts for the research verbs (Research BUILD-PLAN §16; test_research_transcripts.py).
 tests/fixtures/research_transcripts.json
+# SDK-FIX's Compare/Signal tile-match fixture (6bce3153bd, d47501c2a2).
+tests/fixtures/research_compare_tiles.json
 # keel-api's recorded answers the research texts are read over (RI-615, test_research_view.py).
 tests/fixtures/research_server_shapes.json
 # The portfolio view's base-commit outputs on the full profile and the CLI

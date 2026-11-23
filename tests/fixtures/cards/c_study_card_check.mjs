@@ -121,13 +121,59 @@ const PROBE = () => {
     narrow: window.innerWidth < 480,
     headName: t(document.querySelector(".head-name")),
     headChips: q("#head-meta .chip").filter(visible).map(t),
+    // CARD-RENDER #3: the state, date and maker on the muted second line;
+    // the note chips there too (never dropped at 360 px).
+    headSub: t(document.querySelector("#card-head .st-sub-w")),
+    noteChips: q("#card-head .st-sub .chip").filter(visible).map(t),
+    steps: q(".st-run-box .st-step").map(t),
+    runChart: !!document.querySelector(".st-run-box .st-chart"),
+    runWords: t(document.querySelector(".st-run-words")),
+    listEmpty: t(document.querySelector(".st-list-empty")),
+    issues: q(".st-issue").map(t),
     kindChip: t(document.querySelector("#head-meta .chip.kind")),
     lead: t(document.querySelector(".st-lead")),
     tiles: q(".st-number").map((e) => ({
       value: t(e.querySelector(".st-value")),
+      // D-380: a number served as a sentence draws its words on their own
+      // line under the number (874ac3f979); the served string is the two.
+      valueWords: t(e.querySelector(".st-value-words")),
       sample: t(e.querySelector(".st-sample")),
       label: t(e.querySelector(".st-label")),
+      title: e.title || "",
     })),
+    // CARD-360: words a person sees cut. A visible element whose text
+    // overflows its box (either axis) is cut by the CSS ellipsis or clip.
+    cut: (() => {
+      const over = (e) =>
+        visible(e) &&
+        (e.scrollWidth > e.clientWidth + 1 ||
+          e.scrollHeight > e.clientHeight + 1);
+      const cells = q(".st-key-slot .st-cellwords span").filter(
+        (e) => e.textContent,
+      );
+      const title = document.querySelector(".st-key-slot .st-chart-title");
+      const legend = title && title.querySelector(".st-legend");
+      const name = title && title.querySelector(".st-chart-name");
+      const acts = document.querySelector(".rr[data-keep] .rr-acts");
+      return {
+        cellWords: cells.length,
+        cells: cells.filter(over).map((e) => e.textContent),
+        samples: q(".st-number .st-sample").filter(over).map(t),
+        titleWrap: !!(title && title.hasAttribute("data-wrap")),
+        titleName: !!(name && name.textContent && over(name)),
+        legend: !!(legend && over(legend)),
+        legendBelow: !!(
+          legend &&
+          name &&
+          legend.getBoundingClientRect().top >=
+            name.getBoundingClientRect().bottom - 1
+        ),
+        keepWords: q(".rr[data-keep] .rr-l2 .rr-keep").filter(over).map(t),
+        keepActsLine: acts
+          ? acts.parentNode.className.split(" ")[0] || null
+          : null,
+      };
+    })(),
     key: (
       document.querySelector(".st-key-slot") || { getAttribute: () => null }
     ).getAttribute("data-key"),
@@ -177,6 +223,163 @@ const PROBE = () => {
     overflowX:
       document.documentElement.scrollWidth -
       document.documentElement.clientWidth,
+    // MCP-CARDS (D-420): the face, what a person sees of it.
+    face: document.body.getAttribute("data-face") === "1",
+    faceTitle: t(document.querySelector(".sf-head .sf-title")),
+    faceMeta: t(document.querySelector(".sf-head .sf-meta")),
+    hero: document.querySelector(".sf-hero-n")
+      ? {
+          value: t(document.querySelector(".sf-hero-v")),
+          label: t(document.querySelector(".sf-hero-l")),
+          top: Math.round(
+            document.querySelector(".sf-hero-v").getBoundingClientRect().top,
+          ),
+          size: parseFloat(
+            getComputedStyle(document.querySelector(".sf-hero-v")).fontSize,
+          ),
+        }
+      : null,
+    heroAside:
+      q(".sf-aside-line").map(t).join(" ") ||
+      t(document.querySelector(".sf-hero-aside")),
+    asideLines: q(".sf-aside-line").map(t),
+    // MCP-CARDS (founder 11-22, the failed card's dots over its words): no
+    // two drawn blocks of the card overlap. Siblings are compared inside
+    // each container that lays blocks side by side or stacked (the card
+    // body, the run lead, the hero, the tiles, the thumbnails, the link
+    // row), and every body block against every action; the count of boxes
+    // compared is the probe's own non-vacuity.
+    overlap: (() => {
+      const box = (e) => {
+        const r = e.getBoundingClientRect();
+        return {
+          l: r.left,
+          t: r.top,
+          r: r.right,
+          b: r.bottom,
+          w: r.width,
+          h: r.height,
+        };
+      };
+      const shown = (e) => visible(e) && e.getBoundingClientRect().height > 0.5;
+      const name = (e) =>
+        (e.className && typeof e.className === "string"
+          ? e.className.split(" ").filter(Boolean).slice(0, 2).join(".")
+          : e.tagName.toLowerCase()) || e.tagName.toLowerCase();
+      const hit = (a, b) =>
+        Math.min(a.r, b.r) - Math.max(a.l, b.l) > 1 &&
+        Math.min(a.b, b.b) - Math.max(a.t, b.t) > 1;
+      const pairs = [];
+      let compared = 0;
+      const within = (els) => {
+        const list = els.filter(shown);
+        compared += list.length;
+        for (let i = 0; i < list.length; i++)
+          for (let j = i + 1; j < list.length; j++)
+            if (hit(box(list[i]), box(list[j])))
+              pairs.push(name(list[i]) + " × " + name(list[j]));
+      };
+      const kids = (sel) => q(sel).flatMap((c) => Array.from(c.children));
+      const body = document.getElementById("card-body");
+      const actions = q("#link-row > *").filter(shown);
+      if (body) within(Array.from(body.children).concat(actions));
+      within(kids(".sf-run-lead"));
+      within(kids(".sf-hero"));
+      within(kids(".sf-hero-aside"));
+      within(kids(".sf-tiles"));
+      within(kids(".sf-thumb-row"));
+      return { pairs, compared };
+    })(),
+    pips: q(".sf-pips .sf-pip").map((e) => e.getAttribute("data-state")),
+    pipTitles: q(".sf-pips .sf-pip").map((e) => e.title || ""),
+    dots: q(".sf-dot").map((e) => e.getAttribute("data-state")),
+    faceTiles: q(".sf-tile").map((e) => ({
+      value: t(e.querySelector(".sf-tile-v")),
+      label: t(e.querySelector(".sf-tile-l")),
+      sub: t(e.querySelector(".sf-tile-s")),
+      state: e.getAttribute("data-state"),
+      pip: (
+        e.querySelector(".sf-tile-pip") || { getAttribute: () => null }
+      ).getAttribute("data-state"),
+      title: e.title || "",
+      // the value drawn whole, or cut by its box; the label may ellipsize (its title is whole)
+      cut: (() => {
+        const v = e.querySelector(".sf-tile-v");
+        return !!(v && visible(v) && v.scrollWidth > v.clientWidth + 1);
+      })(),
+    })),
+    faceChart: !!document.querySelector(".sf-chart .st-chart"),
+    faceReadout: t(document.querySelector(".sf-chart .st-readout")),
+    faceSteps: q(".sf-step, .sf-plan-step").map((e) => ({
+      label: t(e.querySelector(".sf-step-l")),
+      words: t(e.querySelector(".sf-step-w")),
+      state: e.getAttribute("data-state"),
+    })),
+    faceRows: q(".sf-row").map((e) => ({
+      title: t(e.querySelector(".sf-row-title")),
+      meta: t(e.querySelector(".sf-row-meta")),
+      value: t(e.querySelector(".sf-row-v")),
+      href: (
+        e.querySelector("a.sf-row-link") || { getAttribute: () => null }
+      ).getAttribute("href"),
+      pic: !!e.querySelector(".sf-row-pic svg, .sf-row-pic .st-picture"),
+    })),
+    captions: q(".sf-caption").map(t),
+    // D-420d: the thumbnails under the key chart, each with its visible marks
+    thumbs: q(".sf-thumb").map((b) => {
+      const pic = b.querySelector(".sf-thumb-pic");
+      const r = pic ? pic.getBoundingClientRect() : { width: 0, height: 0 };
+      return {
+        index: b.getAttribute("data-index"),
+        title: b.title || "",
+        caption: t(b.querySelector(".sf-thumb-t")),
+        marks: Array.from(
+          b.querySelectorAll(".st-line, .st-bar, .st-bin, .st-dot, .st-cell"),
+        ).filter((m) => {
+          // a dot is a zero-length round-capped stroke: no box, still ink
+          const cs = getComputedStyle(m);
+          const mr = m.getBoundingClientRect();
+          return (
+            cs.display !== "none" &&
+            cs.visibility !== "hidden" &&
+            (mr.width > 0.5 ||
+              mr.height > 0.5 ||
+              (m.classList.contains("st-dot") &&
+                parseFloat(cs.strokeWidth) > 0))
+          );
+        }).length,
+        w: Math.round(r.width),
+        h: Math.round(r.height),
+        top: Math.round(b.getBoundingClientRect().top),
+        captionLines: (() => {
+          const c = b.querySelector(".sf-thumb-t");
+          if (!c) return 0;
+          return Math.round(
+            c.getBoundingClientRect().height /
+              parseFloat(getComputedStyle(c).lineHeight),
+          );
+        })(),
+      };
+    }),
+    more: t(document.querySelector(".sf-more")),
+    // the bottom of the last drawn thing inside the card vs the card's own bottom: a blank band
+    blank: (() => {
+      const card = document.querySelector(".keel-card");
+      if (!card) return null;
+      const kids = Array.from(
+        card.querySelectorAll("#card-body > *, #link-row > *"),
+      ).filter(visible);
+      if (!kids.length) return null;
+      const last = Math.max(
+        ...kids.map((k) => k.getBoundingClientRect().bottom),
+      );
+      const cs = getComputedStyle(card);
+      return Math.round(
+        card.getBoundingClientRect().bottom -
+          parseFloat(cs.paddingBottom) -
+          last,
+      );
+    })(),
   };
 };
 
@@ -280,7 +483,8 @@ for (const name of names) {
         await page.close();
       }
 
-  // Fullscreen: every tab, at one width.
+  // Fullscreen (D-420d): the dashboard, a focused chart and back; and a
+  // thumbnail tapped inline, which asks for fullscreen on its chart.
   if (full && name.startsWith("study-")) {
     const page = await browser.newPage({
       viewport: { width: 760, height: 1400 },
@@ -289,33 +493,135 @@ for (const name of names) {
     await page.addStyleTag({ content: `:root{--w:760px}` });
     await page.waitForTimeout(900);
     const frame = page.frames().find((f) => f !== page.mainFrame());
-    const tabs = await frame.evaluate(() =>
-      Array.from(document.querySelectorAll(".st-tab")).map((t) =>
-        t.getAttribute("data-tab"),
-      ),
-    );
-    const panels = [];
-    for (const tab of tabs) {
-      await frame.click(`.st-tab[data-tab="${tab}"]`);
-      await page.waitForTimeout(60);
-      panels.push(
-        await frame.evaluate(() => ({
-          tab: document.querySelector(".st-panel").getAttribute("data-tab"),
-          axes: document.querySelectorAll(".st-panel .st-tick").length,
-          svg: !!document.querySelector(".st-panel svg"),
-          tableRows: document.querySelectorAll(".st-panel .st-table tr").length,
-          checks: document.querySelectorAll(".st-panel .st-check").length,
-          checkWords: Array.from(
-            document.querySelectorAll(".st-panel .st-check"),
-          ).map((c) => c.textContent),
-          height: Math.round(
-            document.querySelector(".st-panel").getBoundingClientRect().height,
+    const dash = await frame.evaluate(() => {
+      const q = (s) => Array.from(document.querySelectorAll(s));
+      const t = (e) => ((e && e.textContent) || "").trim();
+      const mk = (root) =>
+        Array.from(
+          root.querySelectorAll(
+            ".st-line, .st-bar, .st-bin, .st-dot, .st-cell",
           ),
+        ).filter((m) => {
+          // a dot is a zero-length round-capped stroke: no box, still ink
+          const cs = getComputedStyle(m);
+          const r = m.getBoundingClientRect();
+          return (
+            cs.display !== "none" &&
+            (r.width > 0.5 ||
+              r.height > 0.5 ||
+              (m.classList.contains("st-dot") &&
+                parseFloat(cs.strokeWidth) > 0))
+          );
+        }).length;
+      return {
+        drawn: !!document.querySelector(".sf-dash"),
+        seg: q(".sf-seg-b").map(t),
+        segHidden: !!(document.querySelector(".sf-seg") || {}).hidden,
+        open: (
+          document.querySelector(".sf-bar .sf-open") || {
+            getAttribute: () => null,
+          }
+        ).getAttribute("href"),
+        linkRowHidden: !!(document.getElementById("link-row") || {}).hidden,
+        keyTicks: document.querySelectorAll(".sf-key .st-tick").length,
+        keyMarks: document.querySelector(".sf-key")
+          ? mk(document.querySelector(".sf-key"))
+          : 0,
+        tiles: q(".sf-gtile").map((g) => ({
+          index: g.getAttribute("data-index"),
+          drawn: g.getAttribute("data-drawn"),
+          title: t(g.querySelector(".sf-gtile-t")),
+          marks: mk(g),
+          text: t(g.querySelector(".sf-gtile-pic")),
+          open: (
+            g.querySelector(".sf-gtile-open") || { getAttribute: () => null }
+          ).getAttribute("href"),
+          left: Math.round(g.getBoundingClientRect().left),
         })),
-      );
+        checkRows: q(".sf-crow").map((r) => ({
+          text: t(r),
+          pip: (
+            r.querySelector(".sf-crow-pip") || { getAttribute: () => null }
+          ).getAttribute("data-state"),
+          chart: (
+            r.querySelector(".sf-crow-chart") || { getAttribute: () => null }
+          ).getAttribute("data-index"),
+          chartMarks: r.querySelector(".sf-crow-chart")
+            ? mk(r.querySelector(".sf-crow-chart"))
+            : 0,
+        })),
+        numbers: q(".sf-sec#sf-numbers .st-num-row").map(t),
+      };
+    });
+    // focus the first tile, then go back
+    let focus = null;
+    let back = null;
+    if (dash.tiles.length) {
+      await frame.click(".sf-gtile .sf-gtile-hit");
+      await page.waitForTimeout(250);
+      focus = await frame.evaluate(() => ({
+        dashHidden: document.querySelector(".sf-dash").hidden,
+        shown: !document.querySelector(".sf-focus").hidden,
+        index: (
+          document.querySelector(".sf-focus-panel") || {
+            getAttribute: () => null,
+          }
+        ).getAttribute("data-index"),
+        ticks: document.querySelectorAll(".sf-focus .st-tick").length,
+        svg: !!document.querySelector(".sf-focus .st-plot"),
+        back: (
+          (document.querySelector(".sf-back") || {}).textContent || ""
+        ).trim(),
+        open: (
+          document.querySelector(".sf-focus .sf-open-chart") || {
+            getAttribute: () => null,
+          }
+        ).getAttribute("href"),
+        height: Math.round(
+          (
+            document.querySelector(".sf-focus-panel") || document.body
+          ).getBoundingClientRect().height,
+        ),
+      }));
+      await frame.click(".sf-back");
+      await page.waitForTimeout(200);
+      back = await frame.evaluate(() => ({
+        dashHidden: document.querySelector(".sf-dash").hidden,
+        focusHidden: document.querySelector(".sf-focus").hidden,
+      }));
     }
-    out.full[name] = { tabs, panels };
     await page.close();
+    // a thumbnail tapped inline: fullscreen asked for, on that chart
+    let tap = null;
+    const ip = await browser.newPage({
+      viewport: { width: 760, height: 1400 },
+    });
+    await ip.setContent(mcpPage([res], "dark", "inline"));
+    await ip.addStyleTag({ content: `:root{--w:760px}` });
+    await ip.waitForTimeout(900);
+    const iframe = ip.frames().find((f) => f !== ip.mainFrame());
+    const first = await iframe.evaluate(() => {
+      const b = document.querySelector(".sf-thumb");
+      return b ? b.getAttribute("data-index") : null;
+    });
+    if (first !== null) {
+      await iframe.click(".sf-thumb");
+      await ip.waitForTimeout(900);
+      tap = {
+        index: first,
+        calls: await ip.evaluate(() => window.__CALLS__),
+        layout: await iframe.evaluate(() =>
+          document.body.getAttribute("data-layout"),
+        ),
+        focus: await iframe.evaluate(() => {
+          const f = document.querySelector(".sf-focus");
+          const p = document.querySelector(".sf-focus-panel");
+          return f && !f.hidden && p ? p.getAttribute("data-index") : null;
+        }),
+      };
+    }
+    await ip.close();
+    out.full[name] = { dash, focus, back, tap };
   }
 }
 

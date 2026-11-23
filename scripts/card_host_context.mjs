@@ -56,6 +56,8 @@ export const HOST_VARS = {
     "--color-text-primary": "#f2f0ec",
     "--color-text-secondary": "#a9a49c",
     "--color-border-primary": "#3d3b37",
+    // Claude's documented tertiary border (15 % of its dark border ink): the face's rules (MCP-CARDS)
+    "--color-border-tertiary": "rgba(222, 220, 209, 0.15)",
     "--color-text-danger": "#f08a7c",
     "--color-text-success": "#6fcf97",
     "--color-text-info": "#8fb8ff",
@@ -66,6 +68,7 @@ export const HOST_VARS = {
     "--color-text-primary": "#1c1b19",
     "--color-text-secondary": "#6b6862",
     "--color-border-primary": "#e6e3dc",
+    "--color-border-tertiary": "rgba(31, 30, 29, 0.15)",
     "--color-text-danger": "#c0392b",
     "--color-text-success": "#1e8449",
     "--color-text-info": "#2456d6",

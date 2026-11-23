@@ -36,11 +36,9 @@ def _handler(args, ctx):
         )
     # 07 §3.2 rule 9 (A3 #12): the receipt ends "View in Keel", the study's page (the make-signal answer serves no
     # link).
-    from .open_in_app import research_link
+    from .open_in_app import app_base, research_link
 
-    link = research_link(
-        "study", args["study_id"], origin=str(getattr(ctx, "app_url", "https://app.usekeel.io"))
-    )
+    link = research_link("study", args["study_id"], origin=app_base(ctx))
     lines.append(f"View in Keel: {link}")
     return study_result(
         {**env, "links": env.get("links") or {"app": link}},

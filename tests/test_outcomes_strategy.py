@@ -938,15 +938,18 @@ def test_strategy_compose_dry_run_does_not_persist(monkeypatch):
     assert env["validation"]["ok"] is True
     assert env["dry_run"] is True
     # No PERSISTING write should have been issued for dry runs. The
-    # graph read (`POST /v1/strategies/parse`, PLAN §4.2) is a
-    # derivation, not a save: it is the only POST allowed here, and
-    # nothing may reach `/v1/strategies` or `/v1/strategies/{id}`.
+    # graph read (`POST /v1/strategies/parse`, PLAN §4.2) and the plan
+    # check (`POST /v1/strategies/validate`, plans v3 spec 02 §C4.2) are
+    # reads, not saves: the only POSTs allowed here, and nothing may reach
+    # `/v1/strategies` or `/v1/strategies/{id}`.
     writes = [
         (method, path)
         for method, path, _ in fake.calls
-        if method in {"POST", "PATCH"} and path != "/v1/strategies/parse"
+        if method in {"POST", "PATCH"}
+        and path not in ("/v1/strategies/parse", "/v1/strategies/validate")
     ]
     assert writes == []
+    assert ("POST", "/v1/strategies/validate") in [(m, p) for m, p, _ in fake.calls]
 
 
 def test_strategy_compose_dry_run_surfaces_validation_as_feedback(monkeypatch):

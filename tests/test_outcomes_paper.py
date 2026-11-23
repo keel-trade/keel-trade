@@ -574,7 +574,8 @@ def test_paper_quota_wall_is_the_neutral_plan_limit_wall(
 
     calls = _deny_paper_create(monkeypatch, tmp_path)
     result = asyncio.run(create_server().call_tool("keel_paper_deploy", {"strategy_id": "str_x"}))
-    assert result.is_error is True
+    # Q-7927 (plans spec 02 §C0 test 4, G9): a plan limit is not an error; the envelope is the refusal.
+    assert result.is_error is False
     envelope = _structured(result)
     assert calls == ["/v1/paper"]
     assert envelope["code"] == "handoff_required"

@@ -35,6 +35,7 @@ def _bar(i: int, met: bool | None = True) -> dict:
         "unit": "score",
         "interval": {"lo": 1.1, "hi": 2.4, "level": 0.9, "method": "hac"},
         "sample": {"days": 584, "coins": 100},
+        "sample_words": "584 days · 100 coins",  # served (research.words.sample_words), never rebuilt
         "op": ">=",
         "bar": 0.3,
         "met": met,
@@ -152,12 +153,17 @@ def test_the_text_follows_07s_rules() -> None:
         "Days Mar 23, 2025 to Oct 29, 2026, split Apr 17, 2026 · 100 coins: top 100 by 30-day volume,"
         " picked Mar 23, 2025, kept fixed · costs 9 bp a fill · data as of Oct 29, 2026"
     )
-    assert lines[3].startswith("Measured with Step0 v1, Step1 v1")
-    assert "Your bars (9; met: 8):" in lines
+    # JOURNEYS S3: the step versions are a details line after the numbers, never the line under the footing
+    # D-401: the steps by their labels, never "Step0 v1"
+    method = next(i for i, line in enumerate(lines) if line.startswith("Measured with step 0, step 1"))
+    assert method > lines.index("Your checks (9; 8 met):") and not lines[3].startswith(
+        "Measured with"
+    )
+    assert "Your checks (9; 8 met):" in lines
     bar_lines = [line for line in lines if line.startswith("- ")]
     assert len(bar_lines) == 9
     assert bar_lines[0] == (
-        "- Sharpe at 2 times the costs (daily returns): 1.9, interval 1.1 to 2.4; 584 days, 100 coins;"
+        "- Sharpe at 2 times the costs (daily returns): 1.9, interval 1.1 to 2.4; 584 days · 100 coins;"
         " your bar >= 0.3; met"
     )
     assert bar_lines[3].endswith("; not met")
@@ -171,8 +177,9 @@ def test_the_text_follows_07s_rules() -> None:
 def test_lists_name_their_population() -> None:
     text = rv.study_text(_study(bars=40))
     assert len([line for line in text.splitlines() if line.startswith("- ")]) == 25
-    assert "Your bars (40; met: 39):" in text
-    assert 'and 15 more bars: 15 met — keel_research_get(study_id="stu_abc", output="bars")' in text
+    assert "Your checks (40; 39 met):" in text
+    # AUDIT-WORDS M23/M63: no em dash; "checks" for the list
+    assert 'and 15 more checks, 15 met: keel_research_get(study_id="stu_abc", output="bars")' in text
 
 
 def _ran_without_repicking(state: str) -> dict:
@@ -180,7 +187,7 @@ def _ran_without_repicking(state: str) -> dict:
     re-picking steps keep their rows with no value (met null). ``state`` is those steps' served run state for the
     reader: ``locked`` (a Free or Trader reader) or ``needs_run`` (a Pro reader of the same version, RI-223)."""
     env = _study(bars=7)
-    words = "Re-picking the settings as you go is not included in this account's plan."
+    words = "Re-picking the settings as you go: not included in this account's plan."
     for sid, label in (
         ("repick", "Sharpe re-picking the settings every 30 days (daily returns)"),
         ("nearby", "Nearby settings as a share of yours (ratio)"),
@@ -208,7 +215,7 @@ def test_a_bar_over_a_locked_step_reads_not_included_with_no_number() -> None:
     (reversed): dropping the locked branch in ``_bars_lines`` reds this with "…: not measured, no interval; … not
     measured"."""
     text = rv.study_text(_ran_without_repicking("locked"))
-    assert "Your bars (7; met: 6):" in text  # the served count: the two locked rows are out of it
+    assert "Your checks (7; 6 met):" in text  # the served count: the two locked rows are out of it
     locked = [
         line for line in text.splitlines() if line.endswith(": not included in this account's plan")
     ]
@@ -221,7 +228,7 @@ def test_a_bar_over_a_locked_step_reads_not_included_with_no_number() -> None:
     # Control: the same version read by a reader whose plan runs re-picking (needs_run) is not locked for them.
     pro = rv.study_text(_ran_without_repicking("needs_run"))
     assert "not included in this account's plan" not in pro
-    assert pro.count("; not measured") == 2
+    assert pro.count(": not measured") == 2
 
 
 def _shared(env: dict, *, locked: bool) -> dict:
@@ -252,7 +259,7 @@ def test_ri267_a_shared_reads_locked_bar_reads_not_included_from_its_row() -> No
     # as not measured, so the verdict follows the row's flag.
     unlocked = rv.study_text(_shared(_ran_without_repicking("locked"), locked=False))
     assert "not included in this account's plan" not in unlocked
-    assert unlocked.count("; not measured") == 2
+    assert unlocked.count(": not measured") == 2
 
 
 def test_ri267_a_served_run_state_wins_over_the_rows_locked() -> None:
@@ -267,15 +274,15 @@ def test_ri267_a_served_run_state_wins_over_the_rows_locked() -> None:
     )  # non-vacuity: two rows say locked
     text = rv.study_text(env)
     assert "not included in this account's plan" not in text
-    assert text.count("; not measured") == 2
+    assert text.count(": not measured") == 2
 
 
 def test_a_platform_failure_is_never_a_failed_check() -> None:
     env = _study()
     env["counts"]["runs"]["failed_platform"] = 2
-    env["counts"]["runs"]["words"] = "22 runs, 2 reused, 2 couldn't run on Keel's side"
+    env["counts"]["runs"]["words"] = "22 runs, 2 reused, 2 didn't finish on our side"
     text = rv.study_text(env)
-    assert "Runs: 22 runs, 2 reused, 2 couldn't run on Keel's side" in text
+    assert "Runs: 22 runs, 2 reused, 2 didn't finish on our side" in text
     assert "none failed" not in text
 
 
@@ -390,7 +397,12 @@ def test_ri253_a_listed_next_call_runs_through_keel_app_link(monkeypatch) -> Non
     monkeypatch.setenv("KEEL_SERVER_PROFILE", "listed")
     app = f"https://app.usekeel.io/research/{_STUDY}"
     call = rv.next_call("keel_research_view_set", {"study_id": _STUDY}, app_url=app)
-    env = _dispatch(call)
+    from keel.tools.outcomes._toolsets import research_served_context
+
+    # the caller is served Research (a listed tool it does not list routes to the page); unserved, app_link refuses a
+    # study (test_outcomes_open_in_app's flag-off arms)
+    with research_served_context(True):
+        env = _dispatch(call)
     assert "error" not in env and env.get("code") is None, env
     assert env["hero_url"] == app
     assert rv.next_call("keel_research_brief", {"cursor": "c1"}, app_url=app) == rv.VIEW_IN_KEEL
@@ -418,7 +430,7 @@ def test_a_plan_text() -> None:
                 "runnable": False,
                 "locked": {
                     "unit": "feature:research_repick",
-                    "words": "Re-picking settings is not included in this account's plan.",
+                    "words": "Re-picking settings: not included in this account's plan.",
                 },
             },
         ],
@@ -432,10 +444,11 @@ def test_a_plan_text() -> None:
         == "Plan · Check a strategy · Momentum rotation v3 · a new study, version 1"
     )
     assert (
-        "Steps (3): Costs from none to six times 5 · Backtest reused · Re-picking the settings every 30 days: not included in this account's plan"
+        # SERVER-2: a locked step reads its served words (steps[].locked.words)
+        "Steps (3): Costs from none to six times: 5 runs · Backtest: reused · Re-picking settings: not included in this account's plan"
         in text
     )
-    assert "Re-picking settings is not included in this account's plan." in text
+    assert "Re-picking settings: not included in this account's plan." in text
     assert "Run it" not in text
     assert 'keel_research_run(plan_id="pln_' in rv.plan_text({**plan, "run_allowed": True})
 
@@ -443,14 +456,14 @@ def test_a_plan_text() -> None:
 def test_a_served_wall_replaces_the_run_line_once() -> None:
     """07 §3.4: the served ``words.limit`` (the neutral wall, which already carries each locked step's words) is
     written once; the steps' own locked words are not repeated beside it."""
-    lock = "Re-picking settings is not included in this account's plan."
+    lock = "Re-picking settings: not included in this account's plan."
     wall = lock + " Pro includes it. Plans are changed in the Keel web app."
     plan = {
         "study": {"title": "Momentum rotation v3", "kind_label": KIND, "state": "planned"},
         "writes": "a new study, version 1",
         "words": {
             "work": "22 runs",
-            "allowance": "Used 1 of 3 studies; resets Dec 3.",
+            "allowance": "2 of 3 studies left this month; resets Dec 3.",
             "limit": wall,
         },
         "steps": [
@@ -467,7 +480,7 @@ def test_a_served_wall_replaces_the_run_line_once() -> None:
     }
     text = rv.plan_text(plan)
     assert text.count(lock) == 1 and wall in text  # non-vacuity: the lock's words are there, once
-    assert "Used 1 of 3 studies; resets Dec 3." in text
+    assert "2 of 3 studies left this month; resets Dec 3." in text
     assert "Run it" not in text
 
 
@@ -492,9 +505,9 @@ def test_a_data_page() -> None:
         version=1,
         call_args={"study_id": "stu_a", "view": 0},
     )
-    assert "Rows 1–2 of 212 (212 computed, 172 not run)" in text
+    assert "Rows 1–2 of 212 (212 measured, 172 not run)" in text
     assert "| 10 | 1 | 1.2 |" in text
-    assert "Across all 212 rows: sharpe -0.41 to 2.31; 18 below zero" in text
+    assert "Across all 212 rows: Sharpe −0.41 to 2.31; 18 below zero" in text
     assert text.endswith('More: keel_research_get(study_id="stu_a", view=0, cursor="c2")')
 
 
@@ -524,12 +537,10 @@ def test_no_verdict_words_in_the_builders_copy() -> None:
 
 
 def test_the_served_count_leads_and_a_what_if_step_says_so() -> None:
-    """D-125: the read's ``words.allowance`` leads (after rule 1's first line), as on a plan; J3.2: a step served
+    """A run answer's served ``words.allowance`` leads (after rule 1's first line), as on a plan; J3.2: a step served
     ``what_if`` (a strategy blend) writes "{label}: {what_if}". Both are the payload's words, never composed."""
     env = _study()
-    allowance = (
-        "Used 2 of 400 studies; resets Dec 3. Planning, reading and saving do not count."
-    )
+    allowance = "398 of 400 studies left this month; resets Dec 3. Planning, reading and saving do not count."
     what_if = "A what-if on the stored results: nothing is traded."
     env["words"] = {"allowance": allowance}
     env["steps"].append(
@@ -577,11 +588,13 @@ def test_a_study_with_no_bars_writes_its_headline_measures() -> None:
                 "ref": "ic", "measure": "ic", "label": "How well it ranks, next day", "value": 0.085,
                 "unit": "score", "interval": {"lo": 0.065, "hi": 0.105, "level": 0.95, "method": "hac_overlap"},
                 "sample": {"days": 584, "effective_days": 584, "coins": 100}, "method_version": "m/1",
+                "sample_words": "584 days · 584 effective days · 100 coins",
             },
             {
                 "ref": "fifths.spread", "measure": "spread", "label": "Top fifth minus bottom fifth",
                 "value": 0.004, "unit": "fraction", "interval": None,
                 "withheld_reason": "below 20 separate periods", "sample": {"days": 584}, "method_version": "m/1",
+                "sample_words": "584 days",
             },
         ],
     }  # fmt: skip
@@ -589,13 +602,23 @@ def test_a_study_with_no_bars_writes_its_headline_measures() -> None:
     assert lines[1] == "How well it ranks, next day: 0.085 (t 8.3)"
     i = lines.index("In short:")
     assert lines[i + 1] == (
-        "- How well it ranks, next day: 0.085, interval 0.065 to 0.105; 584 days, 584 effective days, 100 coins"
+        "- How well it ranks, next day: 0.085, interval 0.065 to 0.105; 584 days · 584 effective days · 100 coins"
     )
     assert lines[i + 2] == (
-        "- Top fifth minus bottom fifth: 0.4%, interval withheld: below 20 separate periods; 584 days"
+        "- Top fifth minus bottom fifth: 0.4%, no interval (below 20 separate periods); 584 days"
     )
+    # SDK-FIX (JOURNEYS S2): a study with bars says only the measures no bar row states (its bar lines carry the
+    # rest); every measure barred -> no "In short" (the old control, now scoped to barred measures)
     with_bars = _study()
     with_bars["headline"]["measures"] = env["headline"]["measures"]
+    i = rv.study_text(with_bars).splitlines().index("In short:")
+    assert (
+        rv.study_text(with_bars)
+        .splitlines()[i + 1]
+        .startswith("- How well it ranks, next day: 0.085")
+    )
+    with_bars["checks"]["rows"][0].update(ref="ic", measure="ic")
+    with_bars["checks"]["rows"][1].update(ref="fifths.spread", measure="spread")
     assert "In short:" not in rv.study_text(with_bars).splitlines()
 
 
@@ -603,7 +626,7 @@ def test_a_locked_step_is_said_once_on_the_steps_line() -> None:
     """RI-263 (07 §4.1 "Truthful plans"): a Free Check's re-picking reads "...: not included in this account's plan"
     on the Steps line; its STUDY_PLAN_STEP_NOT_INCLUDED issue (the same sentence, 07 A16) is not printed again.
     Every other issue line still is. SEED (reversed by edit): the skip removed reds the count (2 != 1)."""
-    lock = "Re-picking the settings as you go is not included in this account's plan."
+    lock = "Re-picking the settings as you go: not included in this account's plan."
     expired = "Costs from none to six times reads the book of AT-9 v3's backtest, which has been cleared; this plan runs that backtest again."
     plan = {
         "study": {"title": "Momentum rotation v3", "kind_label": KIND, "state": "planned"},
@@ -629,7 +652,9 @@ def test_a_locked_step_is_said_once_on_the_steps_line() -> None:
     }
     text = rv.plan_text(plan)
     assert text.count("not included in this account's plan") == 1, text
-    assert "Re-picking the settings as you go: not included in this account's plan" in text
+    assert (
+        "Re-picking the settings as you go: not included in this account's plan" in text
+    )  # its served words
     assert (
         expired in text and 'keel_research_run(plan_id="pln_' in text
     )  # non-vacuity: other lines stay
@@ -643,7 +668,7 @@ def test_a_plan_that_cannot_run_without_a_wall_says_a_locked_step_once() -> None
     step's words the Steps line already says as "not included"; a locked step past the line's 40 (not named there)
     keeps its words (control). SEED (reversed by edit): the fallback printing every locked step's words reds the
     count (2 != 1)."""
-    lock = "Re-picking the settings as you go is not included in this account's plan."
+    lock = "Re-picking the settings as you go: not included in this account's plan."
     steps = [
         {
             "id": "repick",
@@ -669,7 +694,7 @@ def test_a_plan_that_cannot_run_without_a_wall_says_a_locked_step_once() -> None
     assert (
         "Steps (41): Re-picking the settings as you go: not included" in text
     )  # non-vacuity: the line names it
-    late = "Step 99 is not included in this account's plan."
+    late = "Step 99: not included in this account's plan."
     past = {
         **plan,
         "steps": [
@@ -799,11 +824,15 @@ def test_ri361_an_axis_column_reads_its_served_label_beside_its_key() -> None:
         "facts": {"rows_total": 2, "axes": axes},
     }
     text = rv.data_text(page, title="Sharpe when trading late", version=1, call_args={})
-    assert "| Days late (days_late) | lookback | sharpe |" in text, text
+    # MCP-FINAL S3 (POLISH): the label alone in the header; the key a `where` takes said once under the table
+    # AUDIT-WORDS M13: a column with no served label reads in words too ("Sharpe"), never its key
+    assert "| Days late | lookback | Sharpe |" in text, text
+    assert "Keys for where, sort and measures: Days late = days_late, Sharpe = sharpe." in text, text
     assert "| 1 | 10 | 0.9 |" in text
     old = {**page, "facts": {"rows_total": 2, "axes": [{**a, "label": None} for a in axes]}}
     bare = rv.data_text(old, title="Sharpe when trading late", version=1, call_args={})
-    assert "| days_late | lookback | sharpe |" in bare and "Days late" not in bare
+    # control (an older server, no labels): the keys as phrases, never snake case
+    assert "| Days late | Lookback | Sharpe |" in bare and "days_late |" not in bare
 
 
 def test_d315_a_money_measure_reads_its_served_basis_beside_its_key() -> None:
@@ -821,8 +850,24 @@ def test_d315_a_money_measure_reads_its_served_basis_beside_its_key() -> None:
         "facts": {"rows_total": 1, "axes": [], "measures": measures},
     }
     text = rv.data_text(page, title="Trades", version=3, call_args={})
-    assert "| coin | Return (ret) | gross_return (before fees and funding) |" in text  # WL-AG-12: measure label beside its key in text
-    assert "| BNB | — | -0.0605 |" in text and "None" not in text  # a withheld (null) value, never Python's None
+    # WL-AG-12 / POLISH: the measure's label (its basis in it) in the header, the keys once under the table
+    assert "| Coin | Return | Return before fees and funding |" in text, text
+    assert (
+        "Keys for where, sort and measures: Coin = coin, Return = ret, Return before fees and funding = gross_return."
+        in text
+    )
+    nolabel = rv.data_text(
+        {**page, "facts": {**page["facts"], "measures": [{**m, "label": None} for m in measures]}},
+        title="Trades",
+        version=3,
+        call_args={},
+    )
+    assert "| Coin | Ret | Gross return (before fees and funding) |" in nolabel, (
+        nolabel
+    )  # the basis beside the key as a phrase
+    assert (
+        "| BNB | \u2014 | \u22120.0605 |" in text and "None" not in text
+    )  # a withheld (null) value, never Python's None
 
 
 # ── Over keel-api's real shapes (RI-615, WL-AG-01..07) ───────────────────────
@@ -832,7 +877,9 @@ def test_d315_a_money_measure_reads_its_served_basis_beside_its_key() -> None:
 # keel-api's closed route model (``_provenance`` says which). The texts below are read over THOSE shapes: the
 # fixtures above were the agent's own, and their field names were the ones the server never sends (RI-615).
 
-SHAPES = json.loads((Path(__file__).parent / "fixtures" / "research_server_shapes.json").read_text())
+SHAPES = json.loads(
+    (Path(__file__).parent / "fixtures" / "research_server_shapes.json").read_text()
+)
 
 
 def _shape(name: str) -> dict:
@@ -846,8 +893,13 @@ class _Client:
         self.answers, self.calls = answers, []
 
     def _answer(self, method: str, path: str, params=None) -> dict:
-        self.calls.append((method, path, {k: v for k, v in (params or {}).items() if v is not None}))
-        best = max((k for k in self.answers if k[0] == method and path.startswith(k[1])), key=lambda k: len(k[1]))
+        self.calls.append(
+            (method, path, {k: v for k, v in (params or {}).items() if v is not None})
+        )
+        best = max(
+            (k for k in self.answers if k[0] == method and path.startswith(k[1])),
+            key=lambda k: len(k[1]),
+        )
         return json.loads(json.dumps(self.answers[best]))
 
     def get(self, path, *, headers=None, **params):
@@ -877,22 +929,34 @@ def test_ri615_the_brief_reads_the_servers_names_and_lists_its_rows(monkeypatch)
     notes and one family, all from the recorded route."""
     monkeypatch.setenv("KEEL_SERVER_PROFILE", "full")
     brief = _shape("brief")
-    assert len(brief["studies"]) == 3 and brief["projects"] and brief["set_aside"] and len(brief["notes"]) == 3
+    assert (
+        len(brief["studies"]) == 3
+        and brief["projects"]
+        and brief["set_aside"]
+        and len(brief["notes"]) == 3
+    )
     _, text = _run("keel_research_brief", {}, {("get", "/v1/research/brief"): brief})
     assert "None" not in text, text
     for study in brief["studies"]:
-        assert f"- {study['id']} · Check · {study['title']} · {study['state_words']}" in text  # served words
+        assert (
+            f"- {study['id']} · Check · {study['title']} · {study['state_words']}" in text
+        )  # served words
     project = brief["projects"][0]
     assert f"- {project['project_id']} · Momentum: Does momentum survive costs?" in text
     aside = brief["set_aside"][0]
-    assert f"- {aside['study']} · Second look: \"same as the first; costs too high\" (you, Nov 17, 2026)" in text
-    assert "(your agent, Nov 17, 2026)" in text and "- decision on project prj_" in text
+    assert (
+        f'- {aside["study"]} · Second look: "same as the first; costs too high" (you, Nov 17, 2026)'
+        in text
+    )
+    assert "(your agent, Nov 17, 2026)" in text and "- Decision on project prj_" in text
     assert "- Momentum rotation: 5 since Nov 17, 2026" in text
     assert f'Read a study: keel_research_get(study_id="{brief["studies"][0]["id"]}")' in text
     assert f'Read a project: keel_research_get(project_id="{project["project_id"]}")' in text
 
 
-def test_ri615_a_long_note_is_cut_and_says_so_and_the_brief_holds_8000_characters(monkeypatch) -> None:
+def test_ri615_a_long_note_is_cut_and_says_so_and_the_brief_holds_8000_characters(
+    monkeypatch,
+) -> None:
     """WL-AG-01: a note body is at most 200 characters in the brief, cut at a word with its length said; at the
     largest legal brief (25 studies, 50 projects, 50 set aside, 10 notes of 8,192 characters) the text is at most
     8,000 characters and keeps its next calls. SEED (reversed): ``NOTE_BODY_MAX = 200`` -> ``9_000`` -> the cut
@@ -904,18 +968,25 @@ def test_ri615_a_long_note_is_cut_and_says_so_and_the_brief_holds_8000_character
     brief = _shape("brief")
     long = next(n for n in brief["notes"] if len(n["body"]) > 1000)
     text = rb.brief_text(brief, ToolContext())
-    assert f"of {len(' '.join(long['body'].split())):,} characters)" in text and long["body"] not in text
+    assert (
+        f"of {len(' '.join(long['body'].split())):,} characters)" in text
+        and long["body"] not in text
+    )
     big = _shape("brief")
     study, project, aside, note = big["studies"][0], big["projects"][0], big["set_aside"][0], long
     big["studies"] = [{**study, "id": f"stu_{i:024d}", "title": "t" * 120} for i in range(25)]
-    big["projects"] = [{**project, "project_id": f"prj_{i:023d}", "question": "q" * 300} for i in range(50)]
+    big["projects"] = [
+        {**project, "project_id": f"prj_{i:023d}", "question": "q" * 300} for i in range(50)
+    ]
     big["set_aside"] = [{**aside, "study": f"stu_{i:024d}", "why": "w " * 4000} for i in range(50)]
     big["notes"] = [{**note, "body": "n " * 4096} for _ in range(10)]
     big["studies_total"], big["pagination"] = 400, {"cursor": "c25", "has_more": True}
     text = rb.brief_text(big, ToolContext())
     assert len(text) <= rv.TEXT_MAX_CHARS, len(text)
     assert 'More studies: keel_research_brief(cursor="c25")' in text
-    assert 'Read a study: keel_research_get(study_id="stu_' in text and text.splitlines()[-1].startswith("View in Keel")
+    assert 'Read a study: keel_research_get(study_id="stu_' in text and text.splitlines()[
+        -1
+    ].startswith("View in Keel")
 
 
 def _forty_step_plan() -> dict:
@@ -943,7 +1014,9 @@ def _forty_step_plan() -> dict:
     return plan
 
 
-def test_wl_ag_04_the_cap_keeps_the_run_line_and_a_repeated_warning_prints_once(monkeypatch) -> None:
+def test_wl_ag_04_the_cap_keeps_the_run_line_and_a_repeated_warning_prints_once(
+    monkeypatch,
+) -> None:
     """WL-AG-04 (A3 #8): a 40-step plan with 40 served warnings and a long one keeps its "Run it" line under the cap;
     the warning repeated on every step prints once with its count. The cap popped lines from the end, and a plan's
     last body line is "Run it": the 40-step plan lost the one line that acts.
@@ -954,8 +1027,13 @@ def test_wl_ag_04_the_cap_keeps_the_run_line_and_a_repeated_warning_prints_once(
     assert len(text) <= rv.TEXT_MAX_CHARS
     assert f'keel_research_run(plan_id="{_shape("plan")["plan_id"]}")' in text, text[-600:]
     assert text.count("stored detail expires") == 1
-    assert "This step's stored detail expires after 30 days; its evidence is kept. (on 40 steps)" in text
-    assert text.splitlines()[0].startswith("Plan · ") and text.splitlines()[-1].startswith("View in Keel: ")
+    assert (
+        "This step's stored detail expires after 30 days; its evidence is kept. (on 40 steps)"
+        in text
+    )
+    assert text.splitlines()[0].startswith("Plan · ") and text.splitlines()[-1].startswith(
+        "View in Keel: "
+    )
     assert rv.MORE_IN_THE_APP in text
     short = rv.plan_text(_shape("plan"))  # control
     assert rv.MORE_IN_THE_APP not in short and "keel_research_run(" in short
@@ -971,17 +1049,27 @@ def test_wl_ag_03_a_share_read_names_its_maker_and_offers_both_actions(monkeypat
     sid = share["study"]["share_id"]
     text = rv.study_text(share)
     first = text.splitlines()[0]
-    assert first.startswith("Snapshot · Check a strategy · ") and first.endswith("· shared by Test User"), first
-    assert f'Run on yours: keel_research_plan(share_id="{sid}")' in text
+    assert first.startswith("Shared study · Check a strategy · ") and first.endswith(
+        "· shared by Test User"
+    ), first
+    assert (
+        f'Run on yours: keel_research_plan(share_id="{sid}", subjects=["Strategy(\\"str_…@3\\")"])'
+        in text
+    )
     assert f'Make it yours, a copy with nothing run: keel_app_link(id="{sid}")' in text
     assert f'keel_research_get(share_id="{sid}", view=0)' in text
     assert "Runs: 0 runs" not in text  # a snapshot's counts are not this reader's runs
     keel = rv.study_text({**share, "by_keel": True})
     assert keel.splitlines()[0].endswith("· shared by Keel")
-    many = {**share, "checks": {**share["checks"], "count": 30, "rows": share["checks"]["rows"] * 4}}
+    many = {
+        **share,
+        "checks": {**share["checks"], "count": 30, "rows": share["checks"]["rows"] * 4},
+    }
     assert f'keel_research_get(share_id="{sid}", output="bars")' in rv.study_text(many)
     study = _shape("study_done")  # control
-    assert 'keel_research_get(study_id="stu_chkv3000000000000000000000", view=0)' in rv.study_text(study)
+    assert 'keel_research_get(study_id="stu_chkv3000000000000000000000", view=0)' in rv.study_text(
+        study
+    )
     assert "Run on yours" not in rv.study_text(study)
 
 
@@ -1000,7 +1088,10 @@ def test_wl_ag_03_a_shares_chart_rows_and_bars_are_read_by_the_share_id(monkeypa
     }
     client, text = _run("keel_research_get", {"share_id": sid, "view": "Growth of 1"}, answers)
     assert client.calls[-1] == ("get", f"/public/study-shares/{sid}/views/1/data", {"limit": 25})
-    assert text.splitlines()[0] == "Growth of 1, as shared (run Oct 19, 2026)" and "Rows 1–25 of 585" in text
+    assert (
+        text.splitlines()[0] == "Growth of 1, as shared (run Oct 19, 2026)"
+        and "Rows 1–25 of 585" in text
+    )
     assert f'keel_research_get(share_id="{sid}", view=1, cursor="c25")' in text
     _, bars = _run("keel_research_get", {"share_id": sid, "output": "bars"}, answers)
     assert "bars 1–9 of 9" in bars and bars.count("; your bar ") == 9 and "View in Keel: " in bars
@@ -1009,7 +1100,10 @@ def test_wl_ag_03_a_shares_chart_rows_and_bars_are_read_by_the_share_id(monkeypa
     client, _ = _run(
         "keel_research_get",
         {"study_id": sid2, "view": 1},
-        {("get", f"/v1/research/studies/{sid2}/versions/1/data"): _shape("data_page"), ("get", f"/v1/research/studies/{sid2}"): study},
+        {
+            ("get", f"/v1/research/studies/{sid2}/versions/1/data"): _shape("data_page"),
+            ("get", f"/v1/research/studies/{sid2}"): study,
+        },
     )
     assert client.calls[-1][1] == f"/v1/research/studies/{sid2}/versions/1/data"
 
@@ -1043,11 +1137,17 @@ def test_wl_ag_05_cancel_by_run_set_names_the_study_in_its_resume_call(monkeypat
         {"run_set_id": cancel["run_set_id"]},
         {("post", f"/v1/research/run-sets/{cancel['run_set_id']}/cancel"): cancel},
     )
-    assert text.splitlines()[:2] == [cancel["words"], cancel["progress"]["words"]]
-    assert 'Resume later: keel_research_plan(study_id="stu_chkv3000000000000000000000", resume=true)' in text
+    # MCP-FINAL S3 (POLISH): the served sentence says the stop once; the tile's words only with no sentence served
+    assert text.splitlines()[0] == cancel["words"] and cancel["progress"]["words"] not in text
+    assert (
+        'Resume later: keel_research_plan(study_id="stu_chkv3000000000000000000000", resume=true)'
+        in text
+    )
 
 
-def test_wl_ag_05_a_stale_fact_names_its_offers_call_and_a_study_writes_its_notes(monkeypatch) -> None:
+def test_wl_ag_05_a_stale_fact_names_its_offers_call_and_a_study_writes_its_notes(
+    monkeypatch,
+) -> None:
     """WL-AG-05 (07 §3.1, §4.4): a stale fact's words are followed by its offer's call (the plan keel-api built; a
     too-long one points to the app), and a study read writes its latest notes, attributed, and its linked studies.
     SEED (reversed): ``_stale_line`` returning ``words`` alone -> no "Plan it" (this reds); a fact with no offer
@@ -1056,15 +1156,40 @@ def test_wl_ag_05_a_stale_fact_names_its_offers_call_and_a_study_writes_its_note
     study = _shape("study_planned")
     assert study["stale"] and study["notes"]  # not vacuous: the recorded read serves both
     text = rv.study_text(study)
-    assert "has a newer version, v4. Plan it in the app: keel_app_link(id=\"stu_" in text  # its source is long
-    short = {"kind": "newer_subject", "words": "Newer.", "offer": {"plan": {"study_id": "stu_a", "source": "S"}}}
-    assert 'Newer. Plan it: keel_research_plan(study_id="stu_a", source="S")' in rv.study_text({**study, "stale": [short]})
+    assert (
+        'has a newer version, v4. Plan it in the app: keel_app_link(id="stu_' in text
+    )  # its source is long
+    short = {
+        "kind": "newer_subject",
+        "words": "Newer.",
+        "offer": {"plan": {"study_id": "stu_a", "source": "S"}},
+    }
+    assert 'Newer. Plan it: keel_research_plan(study_id="stu_a", source="S")' in rv.study_text(
+        {**study, "stale": [short]}
+    )
     bare = {"kind": "newer_subject", "words": "Its subject was deleted.", "offer": None}
     assert "Its subject was deleted.\n" in rv.study_text({**study, "stale": [bare]})  # control
-    assert "Notes (1 shown of 1, newest first):" in text and "- hypothesis (your agent, Nov 17, 2026): " in text
-    linked = {**study["study"], "linked_to": [{"study_id": "stu_b", "version": 1, "reason": "days", "title": "Later", "words": "A newer study on later days: Later"}]}
-    assert "A newer study on later days: Later (stu_b v1)" in rv.study_text({**study, "study": linked})
-    assert "versions tried: unknown" in text and "versions tried for :" not in text
+    assert (
+        "Notes (1 shown of 1, newest first):" in text
+        and "- Hypothesis (your agent, Nov 17, 2026): " in text
+    )
+    linked = {
+        **study["study"],
+        "linked_to": [
+            {
+                "study_id": "stu_b",
+                "version": 1,
+                "reason": "days",
+                "title": "Later",
+                "words": "A newer study on later days: Later",
+            }
+        ],
+    }
+    assert "A newer study on later days: Later (stu_b v1)" in rv.study_text(
+        {**study, "study": linked}
+    )
+    # AUDIT-WORDS M61: a count not known is left out, never "unknown"
+    assert "versions tried:" not in text and "unknown" not in text
 
 
 def test_wl_ag_05_an_add_plan_leads_with_what_it_adds(monkeypatch) -> None:
@@ -1074,7 +1199,10 @@ def test_wl_ag_05_an_add_plan_leads_with_what_it_adds(monkeypatch) -> None:
     plan = _shape("add_plan")
     assert plan["added"]  # not vacuous
     text = rv.plan_text(plan)
-    assert text.splitlines()[0] == "Adds 28-day momentum, OI screen to Signals, side by side · version 2", text
+    assert (
+        text.splitlines()[0]
+        == "Adds 28-day momentum, OI screen to Signals, side by side · version 2"
+    ), text
     assert text.count("1 run, not counted against you") == 1
     assert rv.plan_text(_shape("plan")).startswith("Plan · Check a strategy · ")
 
@@ -1107,15 +1235,22 @@ def test_wl_ag_06_a_shared_studys_id_links_its_snapshot(monkeypatch) -> None:
     sid = _shape("share")["study"]["share_id"]
     assert len(sid) == 23 and oia.kind_for_id(sid) == "share"
     got = oia.OPEN_IN_APP.handler({"id": sid}, ToolContext())
-    assert got.hero_url == f"https://usekeel.io/share/{sid}" and got.extra["target_kind"] == "share_page"
+    assert (
+        got.hero_url == f"https://usekeel.io/share/{sid}"
+        and got.extra["target_kind"] == "share_page"
+    )
     assert oia.kind_for_id("A" * 21) == "share"  # control: a strategy share keeps its page
     # D-358: the Research wording rides a bound yes only; unbound, the full profile is the pre-Research text.
     from keel.tools.outcomes import OUTCOMES
     from keel.tools.outcomes._mcp_adapter import effective_description
     from keel.tools.outcomes._toolsets import research_served_context
 
-    assert "`stu_...`" in oia.RESEARCH_DESCRIPTION and oia.DESCRIPTION == oia.LISTED_HEAD_DESCRIPTION
-    assert "stu_" not in effective_description(OUTCOMES["keel_app_link"])  # unbound: the pre-Research copy
+    assert (
+        "`stu_...`" in oia.RESEARCH_DESCRIPTION and oia.DESCRIPTION == oia.LISTED_HEAD_DESCRIPTION
+    )
+    assert "stu_" not in effective_description(
+        OUTCOMES["keel_app_link"]
+    )  # unbound: the pre-Research copy
     with research_served_context(True):
         assert effective_description(OUTCOMES["keel_app_link"]) == oia.RESEARCH_DESCRIPTION
     with research_served_context(False):
@@ -1134,13 +1269,20 @@ def test_d9_a_bar_line_quotes_the_served_words(monkeypatch) -> None:
     assert all(r.get("value_words") for r in rows)  # not vacuous: the served words are there
     text = rv.study_text(study)
     luck = rows[0]
-    assert f"- {luck['label']}: {luck['value_words']}, no interval; {luck['sample_words']}; {luck['bar_words']}; met" in text
+    assert (
+        f"- {luck['label']}: {luck['value_words']}, no interval; {luck['sample_words']}; {luck['bar_words']}; met"
+        in text
+    )
     assert "0.993" not in text and ">= 0.75" not in text
     bare = {k: v for k, v in luck.items() if not k.endswith("_words")}
-    assert rv.bar_row(bare, set()).startswith(f"- {luck['label']}: 0.993")  # control: no words, the formatter
+    assert rv.bar_row(bare, set()).startswith(
+        f"- {luck['label']}: 0.993"
+    )  # control: no words, the formatter
     page = _shape("data_page")
-    header = rv.data_text(page, title="Growth of 1", version=1, call_args={}).splitlines()[2]
-    assert header == "| Growth of 1 (growth) | result | Day (time) |"
+    lines = rv.data_text(page, title="Growth of 1", version=1, call_args={}).splitlines()
+    # POLISH: labels in the header, keys under the table; M13: a page of one result leaves the Result column out
+    assert lines[2] == "| Growth of 1 | Day |"
+    assert "Keys for where, sort and measures: Growth of 1 = growth, Day = time." in lines
 
 
 def test_d341_a_never_run_draft_names_its_next_call(monkeypatch) -> None:
@@ -1161,9 +1303,22 @@ def test_d341_a_never_run_draft_names_its_next_call(monkeypatch) -> None:
         "keel_research_run runs that plan." in text
     ), text
     assert "keel_app_link" not in text.split("not run yet.")[1].splitlines()[0]
-    live = {**study, "study": {**study["study"], "draft": {**study["study"]["draft"], "plan_id": "pln_draft"}}}
-    assert 'keel_research_plan(from_plan="pln_draft") plans its run; keel_research_run runs that plan.' in rv.study_text(live)
-    older = {**study, "study": {**study["study"], "version": 1, "draft": {**study["study"]["draft"], "version": 2}}}
+    live = {
+        **study,
+        "study": {**study["study"], "draft": {**study["study"]["draft"], "plan_id": "pln_draft"}},
+    }
+    assert (
+        'keel_research_plan(from_plan="pln_draft") plans its run; keel_research_run runs that plan.'
+        in rv.study_text(live)
+    )
+    older = {
+        **study,
+        "study": {
+            **study["study"],
+            "version": 1,
+            "draft": {**study["study"]["draft"], "version": 2},
+        },
+    }
     assert "Edit it on its own read: keel_research_get(" in rv.study_text(older)  # control
 
 
@@ -1189,19 +1344,33 @@ def test_d341_the_draft_form_plans_the_drafts_own_source_and_base(monkeypatch) -
     _bootstrap()
     study, plan = _shape("study_planned"), _shape("plan")
     sid, version = study["study"]["study_id"], study["study"]["version"]
-    client = _BodyClient({("get", "/v1/research/studies/"): study, ("post", "/v1/research/plans"): plan})
-    got = OUTCOMES["keel_research_plan"].handler({"study_id": sid, "version": version}, ToolContext(api_client=client))
-    assert ("get", f"/v1/research/studies/{sid}") == client.calls[0][:2] and client.calls[0][2]["version"] == version
+    client = _BodyClient(
+        {("get", "/v1/research/studies/"): study, ("post", "/v1/research/plans"): plan}
+    )
+    got = OUTCOMES["keel_research_plan"].handler(
+        {"study_id": sid, "version": version}, ToolContext(api_client=client)
+    )
+    assert ("get", f"/v1/research/studies/{sid}") == client.calls[0][:2] and client.calls[0][2][
+        "version"
+    ] == version
     posted = [c for c in client.calls if c[0] == "body"]
     assert len(posted) == 1 and posted[0][1] == "/v1/research/plans"
     body = posted[0][2]
-    assert body["study_id"] == sid and body["source"] == study["source"] and body["base"]["version"] == version
+    assert (
+        body["study_id"] == sid
+        and body["source"] == study["source"]
+        and body["base"]["version"] == version
+    )
     assert set(body) == {"study_id", "source", "base"}
     assert "keel_research_run(plan_id=" in got.extra["view"]["markdown"]
     ran = {**study, "study": {**study["study"], "draft": None}}
-    refused = _BodyClient({("get", "/v1/research/studies/"): ran, ("post", "/v1/research/plans"): plan})
+    refused = _BodyClient(
+        {("get", "/v1/research/studies/"): ran, ("post", "/v1/research/plans"): plan}
+    )
     with pytest.raises(KeelError, match="not a saved Draft that has not run"):
-        OUTCOMES["keel_research_plan"].handler({"study_id": sid, "version": version}, ToolContext(api_client=refused))
+        OUTCOMES["keel_research_plan"].handler(
+            {"study_id": sid, "version": version}, ToolContext(api_client=refused)
+        )
     assert not [c for c in refused.calls if c[0] == "body"]  # control: nothing planned
 
 
@@ -1213,12 +1382,20 @@ def test_ag18_an_address_read_says_why_in_the_served_words(monkeypatch) -> None:
     monkeypatch.setenv("KEEL_SERVER_PROFILE", "full")
     page = _shape("addresses")
     subject = page["subject"]
-    _, text = _run("keel_research_get", {"subject": subject}, {("get", "/v1/research/addresses"): page})
+    _, text = _run(
+        "keel_research_get", {"subject": subject}, {("get", "/v1/research/addresses"): page}
+    )
     inert = next(r for r in page["data"] if r.get("why_not") == "inert")
     assert f"— {inert['why_not_words']}" in text and "— inert" not in text
     assert "(bound to [])" not in text and text.splitlines()[-1].startswith("View in Keel: ")
-    settable = next(r for r in page["data"] if r.get("settable"))
-    assert f"- {settable['address']} = {json.dumps(settable['value'])} ·" in text  # control
+    settable = next(r for r in page["data"] if r.get("settable") and r.get("component"))
+    step = f"- {settable['address']} = {json.dumps(settable['value'])} · {settable['component']} v{settable['version']}"
+    assert step in text  # control: a step's address names its component and version
+    # MCP-FINAL #9: a declaration's address (execution.*, globals.*) belongs to no component and names none. SEED
+    # (reversed): the old unconditional " · {component} v{version}" -> "· None vNone" on 6 rows (this reds).
+    declared = next(r for r in page["data"] if r.get("settable") and not r.get("component"))
+    assert "None vNone" not in text
+    assert f"- {declared['address']} = {json.dumps(declared['value'])}\n" in text
 
 
 def test_d344_a_plan_states_its_run_call_as_a_fact_with_its_count(monkeypatch) -> None:
@@ -1256,15 +1433,27 @@ def test_d353_include_source_writes_the_document_in_the_text_only(monkeypatch) -
 
     for profile in ("listed", "full"):
         monkeypatch.setenv("KEEL_SERVER_PROFILE", profile)
-        with research_served_context(True):  # the listed profile serves plan, run and get while Research is on
-            client, text = _run("keel_research_get", {"study_id": sid, "include": "source"}, {("get", "/v1/research/studies/"): study})
+        with research_served_context(
+            True
+        ):  # the listed profile serves plan, run and get while Research is on
+            client, text = _run(
+                "keel_research_get",
+                {"study_id": sid, "include": "source"},
+                {("get", "/v1/research/studies/"): study},
+            )
         assert source.rstrip() in text, profile
-        assert f"Source of version {study['study']['version']} ({len(source):,} characters):" in text
-        assert f'Plan a change: keel_research_plan(study_id="{sid}", source="<the changed document>", base=' in text
+        assert (
+            f"Source of version {study['study']['version']} ({len(source):,} characters):" in text
+        )
+        assert (
+            f'Plan a change: keel_research_plan(study_id="{sid}", source="<the changed document>", base='
+            in text
+        )
         assert study["study"]["evidence_hash"] in text  # the base an edit sends
     _bootstrap()
     got = OUTCOMES["keel_research_get"].handler(
-        {"study_id": sid, "include": "source"}, ToolContext(api_client=_Client({("get", "/v1/research/studies/"): study}))
+        {"study_id": sid, "include": "source"},
+        ToolContext(api_client=_Client({("get", "/v1/research/studies/"): study})),
     )
     from keel.tools.outcomes._channels import partition
 
@@ -1283,10 +1472,15 @@ def test_a_cut_note_on_the_study_read_says_its_length(monkeypatch) -> None:
     monkeypatch.setenv("KEEL_SERVER_PROFILE", "full")
     study = _shape("study_planned")
     note = study["notes"][0]
-    assert note["truncated"] is True and note["length"] == 1360  # not vacuous: the recorded note was cut
+    assert (
+        note["truncated"] is True and note["length"] == 1360
+    )  # not vacuous: the recorded note was cut
     assert f"of {note['length']:,} characters)" in rv.study_text(study)
     whole = {**study, "notes": [{**note, "body": "keep v3", "truncated": False, "length": 7}]}
-    assert '"keep v3"' in rv.study_text(whole) and "characters)" not in rv.study_text(whole).split("Notes")[1]
+    assert (
+        '"keep v3"' in rv.study_text(whole)
+        and "characters)" not in rv.study_text(whole).split("Notes")[1]
+    )
 
 
 def test_d353_the_sdk_reads_the_words_serve_already_serves(monkeypatch) -> None:
@@ -1300,7 +1494,9 @@ def test_d353_the_sdk_reads_the_words_serve_already_serves(monkeypatch) -> None:
     study = _shape("study_done")
     sid = study["study"]["study_id"]
     page = _shape("data_page")
-    assert all("words" in r for r in page["data"])  # not vacuous: the recorded page is worded (?words=true)
+    assert all(
+        "words" in r for r in page["data"]
+    )  # not vacuous: the recorded page is worded (?words=true)
     page["data"][0]["words"] = {"growth": "−0.9%"}
     page["data"][1].pop("words")  # control: a row served without words
     client, text = _run("keel_research_get", {"study_id": sid, "view": 1}, {
@@ -1308,8 +1504,18 @@ def test_d353_the_sdk_reads_the_words_serve_already_serves(monkeypatch) -> None:
     asked = [c for c in client.calls if c[1].endswith("/data")]
     assert asked and asked[0][2].get("words") == "true"
     assert "| −0.9% |" in text and "| words |" not in text
-    assert f"| {page['data'][1]['growth']} |" in text  # control: a row with no served words
-    named = {**study, "counts": {**study["counts"], "versions_tried": {**study["counts"]["versions_tried"], "family_name": "Momentum rotation"}}}
+    # control: a row with no served words reads its value rounded, never a raw float
+    assert f"| {format(page['data'][1]['growth'], '.3g')} |" in text
+    named = {
+        **study,
+        "counts": {
+            **study["counts"],
+            "versions_tried": {
+                **study["counts"]["versions_tried"],
+                "family_name": "Momentum rotation",
+            },
+        },
+    }
     assert "versions tried for Momentum rotation: 388" in rv.study_text(named)
     assert "fam:str_" not in rv.study_text(study)
     bare = {**study, "checks": None, "headline": {"sentence": "s", "measures": [{
@@ -1322,4 +1528,220 @@ def test_d353_the_sdk_reads_the_words_serve_already_serves(monkeypatch) -> None:
     brief["studies"][0]["bars_met"] = "Meets 7 of 9 of your bars"
     out = rb.brief_text(brief, None)
     row = brief["studies"][0]
-    assert f"- {row['id']} · Check · {row['title']} · {row['state_words']} · Meets 7 of 9 of your bars" in out
+    assert (
+        f"- {row['id']} · Check · {row['title']} · {row['state_words']} · Meets 7 of 9 of your bars"
+        in out
+    )
+
+
+def test_stg_surfaces_2_a_bar_reads_its_served_sample_words_never_a_rebuild() -> None:
+    """STG-SURFACES #2 (a Check of keel/btc_hold@1 on staging): every bar line read "sample not stated" although the
+    row served its sample line. The bar line quotes the served ``sample_words`` (keel-api serves the line there, D9)
+    and never rebuilds a sample from ``sample``. SEED (reversed): ``_sample`` rebuilding from ``sample`` again reds the
+    second arm ("584 days" from a row that serves no words). Control: the first arm stays green under the seed.
+    Non-vacuity: both rows carry a ``sample``."""
+    served = {**_bar(0), "value_words": "1.9", "interval_words": "1.1 to 2.4", "bar_words": "your bar ≥ 0.30",
+              "sample": {"first_day": "2025-11-17", "last_day": "2026-11-17"},
+              "sample_words": "Nov 17, 2025 to Nov 17, 2026"}  # fmt: skip
+    assert rv.bar_row(served, set()).endswith(
+        "; Nov 17, 2025 to Nov 17, 2026; your bar ≥ 0.30; met"
+    )
+    unworded = {**served, "sample": {"days": 584}, "sample_words": None}
+    # AUDIT-WORDS M7: with no served sample words the line says none, never "sample not stated"
+    assert unworded["sample"] and "sample not stated" not in rv.bar_row(unworded, set())
+    assert rv.bar_row(unworded, set()).endswith("1.1 to 2.4; your bar ≥ 0.30; met")
+
+
+#: A Checks view's data row as keel-api serves it (``page_facts.checks_read`` over the study read's check row).
+_CHECK_ROW = {
+    "check": 0, "label": "Sharpe a day late", "bar_index": 0, "result": None, "at": None, "ref": "late",
+    "measure": "sharpe", "value": 2.0912345678, "unit": "ratio",
+    "interval": {"lo": 1.1, "hi": 2.4, "level": 0.9, "method": "hac"},
+    "sample": {"first_day": "2025-11-17", "last_day": "2026-11-17"}, "op": ">=", "bar": 0.3, "met": True,
+    "locked": False, "withheld_reason": None, "value_words": "2.09", "interval_words": "1.10 to 2.40",
+    "sample_words": "Nov 17, 2025 to Nov 17, 2026", "sample_line": "Nov 17, 2025 to Nov 17, 2026",
+    "bar_words": "your bar ≥ 0.30", "bar_default_words": "default ≥ 0.30",
+    "stricter": {"bar": 0.36, "bar_words": "your bar ≥ 0.36", "met": True},
+    "looser": {"bar": 0.24, "bar_words": "your bar ≥ 0.24", "met": True},
+    "value_lo": 1.1, "value_hi": 2.4, "how": "Trades a day late", "runs": 2,
+}  # fmt: skip
+
+
+def test_stg_surfaces_3_a_checks_page_reads_as_the_bar_lines_never_its_internal_columns() -> None:
+    """STG-SURFACES #3 (WL-AG-12): ``keel research data <stu> --view N`` on a Checks view printed Python reprs
+    ({'lo': …}), raw floats and the rows' internal columns (bar_index, withheld_reason, stricter, looser). A Checks
+    page reads as the study read's bar lines, every number in its served words. SEED (reversed): ``_is_checks_page``
+    returning False -> this reds (the table prints ``bar_index`` and a repr). Control: the generic-page arm below.
+    Non-vacuity: the row carries every internal column the seed would print."""
+    page = {
+        "data": [_CHECK_ROW],
+        "facts": {"rows_total": 1, "axes": [{"name": "check", "label": "Check"}]},
+    }
+    text = rv.data_text(page, title="Your bars", version=1, call_args={})
+    assert (
+        "- Sharpe a day late: 2.09, 1.10 to 2.40; Nov 17, 2025 to Nov 17, 2026; your bar ≥ 0.30; met"
+        in text
+    )
+    for internal in (
+        "bar_index",
+        "withheld_reason",
+        "stricter",
+        "looser",
+        "{'",
+        "2.0912345678",
+        "None",
+    ):
+        assert internal not in text, internal
+
+
+def test_stg_surfaces_3_ranges_marks_and_cells_read_their_served_words() -> None:
+    """STG-SURFACES #3: "Across all …" and "Marks: … at -0.706…" printed the stored floats; each now reads its served
+    words (page_facts: ``ranges.*.words``, ``marks[].at_words``), a nested column is never drawn (the app's table),
+    and a cell no words are served for reads as text, never a repr. SEED (reversed): the range line reading
+    ``low.get('value')`` again -> this reds. Control: a share frozen before the words reads its plain value."""
+    page = {
+        "data": [{"day": "2026-01-02", "growth": 1.2345, "detail": {"k": 1}, "words": {"growth": "1.23×"}}],
+        "facts": {
+            "rows_total": 1, "axes": [{"name": "day", "label": "Day"}],
+            "measures": [{"name": "growth", "label": "Growth of 1", "unit": "multiple"}],
+            "ranges": {"growth": {"low": {"value": 0.81234, "words": "0.81×"}, "high": {"value": 1.2345, "words": "1.23×"},
+                                  "below_zero": None}},
+            "marks": [{"kind": "hline", "at": -0.70612345, "label": "Final", "at_words": "−0.71"}],
+        },
+    }  # fmt: skip
+    text = rv.data_text(page, title="Growth", version=1, call_args={})
+    assert (
+        "Across all 1 rows: Growth of 1 0.81× to 1.23×" in text
+    )  # MCP-FINAL batch 3 #4: the label only
+    assert "Marks: Final at −0.71" in text
+    assert (
+        "| Jan 2, 2026 | 1.23× |" in text
+        and "2026-01-02" not in text
+        and "detail" not in text
+        and "{'" not in text
+    )
+    old = {**page, "facts": {**page["facts"], "marks": [{"kind": "hline", "at": 0.5, "label": ""}]}}
+    assert "Marks: a line across at 0.5" in rv.data_text(
+        old, title="Growth", version=1, call_args={}
+    )
+
+
+def test_stg_surfaces_3_a_view_given_as_text_names_its_chart() -> None:
+    """STG-SURFACES #3: ``keel research data stu_… --view 0`` titled the rows "0 (version 1)": the CLI passes the
+    index as text and the study read's view index is a number. SEED (reversed): matching ``index == view`` again ->
+    the text arm reds. Control: the number arm and a title match."""
+    from keel.tools.outcomes.research_get import _is_view
+
+    row = {"index": 0, "title": "Your bars"}
+    assert _is_view(row, "0") and _is_view(row, 0) and _is_view(row, "Your bars")
+    assert not _is_view(row, "1") and not _is_view({"index": None, "title": "x"}, "None")
+
+
+def test_stg_surfaces_6_the_cli_writes_every_next_step_as_a_keel_command(monkeypatch) -> None:
+    """STG-SURFACES #6: ``keel research cancel`` printed "Resume later: keel_research_plan(…, resume=true)", an MCP
+    call where every other CLI next step is a ``keel research …`` command (``literal_eval`` refused JSON's ``true``,
+    so ``cli_text`` left it as written); the share read's "Run on yours: keel research plan --share-id X, with
+    subjects=[…]" mixed the two forms. SEED (reversed): ``_call_literal`` back to ``ast.literal_eval`` -> the resume
+    arm reds. Control: the share arm (no boolean) is a command under the seed."""
+    from keel.tools.outcomes import _bootstrap
+    from keel.tools.outcomes._research_commands import cli_text
+
+    _bootstrap()
+    resume = cli_text(
+        "Resume later: " + rv.next_call("keel_research_plan", {"study_id": "stu_x", "resume": True})
+    )
+    assert resume == "Resume later: keel research plan stu_x --resume", resume
+    share = cli_text(rv._share_next_lines({"study": {"share_id": "abc"}})[0])
+    assert (
+        share
+        == "Run on yours: keel research plan --share-id abc --subjects 'Strategy(\"str_…@3\")' runs it on your own strategy"
+    ), share
+    assert "keel_" not in share and "subjects=" not in share
+
+
+def test_d382_the_runs_line_prints_keels_share_and_later_tries_as_served() -> None:
+    """EN-13 / D-382: the count is the version's frozen one; Keel's share ("including 3 tried by Keel") and the family's
+    later tries ("2 more tried since") follow it in keel-api's words, never summed into it. SEED (reversed by
+    reversing the edit): drop the ``extra`` words in ``_runs_line`` -> the served arm reds. Control: a count with no
+    such words prints the count alone."""
+    study = _study()
+    vt = {**study["counts"]["versions_tried"], "keel_words": "including 3 tried by Keel"}
+    vt = {**vt, "more_since": 2, "more_since_words": "2 more tried since"}
+    text = rv.study_text({**study, "counts": {**study["counts"], "versions_tried": vt}})
+    count = study["counts"]["versions_tried"]["count"]
+    line = f"versions tried for momentum rotation: {count:,}"
+    assert f"{line} (including 3 tried by Keel, 2 more tried since)" in text, text
+    assert line in rv.study_text(study)  # control: the count alone
+    assert "more tried since" not in rv.study_text(study)
+
+
+def test_stg8_the_text_says_the_served_method_sentence() -> None:
+    """STG-SURFACES #8, D-401: the text says the study read's served ``words.method`` (``research.words.method_line``,
+    plain words), never its own list beside it. Seeded red: ignoring the served sentence prints "Measured with step 0,
+    step 1, ...". Control: a read without it (an older server) names every step by its label, never a class name or
+    a version ("Step0 v1")."""
+    said = "Measured with the backtest and costs from none to six times."
+    env = {**_study(), "words": {**(_study().get("words") or {}), "method": said}}
+    lines = rv.study_text(env).splitlines()
+    assert said in lines
+    assert not any(line.startswith("Measured with step 0, step 1") for line in lines)
+    bare = rv.study_text(_study())
+    assert any(line.startswith("Measured with step 0, step 1") for line in bare.splitlines())
+    assert " v1" not in bare.split("Measured with", 1)[1].splitlines()[0] and "Step0" not in bare
+
+
+def test_polish_a_column_nothing_measured_is_left_out_and_named_once() -> None:
+    """MCP-FINAL S3 (POLISH): a done map's Turnover read "not measured" in every cell. A column no row on the page
+    measured is left out of the table and named once below it; a column measured on some rows stays. Seeded red:
+    keeping every column draws "not measured" in each row. Control: Sharpe, measured, stays. Non-vacuity: 3 rows."""
+    measures = [
+        {"name": "sharpe", "label": "Sharpe", "unit": "ratio"},
+        {"name": "turnover", "label": "Turnover", "unit": "ratio"},
+        {"name": "cagr", "label": "CAGR", "unit": "fraction"},
+    ]
+    rows = [
+        {"lookback": n, "sharpe": 0.8, "turnover": None, "cagr": c,
+         "words": {"sharpe": "0.80", "turnover": "not measured", "cagr": w}}
+        for n, c, w in ((7, 0.15, "15.0%"), (10, None, "not measured"), (14, 0.2, "20.0%"))
+    ]  # fmt: skip
+    page = {
+        "data": rows,
+        "pagination": {"cursor": None, "has_more": False},
+        "facts": {"rows_total": 3, "axes": [], "measures": measures},
+    }
+    lines = rv.data_text(page, title="Map", version=1, call_args={}).splitlines()
+    assert "| Lookback | Sharpe | CAGR |" in lines, lines
+    assert "| 10 | 0.80 | not measured |" in lines  # measured on some rows: the column stays
+    assert "Not measured on these rows: Turnover." in lines
+    assert sum("not measured" in line for line in lines if line.startswith("| ")) == 1
+
+
+def test_polish_a_stopped_read_says_the_stop_once_and_prints_its_served_reason() -> None:
+    """MCP-FINAL S3 + SERVER-5 (POLISH): a stopped Map's read said "Stopped at 15 of 48 settings" in its first line
+    and again below it with the receipt; and ``words.stopped`` (the engine-change reason) was never printed. The
+    first line carries the tally; below it the served reason once. Seeded red: printing the progress line as before
+    repeats the tally. Control: a read whose first line does not carry the tally keeps its progress line."""
+    tally = "Stopped at 15 of 48 settings"
+    reason = (
+        "Keel's engine was updated during this run, so the rest of it didn't run. Resume sets it up again on the "
+        "updated engine."
+    )
+    base = _study()
+    env = {
+        **base,
+        "study": {**base["study"], "state": "completed_partial"},
+        "card_summary": {**(base.get("card_summary") or {}), "state_words": tally},
+        "progress": {
+            "words": tally,
+            "receipt": "Stopped. 15 settings done; nothing is charged for the rest.",
+        },
+        "words": {**(base.get("words") or {}), "stopped": reason},
+    }
+    lines = rv.study_text(env).splitlines()
+    assert lines[0].endswith(tally)
+    assert sum(tally in line for line in lines) == 1, lines
+    assert sum(line == reason for line in lines) == 1, lines
+    plain = {**env, "words": {**env["words"], "stopped": None}}
+    assert sum(tally in line for line in rv.study_text(plain).splitlines()) == 1
+    bare = {**plain, "card_summary": {**env["card_summary"], "state_words": "Stopped"}}
+    assert any("nothing is charged" in line for line in rv.study_text(bare).splitlines())  # control

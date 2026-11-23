@@ -7,7 +7,7 @@
 
 from ._output_schemas import RESEARCH_INPUT_SCHEMAS
 from ._research_commands import call, register_research, research_url, study_result
-from ._research_view import Keep, _cap, _day, next_call
+from ._research_view import Keep, _cap, _day, next_call, note_kind_words
 
 
 REQUIRED_ACTION = "backtest.research.read"
@@ -69,9 +69,11 @@ def brief_text(env: dict, ctx) -> str:
     n_families = _total(env, "families_total", families)
     n_deployed = _total(env, "paper_and_live_total", deployed)
     by_state = env.get("by_state") or {}
-    states = ", ".join(
-        f"{n:,} {str(k).replace('_', ' ')}" for k, n in sorted(by_state.items()) if n
-    )
+    # MCP-FINAL #9: the state counts in the list header's words (research_get.STATE_COUNT_WORDS: "1 stopped,
+    # 2 done, 1 done with runs that didn't finish"), never the enum keys
+    from .research_get import STATE_COUNT_WORDS, _by_state_order
+
+    states = ", ".join(f"{n:,} {STATE_COUNT_WORDS[k]}" for k, n in _by_state_order(by_state) if n)
     lines: list[str] = [
         "Research brief: "
         + ", ".join(
@@ -160,7 +162,7 @@ def brief_text(env: dict, ctx) -> str:
         anchor = n.get("anchor") or {}
         on = f" on {anchor.get('kind')} {anchor.get('id')}" if anchor.get("id") else ""
         lines.append(
-            f"- {str(n.get('kind') or '').replace('_', ' ')}{on} ({n.get('by')}, {_day(n.get('when'))}): {_body(n.get('body'))}"
+            f"- {note_kind_words(n.get('kind'))}{on} ({n.get('by')}, {_day(n.get('when'))}): {_body(n.get('body'))}"
         )
     pagination = env.get("pagination") or {}
     if pagination.get("has_more") and pagination.get("cursor"):

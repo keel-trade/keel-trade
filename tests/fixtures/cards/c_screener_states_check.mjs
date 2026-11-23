@@ -70,22 +70,29 @@ try {
         const read = () =>
           frame.evaluate(() => ({
             text: document.getElementById("root").innerText,
-            paths: document.querySelectorAll(".chart path.ml").length,
-            field: document.querySelectorAll(".chart path.sc-field").length,
-            dim: document.querySelectorAll(".chart path.ml.dim").length,
-            ends: document.querySelectorAll(".chart text.sc-end").length,
+            paths: document.querySelectorAll(
+              "svg path.ml.sc-line:not(.sc-cap-run)",
+            ).length,
+            field: document.querySelectorAll("svg path.sc-field").length,
+            dim: document.querySelectorAll(
+              "svg path.ml.sc-dim:not(.sc-cap-run)",
+            ).length,
+            ends: document.querySelectorAll("svg text.sc-end").length,
             tabs: document.querySelectorAll(".sc-tabs button").length,
-            nums: document.querySelectorAll(".sc-num").length,
-            strokes: [...document.querySelectorAll(".chart path.ml")].map((p) =>
-              p.getAttribute("stroke"),
-            ),
+            rowsInline: document.querySelectorAll(".sc-rows .sc-r").length,
+            strokes: [
+              ...document.querySelectorAll(
+                "svg path.ml.sc-line:not(.sc-cap-run):not(.sc-ink)",
+              ),
+            ].map((p) => p.getAttribute("stroke")),
             links: document.querySelectorAll("a").length,
             dots: document.querySelectorAll(".sc-chart circle.sc-dot").length,
             dotFills: [
-              ...document.querySelectorAll(".sc-chart circle.sc-dot:not(.out)"),
+              ...document.querySelectorAll(
+                ".sc-chart circle.sc-dot:not(.sc-out)",
+              ),
             ].map((c) => c.getAttribute("fill")),
             rows: document.querySelectorAll(".sc-dt tbody tr").length,
-            sel: document.querySelectorAll(".sc-dt tbody tr.sel").length,
             overflow:
               document.documentElement.scrollWidth >
               document.documentElement.clientWidth,
@@ -101,13 +108,14 @@ try {
           ctx,
         );
         if (expect.lines) {
-          // inline: the top 5 by rank coloured and labelled, the rest field;
-          // fullscreen: every shipped line coloured (Show: All)
-          assert.equal(result.paths, full ? expect.lines : 5, ctx);
-          assert.equal(result.field, full ? 0 : expect.lines - 5, ctx);
-          assert.equal(result.ends, full ? expect.lines : 5, ctx);
+          // inline and in Expand alike: the top 5 by rank in their identity
+          // colours and end-labelled, every other line the grey field
+          // (Q-7923: Expand opens on five, never every line in a colour)
+          assert.equal(result.paths, 5, ctx);
+          assert.equal(result.field, expect.lines - 5, ctx);
+          assert.equal(result.ends, 5, ctx);
           assert.ok(
-            result.strokes.every((s) => /^var\(--sc-\d+\)$/.test(s)),
+            result.strokes.every((s) => /^var\(--sc-id-\d\)$/.test(s)),
             ctx,
           );
           assert.equal(
@@ -115,40 +123,37 @@ try {
             result.strokes.length,
             ctx,
           );
-          assert.ok(result.nums >= 1 && result.nums <= 5, ctx);
-          // tap a number: its line stays, every other dims; tap again clears
-          await frame.locator(".sc-num").first().click();
+          // tap an end label: its line stays, every other dims; tap again clears
+          await frame.locator("svg text.sc-end").first().click();
           const iso = await read();
           assert.equal(iso.dim, iso.paths - 1, JSON.stringify(iso));
-          await frame.locator(".sc-num").first().click();
+          await frame.locator("svg text.sc-end").first().click();
           assert.equal((await read()).dim, 0);
-        } else assert.equal(result.paths, 0, ctx);
+        } else if (!expect.dots && !full) assert.equal(result.paths, 0, ctx);
         // a Scatter or Table default draws that graph inline, colouring
         // exactly the passing coins (L6 round 4, founder: specific cards)
-        if (expect.dots != null) {
+        if (expect.dots != null && !full) {
           assert.equal(result.dots, expect.dots, ctx);
           assert.equal(result.dotFills.length, expect.passing, ctx);
           assert.ok(
-            result.dotFills.every((f) => /^var\(--sc-\d+\)$/.test(f)),
+            result.dotFills.every((f) => /^var\(--sc-id-\d\)$/.test(f)),
             ctx,
           );
         }
-        if (expect.rows != null) {
-          assert.equal(result.rows, expect.rows, ctx);
-          assert.equal(result.sel, expect.passing, ctx);
-        }
-        if (expect.nums != null) assert.equal(result.nums, expect.nums, ctx);
+        if (expect.rows != null && !full)
+          assert.equal(result.rowsInline, expect.rows, ctx);
         for (const word of expect.present || [])
           assert.ok(result.text.includes(word), word + " " + ctx);
         for (const word of expect.absent || [])
           assert.ok(!result.text.includes(word), word + " " + ctx);
         if (expect.tabs != null)
-          assert.equal(result.tabs, full ? expect.tabs : 0, ctx);
+          // Expand's view control: all views, then one per published view
+          assert.equal(result.tabs, full ? expect.tabs + 1 : 0, ctx);
         if (expect.tabs && full) {
           await frame.locator(".sc-tabs button", { hasText: "Table" }).click();
           const rows = await frame.locator(".sc-dt tbody tr").count();
           assert.equal(rows, expect.tableRows, ctx);
-          await frame.locator(".sc-dt th").nth(1).click(); // sort toggles
+          await frame.locator(".sc-dt th.sc-n button").first().click(); // sort toggles
           await frame
             .locator(".sc-tabs button", { hasText: "Scatter" })
             .click();

@@ -29,7 +29,7 @@ from keel.tools.outcomes._research_commands import refusal_text
 #: research_backend.not_runnable's bodies, with the words J13 F5/F6 and T4/T5 serve (words.py; D-14:
 #: the served names of the plans that include more, no window words).
 FREE_WALL = (
-    "This study was not run and nothing was charged. You have used 3 of 3 studies; they reset Dec 14. "
+    "This study can't run yet, and nothing was charged. You have used 3 of 3 studies; they reset Dec 14. "
     "Planning, reading, saving and runs that reuse every result do not count. Trader and Pro include more. "
     "Plans are changed in the Keel web app."
 )
@@ -97,10 +97,13 @@ def _served_call(monkeypatch: pytest.MonkeyPatch, profile: str, body: dict, stat
 
 def _card(result: Any, line: str) -> str:
     """The journeys' error_card reading (tests/research_e2e/harness/calls.py): the words are one of the structured
-    content's own string fields, word for word, and it carries an app link under /research."""
-    assert getattr(result, "is_error", False), result
+    content's own string fields, word for word, and it carries an app link under /research. A plan limit carries
+    no isError (Q-7927; plans spec 02 §C0 test 4): it is the refusal envelope all the same."""
+    from keel.tools.outcomes._channels import is_error_envelope, is_plan_limit_envelope
+
     structured = result.structured_content
-    assert isinstance(structured, dict), structured
+    assert getattr(result, "is_error", False) or is_plan_limit_envelope(structured), result
+    assert is_error_envelope(structured), structured
     assert line in [v for v in structured.values() if isinstance(v, str)], structured
     link = (structured.get("detail") or {}).get("links", {}).get("app")
     assert isinstance(link, str) and link.startswith(f"{APP}/research"), structured
@@ -129,8 +132,14 @@ def test_a_refused_run_draws_its_own_words_and_the_study_link(monkeypatch, profi
     assert structured["suggested_next_action"] == {"tool": None, "args": {}}
     flat = json.dumps(structured)
     assert "keel_auth_login" not in flat and "live scope" not in flat and '\\"detail\\"' not in flat
-    # The text: the words, then "View in Keel" last (07 §3.2 rules 9 and 11), no envelope after it.
-    assert _words(result.content[0].text).splitlines() == [body["message"], f"View in Keel: {APP}/research"]
+    # The text: the words, the plan wall's instruction (STG-SURFACES #32), no code line (D-403), then "View in Keel" last
+    # (07 §3.2 rules 9 and 11), and the envelope after it.
+    assert _words(result.content[0].text).splitlines() == [
+        body["message"],
+        structured["what_was_expected"],
+        f"View in Keel: {APP}/research",
+    ]
+    assert structured["what_was_expected"].startswith("Plan limit;")
 
 
 def test_a_refusal_naming_a_study_links_its_page_and_the_listed_next_call_is_an_app_link(
@@ -278,6 +287,11 @@ def test_a_receipt_tools_refusal_ends_with_the_link_too(monkeypatch, tool, args)
     assert client.paths and result.is_error  # non-vacuity: the handler reached keel-api
     lines = _words(result.content[0].text).splitlines()
     assert lines[0] == "No such study." and lines[-1].startswith(f"View in Keel: {APP}/research")
-    assert not any(line.startswith("{") for line in lines)  # the words part (the envelope follows, D-344 (2))
-    assert result.content[0].text.endswith("}") and '"RESEARCH_STUDY_NOT_FOUND"' in result.content[0].text
+    assert not any(
+        line.startswith("{") for line in lines
+    )  # the words part (the envelope follows, D-344 (2))
+    assert (
+        result.content[0].text.endswith("}")
+        and '"RESEARCH_STUDY_NOT_FOUND"' in result.content[0].text
+    )
     assert not (result.meta or {}).get("ui"), result.meta

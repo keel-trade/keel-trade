@@ -162,7 +162,7 @@
                   "c": 1,
                   "hi": null,
                   "lo": null,
-                  "name": "2",
+                  "name": "lookback 2",
                   "ref": false,
                   "y": "hW1Z1ZUWpUf20Ghmq8f2jglIZWvaWoo9"
                 },
@@ -170,7 +170,7 @@
                   "c": 2,
                   "hi": null,
                   "lo": null,
-                  "name": "3",
+                  "name": "lookback 3",
                   "ref": false,
                   "y": "F_0Tq8lYodWoimdlm0sMInnYrPjgUWh1"
                 },
@@ -178,7 +178,7 @@
                   "c": 3,
                   "hi": null,
                   "lo": null,
-                  "name": "4",
+                  "name": "lookback 4",
                   "ref": false,
                   "y": "aglY9C3KyDrPNEYplcoQbNYpbegWdvZW"
                 },
@@ -186,7 +186,7 @@
                   "c": 4,
                   "hi": null,
                   "lo": null,
-                  "name": "5",
+                  "name": "lookback 5",
                   "ref": false,
                   "y": "HrrwWta9l6dleelIoOWoh1Y8f2F_c5mx"
                 },
@@ -194,7 +194,7 @@
                   "c": 5,
                   "hi": null,
                   "lo": null,
-                  "name": "6",
+                  "name": "lookback 6",
                   "ref": false,
                   "y": "1FeesMqnbNiUh0AArwdbh1sMfWIno90G"
                 },
@@ -202,7 +202,7 @@
                   "c": 6,
                   "hi": null,
                   "lo": null,
-                  "name": "7",
+                  "name": "lookback 7",
                   "ref": false,
                   "y": "J1Bkagl6m-za0TWo2mqvhyHDHrlYdv__"
                 },
@@ -210,7 +210,7 @@
                   "c": 7,
                   "hi": null,
                   "lo": null,
-                  "name": "8",
+                  "name": "lookback 8",
                   "ref": false,
                   "y": "0GgWeejRpUUj0GdufWpW_qdvsTWoqvZW"
                 },
@@ -218,14 +218,14 @@
                   "c": 8,
                   "hi": null,
                   "lo": null,
-                  "name": "10",
+                  "name": "lookback 10",
                   "ref": false,
                   "y": "lfiO2mBkjgFzsMduo_rwq8YUm0e_oQH_"
                 }
               ],
               "title": "Across holds",
               "x": {
-                "label": "hold",
+                "label": "Hold",
                 "n": 16,
                 "pos": "AACNEaGoI1LCNPPcT3YRcshGp7yw7l__",
                 "ticks": [
@@ -234,16 +234,8 @@
                     "w": "1"
                   },
                   {
-                    "at": 424,
-                    "w": "4"
-                  },
-                  {
-                    "at": 847,
-                    "w": "7"
-                  },
-                  {
-                    "at": 1553,
-                    "w": "12"
+                    "at": 1271,
+                    "w": "10"
                   },
                   {
                     "at": 2683,
@@ -288,6 +280,7 @@
         "checks": null,
         "chips": [],
         "copy": {
+          "all_charts": "All charts",
           "charts": "Charts",
           "failed_cell": "Didn't finish",
           "full_chart_in_keel": "Open in Keel for the full chart",
@@ -298,6 +291,8 @@
           "lowest": "Lowest",
           "met": "met",
           "more_charts": "",
+          "more_steps": "",
+          "more_views": "",
           "not_measured": "not measured",
           "not_met": "not met",
           "not_run": "Not run yet",
@@ -307,11 +302,20 @@
           "open_chart": "Open this chart in Keel",
           "open_setting": "Open this setting in Keel",
           "points_in_keel": "Open in Keel to read each point",
+          "seg_charts": "Charts",
+          "seg_checks": "Checks",
+          "seg_numbers": "Numbers",
           "steps": "Steps",
           "yours": "Yours"
         },
         "focus": null,
         "head_words": null,
+        "hero": {
+          "label": "Rank nearby",
+          "state": null,
+          "title": "Rank among nearby settings · 3 of 9 · Mar 23, 2025 to Oct 28, 2026",
+          "value": "3 of 9"
+        },
         "key": {
           "cols": 16,
           "d": "gqqakfpglfhicnbk3plikbhejl4jlhagdiurol6cikdcdgec4lbdiefijbgcf3ejqflldhg0leglf4kp51dijppbqlg34ievpgfhkapefkvelblcihq1h3lekllcjfk44ca4jmvjic2ql4qjgcckfiirqifnfcggoaknil63dkqic7ckbhp44vkhbapjk7kqb4hlleji7ilggkhkldildde342hkcjpgejg7hncf44fhpf4le3bl3j5hjglf9iovhegobhhcgbojf4jk55eggeaeh6paged4lfe4lhegflqvojjjdikjdllb44aidalkccklbhnmgijbdgqeoimc5lufdqqib5lgikracgkb4cq5qfee4gclvlejie3kp93b",
@@ -320,6 +324,7 @@
           "kind": "heat",
           "legend": {
             "hi": "1.38",
+            "label": "Sharpe",
             "lo": "−1.55",
             "ramp": "div"
           },
@@ -417,7 +422,7 @@
           "select": "https://app.usekeel.io/research/stu_000005?v={v}&sel={sel}",
           "study": "https://app.usekeel.io/research/stu_000005"
         },
-        "method_line": "Measured with Neighbours v1, SplitCompare v1",
+        "method_line": "Measured with nearby settings and before and after the split.",
         "more_charts_total": 0,
         "more_words": null,
         "notes": {
@@ -428,12 +433,30 @@
           "stale": ["Momentum rotation v3 has a newer version, v4."]
         },
         "rows": null,
+        "runs": null,
         "schema": "keel.research.card-data/2",
         "steps": [],
+        "thumbs": [1, 2, 3],
+        "tiles": [
+          {
+            "label": "Nearby settings",
+            "state": null,
+            "sub": null,
+            "title": "Nearby settings as a share of yours · −0.78 (nearby −0.23 against yours 0.29) · Mar 23, 2025 to Oct 28, 2026",
+            "value": "−0.78"
+          },
+          {
+            "label": "Rank agreement",
+            "state": null,
+            "sub": null,
+            "title": "Rank agreement before and after the split · 0.041 · Mar 23, 2025 to Oct 28, 2026",
+            "value": "0.041"
+          }
+        ],
         "top": {
           "lines": [
-            "Highest: hold 30 · lookback 7 at 1.38",
-            "Lowest: hold 8 · lookback 6 at −1.55"
+            "Highest: hold 30 · lookback 7, Sharpe 1.38",
+            "Lowest: hold 8 · lookback 6, Sharpe −1.55"
           ]
         }
       },
@@ -447,6 +470,25 @@
           },
           "family": "Heatmap",
           "view_index": 0
+        },
+        "top5": {
+          "rows": [
+            {
+              "spark": null
+            },
+            {
+              "spark": null
+            },
+            {
+              "spark": null
+            },
+            {
+              "spark": null
+            },
+            {
+              "spark": null
+            }
+          ]
         }
       }
     },
@@ -456,7 +498,7 @@
   },
   "content": [
     {
-      "text": "card: where the host draws Keel cards, the user sees what follows as a card carrying its name, links and ids, so a reply can call it by name; the ids and links here serve tool calls and hosts without cards.\n\nMap a strategy's settings · Lookback × hold · version 1 · Done · Oct 29\nUsed 0 of 400 studies; resets Dec 1. Planning, reading, saving, and runs that reuse everything or run nothing, do not count.\nNearby settings as a share of yours: −0.78\nDays Mar 23, 2025 to Oct 29, 2026, split Apr 17, 2026 · 100 coins: the coins Momentum rotation trades · costs 9 bp a fill · data as of Oct 29, 2026\nMeasured with SettingsGrid v2, SplitCompare v1, Neighbours v1.\nIn short:\n- Nearby settings as a share of yours: −0.78, no interval; sample not stated\n- Rank among nearby settings: 3, no interval; sample not stated\n- Rank agreement before and after the split: 0.041, interval withheld: No interval: the values share their data.; sample not stated\nRuns: 0 runs, 0 reused, none failed · versions tried: unknown\nCharts (4): Lookback × hold · Before vs after the split · Every setting · Across holds — keel_research_get(study_id=\"stu_000005\", view=0) reads the numbers behind any of them.\nMomentum rotation v3 has a newer version, v4. Plan it: keel_research_plan(study_id=\"stu_000005\", source=\"Study(\\n    title=\\\"Lookback × hold\\\",\\n    question=\\\"How do the results change around lookback 10, hold 28?\\\",\\n)\\n\\nSubjects(\\n    v3=Strategy(\\\"str_momrotpro00000000000000000@4\\\"),\\n)\\n\\nRun(\\n    days=Days(\\\"2025-03-23\\\", \\\"2026-10-29\\\"),\\n    split=Split(\\\"2026-04-17\\\"),\\n    coins=Coins([\\\"BTC\\\", \\\"ETH\\\", \\\"SOL\\\", \\\"HYPE\\\", \\\"XRP\\\", \\\"DOGE\\\", \\\"SUI\\\", \\\"BNB\\\", \\\"ADA\\\", \\\"LINK\\\", \\\"AVAX\\\", \\\"TRX\\\", \\\"LTC\\\", \\\"BCH\\\", \\\"DOT\\\", \\\"NEAR\\\", \\\"APT\\\", \\\"ARB\\\", \\\"OP\\\", \\\"INJ\\\", \\\"TIA\\\", \\\"SEI\\\", \\\"WLD\\\", \\\"JUP\\\", \\\"kPEPE\\\", \\\"WIF\\\", \\\"kBONK\\\", \\\"TON\\\", \\\"ATOM\\\", \\\"FIL\\\", \\\"ETC\\\", \\\"UNI\\\", \\\"AAVE\\\", \\\"MKR\\\", \\\"LDO\\\", \\\"CRV\\\", \\\"ENA\\\", \\\"ONDO\\\", \\\"PENDLE\\\", \\\"RENDER\\\", \\\"FET\\\", \\\"TAO\\\", \\\"STX\\\", \\\"IMX\\\", \\\"GALA\\\", \\\"SAND\\\", \\\"ILV\\\", \\\"AXS\\\", \\\"APE\\\", \\\"DYDX\\\", \\\"GMX\\\", \\\"SNX\\\", \\\"COMP\\\", \\\"SUSHI\\\", \\\"UMA\\\", \\\"BLUR\\\", \\\"JTO\\\", \\\"PYTH\\\", \\\"W\\\", \\\"STRK\\\", \\\"ZK\\\", \\\"ZRO\\\", \\\"EIGEN\\\", \\\"ETHFI\\\", \\\"REZ\\\", \\\"BOME\\\", \\\"MEW\\\", \\\"POPCAT\\\", \\\"TRUMP\\\", \\\"FARTCOIN\\\", \\\"AI16Z\\\", \\\"VIRTUAL\\\", \\\"KAITO\\\", \\\"BERA\\\", \\\"IP\\\", \\\"MOVE\\\", \\\"ME\\\", \\\"PNUT\\\", \\\"GOAT\\\", \\\"HBAR\\\", \\\"XLM\\\", \\\"ALGO\\\", \\\"KAS\\\", \\\"ORDI\\\", \\\"MINA\\\", \\\"ZEC\\\", \\\"DASH\\\", \\\"NEO\\\", \\\"ICP\\\", \\\"RUNE\\\", \\\"ENS\\\", \\\"ZEN\\\", \\\"CFX\\\", \\\"BLAST\\\", \\\"SAGA\\\", \\\"NOT\\\", \\\"MEME\\\", \\\"ALT\\\", \\\"DYM\\\", \\\"MANTA\\\"], chosen=SubjectUniverse(\\\"v3\\\")),\\n    costs=Costs(fee=0.00045, slippage=0.00045),\\n    data=Data(\\\"snap_6c1f0e8a2b9d4f37\\\"),\\n)\\n\\nSteps(\\n    map=SettingsGrid(axes=[SettingAxis(\\\"step[2].period\\\", [2, 3, 4, 5, 6, 7, 8, 10, 12, 14, 16, 18, 21, 24, 28, 32, 36, 42, 48, 56, 64, 72, 80, 90], name=\\\"lookback\\\", stamp=Stamp(\\\"ROC\\\", version=1, param=\\\"period\\\", value=10, written=True)), SettingAxis(\\\"step[7].branch[max_hold].step[1].threshold\\\", [1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 14, 16, 20, 24, 28, 30], name=\\\"hold\\\", stamp=Stamp(\\\"AboveThresholdFilter\\\", version=1, param=\\\"threshold\\\", value=28, written=True))]),\\n    split=SplitCompare(grid=\\\"map\\\"),\\n    nearby=Neighbours(grid=\\\"map\\\"),\\n)\\n\\nViews(\\n    Page(default=\\\"Lookback × hold\\\", switch=[\\\"Lookback × hold\\\", \\\"Before vs after the split\\\", \\\"Every setting\\\"]),\\n    Heatmap(\\\"Lookback × hold\\\", of=\\\"map\\\", x=Axis(\\\"hold\\\"), y=Axis(\\\"lookback\\\"), colour=Raw(Control(\\\"measure\\\", \\\"sharpe\\\", options=[\\\"sharpe\\\", \\\"cagr\\\", \\\"max_drawdown\\\"])), marks=[Ring(Yours()), Box(Selected())], select=\\\"cell\\\"),\\n    Scatter(\\\"Before vs after the split\\\", of=\\\"split\\\", x=Raw(\\\"sharpe_before\\\"), y=Raw(\\\"sharpe_after\\\")),\\n    Distribution(\\\"Every setting\\\", of=\\\"map\\\", x=Raw(\\\"sharpe\\\"), marker=Final(\\\"map\\\", measure=\\\"sharpe\\\", at={\\\"lookback\\\": 10, \\\"hold\\\": 28})),\\n    Curve(\\\"Across holds\\\", of=\\\"map\\\", x=Axis(\\\"hold\\\"), y=Raw(\\\"sharpe\\\"), where=Is(\\\"lookback\\\", Selected(\\\"lookback\\\"))),\\n)\\n\", base={\"version\": 1, \"revision\": 1, \"evidence_hash\": \"b351b78da4ef4314590c9d6503b40d821b040901cbe85c139f24a92dccfd43cf\"})\nView in Keel: https://app.usekeel.io/research/stu_000005",
+      "text": "card: where the host draws Keel cards, the user sees what follows as a card carrying its name, links and ids, so a reply can call it by name; the ids and links here serve tool calls and hosts without cards.\n\nMap a strategy's settings · Lookback × hold · version 1 · Done · Oct 29\nNearby settings as a share of yours: −0.78 (nearby −0.23 against yours 0.29)\nDays Mar 23, 2025 to Oct 29, 2026, split Apr 17, 2026 · 100 coins: the coins Momentum rotation trades · costs 9 bp a fill · data as of Oct 29, 2026\nIn short:\n- Nearby settings as a share of yours: −0.78 (nearby −0.23 against yours 0.29), no interval; Mar 23, 2025 to Oct 28, 2026\n- Rank among nearby settings: 3 of 9, no interval; Mar 23, 2025 to Oct 28, 2026\n- Rank agreement before and after the split: 0.041, no interval (No range shown: these numbers use the same days); Mar 23, 2025 to Oct 28, 2026\nBest settings (of 384): hold 30 · lookback 7: Sharpe 1.38; hold 6 · lookback 18: Sharpe 1.38; hold 5 · lookback 90: Sharpe 1.38; hold 14 · lookback 8: Sharpe 1.37; hold 7 · lookback 12: Sharpe 1.37\nRuns: 0 runs, 0 reused, none failed\nCharts (4): Lookback × hold · Before vs after the split · Every setting · Across holds. keel_research_get(study_id=\"stu_000005\", view=0) reads the numbers behind any of them.\nMeasured with nearby settings and before and after the split.\nMomentum rotation v3 has a newer version, v4. Plan it: keel_research_plan(study_id=\"stu_000005\", source=\"Study(\\n    title=\\\"Lookback × hold\\\",\\n    question=\\\"How do the results change around lookback 10, hold 28?\\\",\\n)\\n\\nSubjects(\\n    v3=Strategy(\\\"str_momrotpro00000000000000000@4\\\"),\\n)\\n\\nRun(\\n    days=Days(\\\"2025-03-23\\\", \\\"2026-10-29\\\"),\\n    split=Split(\\\"2026-04-17\\\"),\\n    coins=Coins([\\\"BTC\\\", \\\"ETH\\\", \\\"SOL\\\", \\\"HYPE\\\", \\\"XRP\\\", \\\"DOGE\\\", \\\"SUI\\\", \\\"BNB\\\", \\\"ADA\\\", \\\"LINK\\\", \\\"AVAX\\\", \\\"TRX\\\", \\\"LTC\\\", \\\"BCH\\\", \\\"DOT\\\", \\\"NEAR\\\", \\\"APT\\\", \\\"ARB\\\", \\\"OP\\\", \\\"INJ\\\", \\\"TIA\\\", \\\"SEI\\\", \\\"WLD\\\", \\\"JUP\\\", \\\"kPEPE\\\", \\\"WIF\\\", \\\"kBONK\\\", \\\"TON\\\", \\\"ATOM\\\", \\\"FIL\\\", \\\"ETC\\\", \\\"UNI\\\", \\\"AAVE\\\", \\\"MKR\\\", \\\"LDO\\\", \\\"CRV\\\", \\\"ENA\\\", \\\"ONDO\\\", \\\"PENDLE\\\", \\\"RENDER\\\", \\\"FET\\\", \\\"TAO\\\", \\\"STX\\\", \\\"IMX\\\", \\\"GALA\\\", \\\"SAND\\\", \\\"ILV\\\", \\\"AXS\\\", \\\"APE\\\", \\\"DYDX\\\", \\\"GMX\\\", \\\"SNX\\\", \\\"COMP\\\", \\\"SUSHI\\\", \\\"UMA\\\", \\\"BLUR\\\", \\\"JTO\\\", \\\"PYTH\\\", \\\"W\\\", \\\"STRK\\\", \\\"ZK\\\", \\\"ZRO\\\", \\\"EIGEN\\\", \\\"ETHFI\\\", \\\"REZ\\\", \\\"BOME\\\", \\\"MEW\\\", \\\"POPCAT\\\", \\\"TRUMP\\\", \\\"FARTCOIN\\\", \\\"AI16Z\\\", \\\"VIRTUAL\\\", \\\"KAITO\\\", \\\"BERA\\\", \\\"IP\\\", \\\"MOVE\\\", \\\"ME\\\", \\\"PNUT\\\", \\\"GOAT\\\", \\\"HBAR\\\", \\\"XLM\\\", \\\"ALGO\\\", \\\"KAS\\\", \\\"ORDI\\\", \\\"MINA\\\", \\\"ZEC\\\", \\\"DASH\\\", \\\"NEO\\\", \\\"ICP\\\", \\\"RUNE\\\", \\\"ENS\\\", \\\"ZEN\\\", \\\"CFX\\\", \\\"BLAST\\\", \\\"SAGA\\\", \\\"NOT\\\", \\\"MEME\\\", \\\"ALT\\\", \\\"DYM\\\", \\\"MANTA\\\"], chosen=SubjectUniverse(\\\"v3\\\")),\\n    costs=Costs(fee=0.00045, slippage=0.00045),\\n    data=Data(\\\"snap_6c1f0e8a2b9d4f37\\\"),\\n)\\n\\nSteps(\\n    map=SettingsGrid(axes=[SettingAxis(\\\"step[2].period\\\", [2, 3, 4, 5, 6, 7, 8, 10, 12, 14, 16, 18, 21, 24, 28, 32, 36, 42, 48, 56, 64, 72, 80, 90], name=\\\"lookback\\\", stamp=Stamp(\\\"ROC\\\", version=1, param=\\\"period\\\", value=10, written=True)), SettingAxis(\\\"step[7].branch[max_hold].step[1].threshold\\\", [1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 14, 16, 20, 24, 28, 30], name=\\\"hold\\\", stamp=Stamp(\\\"AboveThresholdFilter\\\", version=1, param=\\\"threshold\\\", value=28, written=True))]),\\n    split=SplitCompare(grid=\\\"map\\\"),\\n    nearby=Neighbours(grid=\\\"map\\\"),\\n)\\n\\nViews(\\n    Page(default=\\\"Lookback × hold\\\", switch=[\\\"Lookback × hold\\\", \\\"Before vs after the split\\\", \\\"Every setting\\\"]),\\n    Heatmap(\\\"Lookback × hold\\\", of=\\\"map\\\", x=Axis(\\\"hold\\\"), y=Axis(\\\"lookback\\\"), colour=Raw(Control(\\\"measure\\\", \\\"sharpe\\\", options=[\\\"sharpe\\\", \\\"cagr\\\", \\\"max_drawdown\\\"])), marks=[Ring(Yours()), Box(Selected())], select=\\\"cell\\\"),\\n    Scatter(\\\"Before vs after the split\\\", of=\\\"split\\\", x=Raw(\\\"sharpe_before\\\"), y=Raw(\\\"sharpe_after\\\")),\\n    Distribution(\\\"Every setting\\\", of=\\\"map\\\", x=Raw(\\\"sharpe\\\"), marker=Final(\\\"map\\\", measure=\\\"sharpe\\\", at={\\\"lookback\\\": 10, \\\"hold\\\": 28})),\\n    Curve(\\\"Across holds\\\", of=\\\"map\\\", x=Axis(\\\"hold\\\"), y=Raw(\\\"sharpe\\\"), where=Is(\\\"lookback\\\", Selected(\\\"lookback\\\"))),\\n)\\n\", base={\"version\": 1, \"revision\": 1, \"evidence_hash\": \"b351b78da4ef4314590c9d6503b40d821b040901cbe85c139f24a92dccfd43cf\"})\nView in Keel: https://app.usekeel.io/research/stu_000005",
       "type": "text"
     }
   ],
@@ -476,14 +518,14 @@
       "footing_line": "585 days · 100 coins · 9 bp a fill",
       "headline": {
         "chips": [],
-        "text": "Nearby settings as a share of yours: −0.78"
+        "text": "Nearby settings as a share of yours: −0.78 (nearby −0.23 against yours 0.29)"
       },
       "kind_label": {
         "key": "map",
         "name": "Map a strategy's settings",
         "short": "Settings map"
       },
-      "lead": "Nearby settings as a share of yours −0.78",
+      "lead": "Highest of 384 settings: hold 30 · lookback 7, Sharpe 1.38",
       "maker": "you",
       "maker_words": "by you",
       "numbers": [
@@ -493,11 +535,13 @@
           "ref": "nearby.summary",
           "sample": {
             "first_day": "2025-03-23",
-            "last_day": "2026-10-29"
+            "last_day": "2026-10-28"
           },
+          "sample_words": "Mar 23, 2025 to Oct 28, 2026",
           "unit": "ratio",
           "value": -0.7762622105561354,
-          "value_words": "−0.78"
+          "value_short": "−0.78",
+          "value_words": "−0.78 (nearby −0.23 against yours 0.29)"
         },
         {
           "label": "Rank among nearby settings",
@@ -505,11 +549,12 @@
           "ref": "nearby.summary",
           "sample": {
             "first_day": "2025-03-23",
-            "last_day": "2026-10-29"
+            "last_day": "2026-10-28"
           },
+          "sample_words": "Mar 23, 2025 to Oct 28, 2026",
           "unit": "count",
           "value": 3.0,
-          "value_words": "3"
+          "value_words": "3 of 9"
         },
         {
           "label": "Rank agreement before and after the split",
@@ -517,51 +562,81 @@
           "ref": "split.summary",
           "sample": {
             "first_day": "2025-03-23",
-            "last_day": "2026-10-29"
+            "last_day": "2026-10-28"
           },
+          "sample_words": "Mar 23, 2025 to Oct 28, 2026",
           "unit": "score",
           "value": 0.041312568875654695,
           "value_words": "0.041"
         }
       ],
       "schema": "keel.research.card/2",
+      "short": {
+        "text": "Best of 384: Sharpe 1.38"
+      },
       "state": "completed",
       "state_words": "Done · Oct 29",
       "title": "Lookback × hold",
       "top5": {
         "kind": "best_settings",
+        "measure_label": "Sharpe",
         "rows": [
           {
+            "cell": {
+              "ramp": "div",
+              "step": "v"
+            },
             "label": "hold 30 · lookback 7",
             "slot": 0,
+            "split_words": "1.31 → 1.52",
             "unit": "ratio",
             "value": 1.3823968065314913,
             "value_words": "1.38"
           },
           {
+            "cell": {
+              "ramp": "div",
+              "step": "v"
+            },
             "label": "hold 6 · lookback 18",
             "slot": 0,
+            "split_words": "1.31 → 1.52",
             "unit": "ratio",
             "value": 1.3823968065314913,
             "value_words": "1.38"
           },
           {
+            "cell": {
+              "ramp": "div",
+              "step": "v"
+            },
             "label": "hold 5 · lookback 90",
             "slot": 0,
+            "split_words": "1.31 → 1.52",
             "unit": "ratio",
             "value": 1.3823968065314913,
             "value_words": "1.38"
           },
           {
+            "cell": {
+              "ramp": "div",
+              "step": "v"
+            },
             "label": "hold 14 · lookback 8",
             "slot": 0,
+            "split_words": "1.38 → 1.34",
             "unit": "ratio",
             "value": 1.3669974650834855,
             "value_words": "1.37"
           },
           {
+            "cell": {
+              "ramp": "div",
+              "step": "v"
+            },
             "label": "hold 7 · lookback 12",
             "slot": 0,
+            "split_words": "1.38 → 1.34",
             "unit": "ratio",
             "value": 1.3669974650834855,
             "value_words": "1.37"
@@ -577,7 +652,7 @@
         "units": [
           {
             "limit": 400,
-            "resets_at": "2026-12-18",
+            "resets_at": "2026-12-22",
             "unit": "research_studies",
             "used": 0
           }
@@ -587,6 +662,7 @@
         "executed": 0,
         "failed_content": 0,
         "failed_platform": 0,
+        "not_applicable": 0,
         "planned": 0,
         "reused": 0,
         "words": "0 runs, 0 reused, none failed"
@@ -607,7 +683,9 @@
         "fee": 0.00045,
         "slippage": 0.00045
       },
+      "costs_words": "9 bp a fill (fee 4.5 bp, slippage 4.5 bp)",
       "data": "snap_6c1f0e8a2b9d4f37",
+      "data_words": "Data as of Oct 29, 2026",
       "days": {
         "end": "2026-10-29",
         "start": "2025-03-23"
@@ -630,6 +708,13 @@
     },
     "page": {
       "default": 0,
+      "sections": [
+        {
+          "title": "The selected setting",
+          "views": [3],
+          "words": "click any cell, dot or row to change it"
+        }
+      ],
       "switch": [0, 1, 2]
     },
     "stale": [
@@ -694,7 +779,7 @@
       "total": 4
     },
     "words": {
-      "allowance": "Used 0 of 400 studies; resets Dec 1. Planning, reading, saving, and runs that reuse everything or run nothing, do not count."
+      "method": "Measured with nearby settings and before and after the split."
     }
   }
 }

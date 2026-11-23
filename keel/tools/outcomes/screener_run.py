@@ -12,6 +12,11 @@ from keel.errors import BACKTEST_ALLOWANCE_CLAUSE, KeelError
 
 from . import register
 from ._base import OutcomeTool, listed_schema, present_param_schema
+from ._plan_fit import (
+    NARROW_PARAM,
+    apply_narrow_recovery,
+    narrowed_fields,
+)
 from ._screener_commands import _with_refusals, refusal_code
 from ._screener_view import SUBJECT, TERMINAL, VIEW, build_result, invalid, read_envelope
 from .backtest_run import _poll_budget_s, _quota_envelope_fields
@@ -44,6 +49,10 @@ def _handler(args, ctx):
         # The API SubmitRun contract accepts a string version, while the
         # public CLI/MCP argument remains a positive integer.
         body["version"] = str(args["version"])
+    if args.get("narrow_to_plan"):
+        # The acceptance of a coin-limit refusal's remedy (spec 02 §C4.3a): an unsaved source runs narrowed and is
+        # not saved; a saved screen saves the narrowed next version first. Absent, nothing narrows.
+        body["narrow_to_plan"] = True
     if args.get("strategy_id"):
         path = f"/v1/screeners/{seg(args['strategy_id'])}/runs"
     else:
@@ -60,11 +69,17 @@ def _handler(args, ctx):
     # (a timeout, a 5xx) is resent once instead of being reported as unknown.
     headers = {"Idempotency-Key": f"sdk-screener-run-{uuid.uuid4()}"}
     try:
-        run = client.post(path, json=body, headers=headers)
+        try:
+            run = client.post(path, json=body, headers=headers)
+        except KeelError as err:
+            if refusal_code(err) not in (None, "server_error", "error"):
+                raise  # a coded refusal: the run was not queued
+            run = client.post(path, json=body, headers=headers)
     except KeelError as err:
-        if refusal_code(err) not in (None, "server_error", "error"):
-            raise  # a coded refusal: the run was not queued
-        run = client.post(path, json=body, headers=headers)
+        # The coin cap (spec 02 §C4.3): the next action is this same run with the remedy's `apply`.
+        apply_narrow_recovery(err, "keel_screener_run", args)
+        raise
+    submitted = run
     rid = run.get("run_id") or run.get("result_run_id")
     if not rid:
         invalid("Run response omitted run_id.")
@@ -100,6 +115,8 @@ def _handler(args, ctx):
         envelope = _in_flight(run, rid, args)
     result = build_result(envelope, ctx, size=args.get("present") or "receipt")
     result.extra.update(quota)
+    # What the plan kept, said once (spec 02 §C4.3a): the submit's own answer.
+    result.extra.update(narrowed_fields(submitted))
     return result
 
 
@@ -124,6 +141,7 @@ PROPERTIES.update(
         "end_date": {"type": "string", "format": "date", "description": "Exclusive last day."},
         "view": VIEW,
         "wait": {"type": "boolean", "default": True, "description": "Wait up to the poll budget."},
+        "narrow_to_plan": NARROW_PARAM,
         "present": present_param_schema("`receipt`"),
     }
 )

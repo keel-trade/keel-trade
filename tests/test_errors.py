@@ -191,8 +191,8 @@ def test_translate_http_403_plan_limit_is_facts_with_no_destination():
     # — since Q-1806 — no directive to the model: every card renders
     # `message`. `retryable: false` carries the retry fact.
     assert str(e) == (
-        "Backtests: 50 of 50 used on this plan; resets Tue 22 Sep. "
-        "Composing, validating and reading existing results don't use this allowance."
+        "Backtests: 50 of 50 used on this plan; resets Sep 22. "
+        "Screen runs use the same backtests. Your results, paper runs and saved screens keep working, and saved screens keep refreshing without using any."
     )
     for model_word in ("`example`", "docs_url", "do not retry", "Report"):
         assert model_word not in str(e), model_word
@@ -820,7 +820,9 @@ def test_only_no_grant_kinds_may_say_the_plan_does_not_include_it():
         "someone who spent 50 of 50 must never be told the plan lacks the unit"
     )
     assert "Backtests: 50 of 50 used" in str(spent)
-    assert "This plan doesn't include backtests." in str(never)
+    # The v3 feature wall (spec 02 §D, R30): a plan that grants none reads "aren't on", inclusion-first when a
+    # plan is named.
+    assert "Backtests aren't on this plan." in str(never)
 
 
 # ── D-14: the wall names the plans that include more (doc 07 §4/§5) ─────────
@@ -868,9 +870,9 @@ def test_free_plan_wall_is_the_exact_d14_copy():
     * `more_plan_names` reading every served entry's `plan` id instead of
       its `name` — this reds on "trader and pro"."""
     assert _wall("free", 25) == (
-        "Backtests: 25 of 25 used on Free; resets Sat 5 Dec. "
-        "Trader and Pro include more. Plans are changed in the Keel web app. "
-        "Composing, validating and reading existing results don't use this allowance."
+        "Backtests: 25 of 25 used on Free; resets Dec 5. "
+        "Screen runs use the same backtests. Your results, paper runs and saved screens keep working, and saved screens keep refreshing without using any. "
+        "Trader, Quant and Pro include more. Plans are changed in the Keel web app."
     )
 
 
@@ -888,7 +890,7 @@ def test_every_v2_wall_names_exactly_the_catalog_plans_that_include_more(plan):
     if expected is None:
         assert "include" not in text and "Plans are changed" not in text, text
     else:
-        assert f" {expected} Plans are changed in the Keel web app. " in text, text
+        assert text.endswith(f" {expected} Plans are changed in the Keel web app."), text
     others = [n for n in cat.all_plan_names() if n != cat.display_name(plan)]
     for name in others:
         if name not in cat.names(cat.higher_plans(plan, "backtest_runs")):
@@ -905,11 +907,12 @@ def test_the_wall_carries_the_higher_plans_names_never_their_numbers():
     import json as _json
 
     served = _served_wall("free", 25)
-    assert [h["limit"] for h in served["higher_plans"]] == [1000, 4000], "non-vacuity"
+    limits = [h["limit"] for h in served["higher_plans"]]
+    assert limits == [1000, 2000, 4000], "non-vacuity"
     e = translate_http_error(403, _quota_403(**served))
     blob = _json.dumps(e.to_envelope())
-    assert "higher_plans" not in blob and "1000" not in blob and "4000" not in blob
-    assert e.input["more_plans"] == ["Trader", "Pro"]
+    assert "higher_plans" not in blob and not any(str(n) in blob for n in limits)
+    assert e.input["more_plans"] == cat.names(cat.higher_plans("free", "backtest_runs"))
     assert e.input["plan"] == "free" and e.input["plan_name"] == "Free"
 
 
@@ -919,7 +922,7 @@ def test_an_old_server_without_higher_plans_gets_no_clause_and_no_guess():
     same identity, not a lookup."""
     quota = {**_WALL_QUOTA, "plan": "free", "limit": 25, "used": 25, "remaining": 0}
     text = str(translate_http_error(403, _quota_403(**quota)))
-    assert text.startswith("Backtests: 25 of 25 used on Free; resets Sat 5 Dec. ")
+    assert text.startswith("Backtests: 25 of 25 used on Free; resets Dec 5. ")
     assert "include" not in text and "Plans are changed" not in text
 
 
@@ -946,7 +949,7 @@ def test_plan_copy_guard_refuses_prices_links_and_pitch_words():
         with pytest.raises(ValueError):
             assert_plan_copy(pitch)
     for kept in (
-        "Backtests: 25 of 25 used on Free; resets Sat 5 Dec.",
+        "Backtests: 25 of 25 used on Free; resets Dec 5.",
         "Trader and Pro include more. Plans are changed in the Keel web app.",
         "Pro includes more. Plans are changed in the Keel web app.",
         "Keel's pricing page lists the plans.",
@@ -976,16 +979,32 @@ def test_more_clause_matches_the_shared_parity_cases():
     assert any(c["expected_more_clause"] is None for c in cases)
     unit_rows = 0
     for case in cases:
-        assert more_clause(case["kind"], case["names"]) == case["expected_more_clause"], case
-        if case["unit"] is None:
+        said = more_clause(
+            case["kind"],
+            case["names"],
+            unit=case["unit"],
+            own=case["own"],
+            every_coin=case["every_coin"],
+        )
+        assert said == case["expected_more_clause"], case
+        if case["unit"] is None or case["plan"] is None:
             continue
         unit_rows += 1
-        info = {"unit": case["unit"], "more_plans": case["names"]}
+        # The served facts a refusal carries: the unit, the names, the caller's own plan name and, for the coins,
+        # whether every plan named covers every coin (higher_every_coin).
+        info = {"unit": case["unit"], "more_plans": case["names"], "plan_name": case["own"]}
+        if case["every_coin"] is not None:
+            info["higher_every_coin"] = case["every_coin"]
         if case["kind"] == "feature":
             info.update(kind="no_cap_grants", code="plan_feature_unavailable")
         assert limit_kind(info) == case["kind"], case
         assert quota_plans_line(info) == case["expected_wall_more"], case
     assert unit_rows >= 30, unit_rows
+    # The unit verbs and the own-plan words are exercised (PLANS-REVIEW R2-R4).
+    clauses = {c["expected_more_clause"] for c in cases}
+    assert "Trader, Quant and Pro run more." in clauses
+    assert "Trader, Quant and Pro screen every coin." in clauses
+    assert any(c and c.startswith("The current Trader plan") for c in clauses)
 
 
 def test_errors_name_no_tool_absent_on_the_listed_profile(monkeypatch):
@@ -1050,7 +1069,7 @@ def test_render_quota_sentence_states_both_halves_and_the_reset():
             "tier": "warn",
         }
     )
-    assert line == "6 of 50 backtests left; resets Tue 22 Sep."
+    assert line == "6 of 50 backtests left; resets Sep 22."
     block = {
         "unit": "backtest_runs",
         "label": "backtests",
@@ -1060,14 +1079,15 @@ def test_render_quota_sentence_states_both_halves_and_the_reset():
         "resets_at": "2026-12-05T00:00:00Z",
         "higher_plans": cat.higher_plans("free", "backtest_runs"),
     }
-    for tier in ("warn", "critical", "exhausted"):
+    # THE near rule (R17) reads the block's own counts: 21 of 25 is past 75%, so the clause rides whatever tier
+    # an older server stamped.
+    for tier in ("notice", "warn", "critical", "exhausted"):
         assert render_quota_notice({**block, "tier": tier}) == (
-            "4 of 25 backtests left; resets Sat 5 Dec. Trader and Pro include more."
+            "4 of 25 backtests left; resets Dec 5. Trader, Quant and Pro include more."
         ), tier
-    # Control: the 50% notice stays a bare count (founder Q3).
-    assert render_quota_notice({**block, "tier": "notice"}) == (
-        "4 of 25 backtests left; resets Sat 5 Dec."
-    )
+    # Control: at half used (the 50% notice) it stays a bare count (founder Q3), even under a served "critical".
+    half = {**block, "used": 13, "remaining": 12, "tier": "critical"}
+    assert render_quota_notice(half) == "12 of 25 backtests left; resets Dec 5."
 
 
 def test_render_quota_sentence_omits_what_the_server_did_not_send():
@@ -1117,7 +1137,7 @@ def test_the_30_day_cycle_reads_this_30_day_period_and_never_monthly():
     }
     assert quota_period_phrase(block) == " this 30-day period"
     # D-14 rule 8: plan-limit copy names no window; the date carries it.
-    assert render_quota_sentence(block) == "4 of 25 backtests left; resets Sun 29 Nov."
+    assert render_quota_sentence(block) == "4 of 25 backtests left; resets Nov 29."
     # Control: the weekly unit keeps its phrase.
     assert quota_period_phrase({**block, "period": "weekly"}) == " this week"
 
@@ -1131,8 +1151,8 @@ def test_a_30_day_wall_headline_has_no_period_adjective():
         translate_http_error(403, _quota_403(**quota, plan="free", limit=25, used=25, remaining=0))
     )
     assert free == (
-        "Backtests: 25 of 25 used on Free; resets Sun 29 Nov. "
-        "Composing, validating and reading existing results don't use this allowance."
+        "Backtests: 25 of 25 used on Free; resets Nov 29. "
+        "Screen runs use the same backtests. Your results, paper runs and saved screens keep working, and saved screens keep refreshing without using any."
     )
     paid = str(
         translate_http_error(
@@ -1159,7 +1179,7 @@ def test_the_timeframe_floor_refusal_is_the_floor_wall_with_structured_facts():
 
     faster = cat.faster_plans("free")
     for entry in faster:
-        entry["floor"] = cat.floor_of(entry["plan"])
+        entry["floor"] = cat.floor_of(entry["plan"], entry["version"])
     e = translate_http_error(
         422,
         _coded_422(
@@ -1175,10 +1195,11 @@ def test_the_timeframe_floor_refusal_is_the_floor_wall_with_structured_facts():
     env = e.to_envelope()
     assert isinstance(e, ValidationError)
     assert env["code"] == "SERVING_CLOCK_BELOW_PLAN_FLOOR"
+    # No `applies` (a server older than the plans v3 floor split): the one floor names both sides.
     assert env["message"] == (
-        "Paper and live on Free need 1h or slower; this is 15min. "
-        "Change `target_timeframe` to 1h or slower. "
-        "Trader and Pro run faster. Plans are changed in the Keel web app."
+        "Paper and live on Free run at 1 hour or slower; this strategy is 15min. "
+        "Change `target_timeframe` to 1h to deploy it; the backtest stays as it is. "
+        "Trader, Quant and Pro run faster. Plans are changed in the Keel web app."
     )
     assert env["detail"] == {
         "code": "SERVING_CLOCK_BELOW_PLAN_FLOOR",
@@ -1198,8 +1219,8 @@ def test_the_timeframe_floor_refusal_is_the_floor_wall_with_structured_facts():
         _coded_422("SERVING_CLOCK_BELOW_PLAN_FLOOR", _FLOOR_1H, floor="1h", requested="15min"),
     )
     assert str(old) == (
-        "Paper and live on this plan need 1h or slower; this is 15min. "
-        "Change `target_timeframe` to 1h or slower."
+        "Paper and live on this plan run at 1 hour or slower; this strategy is 15min. "
+        "Change `target_timeframe` to 1h to deploy it; the backtest stays as it is."
     )
     # Control: any other coded 422 keeps the generic coded advice.
     other = translate_http_error(422, _coded_422("WINDOW_EMPTY", "empty")).to_envelope()
@@ -1243,9 +1264,9 @@ def test_both_pots_on_the_30_day_wall():
     e = translate_http_error(403, _quota_403(**_BOTH_POTS_QUOTA))
     text = str(e)
     assert "first-week" not in text and "period" not in text, text
-    assert text.startswith(
-        f"Backtest compute time: {_BOTH_POTS_QUOTA['remaining']} s of 2,250 s left on Free"
-    ), text
+    # Compute is silent (PLANS-REVIEW R7): its one sentence is the refusal's, in time words, never a count.
+    assert text.startswith("Backtest time on Free is used up until Nov 29."), text
+    assert " s of " not in text and "2,250" not in text, text
     assert e.input["first_week"] == {
         "granted": 1500,
         "remaining": 0,
@@ -1332,7 +1353,7 @@ def test_every_non_research_403_is_byte_identical_to_before_ri_237(monkeypatch):
      ("plan_feature_unavailable", "feature:research_template_map")],
 )  # fmt: skip
 def test_a_research_403_serves_its_own_words_never_the_body_or_a_login(monkeypatch, code, unit):
-    words = "This study was not run and nothing was charged."
+    words = "This study can't run yet, and nothing was charged."
     body = json.dumps({"detail": {"code": code, "message": words, "unit": unit}})
     for item in _envelopes_403(monkeypatch, [body]):  # both server kinds alike
         env = item["env"]
@@ -1350,3 +1371,25 @@ def test_a_research_coded_403_keeps_its_own_code(monkeypatch):
             item["env"]["code"] == "RESEARCH_SIGN_IN_REQUIRED" and item["env"]["message"] == words
         )
         assert item["env"]["detail"] == {"code": "RESEARCH_SIGN_IN_REQUIRED"}
+
+
+def test_fix8_e11_e19_a_server_error_and_a_coded_413_read_as_words() -> None:
+    """E11: "Server error (HTTP 500)" with "this Keel API may be unavailable"; E19: a coded 413 (a share too large)
+    read "Keel refused the request (HTTP 413)" and lost its code. Seed (reversed): the 413 arm removed reds the second
+    arm. Control: an uncoded 413 still reads the plain refusal."""
+    err = translate_http_error(500, "Server error")
+    assert str(err) == "Something went wrong on Keel's side." and "HTTP" not in str(err)
+    assert err.error_code == "server_error" and err.retryable is True
+    body = json.dumps(
+        {
+            "detail": {
+                "code": "RESEARCH_SHARE_TOO_LARGE",
+                "message": "This snapshot would be larger than 32 MB.",
+            }
+        }
+    )
+    coded = translate_http_error(413, body)
+    assert coded.error_code == "RESEARCH_SHARE_TOO_LARGE", coded.error_code
+    assert str(coded) == "This snapshot would be larger than 32 MB." and "HTTP" not in str(coded)
+    plain = translate_http_error(413, "too big")
+    assert "HTTP 413" in str(plain)  # control: an uncoded 413 is the generic refusal

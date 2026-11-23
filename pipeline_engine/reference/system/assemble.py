@@ -111,6 +111,23 @@ def screens_core_path() -> Path:
     return path
 
 
+#: The research corpus source (Research 07 §5.3): one section, kept out of
+#: `system/` for the screens core's reason, in the same relative place in
+#: both trees (`build_data.py` copies it beside the vendored builder).
+RESEARCH_CORE_NAME = "research_core.md"
+
+
+def research_core_path() -> Path:
+    """The research corpus source, or a loud error naming the rebuild."""
+    path = _SYSTEM_DIR.parent / RESEARCH_CORE_NAME
+    if not path.exists():
+        raise FileNotFoundError(
+            f"{RESEARCH_CORE_NAME} not found at {path}. Re-run: PYTHONPATH=libs python "
+            "packages/keel-trade/keel-sdk/scripts/build_data.py"
+        )
+    return path
+
+
 def core_path() -> Path:
     """The corpus source file, or a loud error naming the rebuild."""
     for candidate in _CORE_CANDIDATES:
@@ -148,8 +165,9 @@ SERVED_LAYERS = frozenset({"reference", "sectioned"})
 
 #: The one `sectioned` file of the strategy corpus (05 §3.3).
 SECTIONED_PATH = "system/operating_core.md"
-#: Every `sectioned` file: the operating core and the screens core (L13).
-SECTIONED_PATHS = frozenset({SECTIONED_PATH, "screens_core.md"})
+#: Every `sectioned` file: the operating core, the screens core (L13) and the
+#: research core (Research 07 §5.3).
+SECTIONED_PATHS = frozenset({SECTIONED_PATH, "screens_core.md", "research_core.md"})
 
 #: The directory name that marks an in-app-only file, at any depth.
 CHAT_DIR = "chat"
@@ -321,6 +339,7 @@ __all__ = [
     "SECTIONED_PATH",
     "SECTIONED_PATHS",
     "SCREENS_CORE_NAME",
+    "RESEARCH_CORE_NAME",
     "SERVED_LAYERS",
     "Section",
     "base_document",
@@ -454,8 +473,20 @@ _VALID_LAYERS = frozenset({"head", "body", "skill", "reference"})
 #: * ``screens`` — emitted on the full profiles always, and on the listed
 #:   profile only while ``KEEL_LISTED_SCREENS_HOSTS`` is on for the caller
 #:   (screeners L13): with it off the listed instructions are the base's.
+#: * ``research_served`` — emitted only while this server's caller is served
+#:   Research (its ``/v1/me``; Research 07 §5.3, D-387), and on the listed
+#:   profile only beside the screens line (Research is a peer of Screens
+#:   there): off, every instructions string is the pre-Research one byte for
+#:   byte (gate E).
 WHEN_CONDITIONS = frozenset(
-    {"live_write_absent", "paper_loaded", "paper_listed", "paper_listed_absent", "screens"}
+    {
+        "live_write_absent",
+        "paper_loaded",
+        "paper_listed",
+        "paper_listed_absent",
+        "screens",
+        "research_served",
+    }
 )
 
 #: The two registers (spec 01 §2.1). No default: a silently-defaulted
@@ -497,10 +528,13 @@ def _parse_front_matter(chunk: str) -> dict[str, object] | None:
 @lru_cache(maxsize=1)
 def load_sections(path: str | None = None) -> tuple[Section, ...]:
     """Parse the corpus into its ordered sections: `operating_core.md`, then
-    `screens_core.md` (L13). An explicit ``path`` parses that one file."""
+    `screens_core.md` (L13), then `research_core.md`. An explicit ``path``
+    parses that one file."""
     if path is None:
-        return _parse_sections(core_path().read_text()) + _parse_sections(
-            screens_core_path().read_text()
+        return (
+            _parse_sections(core_path().read_text())
+            + _parse_sections(screens_core_path().read_text())
+            + _parse_sections(research_core_path().read_text())
         )
     return _parse_sections(Path(path).read_text())
 
@@ -674,8 +708,11 @@ def _when_holds(
     paper_loaded: bool,
     paper_listed: bool = False,
     screens: bool = False,
+    research_served: bool = False,
 ) -> bool:
     """Whether a section's `when:` condition holds (absent = always)."""
+    if sec.when == "research_served":
+        return research_served
     if sec.when == "screens":
         return screens
     if sec.when == "live_write_absent":
@@ -697,6 +734,7 @@ def _included(
     paper_loaded: bool = False,
     paper_listed: bool = False,
     screens_listed: bool = False,
+    research_served: bool = False,
 ) -> bool:
     if "mcp" not in sec.surfaces:
         return False
@@ -715,6 +753,7 @@ def _included(
         paper_loaded=paper_loaded,
         paper_listed=paper_listed,
         screens=screens_listed or profile != "listed",
+        research_served=research_served and (screens_listed or profile != "listed"),
     )
 
 
@@ -725,6 +764,7 @@ def instructions(
     paper_loaded: bool = False,
     paper_listed: bool = False,
     screens_listed: bool = False,
+    research_served: bool = False,
     include_ids: bool = False,
 ) -> str:
     """Assemble the server instructions for one profile.
@@ -737,7 +777,9 @@ def instructions(
     §3.4.2): `when: paper_listed` sections are emitted only with it on and
     `when: paper_listed_absent` sections only with it off. ``screens_listed``
     is the listed screens flag: a `when: screens` section is emitted on the
-    full profiles always and on `listed` only with it on.
+    full profiles always and on `listed` only with it on. ``research_served``
+    is whether this server's caller is served Research: a `when:
+    research_served` section is emitted only with it on.
     """
     if profile not in PROFILE_TAGS:
         raise ValueError(f"unknown profile {profile!r}; valid: {sorted(PROFILE_TAGS)}")
@@ -746,6 +788,7 @@ def instructions(
         "paper_loaded": paper_loaded,
         "paper_listed": paper_listed,
         "screens_listed": screens_listed,
+        "research_served": research_served,
     }
     blocks = [s.terse for s in load_sections() if _included(s, profile, **flags)]
     if include_ids:  # pragma: no cover - debugging aid
@@ -850,6 +893,10 @@ def _served(sec: Section, paper_loaded: bool, paper_listed: bool, screens: bool 
         return not paper_listed
     if sec.when == "screens":
         return screens
+    if sec.when == "research_served":
+        # A pointer to Research's own topic (keel_help topic=research), not a
+        # fact about configuration: the served document stays pre-Research.
+        return False
     return True
 
 
@@ -1360,6 +1407,13 @@ SOLE_CARRIER: tuple[Anchor, ...] = (
         "R-ERROR-TWICE",
         (("tool", "keel_connection_check"), "failing twice on one root cause"),
         (("tool", "keel_feedback"), "when the user asks to send feedback"),
+    ),
+    # ── the research core's sentence (local, Research served; research_core.md) ──
+    _a(
+        "RS1",
+        "a question about a strategy or signal the user already has is a study: plan, then run",
+        "",
+        (("tool", "keel_research_plan"), "check, study, compare or map a strategy or signal"),
     ),
 )
 

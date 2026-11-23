@@ -23,7 +23,6 @@ from ._research_commands import (
 )
 from ._research_view import plan_text, project_text, study_text
 from .research_get import PROPERTIES as GET_PROPERTIES
-from .research_get import _handler as get_handler
 from .research_plan import PROPERTIES as PLAN_PROPERTIES
 from .research_plan import add_call, plan_body
 from .research_run import TERMINAL, _poll_budget_s, state_of
@@ -73,7 +72,13 @@ def _receipt(env: dict, *keys: str, ctx=None, study_id: str | None = None) -> ob
     if not words and env.get("deleted") is True:
         # StudyDeletedResponse serves its words (SERVE 63cc77014e: "Deleted; its 2 shared links stopped working.");
         # an answer without them (an older server) reads its served fields, labelled, never a blank line.
-        words = f"Deleted: {env.get('study_id')} · shares revoked: {int(env.get('shares_revoked') or 0)}"
+        # AUDIT-WORDS M33: as the served words say it, never "shares revoked: N"
+        n = int(env.get("shares_revoked") or 0)
+        words = (
+            f"Deleted; its {n} shared link{'s' if n != 1 else ''} stopped working."
+            if n
+            else "Deleted."
+        )
     link = (env.get("links") or {}).get("app") or (
         _app_link(ctx, study_id) if ctx is not None else None
     )
@@ -83,12 +88,10 @@ def _receipt(env: dict, *keys: str, ctx=None, study_id: str | None = None) -> ob
 
 def _app_link(ctx, study_id: str | None) -> str:
     from ._research_commands import research_url
-    from .open_in_app import research_link
+    from .open_in_app import app_base, research_link
 
     if study_id:
-        return research_link(
-            "study", study_id, origin=str(getattr(ctx, "app_url", "https://app.usekeel.io"))
-        )
+        return research_link("study", study_id, origin=app_base(ctx))
     return research_url(ctx)
 
 
@@ -138,8 +141,17 @@ def _data(args, ctx):
     return read_rows(args, ctx, limit=CLI_DATA_ROWS)
 
 
+#: R-22 (WL-AG-07, STG-SURFACES #28): the CLI lists 100 studies by default (MCP 25); the route serves 25 a page, so
+#: the CLI reads on (``research_get._list``'s ``most``).
+CLI_LIST_ROWS = 100
+
+
 def _list(args, ctx):
-    return get_handler({k: args.get(k) for k in ("limit", "cursor")}, ctx)
+    from .research_get import _list as read_list
+
+    return read_list(
+        {"cursor": args.get("cursor")}, ctx, most=int(args.get("limit") or CLI_LIST_ROWS)
+    )
 
 
 # ── resume, retry, steps ──────────────────────────────────────────────────────
@@ -155,18 +167,23 @@ def _resubmit(mode):
 
 def _steps(args, ctx):
     env = call(ctx, "get", "/v1/research/steps", params={"name": args.get("name")})
-    lines = [f"Steps ({env.get('steps_total')}), catalog {env.get('catalog_version')}"]
+    # AUDIT S3 #8 (07 §3.2 rule 11): no internals: the catalog's id ("keel.research.steps/1#43") is not the
+    # reader's; the count is
+    lines = [f"Steps ({env.get('steps_total')})"]
     for step in env.get("steps") or []:
-        lines.append(
-            f"- {step.get('name')} v{step.get('version')}: {step.get('about') or step.get('label')}"
-        )
+        # AUDIT-WORDS M29: the step by its label, its name only as the handle a study document takes
+        label, name = step.get("label") or step.get("name"), step.get("name")
+        handle = f" ({name})" if name and name != label else ""
+        about = step.get("about")
+        lines.append(f"- {label}{handle}: {about}" if about else f"- {label}{handle}")
     grammar = env.get("grammar")
     if isinstance(grammar, dict):
         # K15 (01 §4.9, RI-092): the listing's grammar is in the answer's `grammar`; its words are the help topic's.
+        # AUDIT-WORDS M30: no field name; the call that reads the grammar (the CLI prints its command)
         lines.append(
-            f"Grammar: {len(grammar.get('references') or [])} reference forms, the address grammar and "
-            f"{len(grammar.get('rules') or {})} rules with their fixes "
-            '(in `grammar`; keel_help(topic="research_steps") reads them).'
+            f"The study document's grammar ({len(grammar.get('references') or [])} reference forms and "
+            f"{len(grammar.get('rules') or {})} rules with their fixes): "
+            'keel_help(topic="research_steps") reads it.'
         )
     lines.append(f"View in Keel: {_app_link(ctx, None)}")
     return study_result(env, "\n".join(lines), size="view")
@@ -199,7 +216,8 @@ def _item_body(args) -> dict:
         (k for prefix, k in _REF_KINDS.items() if str(ref).startswith(prefix)), None
     )
     if kind is None:
-        invalid("Send --ref-kind (study, strategy, output, screen or paper_run) for this ref.")
+        # AUDIT-WORDS M31: the flag's values as values
+        invalid("Send --ref-kind for this ref: study, strategy, output, screen or paper_run.")
     return {"ref_kind": kind, "ref": ref}
 
 
@@ -265,7 +283,8 @@ def _delete(args, ctx):
 def _shares(args, ctx):
     env = call(ctx, "get", f"/v1/research/studies/{seg(args['study_id'])}/shares")
     rows = env.get("data") or env.get("items") or []
-    lines = [f"Shares of {args['study_id']}: {len(rows)}"]
+    # AUDIT-WORDS M32: in words, the study named by its page link below
+    lines = [f"Shared links of this study: {len(rows)}"]
     for row in rows:
         lines.append(f"- {row.get('share_id')} · {row.get('url') or ''}".rstrip(" ·"))
     lines.append(f"View in Keel: {_app_link(ctx, args['study_id'])}")
@@ -360,8 +379,8 @@ CLI_VERBS = (
             "limit": {
                 "type": "integer",
                 "minimum": 1,
-                "maximum": 25,
-                "description": "Studies a page (1 to 25).",
+                "maximum": CLI_LIST_ROWS,
+                "description": f"Studies to show (1 to {CLI_LIST_ROWS}; default {CLI_LIST_ROWS}).",
             },
             "cursor": {"type": "string", "description": "The cursor the previous page named."},
         },
@@ -391,7 +410,12 @@ CLI_VERBS = (
         "research_steps",
         ("research", "steps"),
         _steps,
-        {"name": {"type": "string", "description": "One step in full, e.g. CostStress."}},
+        {
+            "name": {
+                "type": "string",
+                "description": "One step in full, by the name a study document uses (e.g. CostStress).",
+            }
+        },
         [],
         READ,
         True,
@@ -549,7 +573,10 @@ RESEARCH_CLI_HELP: dict[tuple[str, ...], tuple[str, tuple[str, ...]]] = {
         (),
     ),
     ("research", "note"): ("Keep a hypothesis, a decision or a note on a study or a project.", ()),
-    ("research", "cancel"): ("Stop a running study. What has started finishes and is kept.", ()),
+    ("research", "cancel"): (
+        "Stop a running study. What has started finishes and is kept.",
+        ("keel research cancel stu_…", "keel research cancel stu_… --version 2"),
+    ),
     ("research", "make-signal"): ("Keep a study's mix of signals as a new signal.", ()),
     ("research", "add"): (
         "Plan adding a subject or a reference to a study.",
@@ -571,7 +598,7 @@ RESEARCH_CLI_HELP: dict[tuple[str, ...], tuple[str, tuple[str, ...]]] = {
     ("research", "list"): ("Your studies, newest first.", ()),
     ("research", "resume"): ("Resume a stopped run.", ("keel research resume rus_…",)),
     ("research", "retry"): (
-        "Retry the runs that failed on Keel's side (free).",
+        "Retry the runs that didn't finish on our side (free).",
         ("keel research retry rus_…",),
     ),
     ("research", "steps"): (

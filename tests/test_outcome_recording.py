@@ -115,6 +115,7 @@ def test_the_key_set_is_the_one_keel_api_ingests():
         "validation_ok",
         "issue_codes",
         "doc_ref",
+        "plan_limit",
     }
 
 
@@ -261,6 +262,44 @@ def test_adapter_stamps_is_error_on_a_keel_error(slot):
     envelope = json.loads(handler())
     assert slot == {"is_error": True}
     assert envelope["code"] == "usage_error"
+
+
+def test_adapter_records_plan_limit_not_is_error_on_a_plan_limit_keel_error(slot):
+    """Q-8224: a plan-limit refusal records `plan_limit`, never `is_error`
+    (the hosted dispatcher re-applies MCP `isError` to any slot that says
+    `is_error`). The envelope the model reads is unchanged."""
+    from keel.errors import translate_http_error
+
+    body = {
+        "detail": {
+            "code": "SCREEN_COINS_OVER_PLAN",
+            "message": "Free screens cover up to 30 coins.",
+        }
+    }
+    err = translate_http_error(422, json.dumps(body))
+
+    def boom(args, ctx):
+        raise err
+
+    handler = _make_handler(_tool(boom), frozenset())
+    envelope = json.loads(handler())
+    assert slot == {"plan_limit": True, "is_error": False}
+    assert envelope["code"] == "SCREEN_COINS_OVER_PLAN"
+
+
+def test_control_a_non_plan_limit_422_still_records_is_error(slot):
+    from keel.errors import translate_http_error
+
+    err = translate_http_error(
+        422, json.dumps({"detail": {"code": "WINDOW_EMPTY", "message": "x"}})
+    )
+
+    def boom(args, ctx):
+        raise err
+
+    handler = _make_handler(_tool(boom), frozenset())
+    json.loads(handler())
+    assert slot == {"is_error": True}
 
 
 def test_adapter_stamps_is_error_on_an_unexpected_exception(slot):

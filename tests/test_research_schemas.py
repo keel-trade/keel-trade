@@ -129,7 +129,9 @@ def test_the_cell_form_reaches_the_route() -> None:
         with pytest.raises(jsonschema.ValidationError):
             jsonschema.validate({"study_id": "stu_x", "cell": bad}, schema)
     assert plan_body({"study_id": "stu_x", "cell": cell}) == {"study_id": "stu_x", "cell": cell}
-    cli = plan_body({"study_id": "stu_x", "cell": '{"grid": "map", "at": {"lookback": "12", "hold": 20}}'})
+    cli = plan_body(
+        {"study_id": "stu_x", "cell": '{"grid": "map", "at": {"lookback": "12", "hold": 20}}'}
+    )
     assert cli["cell"] == cell
     run = RESEARCH_INPUT_SCHEMAS["keel_research_run"]["properties"]
     # run takes every plan form (07 §4.3): the same shape; its description says it is the direct run's (R-25)
@@ -187,7 +189,7 @@ def test_a_plan_envelope_validates() -> None:
         "steps": [{"id": "costs", "step": "CostStress", "to_run": 5, "runnable": True}],
         "runs": {"children": 26, "to_run": 23},
         "run_allowed": True,
-        "words": {"work": "24 runs, 2 reused · under a minute · versions tried +0"},
+        "words": {"work": "24 runs, 2 reused · under a minute"},
     }
     jsonschema.validate(plan, STUDY_SCHEMA)
     with pytest.raises(jsonschema.ValidationError):
@@ -196,13 +198,13 @@ def test_a_plan_envelope_validates() -> None:
 
 def test_the_paused_refusal_envelope_validates() -> None:
     """07 §3.4: one code, the one sentence, no next action and no link."""
-    err = KeelError("Research is paused.")
+    err = KeelError("Research isn't available yet.")
     err.error_code = "RESEARCH_PAUSED"
     err.recovery_tool = None
     err.detail = {"code": "RESEARCH_PAUSED"}
     envelope = err.to_envelope()
     assert envelope["code"] == "RESEARCH_PAUSED"
-    assert envelope["message"] == "Research is paused."
+    assert envelope["message"] == "Research isn't available yet."
     assert envelope["suggested_next_action"] == {"tool": None, "args": {}}
     jsonschema.validate(envelope, STUDY_SCHEMA)
 
@@ -218,9 +220,13 @@ def test_every_fixture_card_validates_against_keel_apis_exported_card_contract()
     from pathlib import Path
 
     contract = json.loads(
-        (Path(__file__).resolve().parents[4] / "libs/research/fixtures/card_v2/schema.json").read_text()
+        (
+            Path(__file__).resolve().parents[4] / "libs/research/fixtures/card_v2/schema.json"
+        ).read_text()
     )
-    shapes = json.loads((Path(__file__).parent / "fixtures" / "research_server_shapes.json").read_text())
+    shapes = json.loads(
+        (Path(__file__).parent / "fixtures" / "research_server_shapes.json").read_text()
+    )
     cards = [
         shapes["study_done"]["card_summary"],
         shapes["card_summary_v2_max_thumb"],
@@ -229,13 +235,19 @@ def test_every_fixture_card_validates_against_keel_apis_exported_card_contract()
     data = [shapes["card_data_v2"]]
     checked = 0
     for card in cards:
-        jsonschema.validate({k: v for k, v in card.items() if k != "_provenance"}, contract["card_summary"])
+        jsonschema.validate(
+            {k: v for k, v in card.items() if k != "_provenance"}, contract["card_summary"]
+        )
         checked += 1
     share_schema = json.loads(json.dumps(contract["card_summary"]))
     share_schema["properties"]["maker"] = {"type": ["string", "null"]}
     jsonschema.validate(shapes["share"]["card_summary"], share_schema)
     for body in data:
-        jsonschema.validate({k: v for k, v in body.items() if k != "_provenance"}, contract["card_data"])
+        jsonschema.validate(
+            {k: v for k, v in body.items() if k != "_provenance"}, contract["card_data"]
+        )
     assert checked >= 2 and len(data) == 1
     with pytest.raises(jsonschema.ValidationError):
-        jsonschema.validate({**cards[1], "subtitle": "not in the contract"}, contract["card_summary"])
+        jsonschema.validate(
+            {**cards[1], "subtitle": "not in the contract"}, contract["card_summary"]
+        )

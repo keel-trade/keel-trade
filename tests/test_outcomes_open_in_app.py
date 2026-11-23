@@ -260,7 +260,10 @@ def test_a_study_id_links_to_the_study_page_through_the_mcp_dispatch(monkeypatch
     monkeypatch.delenv("KEEL_EXECUTION_MODE", raising=False)
     monkeypatch.delenv("KEEL_APP_URL", raising=False)
     monkeypatch.setenv("KEEL_SERVER_PROFILE", profile)
-    env = json.loads(_make_handler(TOOL, frozenset())(id=_STUDY))
+    from keel.tools.outcomes._toolsets import research_served_context
+
+    with research_served_context(True):
+        env = json.loads(_make_handler(TOOL, frozenset())(id=_STUDY))
     assert "error" not in env and env.get("code") != "internal_error", env
     assert env["hero_url"] == f"https://app.usekeel.io/research/{_STUDY}", env
     assert env["share_url"] is None  # navigation, not publication
@@ -326,3 +329,52 @@ def test_research_links_read_the_bundled_routes():
     assert _study_link(f"{app}/research/stu_b", {"study_id": _STUDY}) == f"{app}/research/{_STUDY}"
     with pytest.raises(ValueError):
         research_link("study", origin=app)
+
+
+_STUDY_SHARE = "AbCdEfGhIjKlMnOpQrStUvW"  # a shared study's 23-character id
+
+
+@pytest.mark.parametrize("target", [_STUDY, "prj_01HZXK3Y6N3V7Q9S2T4W8R5M1E", _STUDY_SHARE])
+def test_a_research_link_while_research_is_off_is_the_paused_refusal(monkeypatch, target):
+    """MCP-FINAL batch 3 #6 (FINAL-LIST §D): while this caller is not served Research, a study, a project or a shared
+    study has no page, so keel_app_link answers keel-api's paused refusal (D-387) on the handler, the MCP dispatch and
+    the CLI, and builds no /research link. SEED (run 2026-11-20, reversed): drop the ``research_served()`` refusal in
+    ``_handler`` -> the 3 arms red (each links the page); 26 others green; control: a strategy id with Research
+    off still links its editor (``test_a_strategy_link_is_unchanged_while_research_is_off``)."""
+    import click
+    from click.testing import CliRunner
+    from keel.errors import RESEARCH_PAUSED_CODE, RESEARCH_PAUSED_WORDS
+    from keel.tools.outcomes._cli_adapter import register_all as cli_register_all
+    from keel.tools.outcomes._mcp_adapter import _make_handler
+    from keel.tools.outcomes._toolsets import research_served_context
+
+    monkeypatch.delenv("KEEL_EXECUTION_MODE", raising=False)
+    monkeypatch.delenv("KEEL_APP_URL", raising=False)
+    with research_served_context(False):
+        with pytest.raises(KeelError) as exc:
+            _run({"id": target})
+        assert exc.value.error_code == RESEARCH_PAUSED_CODE
+        assert str(exc.value) == RESEARCH_PAUSED_WORDS
+        env = json.loads(_make_handler(TOOL, frozenset())(id=target))
+        assert (
+            env.get("code") == RESEARCH_PAUSED_CODE and env["message"] == RESEARCH_PAUSED_WORDS
+        ), env
+        assert "/research" not in json.dumps(env)
+        root = click.Group("keel")
+        cli_register_all(root, OUTCOMES)
+        out = CliRunner().invoke(root, ["app", "open", target])
+    assert out.exit_code != 0 and RESEARCH_PAUSED_WORDS in out.output, out.output
+    assert "/research" not in out.output and "/s/" not in out.output
+    with research_served_context(
+        True
+    ):  # served: the same id links (non-vacuity: the refusal is the switch's)
+        assert _run({"id": target}).hero_url.endswith(target)
+
+
+def test_a_strategy_link_is_unchanged_while_research_is_off():
+    """Control for the paused arms: an id Research does not own links as before with Research off."""
+    from keel.tools.outcomes._toolsets import research_served_context
+
+    with research_served_context(False):
+        result = _run({"id": "str_01ABC"})
+    assert result.hero_url == "https://app.usekeel.io/strategies/str_01ABC/edit"

@@ -45,30 +45,40 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 BASE = ROOT / "tests" / "fixtures" / "cards" / "screener_card.json"
 
-#: The card's served templates (`copy.card`), as keel-api serves them plus
-#: the two Q-3635 asks of lane 3: the tie note and the view revision.
+#: The card's served templates (`copy.card`), as keel-api serves them
+#: (libs/screeners/copy.py `card_copy()`; libs/screeners/copy_test.py pins the
+#: SDK's copy of the drawn words in test_widgets_screener.CARD_COPY).
 CARD_COPY = {
-    "pass_now": "{passing} of {of} pass now",
+    "pass_now": "{passing} of {of} coins",
+    "tie": "{n} coins tie at {value} at the cutoff",
+    "view_rev": "view revision {n}",
     "more_in_keel": "+{k} more in Keel",
     "show": "Show",
     "show_all": "All ({n})",
     "expand": "Open the interactive chart",
     "scrub": "Move through the window",
-    "latest_note": "The numbers and the table stay at the latest bar.",
-    "sorted_within": "Sorted within the {n} shipped.",
+    "latest_note": "The numbers and the table show the latest values.",
+    "sorted_within": "Sorted within the {n} shown.",
     "more_views": "More views in Keel",
-    "caption": "Coloured: the top {k} of {A} by {ranked_by}, over {n} of {source_points} bars.",
-    "scatter_caption": "{n} of {A} coins; colour follows {ranked_by}.",
-    "tie": "{n} coins tie at {value} at the cutoff",
-    "view_rev": "view rev {n}",
-    # Q-3640, contract field 1: the ranked output's range over every coin
-    # with a value, under the rows, when the card shows fewer than that.
-    # `{low}` / `{high}` are formatted by the card in the output's unit with
-    # the column's sign rule; `{label}` is the column header. The below-zero
-    # clause is its own template, joined with " · " when `below_zero` > 0.
+    "caption": "Highlighted: the top {k} of {A} coins by {ranked_by}.",
+    "scatter_caption": "{n} of {A} coins. Colour follows {ranked_by}.",
     "range": "Across {count} coins: {low} ({low_asset}) to {high} ({high_asset})",
     "range_below": "{n} below zero",
+    "kind": "Screen",
+    "as_of": "as of {time}",
+    "coins": "{n} coins",
+    "more_in_expand": "{k} more in Expand",
+    "across": "Across {count} coins",
+    "new": "new",
+    "since_last": "Since the last bar",
+    "entered_asset": "{asset} entered the screen since the last bar",
+    "left_asset": "{asset} left the screen since the last bar",
+    "tie_more": "+{n} more tie at {value}",
+    "label_unit": "{label} ({unit})",
+    "overview": "All views",
+    "sort": "Sort",
     "units": {"rate_per_hour": "an hour", "rate_per_year": "a year"},
+    "unit_labels": {"rate_per_hour": "% an hour", "rate_per_year": "% a year"},
 }
 
 AS_OF_MS = 1_793_883_600_000  # 2026-11-05T13:00:00Z
@@ -212,7 +222,6 @@ def _completed(
         "rebased": None,
         # contract field 2: the server's cadence word, no " bars"
         "clock": "Hourly",
-        "as_of": {"as_of_ms": AS_OF_MS, "words": "as of 5 Nov 13:00 UTC"},
         "description": None,
         "card": copy.deepcopy(CARD_COPY),
     }
@@ -351,6 +360,7 @@ def lines() -> dict:
         "kinds": ["Lines", "Table"],
         "default": "Lines",
         "top_control": False,
+        "views": [{"id": "History", "kind": "Lines"}, {"id": "All coins", "kind": "Table"}],
     }
     c["copy"]["description"] = (
         "Each line is one coin's Funding now, a year, over the displayed window."
@@ -457,6 +467,53 @@ def view_set() -> dict:
     return src
 
 
+def top15_moves() -> dict:
+    """top15 one bar on: SAGA entered the set, LINK (tied at the cutoff) left it."""
+    src = top15()
+    p = src["completed"]["passing"]
+    p["entered"], p["left"] = ["SAGA"], ["LINK"]
+    p["counts"]["entered"], p["counts"]["left"] = 1, 1
+    return src
+
+
+def empty() -> dict:
+    """A rule filter no coin passes right now (above +100% a year)."""
+    src = above20()
+    c = src["completed"]
+    c["passing"] = _passing(0, [])
+    c["headline"] = {"passing": 0, "of": UNIVERSE}
+    c["hero"]["passing"] = []
+    c["copy"]["description"] = (
+        "A coin is in the screen when Funding now, a year is above +100.0% a year."
+    )
+    return src
+
+
+def scatter() -> dict:
+    """The movers screen with a Scatter default: 7-day return against relative volume rank."""
+    src = movers()
+    c = src["completed"]
+    c["graphs"]["default"] = "Scatter"
+    c["graphs"]["default_channels"] = {
+        "view_id": "Volume vs return",
+        "kind": "Scatter",
+        "x": "rel_vol_rank",
+        "y": "ret_7d",
+    }
+    c["graphs"]["views"] = [
+        {"id": "Top 10", "kind": "Table"},
+        {"id": "Week", "kind": "Lines"},
+        {"id": "Volume vs return", "kind": "Scatter"},
+    ]
+    c["copy"]["card"]["quadrants"] = {
+        "top_left": "Quiet, rising",
+        "top_right": "Busy, rising",
+        "bottom_left": "Quiet, falling",
+        "bottom_right": "Busy, falling",
+    }
+    return src
+
+
 def receipt() -> dict:
     """What a saved view (keel_screener_view_set) hands the card: no result."""
     return {
@@ -475,7 +532,7 @@ def receipt() -> dict:
             "view_revision": 4,
         },
         "run": {"status": "COMPLETED", "status_words": "View saved."},
-        "copy": {"card": {"view_rev": "view rev {n}"}},
+        "copy": {"card": copy.deepcopy(CARD_COPY)},
         "hero_url": "https://app.usekeel.io/screens/str_funding000000000000000000",
         "actions": [
             {
@@ -511,4 +568,7 @@ def card_envelopes() -> dict[str, dict]:
         "receipt": receipt(),
         "nofilter": card(nofilter()),
         "view_set": card(view_set()),
+        "top15_moves": card(top15_moves()),
+        "empty": card(empty()),
+        "scatter": card(scatter()),
     }

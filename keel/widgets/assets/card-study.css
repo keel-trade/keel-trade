@@ -8,20 +8,28 @@
    title gets the full width, the chips go under it, D-332 (2)).
 
      layout             wide  narrow   slots (wide; narrow)
-     study, strip        506     640   pad 26 · head 36; 66 · lead 22; 44 ·
-     study, no strip     430     564     key 200 · numbers 76; 154 ·
+     study, strip        522     626   pad 26 · head 52 · lead 22; 44 ·
+     study, no strip     446     550     key 200 · numbers 76; 154 ·
                                          footing 18 · strip 76 · actions 52; 56
-     run                 358     472   pad 26 · head 36; 66 · body · actions
-     list                326     360   pad 26 · head 36; 66 · 5 x 38 · more 22
-     chart               336     370   pad 26 · head · chart 200 · rows 22
+     run                 428     532   pad 26 · head 52 · lead 22; 44 · key
+                                         200 · numbers 76; 154 · actions
+                                         (D-381 (2): the done card's height
+                                         from the start; in flight the body
+                                         box fills it)
+     list                342     346   pad 26 · head 52 · 5 x 38 · more 22
+     chart               352     356   pad 26 · head 52 · chart 200 · rows 22
      refusal             144     192   pad 26 · words 3; 5 lines · link
+
+   The head (CARD-RENDER #3) is two lines at every width: the title, one
+   version pill and the kind chip; then, muted, the note chips and the
+   state and maker words.
 
    The key slot's 200 px: a served chart draws title 18 · plot · x axis 16 ·
    readout 18; a thumb fills all of it (D-332 (3): no empty band). */
 :root {
   --st-pad-top: 10px;
   --st-pad-bottom: 16px;
-  --st-head: 36px;
+  --st-head: 52px;
   --st-lead: 22px;
   --st-lead-lines: 1;
   --st-key: 200px;
@@ -30,27 +38,26 @@
   --st-footing: 18px;
   --st-strip: 76px;
   --st-actions-gap: 16px;
-  --st-h-study: 506px;
-  --st-h-study-bare: 430px;
-  --st-h-run: 358px;
-  --st-h-list: 326px;
-  --st-h-chart: 336px;
+  --st-h-study: 522px;
+  --st-h-study-bare: 446px;
+  --st-h-run: 428px;
+  --st-h-list: 342px;
+  --st-h-chart: 352px;
   --st-h-refusal: 144px;
   --st-refusal-lines: 3;
 }
 @media (max-width: 479px) {
   :root {
-    --st-head: 66px;
     --st-lead: 44px;
     --st-lead-lines: 2;
     --st-tiles: 154px;
     --st-tile-cols: 2;
     --st-actions-gap: 12px;
-    --st-h-study: 640px;
-    --st-h-study-bare: 564px;
-    --st-h-run: 472px;
-    --st-h-list: 360px;
-    --st-h-chart: 370px;
+    --st-h-study: 626px;
+    --st-h-study-bare: 550px;
+    --st-h-run: 532px;
+    --st-h-list: 346px;
+    --st-h-chart: 356px;
     --st-h-refusal: 192px;
     --st-refusal-lines: 5;
   }
@@ -84,10 +91,12 @@ body[data-card="study"][data-layout="run"],
 body[data-card="study"][data-expect="progress"] {
   --st-h: var(--st-h-run);
 }
-body[data-card="study"][data-layout="list"] {
+body[data-card="study"][data-layout="list"],
+body[data-card="study"][data-expect="view"][data-expect-layout="list"] {
   --st-h: var(--st-h-list);
 }
-body[data-card="study"][data-layout="chart"] {
+body[data-card="study"][data-layout="chart"],
+body[data-card="study"][data-expect="view"][data-expect-layout="chart"] {
   --st-h: var(--st-h-chart);
 }
 body[data-card="study"][data-layout="refusal"] {
@@ -109,21 +118,54 @@ body[data-card="study"][data-layout="run"][data-terminal="1"]
   display: none;
 }
 
-/* The header: one line wide; two below 480 px (D-332 (2)). */
+/* The header (CARD-RENDER #3): two lines at every width. Line 1 the title
+   (cut at a word end by the card), one version pill and the kind chip;
+   line 2, muted, the note chips then the state and maker words. */
 body[data-card="study"][data-layout] .card-head,
 body[data-card="study"][data-expect="view"] .card-head,
 body[data-card="study"][data-expect="progress"] .card-head {
   flex: none;
   height: calc(var(--st-head) - 8px);
   margin-bottom: 8px;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
+  align-content: flex-start;
   align-items: center;
+  row-gap: 2px;
   overflow: hidden;
 }
 body[data-card="study"][data-layout] .head-meta {
+  flex: 1 1 100%;
+  min-width: 0;
   flex-wrap: nowrap;
   align-items: center;
+  height: 24px;
   overflow: hidden;
+}
+body[data-card="study"] .st-sub {
+  flex: 1 1 100%;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 18px;
+  overflow: hidden;
+  font-size: var(--t-xs);
+  line-height: 18px;
+  color: var(--muted);
+}
+body[data-card="study"] .st-sub .chip {
+  flex: none;
+  height: 18px;
+  line-height: 16px;
+  padding: 0 6px;
+  font-size: var(--t-2xs, 11px);
+}
+body[data-card="study"] .st-sub-w {
+  flex: 0 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 /* One type family on the card (D-337 (4)): the title is the body face. */
 body[data-card="study"] .head-name,
@@ -142,39 +184,12 @@ body[data-card="study"] #head-meta .chip.note {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-@media (max-width: 479px) {
-  /* Two lines: the wordmark and the title on the first, the chips on the
-     second from the left edge (the meta group dissolves into the head). */
-  body[data-card="study"][data-layout] .card-head {
-    flex-wrap: wrap;
-    align-content: flex-start;
-    align-items: center;
-    row-gap: 4px;
-  }
-  body[data-card="study"][data-layout] .head-meta {
-    display: contents;
-  }
-  body[data-card="study"][data-layout] .card-head::after {
-    content: "";
-    order: 2;
-    flex-basis: 100%;
-    height: 0;
-  }
-  body[data-card="study"][data-layout] .card-head .brand {
-    order: 0;
-  }
-  body[data-card="study"][data-layout] .head-name {
-    order: 1;
-    flex: 1 1 0;
-    min-width: 0;
-    line-height: 22px;
-  }
-  body[data-card="study"][data-layout] #head-meta .chip {
-    order: 3;
-  }
-  body[data-card="study"][data-layout] #head-meta .chip.note {
-    display: none;
-  }
+body[data-card="study"][data-layout] .head-name {
+  flex: 0 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  line-height: 24px;
 }
 body[data-card="study"][data-layout] #card-body,
 body[data-card="study"][data-expect="view"] #card-body,
@@ -212,7 +227,8 @@ body[data-card="study"][data-layout]:not([data-layout="full"]) .link-row {
   overflow: hidden;
 }
 body[data-layout="study"] .st-key-slot,
-body[data-layout="chart"] .st-key-slot {
+body[data-layout="chart"] .st-key-slot,
+body[data-layout="run"] #card-body[data-run="done"] .st-key-slot {
   flex: none;
   height: var(--st-key);
 }
@@ -250,6 +266,16 @@ body[data-layout="chart"] .st-key-slot {
   line-height: 18px;
   color: var(--muted);
   overflow: hidden;
+}
+/* CARD-360: a legend that crowds its title takes the line under it. */
+.st-chart-title[data-wrap] {
+  flex-wrap: wrap;
+  height: auto;
+  row-gap: 0;
+}
+.st-chart-title[data-wrap] .st-legend {
+  flex-basis: 100%;
+  margin-left: 0;
 }
 .st-chart-name {
   flex: 0 1 auto;
@@ -424,7 +450,10 @@ body[data-layout="chart"] .st-key-slot {
   color: #fff;
   text-shadow: 0 0 2px rgba(0, 0, 0, 0.8);
 }
+/* CARD-360: the line fits the 15 px row the size gate allows (an 18 px
+   line overflowed every cell of a 6-row map at 360 px). */
 .st-cellwords span {
+  line-height: var(--t-tiny-lh);
   white-space: nowrap;
   text-overflow: ellipsis;
   display: flex;
@@ -433,12 +462,18 @@ body[data-layout="chart"] .st-key-slot {
   overflow: hidden;
 }
 
-/* The marks: geometry from the server, ink from the host tokens. */
+/* The marks: geometry from the server, ink from the host tokens. A series
+   with a colour slot (c > 0) carries its own stroke and fill attributes, the
+   legend's colours; a class rule would override them (CARD-FINAL B4: every
+   line of an Entries Curve and a Compare drew in the accent while its legend
+   showed two colours), so the accent is for a series without one. */
 .st-line {
   fill: none;
-  stroke: var(--accent, currentColor);
   stroke-width: 1.6;
   stroke-linejoin: round;
+}
+.st-line:not([stroke]) {
+  stroke: var(--accent, currentColor);
 }
 .st-line.st-ref {
   stroke: var(--muted);
@@ -451,9 +486,11 @@ body[data-layout="chart"] .st-key-slot {
   stroke-width: 1.2;
 }
 .st-band {
-  fill: var(--accent, currentColor);
   opacity: 0.18;
   stroke: none;
+}
+.st-band:not([fill]) {
+  fill: var(--accent, currentColor);
 }
 .st-zero,
 .st-split {
@@ -500,6 +537,23 @@ body[data-layout="chart"] .st-key-slot {
   fill: none;
   stroke: var(--fg);
   stroke-width: 2;
+}
+/* AUDIT-CHARTS F55/F66: your setting on a line, a ring round its point (a
+   wide round-capped dot under a narrower one in the background colour). */
+.st-yours-out,
+.st-yours-in {
+  stroke-linecap: round;
+}
+.st-yours-out {
+  stroke: var(--fg);
+  stroke-width: 13;
+}
+.st-yours-in {
+  stroke: var(--bg, #fff);
+  stroke-width: 8;
+}
+.st-dot.st-ref {
+  stroke: var(--muted);
 }
 /* D-352 (3): a map's axis names and the key for its outlined cells. */
 .st-axis-name {
@@ -550,6 +604,34 @@ body[data-layout="chart"] .st-key-slot {
 }
 .st-hk-swatch-low {
   border: 1.5px dashed var(--muted);
+}
+/* "Your setting": a true ring over its cell, never Highest's square. */
+.st-ring-dot {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+  border-radius: 50%;
+  border: 2px solid var(--fg);
+  box-shadow: 0 0 0 1.5px var(--bg, #fff);
+  box-sizing: border-box;
+  pointer-events: none;
+}
+.st-axis-row {
+  flex: none;
+  display: flex;
+  justify-content: flex-end;
+  height: 14px;
+  line-height: 14px;
+}
+.st-legend-name {
+  max-width: 14em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.st-linked {
+  display: inline-flex;
+  margin: 0 0 6px;
 }
 .st-hk-swatch-ring {
   border: 2px solid var(--fg);
@@ -672,6 +754,35 @@ body[data-layout="chart"] .st-key-slot {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+/* A number served as a sentence (D-380's probabilities): the number keeps
+   the big line and its words wrap below it, two lines at most; in the
+   tile's fixed 74 px the label then takes one line and the sample (the
+   footing line under the tiles says the window) leaves. The tile's title
+   carries the label and the whole sentence. */
+.st-number-words .st-value,
+.st-number-words .st-value-words {
+  flex: none;
+}
+.st-value-words {
+  font-size: var(--t-xs);
+  line-height: 16px;
+  max-height: 32px;
+  color: var(--fg);
+  white-space: normal;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+.st-number.st-number-words .st-label {
+  max-height: 16px;
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+}
+.st-number.st-number-words .st-sample {
+  display: none;
 }
 /* A served number with no served words keeps its tile: an em dash, never
    a raw value. */
@@ -797,6 +908,21 @@ body[data-layout="chart"] .st-key-slot {
   font-size: var(--t-tiny);
   color: var(--muted);
 }
+.st-mini-row {
+  display: flex;
+  gap: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.st-mini-cell {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.st-mini-val {
+  flex: none;
+  margin-left: auto;
+  color: var(--muted);
+}
 .st-strip-more {
   flex: none;
   align-self: center;
@@ -900,6 +1026,130 @@ body[data-layout="chart"] .st-key-slot {
   height: auto;
   min-height: 26px;
 }
+.st-steps-more {
+  margin: 4px 0 0;
+  font-size: var(--t-xs);
+  color: var(--muted);
+}
+/* A study read in flight (13 §4.3): the run frame inside the study's frame;
+   the body box takes the extra height. */
+body[data-layout="study"][data-run="1"] .st-run-box {
+  flex: 1 1 auto;
+}
+.st-run-box[data-empty] {
+  margin: 4px 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--tile);
+}
+#card-body[data-run="stopped"] .st-run-words {
+  height: auto;
+  white-space: normal;
+}
+/* A stopped card's partial chart keeps the key chart's height. */
+#card-body[data-run="stopped"] .st-run-box > .st-chart {
+  flex: none;
+  height: var(--st-key);
+}
+body[data-card="study"][data-layout="run"][data-terminal="1"] .st-run-box {
+  flex: none;
+}
+body[data-card="study"][data-layout="run"][data-terminal="1"]
+  .st-run-box[data-empty] {
+  display: none;
+}
+
+/* A plan or Draft row (D-381 (1)): three lines at every width; the work or
+   wall words and the count line are never dropped, only cut. */
+body[data-card="study"] .rr[data-keep] {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+}
+body[data-card="study"] .rr[data-keep] .rr-l1,
+body[data-card="study"] .rr[data-keep] .rr-l2,
+body[data-card="study"] .rr[data-keep] .rr-l3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+body[data-card="study"] .rr[data-keep] .rr-l1 {
+  min-height: 24px;
+}
+body[data-card="study"] .rr[data-keep] .rr-keep {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+body[data-card="study"] .rr[data-keep] .rr-l3 .rr-keep {
+  line-height: 18px;
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+body[data-size="receipt-open"] .rr[data-keep] .rr-l2 .rr-win.rr-keep {
+  display: inline;
+}
+body[data-size="receipt-open"] .rr[data-keep] .rr-l3 .rr-win.rr-keep {
+  display: -webkit-box;
+}
+/* CARD-360: below 480 px the work words have line 2 to themselves (the
+   actions sit on line 3, host-adapter placeKeepActions) and wrap to a
+   second line before they are cut ("27 runs · about 1 to 2 min, in the
+   background · versions tried …" at 360 px). */
+@media (max-width: 479px) {
+  body[data-card="study"] .rr[data-keep] .rr-l2 .rr-win.rr-keep,
+  body[data-size="receipt-open"] .rr[data-keep] .rr-l2 .rr-win.rr-keep {
+    line-height: 18px;
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+  }
+}
+
+/* A superseded card reopened in place keeps the study's slots (13 §4.4;
+   CARD-RENDER superseded: the chart stretched to ~700 px). */
+body[data-card="study"] .rr-body[data-layout="study"] {
+  display: flex;
+  flex-direction: column;
+}
+body[data-card="study"] .rr-body[data-layout="study"] > * {
+  flex: none;
+}
+body[data-card="study"] .rr-body[data-layout="study"] .st-key-slot {
+  height: var(--st-key);
+}
+
+/* The validator's issues under a refusal, one each with its suggestion. */
+.st-issues {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  font-size: var(--t-sm);
+}
+.st-issue {
+  padding: 4px 0;
+  border-top: 1px solid var(--line);
+}
+.st-issue-w,
+.st-issue-s {
+  display: block;
+}
+.st-issue-s {
+  color: var(--muted);
+  font-size: var(--t-xs);
+}
+:root:not([data-display-mode="fullscreen"])
+  body[data-card="study"][data-layout="refusal"][data-terminal="1"]
+  .keel-card {
+  height: auto;
+}
 .st-plan-w {
   margin: 6px 0 0;
   font-size: var(--t-sm);
@@ -946,14 +1196,88 @@ a.st-list-link:hover .st-list-title {
   color: var(--muted);
   white-space: nowrap;
 }
+/* CARD-RENDER list-pro: at 360 px the number ("Sharpe (daily) over the
+   window 1.7…") took the row and the title collapsed to nothing. The title
+   keeps at least 40% of the row; the number shrinks with an ellipsis. */
+.st-list-title {
+  min-width: 40%;
+}
 .st-list-num {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   color: var(--fg);
   font-variant-numeric: tabular-nums;
 }
+/* A row's number as label and value: the label ellipsises, the value is
+   never cut. */
+.st-list-num-split {
+  display: flex;
+  gap: 4px;
+  min-width: 0;
+}
+.st-list-num-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.st-list-num-value {
+  flex: none;
+  white-space: nowrap;
+}
+/* Wide: the meta's children sit in the row as before. */
+.st-list-meta {
+  display: contents;
+}
 @media (max-width: 479px) {
-  .st-list-state {
-    display: none;
+  /* Two short lines in the row's 38 px: the title, then its kind, state
+     and number on one muted line (MCP-FINAL list-pro). */
+  .st-list-meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    overflow: hidden;
+    line-height: 17px;
   }
+  .st-list-meta .chip.kind {
+    flex: none;
+    padding: 0;
+    border: 0;
+    background: none;
+    font-size: var(--t-xs);
+    color: var(--muted);
+  }
+  .st-list-meta .st-list-state {
+    flex: none;
+  }
+  .st-list-link {
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: center;
+    gap: 0;
+  }
+  .st-list-title {
+    flex: none;
+    min-width: 0;
+    max-width: 100%;
+    line-height: 17px;
+  }
+  .st-list-meta .st-list-num {
+    flex: 0 1 auto;
+    min-width: 0;
+    color: var(--muted);
+  }
+}
+/* 13 §5's Empty list: the served words where the rows would be. */
+.st-list-empty {
+  display: flex;
+  align-items: center;
+  height: 38px;
+  font-size: var(--t-sm);
+  color: var(--muted);
 }
 .st-list-more,
 .st-rows-words {
@@ -1198,6 +1522,42 @@ body[data-card="study"][data-expect="view"] .skeleton::after {
   border: 1px solid var(--line);
 }
 
+/* A list or a chart read waits as itself (CARD-RENDER skeleton-*): no
+   strip, no numbers; the list's rows or the chart's box at its height. */
+body[data-card="study"][data-expect="view"][data-expect-layout="list"]
+  .skeleton::after,
+body[data-card="study"][data-expect="view"][data-expect-layout="chart"]
+  .skeleton::after,
+body[data-card="study"][data-expect="view"][data-expect-layout="list"]
+  .skeleton
+  .sk-tiles,
+body[data-card="study"][data-expect="view"][data-expect-layout="chart"]
+  .skeleton
+  .sk-tiles {
+  display: none;
+}
+body[data-card="study"][data-expect="view"][data-expect-layout="list"]
+  .skeleton
+  .sk-table {
+  height: 178px;
+}
+
+/* A plan waits as its three-line row (D-381 (1)): name; work and actions;
+   count line or wall, so the row swaps in at its own height. */
+body[data-card="study"][data-expect="receipt"][data-expect-layout="plan"]
+  .skeleton
+  .sk-live {
+  min-height: 60px;
+  align-items: flex-start;
+}
+@media (max-width: 479px) {
+  body[data-card="study"][data-expect="receipt"][data-expect-layout="plan"]
+    .skeleton
+    .sk-live {
+    min-height: 68px;
+  }
+}
+
 /* A run in flight waits as the run card (13 §4.3): the status line, a bar
    and the body box at the run card's height. */
 body[data-card="study"][data-expect="progress"] .skeleton {
@@ -1235,4 +1595,899 @@ body[data-card="study"][data-expect="progress"]
 
 .st-error {
   margin: 0;
+}
+
+/* ── The face (MCP-CARDS, D-420; lane-scratch/MCP-CARDS/DESIGN.md) ────────
+   The inline card at its content height (both hosts: "Height auto-fits to
+   content", "Avoid fixed heights"), so a run, a plan or a list is as tall as
+   what it says; it supersedes D-332 / D-381's reserved frames inline (the
+   other layouts keep them until they move to the face).
+
+   Structure is the host's: transparent ground, host ink and muted ink, the
+   host's tertiary border for rules (never its 40 % primary, never white).
+   Keel brings the accent and the series (CARD-RESEARCH RESEARCH.md §5,
+   validated on both hosts' light and dark grounds). Four sizes, two weights:
+   caption 12, body 14, title 16, hero 28. One dot is one unit of evidence. */
+/* The face's accent, wash and off ink are card.css's face tokens (shared
+   with the screen card, SCREENS-CARD); the study's names alias them. */
+body[data-card="study"] {
+  --st-ink-accent: var(--accent-ink);
+  --st-after: var(--face-wash);
+  --st-pip-off: var(--face-off);
+}
+
+:root:not([data-display-mode="fullscreen"])
+  body[data-card="study"][data-face][data-layout][data-tpl]
+  .keel-card {
+  display: block;
+  height: auto;
+  overflow: visible;
+  padding: 14px 16px calc(16px + var(--safe-bottom));
+}
+body[data-card="study"][data-face] #card-body {
+  display: block;
+  overflow: visible;
+}
+@media (max-width: 479px) {
+  :root:not([data-display-mode="fullscreen"])
+    body[data-card="study"][data-face][data-layout][data-tpl]
+    .keel-card {
+    padding: 12px 12px calc(14px + var(--safe-bottom));
+  }
+}
+
+/* The head: the title, then one muted line. */
+.sf-head {
+  margin: 0 0 14px;
+  min-width: 0;
+}
+.sf-title {
+  margin: 0;
+  font: 600 var(--f-title) / var(--f-title-lh) var(--font);
+  color: var(--fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sf-meta,
+.sf-caption,
+.sf-hero-l,
+.sf-tile-l,
+.sf-tile-s,
+.sf-hero-aside,
+.sf-row-meta,
+.sf-row-l {
+  font: 400 var(--f-caption) / var(--f-caption-lh) var(--font);
+  color: var(--muted);
+}
+.sf-meta {
+  margin: 2px 0 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+@media (max-width: 479px) {
+  /* a phone gives the title two lines before its ellipsis (integrator polish 7) */
+  .sf-title,
+  .sf-row-title {
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+  }
+}
+
+/* The hero: the answer big, its label under it, its dots to the right. */
+.sf-hero {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin: 0 0 14px;
+  min-width: 0;
+}
+.sf-hero-n {
+  display: flex;
+  flex-direction: column;
+  flex: none;
+}
+.sf-hero-v {
+  font: 600 var(--f-hero) / var(--f-hero-lh) var(--font);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  color: var(--fg);
+  white-space: nowrap;
+}
+/* The run face's count and its words: one column, its own gap, no block
+   pulled into another (a negative margin once laid the words over a
+   hero-less failed card's dots). */
+.sf-run-lead {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  margin: 0 0 14px;
+}
+.sf-run-lead > .sf-hero {
+  margin: 0;
+}
+.sf-hero-aside {
+  margin: 0;
+}
+.sf-aside-line {
+  margin: 0;
+}
+/* a run that stopped short says why in body words, one sentence a line */
+#card-body[data-run="failed"] .sf-hero-aside {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font: 400 var(--f-body) / var(--f-body-lh) var(--font);
+  color: var(--fg);
+}
+
+/* Pips: one per bar you set. Met is filled in the accent; not met is a
+   hollow ring; not measured a dashed one. Shape carries it, never green or
+   red (study 05 §5: no verdict colour). */
+.sf-pips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  min-width: 0;
+}
+.sf-pip {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1.5px solid var(--st-pip-off);
+  box-sizing: border-box;
+}
+.sf-pip[data-state="met"] {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.sf-pip[data-state="unmeasured"] {
+  border-style: dashed;
+}
+
+/* Dots: one per run (many runs share a dot past 96). Done in the accent; a
+   run going rings in the accent; one that failed or stopped, a muted fill. */
+.sf-progress {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.sf-dots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.sf-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1.5px solid var(--st-pip-off);
+  box-sizing: border-box;
+}
+.sf-dot[data-state="done"] {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.sf-dot[data-state="running"] {
+  border-color: var(--accent);
+  border-width: 2.5px;
+}
+.sf-dot[data-state="failed"] {
+  background: var(--st-pip-off);
+  border-color: transparent;
+}
+
+/* The key chart: its name and resting readout on one line, then the plot. */
+body[data-card="study"][data-face] .sf-chart.st-key-slot {
+  display: block;
+  flex: none;
+  height: auto;
+  min-height: 0;
+  overflow: visible;
+  margin: 0 0 14px;
+}
+.sf-chart > .st-picture {
+  height: 168px;
+}
+.sf-chart .st-chart {
+  display: flex;
+  flex-direction: column;
+}
+.sf-chart .st-chart-title {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  min-width: 0;
+  margin-bottom: 6px;
+}
+.sf-chart .st-chart-title {
+  flex-wrap: wrap;
+  row-gap: 4px;
+}
+/* a legend is its own line under the chart's name and readout, never crowded */
+.sf-chart .st-chart-title .st-legend {
+  order: 3;
+  flex: 1 1 100%;
+  min-width: 0;
+}
+.sf-chart .st-chart-name {
+  font: 600 var(--f-body) / var(--f-body-lh) var(--font);
+  color: var(--fg);
+  flex: none;
+  max-width: 55%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sf-chart .st-readout {
+  margin-left: auto;
+  height: auto;
+  min-width: 0;
+  font: 400 var(--f-caption) / var(--f-caption-lh) var(--font);
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  text-align: right;
+}
+.sf-chart .st-readout-w {
+  text-align: right;
+}
+.st-read-v {
+  color: var(--fg);
+  font-weight: 600;
+}
+.st-read-l {
+  color: var(--muted);
+}
+.sf-chart .st-chart-body {
+  height: 206px;
+  flex: none;
+  padding-top: 18px;
+}
+.sf-chart .st-ticks {
+  font: 400 12px/14px var(--font);
+}
+.sf-chart .st-ticks-x {
+  height: 18px;
+}
+.sf-chart .st-axis-row,
+.sf-chart .st-chart-note {
+  display: none;
+}
+.sf-chart .st-split {
+  stroke: var(--muted);
+  stroke-opacity: 0.55;
+}
+.st-after {
+  fill: var(--st-after);
+  stroke: none;
+}
+.sf-chart .st-mark-w {
+  top: -18px;
+  font: 400 12px/14px var(--font);
+}
+@media (max-width: 479px) {
+  .sf-chart .st-chart-body {
+    height: 164px;
+  }
+  .sf-chart .st-chart-title {
+    flex-wrap: wrap;
+    row-gap: 0;
+  }
+  .sf-chart .st-readout {
+    flex-basis: 100%;
+    margin-left: 0;
+    text-align: left;
+  }
+  .sf-chart .st-readout-w {
+    text-align: left;
+  }
+}
+
+/* A series key is a button (it isolates its line): on a phone it is a
+   44 px target (Claude: 44 pt on mobile), the legend its own line. */
+@media (max-width: 479px) {
+  body[data-face] .sf-chart .st-key {
+    min-height: 44px;
+  }
+}
+
+/* Thumbnails (D-420d): up to 3 small charts of the next views under the key
+   chart, 3 across at every width, each a picture the server judged to have
+   values; "+N more charts" opens Expand. */
+.sf-thumbs {
+  margin: 0 0 14px;
+}
+.sf-thumb-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.sf-thumb {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 8px 8px 7px;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: none;
+  color: var(--fg);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.sf-thumb:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--rule));
+}
+.sf-thumb-pic {
+  display: block;
+  height: 64px;
+  min-width: 0;
+  overflow: hidden;
+}
+.sf-thumb-pic .st-plot {
+  height: 100%;
+}
+.sf-thumb-t {
+  font: 400 var(--f-caption) / var(--f-caption-lh) var(--font);
+  color: var(--fg);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.sf-more {
+  margin: 8px 0 0;
+}
+/* marks small: a little lighter, the split label and points left out */
+.sf-mini .st-line {
+  stroke-width: 1.4;
+}
+.sf-mini .st-dot {
+  stroke-width: 3;
+}
+.sf-mini .st-zero {
+  opacity: 0.35;
+}
+@media (max-width: 479px) {
+  .sf-thumb-row {
+    gap: 6px;
+  }
+  .sf-thumb {
+    padding: 6px 6px 5px;
+  }
+  .sf-thumb-pic {
+    height: 52px;
+  }
+  .sf-thumb-t {
+    min-height: 32px;
+  }
+}
+
+/* Tiles: the value, its short label, the bar it is held to. No boxes. */
+.sf-tiles {
+  display: grid;
+  grid-template-columns: repeat(var(--sf-cols, 3), minmax(0, 1fr));
+  gap: 12px 16px;
+  margin: 0 0 12px;
+}
+.sf-tiles[data-n="4"] {
+  --sf-cols: 4;
+}
+.sf-tiles[data-n="2"] {
+  --sf-cols: 2;
+}
+.sf-tile {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding-left: 10px;
+  border-left: 2px solid var(--rule);
+}
+.sf-tile[data-state="met"] {
+  border-left-color: var(--accent);
+}
+.sf-tile-pip {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 7px;
+  vertical-align: 1px;
+}
+.sf-tile-v {
+  font: 600 var(--f-title) / var(--f-title-lh) var(--font);
+  font-variant-numeric: tabular-nums;
+  color: var(--fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sf-tile-l,
+.sf-tile-s {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+@media (max-width: 479px) {
+  .sf-tiles[data-n="4"] {
+    --sf-cols: 2;
+  }
+  .sf-tiles {
+    gap: 10px 10px;
+  }
+  .sf-tile {
+    padding-left: 8px;
+  }
+}
+.sf-caption {
+  margin: 0;
+}
+
+/* A run: the step going now and the next, a hairline between. */
+.sf-steps,
+.sf-plan-steps {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+}
+.sf-step,
+.sf-plan-step {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  padding: 7px 0;
+  border-top: 1px solid var(--rule);
+  font: 400 var(--f-body) / var(--f-body-lh) var(--font);
+  min-width: 0;
+}
+.sf-step-l {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sf-step-w {
+  flex: none;
+  font: 400 var(--f-caption) / var(--f-caption-lh) var(--font);
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.sf-step[data-state="waiting"] .sf-step-l {
+  color: var(--muted);
+}
+
+/* A plan: its work words and one hollow dot per run it will make. */
+.sf-plan {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin: 0 0 12px;
+}
+.sf-plan-w {
+  font: 600 var(--f-title) / var(--f-title-lh) var(--font);
+  color: var(--fg);
+}
+
+/* The list: a picture of each study, its name, kind and state, its number. */
+.sf-list {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+}
+.sf-row {
+  border-top: 1px solid var(--rule);
+}
+.sf-row:first-child {
+  border-top: 0;
+}
+.sf-row-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 52px;
+  padding: 6px 0;
+  color: inherit;
+  text-decoration: none;
+  min-width: 0;
+}
+.sf-row-link:hover .sf-row-title {
+  color: var(--st-ink-accent);
+}
+.sf-row-pic {
+  flex: none;
+  width: 48px;
+  height: 30px;
+  border-radius: 6px;
+  overflow: hidden;
+  position: relative;
+}
+.sf-row-pic > * {
+  width: 100%;
+  height: 100%;
+}
+.sf-row-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.sf-row-title {
+  font: 600 var(--f-body) / var(--f-body-lh) var(--font);
+  color: var(--fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sf-row-meta {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sf-row-num {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  max-width: 40%;
+  min-width: 0;
+}
+.sf-row-v {
+  font: 600 16px/20px var(--font);
+  font-variant-numeric: tabular-nums;
+  color: var(--fg);
+  white-space: nowrap;
+}
+.sf-row-l {
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sf-empty {
+  padding: 8px 0;
+  color: var(--muted);
+}
+@media (max-width: 479px) {
+  /* a phone keeps the title and the value; the number's label is the row's title */
+  .sf-row-l {
+    display: none;
+  }
+  .sf-row-num {
+    max-width: 34%;
+  }
+  .sf-row-pic {
+    width: 40px;
+  }
+}
+
+/* The actions (two, unfilled): card.css's face section. */
+
+/* ── Expand (MCP-CARDS, D-420): the whole study ──────────────────────────
+   The face's head and hero, then the charts from a list beside the chart
+   (Claude: "collapsible sidebars, tabs, or pagination"; never a tab row
+   that runs off the side), then the numbers in full. It scrolls. */
+:root[data-display-mode="fullscreen"]
+  body[data-card="study"][data-face]
+  .keel-card {
+  padding: 18px 24px calc(24px + var(--safe-bottom));
+  max-width: 1180px;
+  margin: 0 auto;
+}
+/* The bar: the selectors (they jump to their section) and the study link. */
+.sf-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  margin: 4px 0 20px;
+}
+.sf-seg {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+}
+.sf-seg[hidden] {
+  display: none;
+}
+.sf-seg-b {
+  font: 500 var(--f-body) / var(--f-body-lh) var(--font);
+  color: var(--muted);
+  background: none;
+  border: 0;
+  border-radius: 8px;
+  padding: 6px 14px;
+  min-height: 34px;
+  cursor: pointer;
+}
+.sf-seg-b:hover {
+  color: var(--fg);
+}
+.sf-seg-b[aria-current="true"] {
+  color: var(--fg);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.sf-seg-b:focus-visible,
+.sf-gtile-hit:focus-visible,
+.sf-back:focus-visible,
+.sf-crow-chart:focus-visible,
+.sf-thumb:focus-visible,
+.sf-more:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.sf-bar .sf-open {
+  margin-left: auto;
+}
+.sf-sec {
+  margin: 0 0 28px;
+  scroll-margin-top: 12px;
+}
+.sf-sec-h {
+  font: 600 var(--f-title) / var(--f-title-lh) var(--font);
+  color: var(--fg);
+  margin: 0 0 10px;
+}
+
+/* The key chart, large; its own link to its view under it. */
+body[data-card="study"][data-face][data-layout="full"] .sf-key.st-key-slot {
+  margin: 0 0 6px;
+}
+[data-layout="full"] .sf-key .st-chart-name,
+[data-layout="full"] .sf-focus-panel .st-chart-name {
+  font: 600 var(--f-title) / var(--f-title-lh) var(--font);
+  max-width: 70%;
+}
+[data-layout="full"] .sf-key .st-chart-body {
+  height: 340px;
+}
+[data-layout="full"] .sf-focus-panel .st-chart-body {
+  height: 420px;
+}
+.sf-open-chart {
+  display: inline-block;
+  margin: 0 0 18px;
+  font: 400 var(--f-caption) / var(--f-caption-lh) var(--font);
+}
+
+/* The grid: every other view small, all at once; a tap focuses it. */
+.sf-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+}
+.sf-gtile {
+  position: relative;
+  min-width: 0;
+}
+.sf-gtile-hit {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  padding: 12px 12px 10px;
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  background: none;
+  color: var(--fg);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+.sf-gtile-hit:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--rule));
+}
+.sf-gtile-t {
+  font: 600 var(--f-body) / var(--f-body-lh) var(--font);
+  padding-right: 28px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.sf-gtile-pic {
+  display: block;
+  height: 120px;
+  min-width: 0;
+  overflow: hidden;
+}
+.sf-gtile-pic .st-plot,
+.sf-gtile-pic .st-picture {
+  height: 100%;
+}
+.sf-gtile-pic .st-mini-checks {
+  font: 400 12px/18px var(--font);
+  font-variant-numeric: tabular-nums;
+}
+.sf-gtile-w {
+  display: block;
+  font: 400 var(--f-caption) / var(--f-caption-lh) var(--font);
+  color: var(--muted);
+  padding-top: 8px;
+}
+.sf-gtile-lead {
+  font: 400 var(--f-caption) / var(--f-caption-lh) var(--font);
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.sf-gtile-open {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  color: var(--st-ink-accent, var(--accent));
+  text-decoration: none;
+  font: 400 14px/1 var(--font);
+}
+.sf-gtile-open:hover {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+/* Checks: one row a bar, its mark, its words, its value, its view small. */
+.sf-crows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.sf-crow {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr) auto auto;
+  grid-template-areas: "pip text value chart";
+  align-items: center;
+  gap: 4px 14px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--rule);
+}
+.sf-crow-pip {
+  grid-area: pip;
+}
+.sf-crow-text {
+  grid-area: text;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.sf-crow-l {
+  font: 400 var(--f-body) / var(--f-body-lh) var(--font);
+  color: var(--fg);
+}
+.sf-crow-sub {
+  font: 400 var(--f-caption) / var(--f-caption-lh) var(--font);
+  color: var(--muted);
+}
+.sf-crow-v {
+  grid-area: value;
+  font: 600 var(--f-title) / var(--f-title-lh) var(--font);
+  font-variant-numeric: tabular-nums;
+  color: var(--fg);
+  text-align: right;
+  max-width: 220px;
+}
+.sf-crow-chart {
+  grid-area: chart;
+  width: 120px;
+  height: 40px;
+  padding: 4px 6px;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: none;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+.sf-crow-chart .st-plot {
+  height: 100%;
+}
+.sf-crow-none {
+  grid-area: chart;
+  width: 120px;
+}
+
+/* One chart, focused. */
+.sf-back {
+  margin: 0 0 16px;
+}
+.sf-back::before {
+  content: "\2190\00a0";
+}
+.sf-focus-t {
+  font: 600 var(--f-title) / var(--f-title-lh) var(--font);
+  margin: 0 0 8px;
+}
+.sf-focus-lead {
+  font: 400 var(--f-body) / var(--f-body-lh) var(--font);
+  color: var(--fg);
+  margin: 8px 0 12px;
+}
+.sf-foot {
+  border-top: 1px solid var(--rule);
+  padding-top: 12px;
+}
+
+@media (max-width: 719px) {
+  .sf-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  [data-layout="full"] .sf-key .st-chart-body {
+    height: 240px;
+  }
+  [data-layout="full"] .sf-focus-panel .st-chart-body {
+    height: 300px;
+  }
+  .sf-bar .sf-open {
+    margin-left: 0;
+  }
+  .sf-crow {
+    grid-template-columns: 14px minmax(0, 1fr) auto;
+    grid-template-areas:
+      "pip text value"
+      ". chart chart";
+  }
+  .sf-crow-chart {
+    width: 100%;
+    height: 48px;
+  }
+  .sf-crow-none {
+    display: none;
+  }
+  .sf-seg-b {
+    min-height: 44px;
+  }
+}
+
+body[data-card="study"][data-face][data-layout="full"] .st-section {
+  border-top: 1px solid var(--rule);
+  padding-top: 12px;
+}
+body[data-card="study"][data-face][data-layout="full"] .st-section-h {
+  font: 600 var(--f-title) / var(--f-title-lh) var(--font);
+  margin: 0 0 8px;
+}
+body[data-card="study"][data-face][data-layout="full"] .st-num-row,
+body[data-card="study"][data-face][data-layout="full"] .st-check {
+  border-bottom-color: var(--rule);
+  padding: 8px 0;
+}
+body[data-card="study"][data-face][data-layout="full"] .st-num-label {
+  font: 400 var(--f-body) / var(--f-body-lh) var(--font);
+}
+body[data-card="study"][data-face][data-layout="full"] .st-num-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+body[data-card="study"][data-face][data-layout="full"] .st-num-value {
+  max-width: 55vw;
+  text-align: right;
+}
+body[data-card="study"][data-face][data-layout="full"] .st-num-value {
+  font: 600 var(--f-title) / var(--f-title-lh) var(--font);
+  font-variant-numeric: tabular-nums;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+/* A refusal on the face: one row, as tall as its sentence. */
+body[data-card="study"][data-face][data-layout="refusal"] .st-refusal-w {
+  display: block;
+  -webkit-line-clamp: unset;
+  line-clamp: unset;
+  overflow: visible;
+  font: 400 var(--f-body) / var(--f-body-lh) var(--font);
+  color: var(--fg);
+}
+body[data-card="study"][data-face][data-layout="refusal"] .link-row {
+  margin-top: 12px;
 }

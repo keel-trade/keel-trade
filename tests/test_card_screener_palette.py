@@ -1,155 +1,143 @@
-"""The screen card's palette is keel-app's, byte for byte (INV-53; spec 06 §D3.3).
+"""The screen card's identity colours are the face's validated palette (Q-7922; D-420a, D-420c).
 
-`card-screener.css` declares `--sc-0…23` in four sites (two per theme, the
-`card_palette` rule). The dark sites must equal keel-app's
-`screenMarks.categorical` (tokens.ts), which chartTheme exports as
-`signalCategorical`: S1's 24 `CAT` colours in S1's order. The light sites
-keep that hue order and clear 3:1 (WCAG 1.4.11, graphical objects) on each
-light host ground. The card draws only `var(--sc-N)` strokes, never a hex.
+Until 2026-11-22 the card ranked coins through S1's 24 `CAT` colours, pinned here by NORMAL-vision delta E only;
+CARD-RESEARCH's validator measured ranks 1 and 2 (light) at a colour-blind delta E of 1.9 and ranks 2 and 3 (dark) at
+1.4. The card now colours ranks 1-5 from ``KeelHost.palette().ids`` (host-adapter.js; the accent first), the one
+palette the study card shares, and every other coin is the grey field.
 
-Proof it can fail (seeds run in the commit): change one dark `--sc-7` hex in
-card-screener.css → the parity test reds; put `#f0abfc` back as light `--sc-14`
-→ the light-contrast test reds at 1.83:1; paste a hex stroke into
-card-screener.js → the hex test reds.
-Not vacuous: 24 colours parsed from tokens.ts, 4 sites × 24 tokens parsed
-from card-screener.css, and chartTheme still aliases `screenMarks.categorical`.
+This module ports the dataviz skill's validator checks the palette was chosen with (Machado 2009 CVD at severity 1,
+OKLab delta E x100, CARD-RESEARCH RESEARCH.md §5) and holds the five identity slots the card draws to them, per theme: every adjacent
+pair >= 8 for protan and deutan readers, >= 15 for normal vision, and every slot >= 3:1 (WCAG 1.4.11) against each
+host's ground for that theme. The card and its stylesheet carry no colour of their own for an identity.
+
+Proof it can fail (in this file): the same checks over S1's ranks 1-2 light (#7c75ff, #df4df9) and 2-3 dark
+(#f0abfc, #7dd3fc) red; control: the validated palette green under the same function.
+Not vacuous: 5 slots parsed per theme from host-adapter.js, and the card reads them (`H.palette().ids`).
 """
 
 from __future__ import annotations
 
-import colorsys
+import math
 import re
 from pathlib import Path
 
-from .test_card_contrast import GROUNDS, contrast
-from .test_compare_palette import _delta_e
-
 
 SDK = Path(__file__).resolve().parents[1]
-REPO = SDK.parents[2]
 ASSETS = SDK / "keel" / "widgets" / "assets"
-TOKENS = REPO / "services" / "keel-app" / "src" / "lib" / "design" / "tokens.ts"
-CHART_THEME = REPO / "services" / "keel-app" / "src" / "lib" / "design" / "chartTheme.ts"
-N = 24
-#: S1 `CAT` (live-design S1 js/util.js:23), the design of record (R-096/R-097).
-#: Pinned here too so the card holds S1's palette even while keel-app's copy
-#: moves; the app parity arm below keeps the two from drifting apart.
-S1_CAT = [
-    "#7c75ff", "#25d0c5", "#f0b133", "#60a5fa", "#f472b6", "#a3e635",
-    "#0da2e7", "#fb923c", "#3fcf98", "#b992f7", "#db2777", "#9333ea",
-    "#14b8a6", "#ca8a04", "#f0abfc", "#86efac", "#65a30d", "#3b82f6",
-    "#c2410c", "#7dd3fc", "#d946ef", "#84cc16", "#0891b2", "#e879f9",
-]  # fmt: skip
+#: The hosts' grounds per theme: Claude's primary and secondary backgrounds, ChatGPT's reference dark.
+GROUNDS = {
+    "light": ["#ffffff", "#f5f4ed", "#f5f4f0"],
+    "dark": ["#30302e", "#262624", "#262522", "#212121"],
+}
+#: The ranks the card colours (card-screener.js `IDS`); the palette's sixth slot (violet) holds 2.6:1 on Claude's
+#: dark ground, so ranks past five are ink grey.
+IDS = 5
+MACHADO = {
+    "protan": [
+        [0.152286, 1.052583, -0.204868],
+        [0.114503, 0.786281, 0.099216],
+        [-0.003882, -0.048116, 1.051998],
+    ],
+    "deutan": [
+        [0.367322, 0.860646, -0.227968],
+        [0.280085, 0.672501, 0.047413],
+        [-0.011820, 0.042940, 0.968881],
+    ],
+}
 
 
-def _hls(hex_: str) -> tuple[float, float, float]:
-    h = hex_.lstrip("#")
-    return colorsys.rgb_to_hls(*(int(h[i : i + 2], 16) / 255 for i in (0, 2, 4)))
+def _lin(h: str) -> list[float]:
+    def ch(c: float) -> float:
+        return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+
+    return [ch(int(h[i : i + 2], 16) / 255) for i in (1, 3, 5)]
 
 
-def _app_categorical() -> list[str]:
-    theme = CHART_THEME.read_text(encoding="utf-8")
-    assert re.search(r"signalCategorical[^=]*=\s*screenMarks\.categorical", theme), (
-        "chartTheme.signalCategorical no longer aliases screenMarks.categorical"
+def _oklab(rgb: list[float]) -> tuple[float, float, float]:
+    r, g, b = rgb
+    lc = (0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b) ** (1 / 3)
+    mc = (0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b) ** (1 / 3)
+    sc = (0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b) ** (1 / 3)
+    return (
+        0.2104542553 * lc + 0.7936177850 * mc - 0.0040720468 * sc,
+        1.9779984951 * lc - 2.4285922050 * mc + 0.4505937099 * sc,
+        0.0259040371 * lc + 0.7827717662 * mc - 0.8086757660 * sc,
     )
-    src = TOKENS.read_text(encoding="utf-8")
-    block = re.search(r"screenMarks = \{.*?categorical: \[(.*?)\]", src, re.S)
-    assert block, "tokens.ts no longer declares screenMarks.categorical"
-    return [h.lower() for h in re.findall(r'"(#[0-9a-fA-F]{6})"', block.group(1))]
 
 
-def _sites() -> dict[str, list[str]]:
-    css = (ASSETS / "card-screener.css").read_text(encoding="utf-8")
-    out: dict[str, list[str]] = {}
-    for sel, body in re.findall(r"(:root[^{]*)\{([^{}]*--sc-0:[^{}]*)\}", css):
-        dark = "dark" in sel or 'not([data-theme="light"])' in sel
-        tokens = dict(re.findall(r"--sc-(\d+):\s*(#[0-9a-fA-F]{6})", body))
-        out[("dark" if dark else "light") + ":" + sel.strip()] = [
-            tokens.get(str(i), "").lower() for i in range(N)
-        ]
+def _simulate(h: str, kind: str) -> list[float]:
+    r, g, b = _lin(h)
+    return [max(0.0, min(1.0, row[0] * r + row[1] * g + row[2] * b)) for row in MACHADO[kind]]
+
+
+def delta_e(h1: str, h2: str, kind: str | None = None) -> float:
+    a = _oklab(_simulate(h1, kind) if kind else _lin(h1))
+    b = _oklab(_simulate(h2, kind) if kind else _lin(h2))
+    return 100 * math.dist(a, b)
+
+
+def _lum(h: str) -> float:
+    r, g, b = _lin(h)
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+def contrast(h1: str, h2: str) -> float:
+    x, y = sorted((_lum(h1), _lum(h2)), reverse=True)
+    return (x + 0.05) / (y + 0.05)
+
+
+def problems(slots: list[str], theme: str) -> list[str]:
+    bad = []
+    for a, b in zip(slots, slots[1:], strict=False):
+        cvd = min(delta_e(a, b, "protan"), delta_e(a, b, "deutan"))
+        if cvd < 8:
+            bad.append(f"{a}/{b} colour-blind dE {cvd:.1f} < 8")
+        if delta_e(a, b) < 15:
+            bad.append(f"{a}/{b} normal dE {delta_e(a, b):.1f} < 15")
+    for s in slots:
+        for g in GROUNDS[theme]:
+            if contrast(s, g) < 3:
+                bad.append(f"{s} on {g} {contrast(s, g):.2f}:1 < 3")
+    return bad
+
+
+def identity_slots() -> dict[str, list[str]]:
+    """The card's identity order per theme: host-adapter.js PALETTE[theme].cat with the accent (its last) first."""
+    src = (ASSETS / "host-adapter.js").read_text()
+    out = {}
+    for theme in ("light", "dark"):
+        block = re.search(theme + r":\s*\{\s*cat:\s*\[([^\]]*)\]", src)
+        assert block, f"host-adapter.js PALETTE.{theme}.cat moved"
+        cat = re.findall(r'"(#[0-9a-f]{6})"', block.group(1))
+        out[theme] = [cat[-1], *cat[:-1]][:IDS]
     return out
 
 
 def test_the_scan_is_not_vacuous() -> None:
-    assert len(_app_categorical()) == N
-    sites = _sites()
-    assert sum(k.startswith("dark") for k in sites) == 2, list(sites)
-    assert sum(k.startswith("light") for k in sites) == 2, list(sites)
-    for site, hexes in sites.items():
-        assert all(hexes), (site, hexes)
+    slots = identity_slots()
+    assert {t: len(s) for t, s in slots.items()} == {"light": IDS, "dark": IDS}
+    card = (ASSETS / "card-screener.js").read_text()
+    assert "H.palette().ids" in card and "--sc-id-" in card
+    assert f"var IDS = {IDS};" in card
 
 
-def test_dark_sites_equal_s1_cat() -> None:
-    for site, hexes in _sites().items():
-        if site.startswith("dark"):
-            assert hexes == S1_CAT, site
+def test_the_identity_slots_pass_the_validator_per_theme() -> None:
+    for theme, slots in identity_slots().items():
+        assert problems(slots, theme) == [], (theme, problems(slots, theme))
 
 
-def test_dark_sites_equal_the_app_palette_byte_for_byte() -> None:
-    app = _app_categorical()
-    for site, hexes in _sites().items():
-        if site.startswith("dark"):
-            assert hexes == app, site
+def test_seeded_s1_neighbours_fail_and_the_face_palette_is_the_control() -> None:
+    """The palette the card drew before Q-7922: ranks 1-2 light and 2-3 dark, as RANK_ORDER assigned them."""
+    assert any("colour-blind" in p for p in problems(["#7c75ff", "#df4df9"], "light"))
+    assert any("colour-blind" in p for p in problems(["#f0abfc", "#7dd3fc"], "dark"))
+    for theme, slots in identity_slots().items():
+        assert problems(slots[:2], theme) == []
 
 
-def test_light_sites_keep_the_order_and_clear_three_to_one() -> None:
-    app = S1_CAT
-    checked = 0
-    for site, hexes in _sites().items():
-        if not site.startswith("light"):
-            continue
-        for i, (light, dark) in enumerate(zip(hexes, app, strict=True)):
-            # the same hue, only darker: the order holds (HLS hue within 2 %)
-            hl, ll, _ = _hls(light)
-            hd, ld, _ = _hls(dark)
-            assert min(abs(hl - hd), 1 - abs(hl - hd)) < 0.02 and ll <= ld, (site, i, light, dark)
-            for name, ground in GROUNDS.items():
-                if "light" in name:
-                    ratio = contrast(light, ground)
-                    assert ratio >= 3.0, f"{site} --sc-{i} {light} on {name}: {ratio:.2f}"
-                    checked += 1
-        for i in range(N - 1):  # neighbours in rank stay apart
-            assert _delta_e(hexes[i], hexes[i + 1]) >= 20, (site, i)
-    assert checked == 2 * N * 2
-
-
-def test_the_card_strokes_only_through_the_palette_tokens() -> None:
-    src = (ASSETS / "card-screener.js").read_text(encoding="utf-8")
-    assert "var(--sc-" in src
-    assert not re.findall(r'"#[0-9a-fA-F]{3,8}"', src), "card-screener.js carries a hex colour"
-    assert re.search(r"PALETTE = 24\b", src)
-
-
-def _rank_order() -> list[int]:
-    src = (ASSETS / "card-screener.js").read_text(encoding="utf-8")
-    m = re.search(r"RANK_ORDER = \[([\d,\s]+)\]", src)
-    assert m, "card-screener.js declares no RANK_ORDER"
-    return [int(x) for x in m.group(1).replace("\n", " ").split(",") if x.strip()]
-
-
-def test_neighbouring_ranks_never_share_a_look() -> None:
-    """Q-3635: the founder's XMR (slot 0, #7c75ff) and SAGA (slot 3,
-    #3d91f9) were hard to tell apart as ranks 1 and 4. The card assigns
-    palette slots to ranks through RANK_ORDER; any two ranks within four of
-    each other (the five lines a card shows inline) sit at ΔE ≥ 40 in BOTH
-    themes, and the first eight are pairwise ≥ 20.
-
-    Seed: make RANK_ORDER the identity (0..23) → reds on ranks 0 and 3 in
-    light at 30.6. Not vacuous: the order must be a permutation of 24."""
-    order = _rank_order()
-    assert sorted(order) == list(range(N)), order
-    assert order[0] == 0, "rank 1 keeps S1's first colour"
-    sites = _sites()
-    palettes = [sites[k] for k in sites]
-    assert len(palettes) == 4
-
-    def apart(i: int, j: int) -> float:
-        return min(_delta_e(p[order[i]], p[order[j]]) for p in palettes)
-
-    for i in range(N):
-        for j in range(i + 1, min(N, i + 5)):
-            assert apart(i, j) >= 40, (i, j, order[i], order[j], apart(i, j))
-    for i in range(8):
-        for j in range(i + 1, 8):
-            assert apart(i, j) >= 20, (i, j, apart(i, j))
-    assert apart(0, 3) >= 40 and apart(0, 9) >= 40 and apart(3, 6) >= 40
+def test_the_card_carries_no_identity_colour_of_its_own() -> None:
+    """Every identity stroke and fill is `var(--sc-id-N)`, written from the palette; the stylesheet's only colours
+    are the host-ink greys of the field."""
+    js = (ASSETS / "card-screener.js").read_text()
+    css = (ASSETS / "card-screener.css").read_text()
+    assert re.findall(r"#[0-9a-fA-F]{6}\b", js) == []
+    assert re.findall(r"#[0-9a-fA-F]{3,6}\b", css) == []

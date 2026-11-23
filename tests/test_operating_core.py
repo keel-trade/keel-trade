@@ -177,6 +177,14 @@ def test_every_core_tool_reference_is_a_real_tool() -> None:
     }
     assert screens_refs >= {"keel_screener_run", "keel_screener_view_set"}
     assert not sorted(r for r in screens_refs if r not in set(OUTCOMES))
+    # The research core (Research 07 §5.3): every name is a registered tool.
+    research_refs = {
+        r
+        for s in assemble.load_sections(str(assemble.research_core_path()))
+        for r in tool_re.findall(s.body)
+    }
+    assert research_refs >= {"keel_research_plan", "keel_research_run", "keel_backtest_run"}
+    assert not sorted(r for r in research_refs if r not in set(OUTCOMES))
 
 
 # The est-token ratchet that stood here from 2026-09-19 measured the FILE.

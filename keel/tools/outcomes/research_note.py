@@ -43,12 +43,10 @@ def _handler(args, ctx):
     # 07 §3.2 rule 9 (A3 #12): a note's receipt ends "View in Keel", the study's page for a study's note, else
     # the Research home (a project's; the note answer serves no link).
     from ._research_commands import research_url
-    from .open_in_app import research_link
+    from .open_in_app import app_base, research_link
 
     link = (
-        research_link(
-            "study", anchor, origin=str(getattr(ctx, "app_url", "https://app.usekeel.io"))
-        )
+        research_link("study", anchor, origin=app_base(ctx))
         if anchor.startswith("stu_")
         else research_url(ctx)
     )

@@ -7,16 +7,16 @@
   },
   "content": [
     {
-      "text": "There is no study with that id that you can read.\nA study id you can read; keel_research_get with no id lists your studies. keel_research_get()\nView in Keel: https://app.usekeel.io/research/stu_000013\n\n{\"code\": \"not_found\", \"message\": \"There is no study with that id that you can read.\", \"what_was_expected\": \"A study id you can read; keel_research_get with no id lists your studies.\", \"example\": {}, \"suggested_next_action\": {\"tool\": \"keel_research_get\", \"args\": {}, \"reason\": \"A study id you can read; keel_research_get with no id lists your studies.\"}, \"detail\": {\"code\": \"RESEARCH_STUDY_NOT_FOUND\", \"links\": {\"app\": \"https://app.usekeel.io/research/stu_000013\"}}, \"exit_code\": 3, \"retryable\": false}",
+      "text": "There is no study with that id that you can read.\nA study id you can read; this lists your studies: keel_research_get()\nView in Keel: https://staging-app.tailf4d598.ts.net/research\n\n{\"code\": \"RESEARCH_STUDY_NOT_FOUND\", \"message\": \"There is no study with that id that you can read.\", \"what_was_expected\": \"A study id you can read; this lists your studies:\", \"example\": {}, \"suggested_next_action\": {\"tool\": \"keel_research_get\", \"args\": {}, \"reason\": \"A study id you can read; this lists your studies:\"}, \"detail\": {\"code\": \"RESEARCH_STUDY_NOT_FOUND\", \"links\": {\"app\": \"https://staging-app.tailf4d598.ts.net/research\"}}, \"exit_code\": 3, \"retryable\": false}",
       "type": "text"
     }
   ],
   "structuredContent": {
-    "code": "not_found",
+    "code": "RESEARCH_STUDY_NOT_FOUND",
     "detail": {
       "code": "RESEARCH_STUDY_NOT_FOUND",
       "links": {
-        "app": "https://app.usekeel.io/research/stu_000013"
+        "app": "https://staging-app.tailf4d598.ts.net/research"
       }
     },
     "example": {},
@@ -25,9 +25,9 @@
     "retryable": false,
     "suggested_next_action": {
       "args": {},
-      "reason": "A study id you can read; keel_research_get with no id lists your studies.",
+      "reason": "A study id you can read; this lists your studies:",
       "tool": "keel_research_get"
     },
-    "what_was_expected": "A study id you can read; keel_research_get with no id lists your studies."
+    "what_was_expected": "A study id you can read; this lists your studies:"
   }
 }

@@ -33,6 +33,7 @@ from ._base import (
     present_choice,
     present_param_schema,
 )
+from ._plan_fit import NARROW_PARAM, apply_narrow_recovery, narrowed_fields
 
 
 #: This tool's `present` default, as its parameter description states it.
@@ -100,6 +101,10 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
         body["name"] = name
     if target_workspace_id:
         body["target_workspace_id"] = target_workspace_id
+    if args.get("narrow_to_plan"):
+        # A screen over the plan's coins per screen (spec 02 §C4.3a): the copy's first version keeps the most
+        # traded coins the plan covers. Absent, nothing narrows.
+        body["narrow_to_plan"] = True
 
     if _looks_like_strategy_id(source):
         try:
@@ -109,7 +114,8 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
             # 422 with `Field required` since the body is missing
             # entirely. {} is accepted (all fields optional).
             result = client.post(f"/v1/strategies/{seg(source)}/fork", json=body)
-        except KeelError:
+        except KeelError as e:
+            apply_narrow_recovery(e, "keel_strategy_fork", args)
             raise
         except Exception as e:  # noqa: BLE001
             raise KeelError(
@@ -130,7 +136,8 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
             payload = dict(body)
             payload["share_id"] = source
             result = client.post("/v1/strategies/fork-with-edits", json=payload)
-        except KeelError:
+        except KeelError as e:
+            apply_narrow_recovery(e, "keel_strategy_fork", args)
             raise
         except Exception as e:  # noqa: BLE001
             raise KeelError(
@@ -151,6 +158,7 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
         # What was applied, as keel-api reports it (Q-2270: the share route
         # used to drop the workspace without a word).
         extra["workspace_id"] = result.get("workspace_id")
+    extra.update(narrowed_fields(result))
     note = fork_note(result, source=source)
     if note is not None:
         extra["fork_note"] = note
@@ -231,6 +239,7 @@ FORK_INPUT_SCHEMA: dict[str, Any] = {
             ),
         },
         "present": present_param_schema(PRESENT_DEFAULT),
+        "narrow_to_plan": NARROW_PARAM,
         "description": {
             "type": "string",
             "maxLength": 2000,

@@ -14,14 +14,17 @@ _SEARCH = route("get", "/v1/blocks")
 
 def _handler(args, ctx):
     """07 §4.10 (A3 4.10, WL-AG-17): the search's text names its population ("Showing 3 of 12 outputs") and each
-    output by name, role and the call a study names it by, ``Output("str_…@n", output="…")``; the route's JSON
-    stays the structured answer."""
+    output by name, role and the call a study names it by, ``Output("str_…@n", output="…")`` (a Keel library output by
+    its ``keel_ref``, ``Output("keel/momentum_7d@1", …)``); the route's JSON stays the structured answer."""
     extra = _SEARCH(args, ctx).extra
     items = [i for i in extra.get("items") or [] if isinstance(i, dict)]
     total = int(extra.get("total") or len(items))
     lines = [f"Showing {len(items)} of {total} output{'s' if total != 1 else ''}"]
     for item in items:
-        call = f"Output({json.dumps(item.get('ref'))}, output={json.dumps(item.get('output'))})"
+        # STG-SURFACES #26 (D-361): a Keel library output is named by its keel ref (`keel/momentum_7d@1`), the form
+        # the library read and every study print; the strategy id behind it is not the reader's to pin
+        ref = item.get("keel_ref") or item.get("ref")
+        call = f"Output({json.dumps(ref)}, output={json.dumps(item.get('output'))})"
         role = f" · {item['role']}" if item.get("role") else ""
         lines.append(f"- {item.get('name')} · {item.get('output')}{role} · {call}")
     return lines_result(extra, lines)

@@ -229,17 +229,20 @@ def test_agent_card_validates_against_schema():
 
 @monorepo_only
 def test_agent_card_endpoints_exist_in_site_public():
-    """Card endpoint URLs on usekeel.io must map to real public/ files."""
+    """Card endpoint URLs on usekeel.io must map to what serves them: a public/ file, or (pricing.md since V3-SITE
+    a7bb8bc50c) the route handler that renders ``src/content/pricing/pricing.md``."""
     data = json.loads(AGENT_CARD.read_text(encoding="utf-8"))
     endpoints = data["endpoints"]
-    for key, rel in [
-        ("agent_instructions", "AGENTS.md"),
-        ("llms_txt", "llms.txt"),
-        ("pricing", "pricing.md"),
-        ("skills", ".well-known/skills/index.json"),
+    site = SITE_PUBLIC.parent
+    for key, rel, served_by in [
+        ("agent_instructions", "AGENTS.md", SITE_PUBLIC / "AGENTS.md"),
+        ("llms_txt", "llms.txt", SITE_PUBLIC / "llms.txt"),
+        ("pricing", "pricing.md", site / "src" / "app" / "pricing.md" / "route.ts"),
+        ("skills", ".well-known/skills/index.json", SITE_PUBLIC / ".well-known" / "skills" / "index.json"),
     ]:
         assert endpoints[key] == f"https://usekeel.io/{rel}"
-        assert (SITE_PUBLIC / rel).exists(), f"{key} target missing: public/{rel}"
+        assert served_by.exists(), f"{key} target missing: {served_by.relative_to(site)}"
+    assert (site / "src" / "content" / "pricing" / "pricing.md").exists(), "the route's pricing.md source is missing"
 
 
 # ── Link checks (llms.txt / AGENTS.md) ─────────────────────────────────

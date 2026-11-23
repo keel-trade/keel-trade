@@ -62,23 +62,23 @@
       "requests": [
         {
           "method": "GET",
-          "path": "/v1/deployments/dep_real",
-          "params": []
+          "params": [],
+          "path": "/v1/deployments/dep_real"
         },
         {
           "method": "GET",
-          "path": "/v1/deployments/dep_real/stats",
-          "params": []
+          "params": [],
+          "path": "/v1/deployments/dep_real/stats"
         },
         {
           "method": "GET",
-          "path": "/v1/deployments/dep_real/equity",
-          "params": []
+          "params": [],
+          "path": "/v1/deployments/dep_real/equity"
         },
         {
           "method": "GET",
-          "path": "/v1/deployments/dep_real/executions",
-          "params": [["limit", "1"]]
+          "params": [["limit", "1"]],
+          "path": "/v1/deployments/dep_real/executions"
         }
       ],
       "structured": {
@@ -364,9 +364,9 @@
         }
       ],
       "structured": {
-        "result": "{\"share_url\": null, \"hero_url\": \"https://app.usekeel.io/strategies\", \"url_line\": \"View in Keel: https://app.usekeel.io/strategies\", \"authenticated\": true, \"app_url\": \"https://app.usekeel.io\", \"profile\": \"listed\", \"capabilities\": {\"research\": true, \"backtest\": true, \"monitor\": \"read-only\", \"live_actions\": \"web app\"}, \"identity\": {\"org_name\": \"Real Org\", \"plan\": \"trader\", \"tier\": \"base\", \"display_name\": \"Real Trader\"}, \"entitlements\": {\"summary\": [{\"unit\": \"backtest_runs\", \"granted\": 500, \"spent\": 54, \"available\": 446, \"consumed_by\": [\"MCP tool calls (keel_backtest_run)\", \"CLI (keel backtest run)\", \"web app backtest UI\"], \"period\": \"weekly\", \"resets_at\": \"2026-10-12T00:00:00Z\", \"reserved\": 0}, {\"unit\": \"backtest_compute_seconds\", \"granted\": 6000, \"spent\": 420, \"available\": 5580, \"consumed_by\": [\"MCP tool calls (keel_backtest_run)\", \"CLI (keel backtest run)\", \"web app backtest UI\"], \"period\": \"weekly\", \"resets_at\": \"2026-10-12T00:00:00Z\", \"reserved\": 0}]}, \"view\": {\"kind\": \"status\", \"size\": \"receipt\", \"object\": \"account\", \"at\": \"2026-10-11T12:00:00.000Z\", \"seq\": 1, \"markdown\": \"**Keel** \\u00b7 signed in as Real Org \\u00b7 trader plan\\n446 of 500 backtest runs and 5,580 of 6,000 backtest compute seconds left this week; they reset Mon 12 Oct 00:00 UTC. Quota is per org and shared across the web app, the CLI and other chats.\\nThis connector: research and backtests; it cannot place orders, move funds or connect wallets; strategies that are running are managed in the Keel web app.\\nView in Keel: https://app.usekeel.io/strategies\\n\"}}"
+        "result": "{\"share_url\": null, \"hero_url\": \"https://app.usekeel.io/strategies\", \"url_line\": \"View in Keel: https://app.usekeel.io/strategies\", \"authenticated\": true, \"app_url\": \"https://app.usekeel.io\", \"profile\": \"listed\", \"capabilities\": {\"research\": true, \"backtest\": true, \"monitor\": \"read-only\", \"live_actions\": \"web app\"}, \"identity\": {\"org_name\": \"Real Org\", \"plan\": \"trader\", \"tier\": \"base\", \"display_name\": \"Real Trader\"}, \"entitlements\": {\"summary\": [{\"unit\": \"backtest_runs\", \"granted\": 500, \"spent\": 54, \"available\": 446, \"consumed_by\": [\"MCP tool calls (keel_backtest_run)\", \"CLI (keel backtest run)\", \"web app backtest UI\"], \"period\": \"weekly\", \"resets_at\": \"2026-10-12T00:00:00Z\", \"reserved\": 0}, {\"unit\": \"backtest_compute_seconds\", \"granted\": 6000, \"spent\": 420, \"available\": 5580, \"consumed_by\": [\"MCP tool calls (keel_backtest_run)\", \"CLI (keel backtest run)\", \"web app backtest UI\"], \"period\": \"weekly\", \"resets_at\": \"2026-10-12T00:00:00Z\", \"reserved\": 0}]}, \"view\": {\"kind\": \"status\", \"size\": \"receipt\", \"object\": \"account\", \"at\": \"2026-10-11T12:00:00.000Z\", \"seq\": 1, \"markdown\": \"**Keel** \\u00b7 signed in as Real Org \\u00b7 trader plan\\n446 of 500 backtest runs left this week; they reset Mon 12 Oct 00:00 UTC. Quota is per org and shared across the web app, the CLI and other chats.\\nThis connector: research and backtests; it cannot place orders, move funds or connect wallets; strategies that are running are managed in the Keel web app.\\nView in Keel: https://app.usekeel.io/strategies\\n\"}}"
       },
-      "text": "**Keel** · signed in as Real Org · trader plan\n446 of 500 backtest runs and 5,580 of 6,000 backtest compute seconds left this week; they reset Mon 12 Oct 00:00 UTC. Quota is per org and shared across the web app, the CLI and other chats.\nThis connector: research and backtests; it cannot place orders, move funds or connect wallets; strategies that are running are managed in the Keel web app.\nView in Keel: https://app.usekeel.io/strategies\n",
+      "text": "**Keel** · signed in as Real Org · trader plan\n446 of 500 backtest runs left this week; they reset Mon 12 Oct 00:00 UTC. Quota is per org and shared across the web app, the CLI and other chats.\nThis connector: research and backtests; it cannot place orders, move funds or connect wallets; strategies that are running are managed in the Keel web app.\nView in Keel: https://app.usekeel.io/strategies\n",
       "tool": "keel_account_status"
     },
     {
@@ -386,9 +386,9 @@
         }
       ],
       "structured": {
-        "result": "{\"share_url\": null, \"plan\": \"trader\", \"plan_name\": \"Trader\", \"period\": \"weekly\", \"quota\": [{\"unit\": \"backtest_runs\", \"limit\": \"unlimited\", \"remaining\": \"unlimited\"}, {\"unit\": \"backtest_compute_seconds\", \"limit\": 6000, \"used\": 420, \"remaining\": 5580, \"resets_at\": \"2026-10-12T00:00:00Z\"}], \"talking_points\": [\"Plan: Trader.\", \"Backtests: unlimited.\", \"Backtest compute time: 5,580 s of 6,000 s left; resets Mon 12 Oct.\"]}"
+        "result": "{\"share_url\": null, \"plan\": \"trader\", \"plan_name\": \"Trader\", \"period\": \"weekly\", \"quota\": [{\"unit\": \"backtest_runs\", \"limit\": \"unlimited\", \"remaining\": \"unlimited\"}, {\"unit\": \"backtest_compute_seconds\", \"limit\": 6000, \"used\": 420, \"remaining\": 5580, \"resets_at\": \"2026-10-12T00:00:00Z\"}], \"talking_points\": [\"Plan: Trader.\", \"Backtests: unlimited.\"]}"
       },
-      "text": "{\"share_url\": null, \"plan\": \"trader\", \"plan_name\": \"Trader\", \"period\": \"weekly\", \"quota\": [{\"unit\": \"backtest_runs\", \"limit\": \"unlimited\", \"remaining\": \"unlimited\"}, {\"unit\": \"backtest_compute_seconds\", \"limit\": 6000, \"used\": 420, \"remaining\": 5580, \"resets_at\": \"2026-10-12T00:00:00Z\"}], \"talking_points\": [\"Plan: Trader.\", \"Backtests: unlimited.\", \"Backtest compute time: 5,580 s of 6,000 s left; resets Mon 12 Oct.\"]}",
+      "text": "{\"share_url\": null, \"plan\": \"trader\", \"plan_name\": \"Trader\", \"period\": \"weekly\", \"quota\": [{\"unit\": \"backtest_runs\", \"limit\": \"unlimited\", \"remaining\": \"unlimited\"}, {\"unit\": \"backtest_compute_seconds\", \"limit\": 6000, \"used\": 420, \"remaining\": 5580, \"resets_at\": \"2026-10-12T00:00:00Z\"}], \"talking_points\": [\"Plan: Trader.\", \"Backtests: unlimited.\"]}",
       "tool": "keel_plan_usage"
     }
   ],

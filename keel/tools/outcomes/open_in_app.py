@@ -47,6 +47,9 @@ _ID_PREFIX_KINDS: dict[str, str] = {
     "shr_": "share",
     # A study's page (07 §5.1, 06 P1: r={n}[.{rev}], v, sel).
     "stu_": "study",
+    # AUDIT S3 #7: a research project's page (link_routes.json's `project`, /research/projects/{id}); a project
+    # read's "View in Keel" links it, and this tool refused its id as an unknown prefix.
+    "prj_": "project",
 }
 
 #: A real share id — `libs/strategy_registry/share_links.py`
@@ -74,7 +77,15 @@ TARGET_KINDS: dict[str, str] = {
     # `stu_` here while this map had no label, so every study id answered
     # internal_error ("Unexpected error in keel_app_link: 'study'").
     "study": "study_page",
+    "project": "project_page",
 }
+
+
+def _research_target(route_kind: str, target_id: str) -> bool:
+    """A study, a project, or a shared study's 23-character id: the links that exist only with Research."""
+    return route_kind in ("study", "project") or (
+        route_kind == "share" and _STUDY_SHARE_RE.fullmatch(target_id) is not None
+    )
 
 
 def kind_for_id(target_id: str) -> str | None:
@@ -106,44 +117,50 @@ def _with_query(base: str, query: dict[str, object] | None) -> str:
 
 
 _PROD_APP_URL = "https://app.usekeel.io"
+_PROD_SHARE_ROOT = "https://usekeel.io/share"
 
 
 def app_base(ctx: ToolContext) -> str:
     """The web app's origin for ``ctx``: ``KEEL_APP_URL`` or a context that
     names one wins; otherwise it follows the configured API's host, so a CLI
     pointed at staging links staging (``staging-api.…`` → ``staging-app.…``,
-    ``api.…`` → ``app.…``). An API host with no app twin keeps the default."""
+    ``api.…`` → ``app.…``; ``keel.config.app_origin_for_api``). An API host
+    with no app twin keeps the default."""
     import os
-    from urllib.parse import urlsplit
+
+    from keel.config import app_origin_for_api, configured_api_url
 
     explicit = os.environ.get("KEEL_APP_URL")
-    if explicit or ctx.app_url.rstrip("/") != _PROD_APP_URL:
-        return (explicit or ctx.app_url).rstrip("/")
+    named = str(getattr(ctx, "app_url", None) or _PROD_APP_URL)
+    if explicit or named.rstrip("/") != _PROD_APP_URL:
+        return (explicit or named).rstrip("/")
     # The client the call already used: its config is the API this answer came
     # from. A tool that makes no API call (keel_app_link) builds the client
     # from the same config (no request is sent).
-    client = ctx.api_client
+    client = getattr(ctx, "api_client", None)
     if client is None and callable(getattr(ctx, "get_client", None)):
         try:
             client = ctx.get_client()
-        except Exception:  # noqa: BLE001 — no configured client: the default origin
+        except Exception:  # noqa: BLE001 — no configured client: the configured API's URL
             client = None
-    config = getattr(client, "_config", None)
-    api_url = getattr(config, "api_url", None)
+    api_url = getattr(getattr(client, "_config", None), "api_url", None)
     if not isinstance(api_url, str):
-        return _PROD_APP_URL
-    api = urlsplit(api_url)
-    host = api.hostname or ""
-    first, _, rest = host.partition(".")
-    if not rest or api.scheme != "https":
-        return _PROD_APP_URL
-    if first == "api":
-        twin = "app"
-    elif first.endswith("-api"):
-        twin = first[: -len("-api")] + "-app"
-    else:
-        return _PROD_APP_URL
-    return f"https://{twin}.{rest}"
+        api_url = configured_api_url()
+    return app_origin_for_api(api_url)
+
+
+def share_root(ctx: ToolContext) -> str:
+    """The public share pages' root for ``ctx`` (STG-SURFACES #18): ``KEEL_SHARE_URL_ROOT`` or a context that names
+    one wins; with the production app the public root (``usekeel.io/share``); any other app (staging) serves its share
+    pages itself, at ``{app}/share`` (keel-app's ``/share/[id]``), where a staging CLI linked prod's root."""
+    import os
+
+    explicit = os.environ.get("KEEL_SHARE_URL_ROOT")
+    named = str(getattr(ctx, "share_url_root", None) or _PROD_SHARE_ROOT)
+    if explicit or named.rstrip("/") != _PROD_SHARE_ROOT:
+        return (explicit or named).rstrip("/")
+    base = app_base(ctx)
+    return _PROD_SHARE_ROOT if base == _PROD_APP_URL else f"{base}/share"
 
 
 def research_link(
@@ -163,7 +180,7 @@ def research_link(
     path = str(route["path"])
     if "{id}" in path:
         if not target_id:
-            raise ValueError(f"the research {kind} link needs an id")
+            raise ValueError(f"A {kind} link needs its id (stu_… or prj_…).")
         path = path.format(id=target_id)
     return _with_query(origin.rstrip("/") + path, {**route["query"], **(query or {})})
 
@@ -199,7 +216,7 @@ def app_url_for(
     2026-09-19: every strategy link lands where the work happens, and
     ``/strategies/{id}`` redirects there), ``backtest`` (tearsheet tab),
     ``live`` (deployment view), ``paper`` (a paper run's page),
-    ``share`` (public share page, rooted at ``ctx.share_url_root``), or
+    ``share`` (public share page, rooted at :func:`share_root`), or
     ``study`` (a study's page, ``/research/{id}``; 06 P1's ``r``/``v``/``sel``
     ride in ``query``).
     """
@@ -231,14 +248,14 @@ def app_url_for(
         # there to this page by its venue block (IC-01-9).
         return _with_query(f"{ctx.app_url}/paper/{target_id}", query)
     if kind == "share":
-        return _with_query(f"{ctx.share_url_root}/{target_id}", query)
-    if kind == "study":
-        return research_link("study", target_id, origin=base, query=query)
+        return _with_query(f"{share_root(ctx)}/{target_id}", query)
+    if kind in ("study", "project"):
+        return research_link(kind, target_id, origin=base, query=query)
     raise KeelError(
         f"Cannot build an app link for kind {kind!r}.",
         error_code="unknown_link_kind",
         exit_code=2,
-        suggestion="Use one of: strategy, backtest, live, share.",
+        suggestion="Use one of: strategy, backtest, live, share, study, project.",
     )
 
 
@@ -251,7 +268,7 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
             exit_code=2,
             suggestion=(
                 "Pass a strategy id (str_...), a backtest run id (btr_...), a "
-                "running strategy's id (dep_...), a study id (stu_...), or a share id "
+                "running strategy's id (dep_...), a study id (stu_...), a project id (prj_...), or a share id "
                 "(the token in a usekeel.io/share/<id> URL, or a shared study's 23 characters)."
             ),
         )
@@ -264,13 +281,32 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
             exit_code=2,
             suggestion=(
                 "Use a strategy id (str_...), a backtest run id (btr_...), a study id "
-                "(stu_...), a running strategy's id (dep_..., from `keel_live_monitor`), or a share "
+                "(stu_...), a project id (prj_...), a running strategy's id (dep_..., from `keel_live_monitor`), or a share "
                 "id (the token in a usekeel.io/share/<id> URL, as "
                 "`keel_share_create` returns). `keel_strategy_search` and "
                 "`keel_backtest_run` return the first two."
             ),
         )
     kind = TARGET_KINDS[route_kind]
+    if _research_target(route_kind, target_id):
+        from ._toolsets import research_served
+
+        if not research_served():
+            # MCP-FINAL batch 3 #6 (FINAL-LIST §D): while this caller is not served Research a study, a project or a
+            # shared study has no page to link; the answer is keel-api's paused refusal, word for word (D-387).
+            from keel.errors import (
+                RESEARCH_PAUSED_CODE,
+                RESEARCH_PAUSED_EXPECTED,
+                RESEARCH_PAUSED_WORDS,
+            )
+
+            raise KeelError(
+                RESEARCH_PAUSED_WORDS,
+                error_code=RESEARCH_PAUSED_CODE,
+                exit_code=3,
+                retryable=False,
+                suggestion=RESEARCH_PAUSED_EXPECTED,
+            )
 
     # Spec 09 CL-2 (review finding): while anonymous, strategy/backtest/
     # live URLs reference anon-org resources the user's future account
@@ -319,8 +355,9 @@ LISTED_HEAD_DESCRIPTION = (
 #: a ``stu_`` or a 23-character shared-study id either way (every research answer writes the call for it).
 DESCRIPTION = LISTED_HEAD_DESCRIPTION
 RESEARCH_DESCRIPTION = (
-    _LEAD + "to the public share page. A study id (`stu_...`) links to the study, and a "
-    "shared study's 23-character id to its snapshot. It returns the link as `url`; nothing is opened."
+    _LEAD
+    + "to the public share page. A study id (`stu_...`) links to the study, a project id (`prj_...`) to "
+    "the project, and a shared study's 23-character id to its snapshot. It returns the link as `url`; nothing is opened."
 )
 
 

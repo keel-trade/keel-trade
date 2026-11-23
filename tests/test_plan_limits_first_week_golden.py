@@ -3,9 +3,12 @@
 The staging probe of 2026-11-16 showed every notice, wall and plan-usage line
 doubling with "0 of 50 first-week backtests left until Mon 23 Nov 18:37 UTC,
 then 18 for this 30-day period": long, a banned window phrase, and read as if
-nothing could run until 23 Nov. The rule now: a clause ONLY while the first
+nothing could run until 23 Nov. The rule then: a clause ONLY while the first
 week has some left, folded into the backtests line in parentheses, date only;
-none once it is spent or expired. The structured ``first_week`` stays in data.
+none once it is spent or expired. Plans v3 (PLANS-REVIEW R16): a bonus that
+ends by the reset reads as the period's allowance beside it ("(25 plus your
+first-week 50); resets to 25 on Dec 16"), spent or not; a bonus that runs past
+the reset keeps the pre-v3 clause. The structured ``first_week`` stays in data.
 
 ``fixtures/plan_limits_first_week_golden.json`` is the one golden: inputs in
 the probe's shapes, the exact words out. Every other first-week test computes
@@ -96,5 +99,5 @@ def test_the_clause_counts_backtests_only():
     block = {**GOLDEN["notice_with_extras"]["block"], "unit": "backtest_compute_seconds"}
     assert render_first_week_clause(block) is None
     assert render_first_week_clause(GOLDEN["notice_with_extras"]["block"]) == (
-        "(12 first-week extras until Mon 23 Nov)"
+        "(12 first-week extras until Nov 23)"
     )

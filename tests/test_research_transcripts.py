@@ -118,6 +118,11 @@ CALLS: dict[str, dict] = {
 
 
 class RecordingClient:
+    #: The API these fixed answers stand for (production): every link the SDK prints follows the API the call's
+    #: client names (``open_in_app.app_base``). The transcripts are computed at import, before the suite's config
+    #: isolation, so without it a developer's stored login (staging) moved every golden link (STG-SURFACES #18).
+    _config = type("Config", (), {"api_url": "https://api.usekeel.io"})()
+
     def __init__(self) -> None:
         self.requests: list[dict] = []
 

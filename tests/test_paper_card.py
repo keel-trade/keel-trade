@@ -141,7 +141,7 @@ FLOOR_422 = {
         ],
     }
 }
-FLOOR_LINE = "Paper and live on Free need 1h or slower; this is 15min."
+FLOOR_LINE = "Paper and live on Free run at 1 hour or slower; this strategy is 15min."
 CAP_LINE = "Paper strategies: 1 of 1 running on Free"
 
 #: A paper run with eight hours of history: the monitor's detail, stats and
@@ -437,7 +437,8 @@ def test_every_paper_result_carries_structured_content(wire: dict) -> None:
         structured = result["structuredContent"]
         assert structured is not None, name
         assert structured["result"] == _text(wire[name]), name
-        assert result["isError"] is name.endswith("_wall"), name
+        # A plan wall is a refusal, not a failure (Q-7927; plans spec 02 §C0 test 4, G9): no isError.
+        assert result["isError"] is False, name
 
 
 def test_the_text_block_is_the_envelope_without_the_card_facts(wire: dict) -> None:

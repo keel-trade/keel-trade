@@ -184,12 +184,13 @@ def _manifest_files() -> dict[str, str]:
 @monorepo
 def test_g2_vendored_corpus_is_exactly_the_shared_layer():
     files = _manifest_files()
-    # The screens core is the instruction builder's input (vendored beside
-    # the builder, screeners L13), never a served topic.
+    # The screens and research cores are the instruction builder's input
+    # (vendored beside the builder, screeners L13), never served topics.
     shared = sorted(
         rel
         for rel, layer in files.items()
-        if layer in ("reference", "sectioned") and rel != "screens_core.md"
+        if layer in ("reference", "sectioned")
+        and rel not in ("screens_core.md", "research_core.md")
     )
     expected = {_vendored_path_for(rel) for rel in shared}
     # Research's help topics are bundled beside the layer from libs/research
@@ -220,7 +221,8 @@ def test_g2_served_topics_are_the_manifests_shared_layer():
     shared = {
         normalize_topic(Path(rel).stem)
         for rel, layer in files.items()
-        if layer in ("reference", "sectioned") and rel != "screens_core.md"
+        if layer in ("reference", "sectioned")
+        and rel not in ("screens_core.md", "research_core.md")
     }
     assert shared == SERVED_DOC_TOPICS, sorted(shared ^ SERVED_DOC_TOPICS)
     opinion = {rel for rel, layer in files.items() if layer == "opinion"}

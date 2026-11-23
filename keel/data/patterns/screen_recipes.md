@@ -26,11 +26,13 @@ units").
   bare indicator name. Rank a change, a ratio or a
   score, never a raw open-interest or volume level (each coin's own units).
 - **Universe.** New screens start on `Universe(mode="top_volume", top_n=30,
-  market="perp")`. Every active perp is `top_n=180`, the launch screens'
-  width (`top_n` is a cap: a larger number only adds coins with no recent
-  data). Coins the user names are `Universe(mode="manual", symbols=["BTC",
-  "ETH"], market="perp")`. A `top_volume` universe resolves when the screen
-  runs.
+  market="perp")`, as every recipe below does (the default, not a plan fact).
+  `top_n` goes up to the plan's coins per screen (`keel_plan_usage` reports
+  `screens.coins_per_screen`); on a plan that screens every coin,
+  every active perp is `top_n=180`, the launch screens' width (`top_n` is
+  a cap: a larger number only adds coins with no recent data). Coins the user names are
+  `Universe(mode="manual", symbols=["BTC", "ETH"], market="perp")`. A
+  `top_volume` universe resolves when the screen runs.
 - **"Coins where X is below / above N"** is one stored output, X, and a view
   filter: `filter=Rule(Raw("x") < 0.0)`. It is never a second, mask output.
 - **Context in the view.** `price` is a general series the view can show
@@ -51,7 +53,7 @@ Screen:
 
 ```python
 Globals(target_timeframe="1h")
-Universe(mode="top_volume", top_n=180, market="perp")
+Universe(mode="top_volume", top_n=30, market="perp")
 Outputs(slots=["ret_7d", "rel_vol", "ret_1d"])
 Pipeline([
     PriceDataLoader(), Store("prices"), ROC(period=168), Store("ret_7d"), Load("prices"), RelativeVolume(lookback=168), CrossSectionalZScore(), Store("rel_vol"), Load("prices"), ROC(period=24), Store("ret_1d")
@@ -75,7 +77,7 @@ Screen:
 
 ```python
 Globals(target_timeframe="1h")
-Universe(mode="top_volume", top_n=180, market="perp")
+Universe(mode="top_volume", top_n=30, market="perp")
 Outputs(slots=["funding_7d", "funding_now", "funding_z"])
 Pipeline([
     FundingDataLoader(), RollingMean(window="7d"), Scale(by=8760, unit="rate_per_year"), Store("funding_7d"), FundingDataLoader(), Scale(by=8760, unit="rate_per_year"), Store("funding_now"), FundingDataLoader(), RollingMean(window="7d"), CrossSectionalZScore(), Store("funding_z")
@@ -99,7 +101,7 @@ Screen:
 
 ```python
 Globals(target_timeframe="1h")
-Universe(mode="top_volume", top_n=180, market="perp")
+Universe(mode="top_volume", top_n=30, market="perp")
 Outputs(slots=["funding_7d", "negative", "ret_7d"])
 Pipeline([
     FundingDataLoader(), RollingMean(window="7d"), Scale(by=8760, unit="rate_per_year"), Store("funding_7d"), BelowThresholdFilter(threshold=0.0), Store("negative"), PriceDataLoader(), ROC(period=168), Store("ret_7d")
@@ -123,7 +125,7 @@ Screen:
 
 ```python
 Globals(target_timeframe="1h")
-Universe(mode="top_volume", top_n=180, market="perp")
+Universe(mode="top_volume", top_n=30, market="perp")
 Outputs(slots=["ret_7d", "funding_7d", "pain"])
 Pipeline([
     PriceDataLoader(), ROC(period=168), Store("ret_7d"), FundingDataLoader(), RollingMean(window="7d"), Scale(by=8760, unit="rate_per_year"), Store("funding_7d"), {"paid": [Load("funding_7d")], "lost": [Load("ret_7d"), NegateTransform()]}, SignalProduct(left_key="paid", right_key="lost"), Store("pain")
@@ -142,7 +144,7 @@ Lines("top-pain", plot=Raw("pain"), filter=TopN(Control("n"), by=Raw("pain")))
 
 ## Funding right now vs its 7-day average
 
-Request: Funding right now next to its 7-day average, for every active perp. The view says: Each coin's funding right now beside its 7-day average, both as an annual rate.
+Request: Funding right now next to its 7-day average, across the top coins by volume. The view says: Each coin's funding right now beside its 7-day average, both as an annual rate.
 
 Two loader shapes, one per output. "Right now" is `FundingDataLoader(agg="last")`, the rate at each bar's close (on an hourly screen the latest hourly rate); the 7-day average is `RollingMean(window="7d")` over the hourly rates (168 of them). Both are scaled to a yearly rate, so a filter on either is written as a yearly decimal (0.2 = 20% a year).
 
@@ -150,7 +152,7 @@ Screen:
 
 ```python
 Globals(target_timeframe="1h")
-Universe(mode="top_volume", top_n=180, market="perp")
+Universe(mode="top_volume", top_n=30, market="perp")
 Outputs(slots=["funding_now", "funding_7d"])
 Pipeline([
     {

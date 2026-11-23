@@ -115,10 +115,75 @@
   }
 
   // ── Theme + host styles ───────────────────────────────────────────
+  // Q-7890: the host's theme sets data-theme AND the root color-scheme
+  // (Claude's transparent-theming guide, applyDocumentTheme). With only the
+  // meta's "light dark" the browser took the scheme from the OS, and an
+  // iframe whose scheme differs from its embedder gets an opaque backdrop:
+  // near-black under the host's light text when the OS was dark.
+  var themeListeners = [];
   function applyTheme(theme) {
     if (theme === "dark" || theme === "light") {
+      var was = document.documentElement.getAttribute("data-theme");
       document.documentElement.setAttribute("data-theme", theme);
+      document.documentElement.style.colorScheme = theme;
+      if (was && was !== theme)
+        themeListeners.forEach(function (cb) {
+          cb(theme);
+        });
     }
+  }
+
+  // ── The face's palette (D-420; CARD-RESEARCH RESEARCH.md §5) ──────
+  // One validated palette per host theme, by job, never cycled, shared by
+  // the study card and the screen card. Identity: the categorical slots
+  // (the accent is slot 1 and comes last here, so `cat[0]` is the first
+  // series after the subject); polarity: binned amber to indigo through a
+  // neutral grey; magnitude: one indigo. Validated (dataviz
+  // validate_palette.js) on #ffffff, #f5f4f0, #262522 and #212121: worst
+  // adjacent colour-blind delta E 10.8 light, 12.5 dark. Dark is selected,
+  // not inverted. The theme is the host's (Q-7890), else the OS's.
+  function hexRgb(h) {
+    return [1, 3, 5].map(function (i) {
+      return parseInt(h.slice(i, i + 2), 16);
+    });
+  }
+  var PALETTE = {
+    light: {
+      cat: ["#c04689", "#b68103", "#027db4", "#c86907", "#7b4aba", "#4b4cba"],
+      div: ["#896105", "#b5820c", "#d3aa64", "#e6cda5", "#eeede9",
+        "#cfd5f9", "#a2abf0", "#7179e4", "#4a44ca"], // prettier-ignore
+      seq: ["#dee3fe", "#a2abf0", "#7179e4", "#4a44ca", "#342c99"],
+    },
+    dark: {
+      cat: ["#cd5395", "#bf8809", "#049de0", "#c06403", "#8656c7", "#6b71e3"],
+      div: ["#e9ab2b", "#bc881a", "#8d671d", "#5e4925", "#3a3936",
+        "#3e4372", "#585fb2", "#767df1", "#9ea9ff"], // prettier-ignore
+      seq: ["#30345c", "#585fb2", "#767df1", "#9ea9ff", "#bdc6ff"],
+    },
+  };
+
+  /** The host's theme ("light" | "dark"): [data-theme], else the OS's. */
+  function themeNow() {
+    var t = document.documentElement.getAttribute("data-theme");
+    if (t === "dark" || t === "light") return t;
+    return window.matchMedia &&
+      window.matchMedia("(prefers-color-scheme: dark)").matches
+      ? "dark"
+      : "light";
+  }
+
+  /** The palette for the host's theme: `cat` (hex, the accent last),
+   *  `div` and `seq` (rgb triples), and `ids` (hex, the accent first: the
+   *  order identities take, rank 1 first). Fresh arrays each call. */
+  function palette() {
+    var p = PALETTE[themeNow()];
+    var cat = p.cat.slice();
+    return {
+      cat: cat,
+      div: p.div.map(hexRgb),
+      seq: p.seq.map(hexRgb),
+      ids: [cat[cat.length - 1]].concat(cat.slice(0, cat.length - 1)),
+    };
   }
 
   // Host CSS variable → card token. The first name present wins; a
@@ -132,6 +197,8 @@
     "--fg": ["--color-text-primary"],
     "--muted": ["--color-text-secondary", "--color-text-tertiary"],
     "--line": ["--color-border-primary", "--color-border-secondary"],
+    // MCP-CARDS: the face's hairline rules, the host's lightest border.
+    "--rule": ["--color-border-tertiary", "--color-border-secondary"],
     // `--accent` is deliberately ABSENT. Both vendors permit brand as the
     // accent and only as the accent: "host tokens for structure, brand only
     // as accent" (Claude design guidelines) and "use brand accent colors on
@@ -642,6 +709,7 @@
     callInFlight = false;
     clearSkeleton();
     if (document.body) document.body.removeAttribute("data-expect");
+    if (document.body) document.body.removeAttribute("data-expect-layout");
     for (var i = 0; i < resultListeners.length; i++) {
       try {
         resultListeners[i](envelope);
@@ -730,12 +798,39 @@
   // `dryRun` = what a `dry_run: true` call resolves to. A research run
   // waits as its run card (`progress`, 13 §4.3): one fixed height that its
   // progress and its compact result both fill.
+  // CARD-RENDER skeleton-* (13 §4.3): without `toolInfo` (the stock MCP
+  // Apps host, ChatGPT) every research tool fits every call (none requires
+  // an argument), so the smaller-guess rule waited as a 48 px row and then
+  // jumped 300-600 px. Their arguments tell them apart: `only` keys belong
+  // to that tool alone among its kind (a run's `plan_id`, a read's `view`);
+  // a tool with `wants` is a candidate only when one of those is given (a
+  // plan is a template, a source or an edit; a bare `study_id` is a read).
+  // tests/test_widgets_inflight.py pins both against the tools' schemas.
   var INFLIGHT = {
     keel_research_plan: {
       kind: "study",
       needs: [],
       invoking: "Planning study…",
       size: "receipt",
+      wants: [
+        "template",
+        "source",
+        "add",
+        "subjects",
+        "axes",
+        "cell",
+        "coins",
+        "costs",
+        "days",
+        "delay",
+        "exposure_multiple",
+        "from_plan",
+        "resume",
+        "retry",
+        "split",
+        "to",
+        "vol_cap",
+      ],
     },
     keel_research_run: {
       kind: "study",
@@ -743,6 +838,29 @@
       invoking: "Running study…",
       size: "progress",
       present: true,
+      only: ["plan_id", "max_runs", "wait"],
+      wants: [
+        "template",
+        "source",
+        "add",
+        "subjects",
+        "axes",
+        "cell",
+        "coins",
+        "costs",
+        "days",
+        "delay",
+        "exposure_multiple",
+        "from_plan",
+        "resume",
+        "retry",
+        "split",
+        "to",
+        "vol_cap",
+        "plan_id",
+        "max_runs",
+        "wait",
+      ],
     },
     keel_research_get: {
       kind: "study",
@@ -750,11 +868,23 @@
       invoking: "Reading the study…",
       size: "view",
       present: true,
+      only: [
+        "include",
+        "library",
+        "measures",
+        "output",
+        "project_id",
+        "revision",
+        "sort",
+        "subject",
+        "view",
+        "where",
+      ],
     },
     keel_research_view_set: {
       kind: "study",
       needs: ["study_id", "expected_revision"],
-      invoking: "Saving the study view…",
+      invoking: "Saving the study…",
       size: "view",
       dryRun: "receipt",
       present: true,
@@ -865,6 +995,30 @@
     },
   };
 
+  // What a research read waits as, from its arguments (13 §4.3): a read of
+  // the library, a subject's addresses or a project is a one-row receipt; a
+  // chart's rows and the list wait as themselves, not as a study.
+  var INFLIGHT_SHAPE = {
+    // A plan waits as its own row: three lines (name; work and actions;
+    // the count line or wall), not a one-line receipt.
+    keel_research_plan: {
+      layoutOf: function () {
+        return "plan";
+      },
+    },
+    keel_research_get: {
+      sizeOf: function (args) {
+        if (args.library || args.project_id || args.subject) return "receipt";
+        return null;
+      },
+      layoutOf: function (args) {
+        if (args.view != null || args.output) return "chart";
+        if (!args.study_id && !args.share_id) return "list";
+        return null;
+      },
+    },
+  };
+
   // With NO arguments this long after mount there is no call behind the
   // card — a host that renders the frame and delivers nothing (Q-1627).
   var NO_INPUT_GRACE_MS = 4000;
@@ -882,13 +1036,21 @@
     return (document.body && document.body.getAttribute("data-card")) || "";
   }
 
-  function sizeFor(rule, args) {
+  function sizeFor(rule, args, tool) {
     // A dry run's card is its one-row draft check whatever `present` asks
     // for (Q-1848), so it waits as that row and never grows then collapses.
     if (rule.dryRun && args.dry_run === true) return rule.dryRun;
     if (rule.present && (args.present === "receipt" || args.present === "view"))
       return args.present;
-    return rule.size;
+    var shape = INFLIGHT_SHAPE[tool];
+    var own = shape && shape.sizeOf ? shape.sizeOf(args) : null;
+    return own || rule.size;
+  }
+
+  function hasAny(args, keys) {
+    return (keys || []).some(function (k) {
+      return args[k] != null;
+    });
   }
 
   // The tools that can have drawn THIS card: the named one when the host
@@ -912,11 +1074,35 @@
           return args[k] != null;
         }) &&
         (args.dry_run == null || r.dryRun) &&
-        (args.present == null || r.present)
+        (args.present == null || r.present) &&
+        (!r.wants || hasAny(args, r.wants))
       )
         fit.push(t);
     }
+    // A tool's own argument names it among the ones that fit.
+    var owned = fit.filter(function (t) {
+      return hasAny(args, INFLIGHT[t].only);
+    });
+    if (owned.length) return owned;
     return fit.length ? fit : all;
+  }
+
+  /** The study card's expected layout inside a `view` wait (list, chart). */
+  function expectedLayout(args, size) {
+    if (args === undefined) return null;
+    // Only the tools that wait at the size chosen (a plan's row, not the
+    // run card a plan-and-run call could also become).
+    var names = candidates(args).filter(function (t) {
+      return sizeFor(INFLIGHT[t], args, t) === size;
+    });
+    var got = null;
+    for (var i = 0; i < names.length; i++) {
+      var shape = INFLIGHT_SHAPE[names[i]];
+      var l = shape && shape.layoutOf ? shape.layoutOf(args) : null;
+      if (got !== null && l !== got) return null;
+      got = l;
+    }
+    return got;
   }
 
   /**
@@ -936,7 +1122,7 @@
       if (args === undefined) {
         if (r.size === "receipt" || r.dryRun === "receipt" || r.present)
           return "receipt";
-      } else if (sizeFor(r, args) === "receipt") {
+      } else if (sizeFor(r, args, names[i]) === "receipt") {
         return "receipt";
       }
     }
@@ -945,7 +1131,7 @@
       args !== undefined &&
       names.length &&
       names.every(function (t) {
-        return sizeFor(INFLIGHT[t], args) === "progress";
+        return sizeFor(INFLIGHT[t], args, t) === "progress";
       })
     )
       return "progress";
@@ -973,8 +1159,11 @@
     }
   }
 
-  function setExpect(size) {
-    if (document.body) document.body.setAttribute("data-expect", size);
+  function setExpect(size, layout) {
+    if (!document.body) return;
+    document.body.setAttribute("data-expect", size);
+    if (layout) document.body.setAttribute("data-expect-layout", layout);
+    else document.body.removeAttribute("data-expect-layout");
   }
 
   function onToolInput(args) {
@@ -1006,7 +1195,9 @@
   function drawInFlight() {
     var body = document.getElementById("card-body");
     if (!body) return;
-    setExpect(expectedSize(lastArgs == null ? undefined : lastArgs));
+    var waitArgs = lastArgs == null ? undefined : lastArgs;
+    var waitSize = expectedSize(waitArgs);
+    setExpect(waitSize, expectedLayout(waitArgs, waitSize));
     var sk = body.querySelector(".skeleton");
     if (!sk) {
       // A terminal line was drawn (the no-input grace ran out) and THEN
@@ -1077,6 +1268,7 @@
     stopMetaHold();
     clearSkeleton();
     if (document.body) document.body.removeAttribute("data-expect");
+    if (document.body) document.body.removeAttribute("data-expect-layout");
     var body = document.getElementById("card-body");
     if (body) {
       body.textContent = "";
@@ -1980,6 +2172,9 @@
     var name = spec.name || "Untitled";
     var nm = el("span", "rr-name", name);
     nm.title = name;
+    // A study row's title is cut at a word end (CARD-RENDER #3: "MA
+    // Cross…en Cross) Strategy"); every other kind keeps Q-1780's middle cut.
+    if (spec.wordEnd) nm.setAttribute("data-word-end", "1");
     l1.appendChild(nm);
     aria.push(name);
     if (spec.version != null && spec.version !== "") {
@@ -2079,22 +2274,37 @@
           hk.newValue,
       );
     }
+    // `keep` (a study's plan row, D-381 (1)): its work or wall words and its
+    // count line are what the row is FOR, so neither is ever dropped; the
+    // row is three lines at every width (name; words and actions; count),
+    // and each line cuts with an ellipsis instead.
+    if (spec.keep) row.setAttribute("data-keep", "1");
     if (spec.note) {
-      var nt = el("span", "rr-win", spec.note);
+      var nt = el("span", "rr-win" + (spec.keep ? " rr-keep" : ""), spec.note);
       nt.title = spec.note;
-      nt.setAttribute("data-drop", "2");
+      if (!spec.keep) nt.setAttribute("data-drop", "2");
       l2.appendChild(nt);
       aria.push(spec.note);
     }
     // Provenance (Q-1797) goes BEFORE the name is squeezed at all
     // (`data-soft`): "Draft · updated Sep 23" beside a name cut to
     // "Simple Me…Perps)" said the least useful thing in the most room.
+    var l3 = null;
     if (spec.provenance) {
-      var pv = el("span", "rr-win rr-prov", spec.provenance);
+      var pv = el(
+        "span",
+        "rr-win rr-prov" + (spec.keep ? " rr-keep" : ""),
+        spec.provenance,
+      );
       pv.title = spec.provenance;
-      pv.setAttribute("data-drop", "3");
-      pv.setAttribute("data-soft", "1");
-      l2.appendChild(pv);
+      if (spec.keep) {
+        l3 = el("span", "rr-l3");
+        l3.appendChild(pv);
+      } else {
+        pv.setAttribute("data-drop", "3");
+        pv.setAttribute("data-soft", "1");
+        l2.appendChild(pv);
+      }
       aria.push(spec.provenance);
     }
     var acts = el("span", "rr-acts");
@@ -2151,6 +2361,7 @@
       wrap.openInPlace = toggle;
     }
     l2.appendChild(acts);
+    if (l3) row.appendChild(l3);
     row.setAttribute("role", "group");
     row.setAttribute(
       "aria-label",
@@ -2267,6 +2478,7 @@
 
   function fitRow(row) {
     if (!row.isConnected || !row.clientWidth) return;
+    placeKeepActions(row);
     var nm = row.querySelector(".rr-name");
     // Measure against the WHOLE name: a name already cut to fit would
     // read as "not truncated" and the drops below would never run.
@@ -2298,7 +2510,59 @@
           items[i].classList.add("rr-dropped");
       }
     }
-    if (nm) middleTruncate(nm);
+    if (nm) {
+      if (nm.getAttribute("data-word-end")) wordEndTruncate(nm);
+      else middleTruncate(nm);
+    }
+  }
+
+  /**
+   * A study's plan or Draft row (`data-keep`, D-381 (1)) below 480 px:
+   * its work words take line 2 whole and Open / Show steps move to line 3,
+   * beside the count line (CARD-360: "22 runs, 1 reused · under a …" at
+   * 360 px, the actions taking half the line the words are for). From
+   * 480 px up they return to line 2. Re-placed on every fit, so a frame
+   * that crosses 480 px follows.
+   */
+  function placeKeepActions(row) {
+    if (!row.hasAttribute("data-keep")) return;
+    var acts = row.querySelector(".rr-acts");
+    var l2 = row.querySelector(".rr-l2");
+    if (!acts || !l2) return;
+    var narrow =
+      !!window.matchMedia && window.matchMedia("(max-width: 479px)").matches;
+    var l3 = row.querySelector(".rr-l3");
+    if (narrow) {
+      if (!l3) {
+        l3 = el("span", "rr-l3");
+        l3.setAttribute("data-acts-only", "1");
+        row.appendChild(l3);
+      }
+      if (acts.parentNode !== l3) l3.appendChild(acts);
+    } else if (acts.parentNode !== l2) {
+      l2.appendChild(acts);
+      if (l3 && l3.hasAttribute("data-acts-only")) row.removeChild(l3);
+    }
+  }
+
+  /** Cut a name at the end of a word, with an ellipsis (a study's title). */
+  function wordEndTruncate(nm) {
+    var full = nm.getAttribute("data-full");
+    if (full === null) {
+      full = nm.textContent;
+      nm.setAttribute("data-full", full);
+    }
+    nm.textContent = full;
+    if (nm.scrollWidth <= nm.clientWidth + 1) return;
+    var parts = full.split(" ");
+    for (var n = parts.length - 1; n > 0; n--) {
+      nm.textContent =
+        parts
+          .slice(0, n)
+          .join(" ")
+          .replace(/[,·:;(]+$/, "") + "…";
+      if (nm.scrollWidth <= nm.clientWidth + 1) return;
+    }
   }
 
   /**
@@ -2435,6 +2699,7 @@
     var b = document.body;
     if (b) {
       b.removeAttribute("data-expect");
+      b.removeAttribute("data-expect-layout");
       b.setAttribute("data-size", "receipt");
       // The state carries no link, and the fallback band stays away too.
       b.setAttribute("data-owns-link", "1");
@@ -2466,6 +2731,7 @@
     var b = document.body;
     if (b) {
       b.removeAttribute("data-expect");
+      b.removeAttribute("data-expect-layout");
       b.setAttribute("data-size", "receipt");
       b.setAttribute("data-owns-link", "0");
       b.setAttribute("data-no-hero", "1");
@@ -2523,6 +2789,7 @@
     var b = document.body;
     if (b) {
       b.removeAttribute("data-expect");
+      b.removeAttribute("data-expect-layout");
       b.removeAttribute("data-size");
       b.removeAttribute("data-layout");
       b.setAttribute("data-owns-link", "0");
@@ -2564,12 +2831,16 @@
     study: "Open the study in Keel",
   };
   var RESEARCH_LINK_LABEL = "Open Research in Keel";
+  // CARD-RENDER share-read: a shared snapshot's link said "Open Research in
+  // Keel"; it opens the snapshot's page (`/share/{id}`, D-168) and says so.
+  var SNAPSHOT_LINK_LABEL = "Open the snapshot in Keel";
   var STUDY_PATH = /\/research\/stu_[A-Za-z0-9]+/;
+  var SHARE_PATH = /\/share\/[A-Za-z0-9_-]+/;
 
   function studyLinkLabel(url) {
-    return url && STUDY_PATH.test(String(url))
-      ? LINK_LABELS.study
-      : RESEARCH_LINK_LABEL;
+    if (url && STUDY_PATH.test(String(url))) return LINK_LABELS.study;
+    if (url && SHARE_PATH.test(String(url))) return SNAPSHOT_LINK_LABEL;
+    return RESEARCH_LINK_LABEL;
   }
   // A screen draws through the strategy card (compose, get, fork), so its
   // kind cannot tell it apart; its view names what it produces
@@ -2604,8 +2875,10 @@
     return hostDisplayModes.indexOf("fullscreen") >= 0;
   }
 
-  function buttonLink(label, onPress) {
-    var a = el("a", "button-link", label);
+  // D-420d: the shared button pair (card.css): the URL link is the primary
+  // (`button-primary`, filled), Expand the quiet one (`button-quiet`).
+  function buttonLink(label, onPress, kind) {
+    var a = el("a", "button-link " + (kind || "button-quiet"), label);
     a.href = "#";
     a.addEventListener("click", function (ev) {
       ev.preventDefault();
@@ -2680,9 +2953,13 @@
     row.hidden = false;
     row.textContent = "";
     if (url) {
-      var a = buttonLink(label + " ↗", function () {
-        KeelHost.openLink(url);
-      });
+      var a = buttonLink(
+        label + " ↗",
+        function () {
+          KeelHost.openLink(url);
+        },
+        "button-primary",
+      );
       a.href = url;
       a.title = url;
       row.appendChild(a);
@@ -2707,9 +2984,10 @@
       );
     }
     // The second (and last) action: Expand, only where the host says it
-    // can honour it, and only from inline (Q-1632).
+    // can honour it, and only from inline (Q-1632). The screen card has it
+    // too since Q-7926 (it expanded only from a tap on its chart's empty
+    // space, which a Table never had).
     if (
-      cardKind() !== "screener" &&
       hostOffersFullscreen() &&
       currentDisplayMode !== "fullscreen" &&
       !(
@@ -2823,6 +3101,13 @@
     },
     fmt: fmt,
     display: display,
+    palette: palette,
+    theme: themeNow,
+    // A card that colours from `palette()` redraws when the host's theme
+    // changes after the first draw.
+    onTheme: function (cb) {
+      if (typeof cb === "function") themeListeners.push(cb);
+    },
     cardWidth: cardWidth,
     isNarrow: isNarrow,
     fmtNum: fmtNum,

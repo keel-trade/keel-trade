@@ -114,9 +114,15 @@
   }
 
   // ── Theme + host styles ───────────────────────────────────────────
+  // Q-7890: the host's theme sets data-theme AND the root color-scheme
+  // (Claude's transparent-theming guide, applyDocumentTheme). With only the
+  // meta's "light dark" the browser took the scheme from the OS, and an
+  // iframe whose scheme differs from its embedder gets an opaque backdrop:
+  // near-black under the host's light text when the OS was dark.
   function applyTheme(theme) {
     if (theme === "dark" || theme === "light") {
       document.documentElement.setAttribute("data-theme", theme);
+      document.documentElement.style.colorScheme = theme;
     }
   }
 

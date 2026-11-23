@@ -338,7 +338,7 @@ def test_plan_usage_paper_block_follows_the_host(paper_sdk_released, host):
             "used": 1,
             "remaining": 0,
         }
-        assert got["talking_points"][-1] == "Paper strategies: 1 of 1 running."
+        assert got["talking_points"][-1] == "Paper strategies: 1 of 1 running on Free."
     else:
         assert got == head  # ChatGPT and unknown clients: HEAD's bytes
 

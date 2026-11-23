@@ -567,7 +567,7 @@ def test_a_screen_run_says_the_backtest_runs_left(monkeypatch):
     text, envelope = served_text(
         "keel_screener_run", {"strategy_id": SID}, Screens(submit=submit), monkeypatch
     )
-    assert "quota: 3 of 50 backtests left; resets Mon 9 Nov." in text
+    assert "quota: 3 of 50 backtests left; resets Nov 9." in text
     assert envelope["remaining"] == {"backtest_runs": 3}
     assert "plan" not in envelope["quota"][0]  # the projection, never the plan ladder
     plain, plain_env = served_text(

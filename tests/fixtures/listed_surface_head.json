@@ -4,7 +4,7 @@
     {
       "contents": [
         {
-          "length": 172859,
+          "length": 177419,
           "meta": {
             "ui": {
               "csp": {
@@ -15,7 +15,7 @@
             }
           },
           "mime_type": "text/html;profile=mcp-app",
-          "sha256": "651d67c33525c2f75743932efbdcd845733f144b36612aa5a2eaa3e82f56ca67"
+          "sha256": "b74b79110d65590568e5194295740e6f002ad5538ab86cee4d5b2ceb7a7612d3"
         }
       ],
       "resource": {
@@ -42,7 +42,7 @@
     {
       "contents": [
         {
-          "length": 172859,
+          "length": 177419,
           "meta": {
             "openai/widgetCSP": {
               "connect_domains": [],
@@ -56,7 +56,7 @@
             "openai/widgetPrefersBorder": false
           },
           "mime_type": "text/html+skybridge",
-          "sha256": "651d67c33525c2f75743932efbdcd845733f144b36612aa5a2eaa3e82f56ca67"
+          "sha256": "b74b79110d65590568e5194295740e6f002ad5538ab86cee4d5b2ceb7a7612d3"
         }
       ],
       "resource": {
@@ -86,7 +86,7 @@
     {
       "contents": [
         {
-          "length": 168708,
+          "length": 173268,
           "meta": {
             "ui": {
               "csp": {
@@ -97,7 +97,7 @@
             }
           },
           "mime_type": "text/html;profile=mcp-app",
-          "sha256": "45272b9c5a17e578655fd78d88e4d8d5c6fea8ff850a561329498e3d1cc5290e"
+          "sha256": "7ade109ac21b30522f7cbe09b1b4eb2d66599dbb29bd93d24a1361edcd6fe587"
         }
       ],
       "resource": {
@@ -124,7 +124,7 @@
     {
       "contents": [
         {
-          "length": 168708,
+          "length": 173268,
           "meta": {
             "openai/widgetCSP": {
               "connect_domains": [],
@@ -138,7 +138,7 @@
             "openai/widgetPrefersBorder": false
           },
           "mime_type": "text/html+skybridge",
-          "sha256": "45272b9c5a17e578655fd78d88e4d8d5c6fea8ff850a561329498e3d1cc5290e"
+          "sha256": "7ade109ac21b30522f7cbe09b1b4eb2d66599dbb29bd93d24a1361edcd6fe587"
         }
       ],
       "resource": {
@@ -168,7 +168,7 @@
     {
       "contents": [
         {
-          "length": 163268,
+          "length": 167828,
           "meta": {
             "ui": {
               "csp": {
@@ -179,7 +179,7 @@
             }
           },
           "mime_type": "text/html;profile=mcp-app",
-          "sha256": "781bad8f80d44fda8c51491b7833ce70a1384f1f93b76fb64aa6d9a89a3ed9b4"
+          "sha256": "24f8c170ac02b38203e113f9a4b0daea8e09c80db999b2aab2d82b61a5f18e55"
         }
       ],
       "resource": {
@@ -206,7 +206,7 @@
     {
       "contents": [
         {
-          "length": 163268,
+          "length": 167828,
           "meta": {
             "openai/widgetCSP": {
               "connect_domains": [],
@@ -220,7 +220,7 @@
             "openai/widgetPrefersBorder": false
           },
           "mime_type": "text/html+skybridge",
-          "sha256": "781bad8f80d44fda8c51491b7833ce70a1384f1f93b76fb64aa6d9a89a3ed9b4"
+          "sha256": "24f8c170ac02b38203e113f9a4b0daea8e09c80db999b2aab2d82b61a5f18e55"
         }
       ],
       "resource": {
@@ -250,7 +250,7 @@
     {
       "contents": [
         {
-          "length": 228210,
+          "length": 232770,
           "meta": {
             "ui": {
               "csp": {
@@ -261,7 +261,7 @@
             }
           },
           "mime_type": "text/html;profile=mcp-app",
-          "sha256": "19e88a978d41423475cd9c6d5b3fd4fb52b975b576c0478825501fd295b52344"
+          "sha256": "e555639428d4be98a99709033717e832e456b640986b3e8b1bd65c2c00279340"
         }
       ],
       "resource": {
@@ -288,7 +288,7 @@
     {
       "contents": [
         {
-          "length": 228210,
+          "length": 232770,
           "meta": {
             "openai/widgetCSP": {
               "connect_domains": [],
@@ -302,7 +302,7 @@
             "openai/widgetPrefersBorder": false
           },
           "mime_type": "text/html+skybridge",
-          "sha256": "19e88a978d41423475cd9c6d5b3fd4fb52b975b576c0478825501fd295b52344"
+          "sha256": "e555639428d4be98a99709033717e832e456b640986b3e8b1bd65c2c00279340"
         }
       ],
       "resource": {
@@ -330,7 +330,7 @@
       "uri": "ui://keel/cards/strategy.openai.html"
     }
   ],
-  "instructions": "Keel builds crypto strategies on Hyperliquid; use it for crypto strategy, backtest or portfolio tasks. keel_account_status reports identity, quota and capabilities when a task needs them. Omitted arguments take platform defaults; a run's result names its window and declarations. When a result carries `view`, the card the host draws already shows names, ids and links — explain it rather than repeat it. One run: keel_backtest_summarize; several: keel_backtest_compare once.\n\nNew strategy: keel_components_search → keel_components_get_many → keel_strategy_compose(dry_run=true) until clean → save → keel_backtest_run; an edit to it saves its next version, not a fork.\n\nPlan limits name the user's numbers, the reset, and which plans include more; a plan-limit refusal is not retryable, and prices are not part of it. keel_plan_usage answers at any time.\n\nThis connector is for research and backtests. It cannot place orders, move funds or connect wallets; strategies that are running are managed in the Keel web app (keel_app_link).",
+  "instructions": "Keel builds crypto strategies on Hyperliquid; use it for crypto strategy, backtest or portfolio tasks. keel_account_status reports identity, quota and capabilities when a task needs them. Omitted arguments take platform defaults; a run's result names its window and declarations. When a result carries `view`, the card the host draws already shows names, ids and links — explain it rather than repeat it. One run: keel_backtest_summarize; several: keel_backtest_compare once.\n\nNew strategy: keel_components_search → keel_components_get_many → keel_strategy_compose(dry_run=true) until clean → save → keel_backtest_run; an edit to it saves its next version, not a fork.\n\nPlan limits name the user's numbers, the reset and which plans include more, not prices; a plan-limit refusal is not retryable.\n\nThis connector is for research and backtests. It cannot place orders, move funds or connect wallets; strategies that are running are managed in the Keel web app (keel_app_link).",
   "tool_count": 29,
   "tools": [
     {
@@ -3514,6 +3514,24 @@
           "parent": {
             "type": "string"
           },
+          "plan_check_error": {
+            "type": ["string", "null"]
+          },
+          "plan_findings": {
+            "items": {
+              "type": "object"
+            },
+            "type": ["array", "null"]
+          },
+          "plan_findings_notice": {
+            "type": ["string", "null"]
+          },
+          "plan_narrowed": {
+            "type": ["object", "null"]
+          },
+          "plan_narrowed_notice": {
+            "type": ["string", "null"]
+          },
           "projection_available": {
             "type": "boolean"
           },
@@ -3874,6 +3892,24 @@
           },
           "parent": {
             "type": "string"
+          },
+          "plan_check_error": {
+            "type": ["string", "null"]
+          },
+          "plan_findings": {
+            "items": {
+              "type": "object"
+            },
+            "type": ["array", "null"]
+          },
+          "plan_findings_notice": {
+            "type": ["string", "null"]
+          },
+          "plan_narrowed": {
+            "type": ["object", "null"]
+          },
+          "plan_narrowed_notice": {
+            "type": ["string", "null"]
           },
           "projection_available": {
             "type": "boolean"
@@ -4370,6 +4406,11 @@
             "minLength": 1,
             "type": "string"
           },
+          "narrow_to_plan": {
+            "default": false,
+            "description": "Keep the highest-volume coins the plan covers when the screen resolves to more, and run, save or copy that version; a coin-limit refusal or a compose finding names it. False narrows nothing.",
+            "type": "boolean"
+          },
           "parent_version": {
             "description": "Optional commit/version ref this update is based on.",
             "maxLength": 200,
@@ -4511,6 +4552,24 @@
           },
           "parent": {
             "type": "string"
+          },
+          "plan_check_error": {
+            "type": ["string", "null"]
+          },
+          "plan_findings": {
+            "items": {
+              "type": "object"
+            },
+            "type": ["array", "null"]
+          },
+          "plan_findings_notice": {
+            "type": ["string", "null"]
+          },
+          "plan_narrowed": {
+            "type": ["object", "null"]
+          },
+          "plan_narrowed_notice": {
+            "type": ["string", "null"]
           },
           "projection_available": {
             "type": "boolean"
@@ -4888,6 +4947,24 @@
           "parent": {
             "type": "string"
           },
+          "plan_check_error": {
+            "type": ["string", "null"]
+          },
+          "plan_findings": {
+            "items": {
+              "type": "object"
+            },
+            "type": ["array", "null"]
+          },
+          "plan_findings_notice": {
+            "type": ["string", "null"]
+          },
+          "plan_narrowed": {
+            "type": ["object", "null"]
+          },
+          "plan_narrowed_notice": {
+            "type": ["string", "null"]
+          },
           "projection_available": {
             "type": "boolean"
           },
@@ -5140,6 +5217,11 @@
             "minLength": 1,
             "type": "string"
           },
+          "narrow_to_plan": {
+            "default": false,
+            "description": "Keep the highest-volume coins the plan covers when the screen resolves to more, and run, save or copy that version; a coin-limit refusal or a compose finding names it. False narrows nothing.",
+            "type": "boolean"
+          },
           "present": {
             "description": "How this result displays in the chat — presentation only, no effect on what the tool does. `view`: the full card, for showing the result in full or enlarged. `receipt`: a compact one-line summary row, for the one-line or short version. Omitted: `view`.",
             "enum": ["receipt", "view"],
@@ -5271,6 +5353,24 @@
           },
           "parent": {
             "type": "string"
+          },
+          "plan_check_error": {
+            "type": ["string", "null"]
+          },
+          "plan_findings": {
+            "items": {
+              "type": "object"
+            },
+            "type": ["array", "null"]
+          },
+          "plan_findings_notice": {
+            "type": ["string", "null"]
+          },
+          "plan_narrowed": {
+            "type": ["object", "null"]
+          },
+          "plan_narrowed_notice": {
+            "type": ["string", "null"]
           },
           "projection_available": {
             "type": "boolean"
@@ -5659,6 +5759,24 @@
           },
           "parent": {
             "type": "string"
+          },
+          "plan_check_error": {
+            "type": ["string", "null"]
+          },
+          "plan_findings": {
+            "items": {
+              "type": "object"
+            },
+            "type": ["array", "null"]
+          },
+          "plan_findings_notice": {
+            "type": ["string", "null"]
+          },
+          "plan_narrowed": {
+            "type": ["object", "null"]
+          },
+          "plan_narrowed_notice": {
+            "type": ["string", "null"]
           },
           "projection_available": {
             "type": "boolean"
@@ -6071,6 +6189,11 @@
             "maxLength": 200,
             "type": "string"
           },
+          "narrow_to_plan": {
+            "default": false,
+            "description": "Keep the highest-volume coins the plan covers when the screen resolves to more, and run, save or copy that version; a coin-limit refusal or a compose finding names it. False narrows nothing.",
+            "type": "boolean"
+          },
           "ref": {
             "description": "A sequence number, tag or commit id (from `keel_strategy_history`).",
             "type": "string"
@@ -6201,6 +6324,24 @@
           },
           "parent": {
             "type": "string"
+          },
+          "plan_check_error": {
+            "type": ["string", "null"]
+          },
+          "plan_findings": {
+            "items": {
+              "type": "object"
+            },
+            "type": ["array", "null"]
+          },
+          "plan_findings_notice": {
+            "type": ["string", "null"]
+          },
+          "plan_narrowed": {
+            "type": ["object", "null"]
+          },
+          "plan_narrowed_notice": {
+            "type": ["string", "null"]
           },
           "projection_available": {
             "type": "boolean"

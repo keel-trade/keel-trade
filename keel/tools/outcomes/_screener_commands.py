@@ -43,7 +43,7 @@ def register_command(
                 {**args, "dry_run": bool(ctx.dry_run or args.get("dry_run", False))}, ctx
             )
 
-    handler = _with_refusals(handler, screen=name.startswith("screener_"))
+    handler = _with_refusals(handler, screen=name.startswith("screener_"), tool="keel_" + name)
     return register(
         OutcomeTool(
             name="keel_" + name,
@@ -313,12 +313,19 @@ def _not_run(err, args, detail):
     return err
 
 
-def apply_refusal(err, args, *, screen=False):
+def apply_refusal(err, args, *, screen=False, tool=None):
     """Set §D1.7's next step on a screener refusal; other errors pass through.
 
     ``screen`` marks a screen tool: its not-found refusals name the screen's
     own next step, never the generic advice about backtests (Q-3634).
+    ``tool`` is the refused tool: a coin-cap refusal's next step is that
+    same call with its remedy's ``apply`` (plans v3 spec 02 §C4.3a).
     """
+    if tool is not None:
+        from ._plan_fit import apply_narrow_recovery
+
+        if apply_narrow_recovery(err, tool, args):
+            return err
     if (
         isinstance(err, EntitlementError)
         and (getattr(err, "input", None) or {}).get("plan") == "anon"
@@ -348,12 +355,12 @@ def apply_refusal(err, args, *, screen=False):
     return err
 
 
-def _with_refusals(handler, *, screen=False):
+def _with_refusals(handler, *, screen=False, tool=None):
     def guarded(args, ctx):
         try:
             return handler(args, ctx)
         except KeelError as err:
-            apply_refusal(err, args, screen=screen)
+            apply_refusal(err, args, screen=screen, tool=tool)
             raise
 
     return guarded

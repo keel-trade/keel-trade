@@ -22,6 +22,7 @@ from keel.errors import KeelError, NotFoundError
 
 from . import register
 from ._base import OutcomeResult, OutcomeTool, ToolContext
+from ._plan_fit import NARROW_PARAM, apply_narrow_recovery, narrowed_fields
 from ._surface_hints import strategy_ids_hint
 from ._toolsets import is_listed_profile
 from .open_in_app import app_url_for
@@ -61,6 +62,9 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
     message = args.get("message")
     if isinstance(message, str) and message.strip():
         body["message"] = message.strip()
+    if args.get("narrow_to_plan"):
+        # A restore is a save (spec 02 §C4.3): a screen over the coin cap restores narrowed only when asked.
+        body["narrow_to_plan"] = True
 
     client = ctx.get_client()
     try:
@@ -71,6 +75,7 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
     except NotFoundError:
         raise
     except KeelError as e:
+        apply_narrow_recovery(e, "keel_strategy_restore", args)
         detail = e.detail or {}
         if detail.get("code") == "RESTORE_DOES_NOT_COMPILE":
             # Spec 03 §2.4 (atomic restore): the source at `ref` does not
@@ -124,6 +129,7 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
         extra["message"] = stored_message
     elif "message" in body:
         extra["message"] = body["message"]
+    extra.update(narrowed_fields(result))
     if not is_listed_profile():
         # A local-only fact (`keel_strategy_pull` is not served on the
         # listed profile): a checkout on THIS machine is now behind.
@@ -235,6 +241,7 @@ STRATEGY_RESTORE = register(
                     "maxLength": 200,
                     "description": "Commit message for the new version. Omitted: 'Restored from vN'.",
                 },
+                "narrow_to_plan": NARROW_PARAM,
             },
         },
         annotations={

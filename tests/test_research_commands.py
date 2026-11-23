@@ -97,7 +97,7 @@ def test_no_next_is_explicit(code) -> None:
 
 def test_an_entitlement_refusal_never_names_a_login() -> None:
     body = json.dumps(
-        {"detail": "This study was not run and nothing was charged.", "code": "quota_exhausted"}
+        {"detail": "This study can't run yet, and nothing was charged.", "code": "quota_exhausted"}
     )
     err = translate_http_error(403, body)
     assert isinstance(err, EntitlementError)
@@ -107,10 +107,10 @@ def test_an_entitlement_refusal_never_names_a_login() -> None:
 
 def test_the_paused_refusal_stays_bare() -> None:
     err = translate_http_error(
-        404, json.dumps({"detail": "Research is paused.", "code": "RESEARCH_PAUSED"})
+        404, json.dumps({"detail": "Research isn't available yet.", "code": "RESEARCH_PAUSED"})
     )
     env = apply_research_refusal(err, {"study_id": "stu_a"}).to_envelope()
-    assert env["message"] == "Research is paused."
+    assert env["message"] == "Research isn't available yet."
     assert env["suggested_next_action"] == {"tool": None, "args": {}}
 
 
@@ -367,10 +367,11 @@ def test_the_steps_listing_names_its_grammar() -> None:
         ctx.get_client = lambda: Client(env)
         return OUTCOMES["keel_research_steps"].handler({}, ctx).extra["view"]["markdown"]
 
-    assert "Grammar: 4 reference forms, the address grammar and 2 rules" in text(
+    # AUDIT-WORDS M30: no field name, the call that reads it
+    assert "grammar (4 reference forms and 2 rules with their fixes): keel_help(" in text(
         {**served, "grammar": grammar}
     )
-    assert "Grammar:" not in text(served)
+    assert "grammar (" not in text(served)
 
 
 @pytest.mark.parametrize(
@@ -396,7 +397,9 @@ def test_ri504_every_costed_research_verb_sends_an_idempotency_key(
     sent: list[tuple[str, dict | None]] = []
 
     class Client:
-        def post(self, p, json=None, headers=None, **params):  # a POST's query (``?card=full``, WL-SV-21)
+        def post(
+            self, p, json=None, headers=None, **params
+        ):  # a POST's query (``?card=full``, WL-SV-21)
             sent.append((p, headers))
             return {"study": {"study_id": "stu_a", "state": "running"}, "links": {}}
 

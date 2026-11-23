@@ -7,7 +7,7 @@
   },
   "content": [
     {
-      "text": "Research is paused.\nValid input matching the tool's schema.\nView in Keel: https://app.usekeel.io/research/stu_000014\n\n{\"code\": \"RESEARCH_PAUSED\", \"message\": \"Research is paused.\", \"what_was_expected\": \"Valid input matching the tool's schema.\", \"example\": {}, \"suggested_next_action\": {\"tool\": null, \"args\": {}}, \"detail\": {\"code\": \"RESEARCH_PAUSED\", \"links\": {\"app\": \"https://app.usekeel.io/research/stu_000014\"}}, \"exit_code\": 3, \"retryable\": false}",
+      "text": "Research isn't available yet.\nView in Keel: https://staging-app.tailf4d598.ts.net/research/stu_000014\n\n{\"code\": \"RESEARCH_PAUSED\", \"message\": \"Research isn't available yet.\", \"what_was_expected\": \"Nothing in this call can change it: Research isn't available on Keel yet.\", \"example\": {}, \"suggested_next_action\": {\"tool\": null, \"args\": {}}, \"detail\": {\"code\": \"RESEARCH_PAUSED\", \"links\": {\"app\": \"https://staging-app.tailf4d598.ts.net/research/stu_000014\"}}, \"exit_code\": 3, \"retryable\": false}",
       "type": "text"
     }
   ],
@@ -16,17 +16,17 @@
     "detail": {
       "code": "RESEARCH_PAUSED",
       "links": {
-        "app": "https://app.usekeel.io/research/stu_000014"
+        "app": "https://staging-app.tailf4d598.ts.net/research/stu_000014"
       }
     },
     "example": {},
     "exit_code": 3,
-    "message": "Research is paused.",
+    "message": "Research isn't available yet.",
     "retryable": false,
     "suggested_next_action": {
       "args": {},
       "tool": null
     },
-    "what_was_expected": "Valid input matching the tool's schema."
+    "what_was_expected": "Nothing in this call can change it: Research isn't available on Keel yet."
   }
 }

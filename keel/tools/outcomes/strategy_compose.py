@@ -46,6 +46,7 @@ from ._base import (
     present_choice,
     present_param_schema,
 )
+from ._plan_fit import NARROW_PARAM, apply_narrow_recovery, narrowed_fields
 
 
 #: This tool's `present` default, as its parameter description states it.
@@ -163,6 +164,36 @@ def _read_source(args: dict) -> str:
             "discover components for the DSL body first."
         ),
     )
+
+
+def _plan_findings(
+    source: str, ctx: ToolContext, strategy_id: str | None, served: dict | None
+) -> dict[str, Any]:
+    """The plan limits this source would meet (spec 02 §C4.2): keel-api's ``plan_findings``, computed after the
+    plan-blind DSL validator, warnings only (a finding never blocks composing or saving). Read from the validate
+    call the Use context already made, else one validate call. A read that fails is SAID (``plan_check_error``),
+    never silently read as "no finding"; the save and the run check the plan themselves either way."""
+    from keel.errors import AuthError
+
+    from ._plan_fit import findings_fields
+
+    if served is None:
+        body: dict[str, Any] = {"source": source}
+        if strategy_id:
+            body["strategy_id"] = strategy_id
+        try:
+            served = ctx.get_client().post("/v1/strategies/validate", json=body)
+        except (AuthError, EntitlementError):
+            raise
+        except KeelError as e:
+            return {
+                "plan_check_error": (
+                    f"The plan check could not run ({e}); the save and the run check the plan themselves."
+                )
+            }
+    if not isinstance(served, dict) or "plan_findings" not in served:
+        return {}
+    return findings_fields(served.get("plan_findings"))
 
 
 def _use_context(source: str, ctx: ToolContext, strategy_id: str | None):
@@ -1008,6 +1039,7 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
         universe = _dry_run_universe_block(source, ctx)
         if universe is not None:
             body["universe"] = universe
+        body.update(_plan_findings(source, ctx, strategy_id, use_context))
         from .open_in_app import app_url_for
 
         # No strategy ⇒ NO LINK (Q-1686). A card's primary action must go
@@ -1116,6 +1148,10 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
         # The thesis line, on create AND update (founder Q2, D4 spec §8):
         # a thesis that changes is recorded where the user reads it.
         payload["description"] = description
+    if args.get("narrow_to_plan"):
+        # The acceptance of a coin-limit refusal's or finding's remedy (spec 02 §C4.3a): the server stores the
+        # narrowed version (the most traded coins the plan covers). Absent, nothing narrows.
+        payload["narrow_to_plan"] = True
 
     previous_source: str | None = None
     previous_sequence: Any = None
@@ -1143,6 +1179,8 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
             raise
         except KeelError as e:
             _record_refused_save(e)
+            # The coin cap (spec 02 §C4.3): the next action is this same save with the remedy's `apply`.
+            apply_narrow_recovery(e, "keel_strategy_compose", args)
             detail = e.detail or {}
             if (
                 isinstance(e, ConflictError)
@@ -1251,6 +1289,7 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
             raise
         except KeelError as e:
             _record_refused_save(e)
+            apply_narrow_recovery(e, "keel_strategy_compose", args)
             raise
         except Exception as e:  # noqa: BLE001
             raise KeelError(
@@ -1296,6 +1335,8 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
             **({"units": validation["units"]} if validation.get("units") else {}),
         },
     }
+    # What the coin cap kept on a narrowed save, said once (spec 02 §C4.3a).
+    body.update(narrowed_fields(result))
     if requested_lock is not None and isinstance(result.get("component_lock"), dict):
         # What was applied, as keel-api stored it: the caller's pins, and
         # every other component the source uses at its stored version.
@@ -1456,6 +1497,7 @@ INPUT_SCHEMA: dict[str, Any] = {
             "default": False,
             "description": "Only validate + compile, do not persist.",
         },
+        "narrow_to_plan": NARROW_PARAM,
         "parent_version": {
             "type": "string",
             "minLength": 1,

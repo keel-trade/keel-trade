@@ -36,6 +36,7 @@
   var MAX_STEPS = 5;
   var MAX_LIST = 5;
   var MAX_CHECKS = 40;
+  var MAX_ISSUES = 3;
 
   // The thumb's coordinate box (research.card_summary: x columns 0-299, y rows
   // 0-63, 63 at the top).
@@ -83,6 +84,21 @@
     "#9333ea",
   ];
 
+  // MCP-CARDS (D-420, CARD-RESEARCH RESEARCH.md §5): one validated palette per
+  // host theme, by job, never cycled. Identity: the categorical slots after
+  // the accent (series 1 is the subject, drawn in the accent by card-study.css);
+  // polarity: binned amber to indigo through a neutral grey; magnitude: one
+  // indigo. The palette is the host adapter's (`H.palette()`, shared with the
+  // screen card, SCREENS-CARD); the theme is the host's (Q-7890).
+
+  /** The palette for the host's theme, set before each draw. */
+  function applyPalette() {
+    var p = H.palette();
+    CAT = p.cat;
+    DIV = p.div;
+    SEQ = p.seq;
+  }
+
   function svg(tag, attrs) {
     var node = document.createElementNS(NS, tag);
     Object.keys(attrs || {}).forEach(function (k) {
@@ -128,11 +144,15 @@
 
   // ── Thumb decoders: one per family, exactly what view_thumb_facts writes ─
 
-  /** `enc: "b64"` values (encode_thumb_values' inverse); throws off-alphabet. */
+  /** `enc: "b64"` values (encode_thumb_values' inverse); `.` (THUMB_GAP) is no point; throws off-alphabet. */
   function b64(text) {
     if (typeof text !== "string" || !text.length) fail("b64");
     var out = [];
     for (var i = 0; i < text.length; i++) {
+      if (text.charAt(i) === ".") {
+        out.push(null);
+        continue;
+      }
       var v = ALPHABET.indexOf(text.charAt(i));
       if (v < 0) fail("b64");
       out.push(v);
@@ -498,7 +518,10 @@
   }
 
   function drawThumbHeat(box, m) {
-    cells(box, m.d, m.c, m.r, m.ramp, { ring: m.ring });
+    // The thumb's row 0 is the y axis's first value (card_summary's
+    // `_heatmap_facts`), drawn at the bottom as the study's own map draws it
+    // (CARD-RENDER share-read: the thumb was the map upside down).
+    cells(box, m.d, m.c, m.r, m.ramp, { ring: m.ring, flip: true });
   }
 
   function riverChars(rows) {
@@ -720,12 +743,47 @@
     (c.marks || []).forEach(function (mk) {
       if (mk.kind === "hline")
         box.appendChild(hline(yOf(mk.at), "st-zero", CMAX));
-      else if (mk.kind === "vline")
+      else if (mk.kind === "vline") {
+        // MCP-CARDS (RESEARCH.md §4 Check): the days after the split, tinted,
+        // so "does it hold after the split" reads without a legend.
+        box.appendChild(
+          svg("rect", {
+            x: mk.at,
+            y: 0,
+            width: Math.max(0, CMAX - mk.at),
+            height: CMAX,
+            class: "st-after",
+          }),
+        );
         box.appendChild(vline(mk.at, "st-split", CMAX));
+      }
     });
     var xAt = function (i) {
       return m.xs[i];
     };
+    // AUDIT-CHARTS F55/F66 (FIX-11): "your setting" on a line over a setting
+    // axis, a ring on the first drawn series at the served x.
+    (c.marks || []).forEach(function (mk) {
+      if (mk.kind !== "point") return;
+      var s = m.series.filter(function (x) {
+        return !x.ref;
+      })[0];
+      // the drawn x nearest the served one (even positions are fractional)
+      var i = -1;
+      m.xs.forEach(function (x, j) {
+        if (
+          Math.abs(x - mk.at) <= 2 &&
+          (i < 0 || Math.abs(x - mk.at) < Math.abs(m.xs[i] - mk.at))
+        )
+          i = j;
+      });
+      if (!s || i < 0 || s.y[i] == null) {
+        box.appendChild(vline(mk.at, "st-split", CMAX));
+        return;
+      }
+      box.appendChild(dot(m.xs[i], yOf(s.y[i]), "st-yours-out"));
+      box.appendChild(dot(m.xs[i], yOf(s.y[i]), "st-yours-in"));
+    });
     m.series.forEach(function (s, k) {
       if (!s.lo || !s.hi || k >= 3) return;
       var d = bandOf(s.lo, s.hi, xAt, yOf);
@@ -748,6 +806,21 @@
           "vector-effect": "non-scaling-stroke",
         }),
       );
+      // AUDIT-CHARTS F55 (FIX-11): a point with no neighbour drew nothing (a
+      // path of one "M" is no ink), so a 1-axis map's key read as axes only.
+      // A short series dots every value; a long one dots its isolated ones.
+      var few = s.y.length <= 40;
+      s.y.forEach(function (v, i) {
+        if (v == null) return;
+        var alone =
+          (i === 0 || s.y[i - 1] == null) &&
+          (i === s.y.length - 1 || s.y[i + 1] == null);
+        if (!few && !alone) return;
+        var d = dot(m.xs[i], yOf(v), "st-dot" + (s.ref ? " st-ref" : ""));
+        if (s.c > 0) d.setAttribute("stroke", colourOf(s.c));
+        d.setAttribute("data-series", k);
+        box.appendChild(d);
+      });
       // Withheld points (13 §2.5 Curve): hollow, never a value.
       if (withheld)
         Object.keys(withheld).forEach(function (i) {
@@ -761,14 +834,17 @@
   function drawBarsChart(box, m) {
     var w = CMAX / m.y.length;
     var gap = Math.min(w * 0.25, 120);
+    // CARD-RENDER compare-done: one bar filled the whole plot; a bar is at
+    // most a sixth of it, centred on its place.
+    var bw = Math.max(1, Math.min(w - gap, CMAX / 6));
     var zero = yOf(m.zero);
     m.y.forEach(function (v, i) {
       if (v == null) return;
       box.appendChild(
         svg("rect", {
-          x: round1(i * w + gap / 2),
+          x: round1(i * w + (w - bw) / 2),
           y: Math.min(zero, yOf(v)),
-          width: round1(Math.max(1, w - gap)),
+          width: round1(bw),
           height: Math.max(8, Math.abs(yOf(v) - zero)),
           class: "st-bar",
         }),
@@ -841,13 +917,38 @@
 
   function drawHeatChart(box, m) {
     var c = m.c;
+    // "Your setting" is a true ring (ringOverlay), never the square outline
+    // Highest wears (CARD-RENDER map-done).
     cells(box, c.d, c.cols, c.rows, (c.legend && c.legend.ramp) || "div", {
       w: CMAX,
       h: CMAX,
-      ring: c.ring,
       outline: c.outline,
       flip: true,
     });
+  }
+
+  /** A heatmap's "your setting": a round ring centred on its cell. */
+  function ringOverlay(plot, c) {
+    if (typeof c.ring !== "number" || c.ring < 0 || c.ring >= c.cols * c.rows)
+      return;
+    var col = c.ring % c.cols;
+    var row = Math.floor(c.ring / c.cols);
+    var dot = el("span", "st-ring-dot");
+    dot.style.left = ((col + 0.5) / c.cols) * 100 + "%";
+    dot.style.top = ((c.rows - 1 - row + 0.5) / c.rows) * 100 + "%";
+    dot.setAttribute("aria-hidden", "true");
+    plot.appendChild(dot);
+    // Round, around the cell's written value: as wide as the cell allows.
+    var size = function () {
+      var w = plot.clientWidth / c.cols;
+      var h = plot.clientHeight / c.rows;
+      if (!w || !h) return;
+      var d = Math.max(10, Math.min(w, h, 44) - 4);
+      dot.style.width = dot.style.height = d + "px";
+      dot.style.margin = -d / 2 + "px 0 0 " + -d / 2 + "px";
+    };
+    size();
+    requestAnimationFrame(size);
   }
 
   function drawRiverChart(box, m) {
@@ -988,6 +1089,12 @@
     var lg = c.legend;
     if (!lg || !lg.lo || !lg.hi) return null;
     var box = el("span", "st-legend st-ramp-legend");
+    // What the colour measures, served (CARD-RENDER map-done).
+    if (lg.label) {
+      var nm = el("span", "st-legend-w st-legend-name", lg.label);
+      nm.title = lg.label;
+      box.appendChild(nm);
+    }
     box.appendChild(el("span", "st-legend-w", lg.lo));
     var bar = el("span", "st-ramp");
     bar.style.background = rampGradient(lg.ramp || "div");
@@ -1039,6 +1146,23 @@
   }
 
   /** The words a readout shows for index `i` (13 §4.1), served only. */
+  /** MCP-CARDS (integrator polish 6): on the face a one-series line chart's
+   *  readout leads with its value, the date quiet after it ("0.86× · Oct 28,
+   *  2026"); anything else reads as readWords does. */
+  function faceRead(m, i) {
+    var r = m.c.read || {};
+    if (m.kind === "line" && (r.y || []).length === 1 && i != null) {
+      var v = split(r.y[0])[i];
+      var band = split((r.band || [])[0])[i];
+      if (v)
+        return {
+          bold: v + (band ? " (" + band + ")" : ""),
+          rest: split(r.x)[i] || "",
+        };
+    }
+    return { bold: "", rest: i == null ? "" : readWords(m, i) };
+  }
+
   function readWords(m, i) {
     var r = m.c.read || {};
     if (m.kind === "heat") {
@@ -1066,10 +1190,14 @@
     (r.y || []).forEach(function (row, k) {
       var w = split(row)[i];
       if (!w) return;
+      // The series by name, else (one unnamed series) the measure itself, so
+      // the readout says what the number is (CARD-RENDER #2).
       var name =
         m.series && m.series.length > 1 && m.series[k]
           ? m.series[k].name
-          : null;
+          : (m.series && m.series[k] && m.series[k].name) ||
+            (m.c.y && m.c.y.label) ||
+            null;
       var band = split(bands[k])[i];
       parts.push(
         (name ? name + " " : "") + w + (band ? " (" + band + ")" : ""),
@@ -1158,7 +1286,8 @@
     return g;
   }
 
-  /** Words written in a Heatmap's cells when each is >= 34 x 15 px (13 §2.5). */
+  /** Words written in a Heatmap's cells when each is >= 34 x 15 px (13 §2.5)
+   *  and every value fits its cell whole. */
   function cellValues(plot, m) {
     var c = m.c;
     if (!c.values_in_cells) return;
@@ -1179,6 +1308,22 @@
         layer.appendChild(el("span", "", valued ? cellWords[i] || "" : ""));
       }
     plot.appendChild(layer);
+    // CARD-360: a value that does not fit its cell is never half-drawn
+    // ("0.…" at 360 px). The size gate above is a floor, not a proof: if
+    // any value overflows its cell, the whole layer goes, so the map reads
+    // as colour alone and every value stays in the readout.
+    var spans = layer.children;
+    for (var j = 0; j < spans.length; j++) {
+      var s = spans[j];
+      if (
+        s.textContent &&
+        (s.scrollWidth > s.clientWidth + 1 ||
+          s.scrollHeight > s.clientHeight + 1)
+      ) {
+        plot.removeChild(layer);
+        return;
+      }
+    }
   }
 
   function tableOf(c) {
@@ -1211,24 +1356,50 @@
     return found;
   }
 
+  /**
+   * D-407 (2): a Check with no bars set (Keel's showcase, a Check before its
+   * bars are set): every bar is unset, so nothing counts (served count 0) and
+   * no unlocked row carries a met mark. Its rows are its measured checks,
+   * with no met words or glyph; the block's served more_words is its one line.
+   */
+  function noBars(data) {
+    var c = data && data.checks;
+    return (
+      !!c &&
+      c.count === 0 &&
+      (c.rows || []).every(function (r) {
+        return r.locked || (r.met == null && !r.bar_words);
+      })
+    );
+  }
+
+  /** A check row's state: met, not met, not measured, locked, or "plain" (no bar set, D-407 (2)). */
+  function checkState(r, plain) {
+    return r.locked
+      ? "locked"
+      : r.met === true
+        ? "met"
+        : r.met === false
+          ? "not_met"
+          : plain
+            ? "plain"
+            : "not_measured";
+  }
+
   /** "Your checks" rows (13 §2.3): met words, label, value, the rest, link. */
   function checksList(rows, data, max) {
     var copy = data.copy || {};
     var links = data.links || {};
     var view = checksEntry(data);
+    var plain = noBars(data);
     var list = el("ul", "st-checks");
     (rows || []).slice(0, max || MAX_CHECKS).forEach(function (r) {
       var li = el("li", "st-check");
-      var state = r.locked
-        ? "locked"
-        : r.met === true
-          ? "met"
-          : r.met === false
-            ? "not_met"
-            : "not_measured";
+      var state = checkState(r, plain);
       li.setAttribute("data-state", state);
       var top = el("div", "st-check-head");
-      top.appendChild(el("span", "st-check-met", words(copy[state])));
+      if (state !== "plain")
+        top.appendChild(el("span", "st-check-met", words(copy[state])));
       top.appendChild(el("span", "st-check-label", words(r.label)));
       // A locked row draws its words and no number (13 §2.3).
       if (!r.locked)
@@ -1327,7 +1498,7 @@
     var marker = chart.marker && chart.marker.w ? [chart.marker] : [];
     (chart.marks || [])
       .filter(function (mk) {
-        return mk && mk.kind === "vline" && mk.w;
+        return mk && (mk.kind === "vline" || mk.kind === "point") && mk.w;
       })
       .concat(marker)
       .forEach(function (mk) {
@@ -1338,8 +1509,17 @@
       });
     var yTicks = ticksOf(chart.y, "y");
     var xTicks = ticksOf(chart.x, "x");
-    var yName = m.kind === "heat" && chart.y && chart.y.label;
-    if (yName) {
+    // CARD-RENDER #2: every chart names its measures, as the map does: the
+    // y axis's served name up its left edge, the x axis's under its ticks.
+    var yName = chart.y && chart.y.label;
+    // MCP-FINAL round 6: "Growth of 1" was both the chart's title and its y
+    // axis's name; a name the title already says is not drawn twice.
+    var sameAsTitle =
+      yName &&
+      chart.title &&
+      String(yName).trim().toLowerCase() ===
+        String(chart.title).trim().toLowerCase();
+    if (yName && !sameAsTitle) {
       var yn = el("span", "st-axis-name st-axis-name-y", words(yName));
       yn.title = yName;
       frame.appendChild(yn);
@@ -1348,9 +1528,27 @@
     frame.appendChild(plot);
     block.appendChild(frame);
     block.appendChild(xTicks);
+    if (m.kind === "heat") ringOverlay(plot, chart);
     var hk = m.kind === "heat" ? heatKey(chart, m, copy) : null;
     if (hk) block.appendChild(hk);
+    else if (chart.x && chart.x.label) {
+      var xr = el("div", "st-axis-row");
+      var xn = el("span", "st-axis-name st-axis-name-x", words(chart.x.label));
+      xn.title = chart.x.label;
+      xr.appendChild(xn);
+      block.appendChild(xr);
+    }
     requestAnimationFrame(function () {
+      // CARD-360: a legend that crowds the title ("Grow… — Momentum
+      // rotation v4 — Momentum rotati…" at 360 px) takes its own line
+      // under it; the plot gives up that line inside the key's fixed slot.
+      // Laid out before the ticks, which fit the plot's final size.
+      if (
+        keys &&
+        (name.scrollWidth > name.clientWidth + 1 ||
+          keys.scrollWidth > keys.clientWidth + 1)
+      )
+        titleRow.setAttribute("data-wrap", "1");
       fitTicks(block, yTicks, xTicks);
     });
 
@@ -1359,13 +1557,29 @@
     var coarse =
       window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
     var hint = words(coarse ? copy.hint_touch : copy.hint_pointer);
-    var idle = hint;
-    var readText = el("span", "st-readout-w", idle);
+    // MCP-CARDS (RESEARCH.md §2.4): on the face the readout rests on the last
+    // point, which teaches the crosshair; no instruction line is printed.
+    var rest = o.face && countOf(m) ? readWords(m, countOf(m) - 1) : null;
+    var idle = o.face ? rest || "" : hint;
+    var readText = el("span", "st-readout-w", o.face ? "" : idle);
+    var faceShow = function (i) {
+      var at = faceRead(m, i);
+      readText.textContent = "";
+      if (at.bold) readText.appendChild(el("span", "st-read-v", at.bold));
+      if (at.rest)
+        readText.appendChild(
+          el("span", "st-read-l", (at.bold ? SEP : "") + at.rest),
+        );
+    };
+    if (o.face) faceShow(countOf(m) ? countOf(m) - 1 : null);
     readout.appendChild(readText);
-    block.appendChild(readout);
+    if (o.face) titleRow.appendChild(readout);
+    else block.appendChild(readout);
     // D-354 (2): the served key sentence repeats a drawn key line, so it is
     // drawn only where no key line is, as its own line that wraps.
-    if (!hk && chart.note_words)
+    // MCP-CARDS (D-420): the face says its provenance once, in its caption;
+    // the chart's own note is the full study's (Expand).
+    if (!o.face && !hk && chart.note_words)
       block.appendChild(el("p", "st-chart-note", words(chart.note_words)));
 
     // A selected cell or bar (13 §4.1): its link in the readout's fixed
@@ -1396,7 +1610,9 @@
       if (cursor && cursor.parentNode) cursor.parentNode.removeChild(cursor);
       cursor = cursorOf(m, i);
       box.appendChild(cursor);
-      readText.textContent = i == null ? idle : readWords(m, i) || idle;
+      if (o.face)
+        faceShow(i == null ? (countOf(m) ? countOf(m) - 1 : null) : i);
+      else readText.textContent = i == null ? idle : readWords(m, i) || idle;
       block.setAttribute("data-at", i == null ? "" : String(i));
     }
     function fromEvent(ev) {
@@ -1434,8 +1650,10 @@
           next = Math.max(0, Math.max(0, i) - step);
         else if (ev.key === "Home") next = 0;
         else if (ev.key === "End") next = n - 1;
-        else if (ev.key === "Escape") next = null;
-        else if (ev.key === "Enter" && current != null) {
+        else if (ev.key === "Escape") {
+          next = null;
+          select(null); // the selected cell's link goes with it
+        } else if (ev.key === "Enter" && current != null) {
           // Enter selects the cell or bar under the readout and focuses its link.
           if (m.kind === "heat" || m.kind === "bars") {
             select(current);
@@ -1468,22 +1686,101 @@
     return major === CARD_DATA_MAJOR ? d : {};
   }
 
-  function head(env, summary, data) {
+  /**
+   * The header (CARD-RENDER #3, Screener's calm head): line 1 the title (cut
+   * at a word end, never mid-word), ONE version pill and the kind chip;
+   * line 2, muted, the state words and the maker's served words, then the
+   * note chips ("Linked", "v4 Draft not run"), which never drop at 360 px.
+   * `stateWords` overrides the served state words (null: none).
+   */
+  function head(env, summary, data, stateWords) {
     var study = env.study || {};
     H.header({
       name: study.title || summary.title || null,
       version: summary.version != null ? summary.version : study.version,
       kind: summary.kind_label || study.kind_label || null,
-      state: summary.state_words || study.state_words || null,
-      notes: (data.chips || []).slice(0, MAX_NOTES),
     });
-    // D-352 (4): no "Keel" wordmark glued before the title; the maker is its
-    // served words ("by Keel") in the chips line.
+    // D-352 (4): no "Keel" wordmark glued before the title.
     var brand = document.querySelector("#card-head .brand");
     if (brand) brand.hidden = true;
-    var meta = document.getElementById("head-meta");
-    if (meta && summary.maker_words)
-      meta.appendChild(el("span", "chip st-maker", words(summary.maker_words)));
+    var headEl = document.getElementById("card-head");
+    if (!headEl) return;
+    var old = headEl.querySelector(".st-sub");
+    if (old && old.parentNode) old.parentNode.removeChild(old);
+    var sub = el("div", "st-sub");
+    (data.chips || []).slice(0, MAX_NOTES).forEach(function (note) {
+      if (typeof note !== "string" || !note) return;
+      var n = el("span", "chip muted note st-note-chip", note);
+      n.title = note;
+      sub.appendChild(n);
+    });
+    var said = [
+      stateWords === undefined
+        ? summary.state_words || study.state_words
+        : stateWords,
+      summary.maker_words,
+    ].filter(function (w) {
+      return typeof w === "string" && w;
+    });
+    if (said.length) {
+      var line = el("span", "st-sub-w", said.join(SEP));
+      line.title = said.join(SEP);
+      sub.appendChild(line);
+    }
+    headEl.appendChild(sub);
+    var nm = headEl.querySelector(".head-name");
+    if (nm) fitWords(nm);
+  }
+
+  /**
+   * Cut a one-line text at the end of a word so it fits its box, with an
+   * ellipsis (CARD-RENDER #3: "MA Cross…en Cross) Strategy" cut mid-word).
+   * The whole text stays in `title`. Re-run on the next frame (layout).
+   */
+  function fitWords(node) {
+    var full = node.getAttribute("data-full");
+    if (full === null) {
+      full = node.textContent;
+      node.setAttribute("data-full", full);
+      node.title = full;
+    }
+    var fit = function () {
+      node.textContent = full;
+      if (!node.clientWidth || node.scrollWidth <= node.clientWidth + 1) return;
+      var parts = full.split(" ");
+      for (var n = parts.length - 1; n > 0; n--) {
+        node.textContent =
+          parts
+            .slice(0, n)
+            .join(" ")
+            .replace(/[,·:;(]+$/, "") + "…";
+        if (node.scrollWidth <= node.clientWidth + 1) return;
+      }
+    };
+    fit();
+    requestAnimationFrame(fit);
+  }
+
+  /**
+   * Cut a one-line " · " list at a segment end so it fits its box, with
+   * " …" (CARD-360: a tile's sample read "353 days · 353 effective day…"
+   * at 360 and 760 px). A text whose first segment alone does not fit is
+   * left whole for the CSS ellipsis. The tile's title says it whole.
+   */
+  function fitSegments(node) {
+    var full = node.textContent;
+    var parts = full.split(SEP);
+    if (parts.length < 2) return;
+    var fit = function () {
+      node.textContent = full;
+      if (!node.clientWidth || node.scrollWidth <= node.clientWidth + 1) return;
+      for (var n = parts.length - 1; n > 0; n--) {
+        node.textContent = parts.slice(0, n).join(SEP) + " …";
+        if (node.scrollWidth <= node.clientWidth + 1) return;
+      }
+      node.textContent = full;
+    };
+    requestAnimationFrame(fit);
   }
 
   /** The numbers: only what is served (D-332 (1)), up to four. */
@@ -1495,20 +1792,57 @@
       var cell = el("div", "st-number");
       // A served number with no words (a v1 server) → the em dash from the
       // CSS, never the raw value.
-      cell.appendChild(el("span", "st-value", words(n.value_words)));
+      // D-380: a probability is served as a sentence ("0.45 chance the edge
+      // is real with one version known"); in the one-line number style it
+      // read "0.45 chance the ed…" (MCP-FINAL, round 6). Its leading number
+      // keeps the big style and the served words follow it on their own
+      // wrapping line, the served string unchanged.
+      var said = words(n.value_words);
+      var split = /^(\S*\d\S*)\s+(.*[A-Za-z].*)$/.exec(said);
+      if (split) {
+        cell.className = "st-number st-number-words";
+        cell.appendChild(el("span", "st-value", split[1]));
+        cell.appendChild(el("span", "st-value-words", split[2]));
+      } else {
+        cell.appendChild(el("span", "st-value", said));
+      }
       cell.appendChild(el("span", "st-label", words(n.label)));
-      cell.appendChild(el("span", "st-sample", words(n.sample_words)));
-      if (n.label) cell.title = n.label;
+      var sample = el("span", "st-sample", words(n.sample_words));
+      cell.appendChild(sample);
+      fitSegments(sample);
+      // The tile's lines ellipsise in its fixed 74 px (a phone-width sample
+      // "Mar 23, 2025 to Oct 29, 2…"); its title says every one whole.
+      var whole = [n.label, split ? said : "", n.sample_words]
+        .filter(function (t) {
+          return typeof t === "string" && t;
+        })
+        .join(" · ");
+      if (whole) cell.title = whole;
       wrap.appendChild(cell);
     });
     return wrap;
   }
 
+  /**
+   * The lead (13 §2.2 slot 2): the served line, never one the header already
+   * says (CARD-RENDER #6: "Running · 6 of 48 settings" twice) and never the
+   * kind's name; then the headline. An empty line keeps its slot.
+   */
   function leadOf(summary) {
+    var kind = (summary.kind_label || {}).name;
+    var said = function (t) {
+      return (
+        typeof t === "string" &&
+        t &&
+        t !== summary.state_words &&
+        t !== kind &&
+        t
+      );
+    };
     var lead =
-      summary.lead ||
+      said(summary.lead) ||
       (summary.headline &&
-        (summary.headline.text || summary.headline.sentence)) ||
+        (said(summary.headline.text) || said(summary.headline.sentence))) ||
       "";
     var p = el("p", "st-lead", lead);
     if (lead) p.title = lead;
@@ -1559,6 +1893,7 @@
     b.removeAttribute("data-no-hero");
     b.removeAttribute("data-no-expand");
     b.removeAttribute("data-terminal");
+    b.removeAttribute("data-face");
     b.setAttribute("data-owns-link", "0");
     Object.keys(extra || {}).forEach(function (k) {
       b.setAttribute(k, extra[k]);
@@ -1594,6 +1929,19 @@
     if (url) H.openLink(url);
   }
 
+  /** A table's strip thumbnail: its first three rows, first two cells. */
+  function miniTable(chart) {
+    var mini = el("span", "st-mini-checks st-mini-table");
+    (chart.rows || []).slice(0, 3).forEach(function (row) {
+      var line = el("span", "st-mini-row");
+      line.appendChild(el("span", "st-mini-cell", words(row[0])));
+      if (row.length > 1)
+        line.appendChild(el("span", "st-mini-cell st-mini-val", words(row[1])));
+      mini.appendChild(line);
+    });
+    return mini;
+  }
+
   /** The strip of more charts (13 §2.2 slot 6): up to 4 (3 narrow). */
   function stripOf(env, data) {
     var entries = (data.charts || []).filter(function (e) {
@@ -1615,6 +1963,15 @@
           var mini = chartSvg();
           DRAW_CHART[mm.kind](mini, mm, null);
           pic.appendChild(mini);
+        } else if (
+          entry.form === "chart" &&
+          entry.chart &&
+          entry.chart.kind === "table" &&
+          (entry.chart.rows || []).length
+        ) {
+          // CARD-FINAL B2: a table has no picture to draw small, so its
+          // thumbnail is its first rows as served words (it was an empty box).
+          pic.appendChild(miniTable(entry.chart));
         } else if (entry.thumb) {
           drawThumbInto(pic, entry.thumb, null, b);
         } else if (
@@ -1625,6 +1982,7 @@
           // "Your checks" as short labelled rows (D-337 (6)): the misses
           // first, each its glyph and its served label.
           var mini = el("span", "st-mini-checks");
+          var plainMini = noBars(data);
           var rowsSorted = (data.checks.rows || [])
             .slice()
             .sort(function (a, b) {
@@ -1632,16 +1990,8 @@
             });
           rowsSorted.slice(0, 3).forEach(function (r) {
             var g = el("span", "st-mini-check", words(r.label));
-            g.setAttribute(
-              "data-state",
-              r.locked
-                ? "locked"
-                : r.met === true
-                  ? "met"
-                  : r.met === false
-                    ? "not_met"
-                    : "not_measured",
-            );
+            // D-407 (2): a Check with no bars set draws no met glyph
+            g.setAttribute("data-state", checkState(r, plainMini));
             mini.appendChild(g);
           });
           pic.appendChild(mini);
@@ -1649,6 +1999,29 @@
           // A Checks entry never says "Not run yet": with no rows served it
           // draws its title only (D-352 (1)).
           pic.appendChild(el("span", "st-strip-w", entry.state_words));
+        } else if (
+          entry.chart &&
+          entry.chart.kind === "table" &&
+          (entry.chart.note_words || entry.chart.more_words)
+        ) {
+          // A table with no rows to show says its served sentence
+          // ("Same footing."), the words its tab draws.
+          pic.appendChild(
+            el(
+              "span",
+              "st-strip-w",
+              entry.chart.note_words || entry.chart.more_words,
+            ),
+          );
+        } else if (
+          entry.family !== "Checks" &&
+          (data.copy || {}).full_chart_in_keel
+        ) {
+          // CARD-FINAL B2: a chart served by title only says where it is
+          // drawn, never an empty box.
+          pic.appendChild(
+            el("span", "st-strip-w", data.copy.full_chart_in_keel),
+          );
         }
       } catch (e) {
         if (!e.thumb) throw e;
@@ -1673,67 +2046,597 @@
     return !!((data.charts && data.charts.length) || data.more_charts_total);
   }
 
+  // ── The face (MCP-CARDS, D-420; build/lane-scratch/MCP-CARDS/DESIGN.md) ──
+  // The inline card at its content height (RESEARCH.md §1 R3: both hosts ask
+  // for it; supersedes D-332 / D-381's reserved frames inline). One idea in
+  // every state: one dot is one unit of evidence, a run or a bar you set.
+  // Every word is served: the title, the meta words, card_data.hero and
+  // card_data.tiles (research.card_summary.card_face), the steps, the copy.
+
+  var MAX_DOTS = 96;
+
+  function faceFrame(layout, extra) {
+    setFrame(layout, extra);
+    if (document.body) document.body.setAttribute("data-face", "1");
+    var headEl = document.getElementById("card-head");
+    if (headEl) headEl.hidden = true;
+  }
+
+  /** Title, then one muted line: kind, version, notes, state, maker. */
+  function faceHead(env, summary, data, stateWords) {
+    var study = env.study || {};
+    var head = el("div", "sf-head");
+    var name = study.title || summary.title || "";
+    var t = el("h2", "sf-title", words(name));
+    if (name) t.title = name;
+    head.appendChild(t);
+    var kind = (summary.kind_label || study.kind_label || {}).short;
+    var version = summary.version != null ? summary.version : study.version;
+    var vWord = version != null ? "v" + version : null;
+    var chips = data.chips || [];
+    // a note chip that names the version ("v1 Draft not run") says it once
+    if (
+      vWord &&
+      chips.some(function (c) {
+        return String(c).indexOf(vWord + " ") === 0;
+      })
+    )
+      vWord = null;
+    var said = [kind, vWord]
+      .concat(chips)
+      .concat([
+        stateWords === undefined
+          ? summary.state_words || study.state_words
+          : stateWords,
+        summary.maker_words,
+      ])
+      .filter(function (w) {
+        return typeof w === "string" && w;
+      });
+    var meta = el("p", "sf-meta", said.join(SEP));
+    if (said.length) meta.title = said.join(SEP);
+    head.appendChild(meta);
+    return head;
+  }
+
+  /** The hero: its value big, its label under it; `aside` to its right. */
+  function faceHero(hero, aside) {
+    var row = el("div", "sf-hero");
+    var n = el("div", "sf-hero-n");
+    n.appendChild(el("span", "sf-hero-v", words(hero.value)));
+    n.appendChild(el("span", "sf-hero-l", words(hero.label)));
+    if (hero.title) n.title = hero.title;
+    row.appendChild(n);
+    if (aside) row.appendChild(aside);
+    return row;
+  }
+
+  /** One pip per bar you set: met filled, not met hollow, not measured dashed. */
+  function facePips(data) {
+    var rows = ((data.checks && data.checks.rows) || []).filter(function (r) {
+      return r && !r.locked;
+    });
+    if (!rows.length || noBars(data)) return null;
+    // met first, then not met, then not measured (integrator polish 5): the
+    // count reads at a glance; each pip's title names its bar
+    var rank = function (r) {
+      return r.met === true ? 0 : r.met === false ? 1 : 2;
+    };
+    rows = rows
+      .map(function (r, k) {
+        return { r: r, k: k };
+      })
+      .sort(function (a, b) {
+        return rank(a.r) - rank(b.r) || a.k - b.k;
+      })
+      .map(function (x) {
+        return x.r;
+      });
+    var wrap = el("div", "sf-pips");
+    wrap.setAttribute("role", "list");
+    rows.forEach(function (r) {
+      var pip = el("span", "sf-pip");
+      pip.setAttribute("role", "listitem");
+      pip.setAttribute(
+        "data-state",
+        r.met === true ? "met" : r.met === false ? "not_met" : "unmeasured",
+      );
+      var said = [r.label, r.value_words, r.bar_words, checkWord(r, data)]
+        .filter(function (w) {
+          return typeof w === "string" && w;
+        })
+        .join(SEP);
+      pip.title = said;
+      pip.setAttribute("aria-label", said);
+      wrap.appendChild(pip);
+    });
+    return wrap;
+  }
+
+  /** A check row's met words, from the served copy. */
+  function checkWord(r, data) {
+    var copy = data.copy || {};
+    if (r.met === true) return copy.met;
+    if (r.met === false) return copy.not_met;
+    return copy.not_measured;
+  }
+
+  /** Dots for runs: done filled, running ringed, failed crossed, the rest hollow. */
+  function faceDots(total, done, running, failed, hollow) {
+    var n = Math.max(0, total | 0);
+    if (!n) return null;
+    var per = Math.ceil(n / MAX_DOTS);
+    var count = Math.ceil(n / per);
+    var wrap = el("div", "sf-dots");
+    wrap.setAttribute("aria-hidden", "true");
+    for (var i = 0; i < count; i++) {
+      var at = i * per;
+      var d = el("span", "sf-dot");
+      var state = hollow
+        ? "waiting"
+        : at < done
+          ? "done"
+          : at < done + failed
+            ? "failed"
+            : at < done + failed + running
+              ? "running"
+              : "waiting";
+      d.setAttribute("data-state", state);
+      wrap.appendChild(d);
+    }
+    return wrap;
+  }
+
+  /** Up to four tiles: the value, its short label, the bar it is held to. */
+  function faceTiles(tiles) {
+    var shown = (tiles || []).slice(0, MAX_NUMBERS);
+    if (!shown.length) return null;
+    var wrap = el("div", "sf-tiles");
+    wrap.setAttribute("data-n", String(shown.length));
+    shown.forEach(function (t) {
+      var cell = el("div", "sf-tile");
+      if (t.state) cell.setAttribute("data-state", t.state);
+      var val = el("span", "sf-tile-v");
+      // a bar you set: the tile wears its pip (met filled, not met hollow),
+      // the same mark as the hero's, never a verdict word (D-407: only when set)
+      if (t.state) {
+        var mark = el("span", "sf-pip sf-tile-pip");
+        mark.setAttribute("data-state", t.state);
+        mark.setAttribute("aria-hidden", "true");
+        val.appendChild(mark);
+      }
+      val.appendChild(document.createTextNode(words(t.value)));
+      cell.appendChild(val);
+      cell.appendChild(el("span", "sf-tile-l", words(t.label)));
+      if (t.sub) cell.appendChild(el("span", "sf-tile-s", words(t.sub)));
+      if (t.title) cell.title = t.title;
+      wrap.appendChild(cell);
+    });
+    return wrap;
+  }
+
+  /** The key chart at face size, its readout resting on the last point. */
+  function faceChart(summary, data) {
+    // the key slot's class too, so every key-chart reader (hover, ticks) reads it
+    var slot = el("div", "sf-chart st-key-slot");
+    if (data.key) {
+      try {
+        slot.appendChild(
+          chartBlock(data.key, data, {
+            state: savedState(),
+            onState: saveState,
+            face: true,
+          }),
+        );
+        slot.setAttribute("data-key", "chart");
+        return slot;
+      } catch (e) {
+        if (!e.thumb) throw e;
+        slot.setAttribute("data-chart-error", e.message);
+      }
+    }
+    if (drawThumbInto(slot, summary.thumb, null, slot)) {
+      slot.setAttribute("data-key", "thumb");
+      return slot;
+    }
+    return null;
+  }
+
+  /** A server older than the face (no card_data.hero): its first served number
+   *  is the hero and the next three the tiles, their labels whole. */
+  function servedFace(summary, data) {
+    if (data.hero) return { hero: data.hero, tiles: data.tiles || [] };
+    var nums = (summary.numbers || []).filter(function (n) {
+      return n && (n.value_short || n.value_words);
+    });
+    var as = function (n) {
+      return {
+        value: n.value_short || n.value_words,
+        label: n.label,
+        title: [n.label, n.value_words, n.sample_words]
+          .filter(function (w) {
+            return typeof w === "string" && w;
+          })
+          .join(SEP),
+      };
+    };
+    return nums.length
+      ? { hero: as(nums[0]), tiles: nums.slice(1, 4).map(as) }
+      : { hero: null, tiles: [] };
+  }
+
+  /** A served chart drawn small, marks only (a thumbnail, a dashboard tile, a
+   *  check row's chart); null when it draws no mark (never an empty box). */
+  function miniChart(chart, cls) {
+    if (!chart || !DRAW_CHART[chart.kind]) return null;
+    var m;
+    try {
+      m = decodeChart(chart);
+    } catch (e) {
+      if (!e.thumb) throw e;
+      return null;
+    }
+    var box = chartSvg();
+    box.setAttribute("class", "st-plot " + (cls || "sf-mini"));
+    DRAW_CHART[m.kind](box, m, null);
+    var marks = box.querySelectorAll(
+      ".st-line, .st-bar, .st-bin, .st-dot, .st-cell",
+    ).length;
+    return marks ? box : null;
+  }
+
+  /** The gallery entries by view index. */
+  function entriesByIndex(data) {
+    var by = {};
+    (data.charts || []).forEach(function (e) {
+      if (e && typeof e.index === "number") by[e.index] = e;
+    });
+    return by;
+  }
+
+  /** Expand on the dashboard where the host offers fullscreen, else Keel. */
+  function openAll(env) {
+    var modes = H.availableDisplayModes || [];
+    if (modes.indexOf("fullscreen") >= 0) {
+      var s = savedState();
+      s.tab = null;
+      saveState(s);
+      H.requestDisplayMode("fullscreen");
+      return;
+    }
+    var url = (env.links && env.links.app) || env.hero_url;
+    if (url) H.openLink(url);
+  }
+
+  /**
+   * MCP-CARDS (D-420d): up to 3 small charts of the next views under the key
+   * chart (card_data.thumbs: views the server judged to draw a picture, in the
+   * study's order) and the served "+N more charts". A tap opens Expand on that
+   * chart (requestDisplayMode inside the click), or the chart in Keel where
+   * the host lists no fullscreen.
+   */
+  function faceThumbs(env, data) {
+    var by = entriesByIndex(data);
+    var row = el("div", "sf-thumb-row");
+    (data.thumbs || []).forEach(function (i) {
+      var e = by[i];
+      var pic = e && e.form === "chart" ? miniChart(e.chart, "sf-mini") : null;
+      if (!pic) return;
+      var b = el("button", "sf-thumb");
+      b.type = "button";
+      b.setAttribute("data-index", String(e.index));
+      if (e.v) b.setAttribute("data-v", e.v);
+      b.title = e.title;
+      var frame = el("span", "sf-thumb-pic");
+      frame.appendChild(pic);
+      b.appendChild(frame);
+      b.appendChild(el("span", "sf-thumb-t", words(e.title)));
+      b.addEventListener("click", function () {
+        openChart(env, data, e);
+      });
+      row.appendChild(b);
+    });
+    if (!row.children.length) return null;
+    var wrap = el("div", "sf-thumbs");
+    wrap.appendChild(row);
+    var more = (data.copy || {}).more_views;
+    if (more) {
+      var m = el("button", "button-link button-quiet sf-more", more);
+      m.type = "button";
+      m.addEventListener("click", function () {
+        openAll(env);
+      });
+      wrap.appendChild(m);
+    }
+    return wrap;
+  }
+
+  /** A done study (and a run done inside its wait): hero, key chart, tiles, provenance. */
+  function faceStudy(env, body, layout) {
+    var summary = env.card_summary || {};
+    var data = cardDataOf(env);
+    var face = servedFace(summary, data);
+    faceFrame(layout || "face-study", {
+      "data-key": data.key ? "chart" : "thumb",
+    });
+    body.appendChild(faceHead(env, summary, data));
+    if (face.hero) body.appendChild(faceHero(face.hero, facePips(data)));
+    var chart = faceChart(summary, data);
+    if (chart) body.appendChild(chart);
+    var thumbs = faceThumbs(env, data);
+    if (thumbs) body.appendChild(thumbs);
+    var tiles = faceTiles(face.tiles);
+    if (tiles) body.appendChild(tiles);
+    if (summary.footing_line)
+      body.appendChild(el("p", "sf-caption", words(summary.footing_line)));
+  }
+
+  /** In flight, queued or stopped: the count, the run dots, the step going and the next. */
+  function faceRun(env, body, opts) {
+    var o = opts || {};
+    var summary = env.card_summary || {};
+    var data = cardDataOf(env);
+    var p = env.progress || {};
+    faceFrame("face-run", o.stopped ? { "data-terminal": "1" } : null);
+    if (document.body) document.body.setAttribute("data-no-expand", "1");
+    body.setAttribute(
+      "data-run",
+      o.failed ? "failed" : o.stopped ? "stopped" : "running",
+    );
+    // the meta line says the state without the count the hero says (polish 1)
+    var hs = data.hero && data.hero.state;
+    body.appendChild(faceHead(env, summary, data, hs || undefined));
+    var by = p.by_status || {};
+    var aside = o.failed
+      ? p.stopped || summary.state_words || p.words
+      : o.stopped
+        ? p.receipt || p.stopped || p.words
+        : p.queue || p.time_words || null;
+    var dots = faceDots(
+      p.children,
+      p.done || 0,
+      by.running || 0,
+      (by.failed || 0) + (by.cancelled || 0),
+      false,
+    );
+    var bar = null;
+    if (dots) {
+      // the dots sit beside the count, as a Check's pips sit beside its bars
+      bar = el("div", "sf-progress");
+      bar.setAttribute("role", "progressbar");
+      bar.setAttribute("aria-valuemin", "0");
+      bar.setAttribute("aria-valuemax", String(p.children || 0));
+      bar.setAttribute("aria-valuenow", String(p.done || 0));
+      if (p.words) bar.setAttribute("aria-valuetext", p.words);
+      bar.appendChild(dots);
+    }
+    // The count (or the dots alone) and the served words under it, in one
+    // column with its own gap: each block keeps its own line at every width
+    // (the words once rose 6 px into a hero-less failed card's dots).
+    var lead = el("div", "sf-run-lead");
+    // A run's own hero (its count, served with its state words) carries the
+    // dots beside it. A stopped study's result hero ("1 of 9 bars met") is
+    // not about runs: it keeps its pips, and the run dots take their own row.
+    if (data.hero && data.hero.state)
+      lead.appendChild(faceHero(data.hero, bar));
+    else {
+      if (data.hero) lead.appendChild(faceHero(data.hero, facePips(data)));
+      if (bar) lead.appendChild(bar);
+    }
+    if (aside) {
+      // a stop's served sentences each take a line (one run-on block read as a wall)
+      var said = el("div", "sf-hero-aside");
+      sentencesOf(words(aside)).forEach(function (line) {
+        said.appendChild(el("p", "sf-aside-line", line));
+      });
+      lead.appendChild(said);
+    }
+    if (lead.children.length) body.appendChild(lead);
+    var steps = (data.steps || []).slice(0, STEPS_FACE);
+    if (steps.length) {
+      var list = el("ul", "sf-steps");
+      steps.forEach(function (st) {
+        var li = el("li", "sf-step");
+        if (st.state) li.setAttribute("data-state", st.state);
+        li.appendChild(el("span", "sf-step-l", words(st.label)));
+        li.appendChild(el("span", "sf-step-w", words(st.words)));
+        list.appendChild(li);
+      });
+      body.appendChild(list);
+      var more = (data.copy || {}).more_steps;
+      if (more) body.appendChild(el("p", "sf-caption", more));
+    }
+  }
+
+  /** Served words, one sentence a line: split after a sentence's full stop
+   *  (layout only; every word stays the server's). */
+  function sentencesOf(text) {
+    return String(text || "")
+      .replace(/([.!?])\s+(?=\S)/g, "$1\n")
+      .split("\n")
+      .filter(function (line) {
+        return line;
+      });
+  }
+
+  /** A saved Draft that never ran: what the plan will do, before anyone spends it. */
+  function facePlan(env, body) {
+    var summary = env.card_summary || {};
+    var study = env.study || {};
+    var data = cardDataOf(env);
+    var draft = study.draft || {};
+    faceFrame("face-plan", { "data-no-expand": "1" });
+    body.appendChild(faceHead(env, summary, data, null));
+    var row = el("div", "sf-plan");
+    var work = draft.words || (data.notes || {}).draft;
+    if (work) row.appendChild(el("span", "sf-plan-w", words(work)));
+    var dots = faceDots(data.runs || 0, 0, 0, 0, true);
+    if (dots) row.appendChild(dots);
+    body.appendChild(row);
+    var steps = data.steps || [];
+    if (steps.length) {
+      var list = el("ul", "sf-plan-steps");
+      steps.slice(0, STEPS_FACE_PLAN).forEach(function (st) {
+        var li = el("li", "sf-plan-step");
+        li.appendChild(el("span", "sf-step-l", words(st.label)));
+        if (st.words) li.appendChild(el("span", "sf-step-w", words(st.words)));
+        list.appendChild(li);
+      });
+      body.appendChild(list);
+      var more = (data.copy || {}).more_steps;
+      if (more) body.appendChild(el("p", "sf-caption", more));
+    }
+    // what running it uses of the account's allowance (served, names no plan)
+    if (study.counter)
+      body.appendChild(el("p", "sf-caption", words(study.counter)));
+  }
+
+  /** The list: up to five studies, each a picture, its name, kind and state, its lead number. */
+  function faceList(env, body) {
+    var data = cardDataOf(env);
+    faceFrame("face-list", { "data-no-expand": "1" });
+    var head = el("div", "sf-head");
+    head.appendChild(el("h2", "sf-title", words(data.head_words)));
+    body.appendChild(head);
+    var rows = env.studies || [];
+    var extra = data.rows || [];
+    var n = Math.min(rows.length, extra.length || rows.length, MAX_LIST);
+    var list = el("ul", "sf-list");
+    for (var i = 0; i < n; i++) {
+      var r = rows[i];
+      var x = extra[i] || {};
+      var li = el("li", "sf-row");
+      var url = x.link || null;
+      var a = el(url ? "a" : "div", "sf-row-link");
+      if (url) {
+        a.href = url;
+        a.addEventListener(
+          "click",
+          (function (u) {
+            return function (ev) {
+              ev.preventDefault();
+              H.openLink(u);
+            };
+          })(url),
+        );
+      }
+      var pic = el("span", "sf-row-pic");
+      if (x.thumb) {
+        try {
+          drawThumbInto(pic, x.thumb, null, pic);
+        } catch (e) {
+          if (!e.thumb) throw e;
+        }
+      }
+      a.appendChild(pic);
+      var text = el("span", "sf-row-text");
+      text.appendChild(el("span", "sf-row-title", words(r.title)));
+      var meta = [r.kind_label && r.kind_label.short, r.state_words].filter(
+        function (w) {
+          return typeof w === "string" && w;
+        },
+      );
+      text.appendChild(el("span", "sf-row-meta", meta.join(SEP)));
+      a.appendChild(text);
+      if (x.lead_number_value) {
+        var num = el("span", "sf-row-num");
+        num.appendChild(el("span", "sf-row-v", x.lead_number_value));
+        num.appendChild(el("span", "sf-row-l", words(x.lead_number_label)));
+        num.title = x.lead_number_words || "";
+        a.appendChild(num);
+      }
+      if (r.title) a.title = r.title;
+      li.appendChild(a);
+      list.appendChild(li);
+    }
+    var empty = (data.copy || {}).no_studies;
+    if (!rows.length && empty) list.appendChild(el("li", "sf-empty", empty));
+    body.appendChild(list);
+    if (data.more_words)
+      body.appendChild(el("p", "sf-caption", words(data.more_words)));
+  }
+
+  var STEPS_FACE = 2;
+  var STEPS_FACE_PLAN = 5;
+
+  /** The study state a card reads (the read's own, else its card's). */
+  function stateOf(env) {
+    var summary = env.card_summary || {};
+    return String((env.study || {}).state || summary.state || "");
+  }
+
+  /** A run frame's state: in flight (updates in place) or stopped short. */
+  var IN_FLIGHT = { running: 1, cancel_requested: 1 };
+
   function renderStudy(env, body) {
     var summary = env.card_summary || {};
     var data = cardDataOf(env);
+    var state = stateOf(env);
+    // D-381 (2), 13 §4.3: a get of a study still running (or stopping) draws
+    // the run card's progress inside the study's reserved frame; the body
+    // box takes the extra height, so the frame is filled, never blank.
+    // MCP-CARDS (D-420): a study in flight is its run face; a stopped one with
+    // no key chart its run face, frozen; anything with a result its face.
+    if (IN_FLIGHT[state]) {
+      faceRun(env, body);
+      return;
+    }
+    if (state === "cancelled" && !data.key) {
+      faceRun(env, body, { stopped: true });
+      return;
+    }
+    if (summary.numbers || data.key || (data.thumbs || []).length) {
+      faceStudy(env, body);
+      return;
+    }
     var strip = hasStrip(data);
     setFrame("study", {
       "data-strip": strip ? "1" : "0",
       "data-key": data.key ? "chart" : "thumb",
     });
     head(env, summary, data);
-    body.appendChild(leadOf(summary));
+    body.appendChild(leadOf(summary, data));
     body.appendChild(keySlot(summary, data, savedState()));
     body.appendChild(tiles(summary));
     body.appendChild(footingOf(summary));
     if (strip) body.appendChild(stripOf(env, data));
   }
 
-  /** A run in progress, or a finished run inside the wait (13 §2.6). */
-  function renderRun(env, body) {
-    var summary = env.card_summary || {};
-    var data = cardDataOf(env);
+  /**
+   * The run frame's body (13 §2.6, D-381 (2)): a served line (the queue
+   * words, else the time words, else the progress words; never the chip's
+   * own words again), the progress bar (geometry only), then the body box:
+   * the partial key chart when served, else up to five steps with their
+   * served words and "+N more steps", then the time line. A stopped card
+   * says its served stopped words and draws the same box frozen.
+   */
+  function progressBody(env, data, body, opts) {
+    var o = opts || {};
     var p = env.progress || {};
-    var state = String((env.study || {}).state || summary.state || "");
-    // D-354 (4): only a card that updates in place (queued, running) keeps the
-    // reserved frame; a terminal one is as tall as what it says.
-    var terminal =
-      state === "failed" ||
-      state === "cancelled" ||
-      state === "completed_partial";
-    setFrame("run", terminal ? { "data-terminal": "1" } : null);
-    head(env, summary, data);
-    if (state === "completed" || state === "completed_partial") {
-      body.setAttribute("data-run", "done");
-      body.appendChild(leadOf(summary));
-      body.appendChild(keySlot(summary, data, savedState()));
-      body.appendChild(tiles(summary));
-      return;
-    }
-    // Expand only once the run is done (13 §2.6).
+    var summary = env.card_summary || {};
+    var chip = summary.state_words || "";
+    body.setAttribute("data-run", o.stopped ? "stopped" : "running");
     if (document.body) document.body.setAttribute("data-no-expand", "1");
-    if (state === "failed") {
-      body.setAttribute("data-run", "failed");
-      body.appendChild(
-        el("p", "st-run-words", words(p.stopped || summary.state_words)),
-      );
-      return;
+    var first = o.stopped
+      ? p.receipt || p.stopped || p.words
+      : p.queue || p.time_words || p.words;
+    if (first && first === chip) first = p.words !== chip ? p.words : null;
+    body.appendChild(el("p", "st-run-words", words(first)));
+    if (!o.stopped) {
+      var bar = el("div", "st-progress");
+      var part = el("span", "st-progress-fill");
+      var frac = p.children
+        ? Math.max(0, Math.min(1, (p.done || 0) / p.children))
+        : 0;
+      part.style.width = frac * 100 + "%";
+      bar.appendChild(part);
+      bar.setAttribute("role", "progressbar");
+      bar.setAttribute("aria-valuemin", "0");
+      bar.setAttribute("aria-valuemax", String(p.children || 0));
+      bar.setAttribute("aria-valuenow", String(p.done || 0));
+      if (p.words) bar.setAttribute("aria-valuetext", p.words);
+      body.appendChild(bar);
     }
-    body.setAttribute("data-run", "running");
-    body.appendChild(el("p", "st-run-words", words(p.queue || p.words)));
-    var bar = el("div", "st-progress");
-    var part = el("span", "st-progress-fill");
-    var frac = p.children
-      ? Math.max(0, Math.min(1, (p.done || 0) / p.children))
-      : 0;
-    part.style.width = frac * 100 + "%";
-    bar.appendChild(part);
-    bar.setAttribute("role", "progressbar");
-    bar.setAttribute("aria-valuemin", "0");
-    bar.setAttribute("aria-valuemax", String(p.children || 0));
-    bar.setAttribute("aria-valuenow", String(p.done || 0));
-    if (p.words) bar.setAttribute("aria-valuetext", p.words);
-    body.appendChild(bar);
     var box = el("div", "st-run-box");
     var drew = false;
     if (data.key) {
@@ -1744,32 +2647,95 @@
         if (!e.thumb) throw e;
       }
     }
-    if (!drew && data.steps && data.steps.length) {
+    var steps = data.steps || [];
+    if (!drew && steps.length) {
       var list = el("ul", "st-steps");
-      data.steps.slice(0, MAX_STEPS).forEach(function (s) {
+      steps.slice(0, MAX_STEPS).forEach(function (st) {
         var li = el("li", "st-step");
-        li.appendChild(el("span", "st-step-label", words(s.label)));
-        li.appendChild(el("span", "st-step-words", words(s.words)));
+        li.appendChild(el("span", "st-step-label", words(st.label)));
+        li.appendChild(el("span", "st-step-words", words(st.words)));
         list.appendChild(li);
       });
       box.appendChild(list);
+      var more = (data.copy || {}).more_steps;
+      if (more) box.appendChild(el("p", "st-steps-more", more));
+      drew = true;
     }
+    if (!drew) box.setAttribute("data-empty", "1");
     body.appendChild(box);
-    body.appendChild(el("p", "st-run-time", words(p.time_words)));
+    // The time words close the frame unless they already led it.
+    var last = o.stopped || first === p.time_words ? null : p.time_words;
+    body.appendChild(el("p", "st-run-time", words(last)));
   }
 
-  /** The plan receipt (13 §2.6): card line, work words, count line; no Run. */
+  /** A run in progress, or a finished run inside the wait (13 §2.6). */
+  function renderRun(env, body) {
+    var summary = env.card_summary || {};
+    var data = cardDataOf(env);
+    var p = env.progress || {};
+    var state = stateOf(env);
+    // D-354 (4): only a card that updates in place (queued, running) keeps the
+    // reserved frame; a terminal one is as tall as what it says. D-381 (2):
+    // the frame is the done card's height from the start, so a host whose
+    // frame never grows (ChatGPT) clips nothing when the result lands.
+    var terminal =
+      state === "failed" ||
+      state === "cancelled" ||
+      state === "completed_partial";
+    setFrame("run", terminal ? { "data-terminal": "1" } : null);
+    head(env, summary, data);
+    if (state === "completed" || state === "completed_partial") {
+      body.setAttribute("data-run", "done");
+      faceStudy(env, body, "face-run-done");
+      return;
+    }
+    // Expand only once the run is done (13 §2.6).
+    if (document.body) document.body.setAttribute("data-no-expand", "1");
+    // a run that didn't finish is its run face, frozen: how far it got, what
+    // failed (crossed dots), and its served words
+    faceRun(env, body, {
+      stopped: state === "cancelled" || state === "failed",
+      failed: state === "failed",
+    });
+  }
+
+  /**
+   * The plan receipt (13 §2.6): card line, work words, count line; no Run.
+   * D-381 (1): the count line and the wall are the card's served forms
+   * (`card_allowance`, `card_limit`: no plan named, never a price); a plan
+   * that may not run shows its wall IN the closed row, in place of the
+   * work words. A saved Draft that never ran (13 §5, a `get`) is the same
+   * row: its title, its served note chip and the Draft's run words.
+   */
   function renderPlan(env, body) {
     var w = env.words || {};
-    var steps = env.steps || [];
+    var steps = Array.isArray(env.steps) ? env.steps : [];
+    var study = env.study || {};
+    // MCP-CARDS finding 1: a saved Draft read by get shows its plan.
+    if (study.draft && !steps.length) {
+      facePlan(env, body);
+      return;
+    }
+    var data = cardDataOf(env);
+    var walled = env.run_allowed === false && w.card_limit;
     setFrame(null);
+    // A plan answer's study carries no draft; a Draft read by get does.
+    var draft = study.draft || null;
     var spec = {
-      name: w.card_line || (env.study || {}).title || null,
-      note: w.work || null,
-      provenance: w.allowance || null,
+      name: w.card_line || study.title || null,
+      note: w.work || (draft && draft.words) || null,
+      // The row's own line: the wall when the plan may not run, else the
+      // count line; it wraps to two lines, never cut short.
+      provenance: walled ? w.card_limit : w.card_allowance || null,
       url: (env.links || {}).app || null,
+      wordEnd: true,
+      keep: true,
     };
-    if (steps.length || w.queue || w.limit)
+    if (draft)
+      spec.chips = (data.chips || []).map(function (c) {
+        return { text: c, tone: "muted" };
+      });
+    if (steps.length || w.queue || walled)
       spec.disclosure = {
         label: H.words && H.words.showSteps,
         build: function (into) {
@@ -1786,8 +2752,7 @@
           });
           into.appendChild(list);
           if (w.queue) into.appendChild(el("p", "st-plan-w", w.queue));
-          if (env.run_allowed === false && w.limit)
-            into.appendChild(el("p", "st-plan-w", w.limit));
+          // The wall is in the closed row already (D-381 (1)): said once.
         },
       };
     body.appendChild(H.receiptRow(spec));
@@ -1796,9 +2761,15 @@
   /** The list (13 §2.1): up to five studies, each opening its study. */
   function renderList(env, body) {
     var data = cardDataOf(env);
+    if (data.head_words) {
+      faceList(env, body);
+      return;
+    }
     // A list is for choosing (13 §2.1): nothing to expand.
     setFrame("list", { "data-no-expand": "1" });
     H.header({ name: data.head_words || null, untitled: false });
+    var brand = document.querySelector("#card-head .brand");
+    if (brand) brand.hidden = true;
     var rows = env.studies || [];
     var extra = data.rows || [];
     var list = el("ul", "st-list");
@@ -1815,15 +2786,35 @@
         });
       }
       b.appendChild(el("span", "st-list-title", words(r.title)));
+      // MCP-FINAL list-pro: at 360 the kind and state were hidden, so a
+      // stopped map read as a bare title and two same-named studies read
+      // alike. They share one meta line under the title there (inline above).
+      var meta = el("span", "st-list-meta");
       if (r.kind_label && r.kind_label.short)
-        b.appendChild(el("span", "chip kind", r.kind_label.short));
-      b.appendChild(el("span", "st-list-state", words(r.state_words)));
-      if (x.lead_number_words)
-        b.appendChild(el("span", "st-list-num", x.lead_number_words));
+        meta.appendChild(el("span", "chip kind", r.kind_label.short));
+      meta.appendChild(el("span", "st-list-state", words(r.state_words)));
+      if (x.lead_number_label && x.lead_number_value) {
+        // CARD-FINAL B4 (list at 360): the label gives way, the value stays
+        // whole ("How well it ranks, next day –…" lost the number).
+        var num = el("span", "st-list-num st-list-num-split");
+        num.appendChild(el("span", "st-list-num-label", x.lead_number_label));
+        num.appendChild(el("span", "st-list-num-value", x.lead_number_value));
+        num.title = x.lead_number_words || "";
+        meta.appendChild(num);
+      } else if (x.lead_number_words)
+        meta.appendChild(el("span", "st-list-num", x.lead_number_words));
+      b.appendChild(meta);
       if (r.title) b.title = r.title;
       li.appendChild(b);
       list.appendChild(li);
     });
+    // 13 §5's Empty list: the served "No studies yet", never a count over a
+    // blank box (D-381 (2)).
+    var empty = (data.copy || {}).no_studies;
+    if (!rows.length && empty) {
+      var li0 = el("li", "st-list-empty", empty);
+      list.appendChild(li0);
+    }
     body.appendChild(list);
     body.appendChild(el("p", "st-list-more", words(data.more_words)));
   }
@@ -1832,8 +2823,9 @@
   function renderChart(env, body) {
     var summary = env.card_summary || {};
     var data = cardDataOf(env);
-    setFrame("chart");
-    head(env, summary, data);
+    // MCP-CARDS (D-420): one chart's read on the face, at its content height
+    faceFrame("chart");
+    body.appendChild(faceHead(env, summary, data));
     var focus = data.focus || {};
     var entry = null;
     (data.charts || []).forEach(function (e) {
@@ -1850,7 +2842,7 @@
       summary.thumb.view_index === focus.index
         ? summary.thumb
         : null);
-    var slot = el("div", "st-key-slot");
+    var slot = el("div", "sf-chart st-key-slot");
     if (chart) {
       try {
         slot.appendChild(
@@ -1859,6 +2851,7 @@
             onState: saveState,
             v: entry ? entry.v : null,
             hideTitle: (env.study || {}).title || summary.title || undefined,
+            face: true,
           }),
         );
         slot.setAttribute("data-key", "chart");
@@ -1877,7 +2870,8 @@
       slot.setAttribute("data-key", thumb ? "thumb" : "none");
     }
     body.appendChild(slot);
-    body.appendChild(el("p", "st-rows-words", words(focus.rows_words)));
+    if (focus.rows_words)
+      body.appendChild(el("p", "sf-caption", words(focus.rows_words)));
   }
 
   /** Addresses, a project, a library read (D-328 D8): one served receipt row. */
@@ -1905,179 +2899,455 @@
       String((H.prose ? H.prose(env.message) : env.message) || "").split(
         "\n",
       )[0];
-    setFrame("refusal", { "data-no-expand": "1" });
-    var headEl = document.getElementById("card-head");
-    if (headEl) headEl.hidden = true;
+    // CARD-RENDER refusal-validator: "Plan refused: 2 issues" said what, not
+    // which. The validator's issues are served one by one (`detail.issues`:
+    // its message and its suggestion, "Did you mean …" where it has one);
+    // the card lists up to three, so it is as tall as what it says.
+    var issues = (Array.isArray(detail.issues) ? detail.issues : []).filter(
+      function (i) {
+        return i && typeof i.message === "string" && i.message;
+      },
+    );
+    // MCP-CARDS (D-420): a refusal is one row at its content height (the
+    // house error pattern), no wordmark; its words are the served card form
+    // (a plan limit's names no plan: D-328 D3, D-381; the model's text keeps
+    // D-14's clause) and its one link is the served study or Research home.
+    var extra = { "data-no-expand": "1" };
+    if (issues.length) extra["data-terminal"] = "1";
+    faceFrame("refusal", extra);
     var row = el("div", "st-refusal");
-    if (H.wordmark()) row.appendChild(el("span", "brand", "Keel"));
     row.appendChild(el("p", "st-refusal-w", text));
     body.appendChild(row);
+    if (issues.length) {
+      var ul = el("ul", "st-issues");
+      issues.slice(0, MAX_ISSUES).forEach(function (i) {
+        var li = el("li", "st-issue");
+        li.appendChild(el("span", "st-issue-w", i.message));
+        if (typeof i.suggestion === "string" && i.suggestion)
+          li.appendChild(el("span", "st-issue-s", i.suggestion));
+        ul.appendChild(li);
+      });
+      body.appendChild(ul);
+    }
     var link = detail.links && detail.links.app;
     if (!link && document.body) document.body.setAttribute("data-no-hero", "1");
   }
 
   /** Fullscreen (13 §2.3): header, lead; the tabs; then the numbers. */
+  /**
+   * MCP-CARDS (D-420d, founder: "the expand view can show more too, instead
+   * of the same thing just bigger"): Expand is a dashboard. The face's head
+   * and hero; selectors (Charts · Checks · Numbers) and Open in Keel up top;
+   * the key chart large; every other view as a grid of small charts, all at
+   * once (2-3 columns at 720 px and up, one on a phone); "Your checks" as
+   * rows, each its mark, its words and its view's small chart; the numbers
+   * with full labels and intervals. A tap on a chart focuses it (large, with
+   * its readout, legend and its own Open in Keel) and "All charts" goes back.
+   */
   function renderFull(env, body) {
     var summary = env.card_summary || {};
     var data = cardDataOf(env);
-    setFrame("full");
-    head(env, summary, data);
-    if (typeof H.setOpenInAppUrl === "function")
-      H.setOpenInAppUrl((env.links && env.links.app) || env.hero_url);
-    body.appendChild(leadOf(summary));
-    var state = savedState();
+    // a study with nothing to show yet keeps its face in fullscreen too: in
+    // flight or stopped empty its run face, a Draft its plan
+    var st = stateOf(env);
+    if (IN_FLIGHT[st] || st === "failed") {
+      faceRun(env, body, { stopped: st === "failed", failed: st === "failed" });
+      return;
+    }
+    if (st === "cancelled" && !data.key) {
+      faceRun(env, body, { stopped: true });
+      return;
+    }
+    if (
+      (env.study || {}).draft &&
+      !data.key &&
+      !(summary.numbers || []).length
+    ) {
+      facePlan(env, body);
+      return;
+    }
     var copy = data.copy || {};
     var links = data.links || {};
-    var tabs = [];
-    if (data.key)
-      tabs.push({ id: "key", title: data.key.title, chart: data.key });
-    var checksPlaced = false;
-    (data.charts || []).forEach(function (e) {
-      if (!e || !e.title) return;
-      var isChecks = e.family === "Checks";
-      if (isChecks) checksPlaced = true;
-      tabs.push({
-        id: "v" + e.index,
-        title: e.title,
-        entry: e,
-        checks: isChecks,
-      });
-    });
-    var checkRows = (data.checks && data.checks.rows) || [];
-    if (!tabs.length) {
-      body.appendChild(keySlot(summary, data, state));
-    } else {
-      var active = state.tab;
-      if (
-        !tabs.some(function (t) {
-          return t.id === active;
-        })
-      )
-        active = tabs[0].id;
-      var list = el("div", "st-tabs");
-      list.setAttribute("role", "tablist");
-      var panel = el("div", "st-panel");
-      panel.setAttribute("role", "tabpanel");
-      var below = el("div", "st-panel-below");
-      var buttons = [];
-      var drawPanel = function () {
-        panel.textContent = "";
-        below.textContent = "";
-        var t = tabs.filter(function (x) {
-          return x.id === active;
-        })[0];
-        panel.setAttribute("data-tab", active);
-        if (t.checks) {
-          panel.className = "st-panel st-panel-list";
-          panel.appendChild(checksList(checkRows, data, MAX_CHECKS));
-          if (data.checks && data.checks.more_words)
-            below.appendChild(el("p", "st-note", data.checks.more_words));
-          return;
-        }
-        panel.className = "st-panel";
-        var e = t.entry;
-        var chart = t.chart || (e && e.form === "chart" ? e.chart : null);
-        if (chart) {
-          try {
-            panel.appendChild(
-              chartBlock(chart, data, {
-                state: state,
-                onState: saveState,
-                v: e ? e.v : null,
-              }),
-            );
-          } catch (err) {
-            if (!err.thumb) throw err;
-            panel.setAttribute("data-chart-error", err.message);
-          }
-        } else if (e && e.form === "thumb" && e.thumb) {
-          drawThumbInto(panel, e.thumb, null, panel);
-          below.appendChild(el("p", "st-note", words(copy.full_chart_in_keel)));
-        } else if (e) {
-          panel.appendChild(
-            el("p", "st-note", words(e.state_words || copy.full_chart_in_keel)),
-          );
-        }
-        if (e && e.lead) below.appendChild(el("p", "st-panel-lead", e.lead));
-        var v = e ? e.v : null;
-        if (v && links.chart && copy.open_chart)
-          below.appendChild(
-            linkButton(copy.open_chart, fill(links.chart, { v: v })),
-          );
-      };
-      var select = function (id, focus) {
-        active = id;
-        state.tab = id;
-        saveState(state);
-        buttons.forEach(function (b) {
-          var on = b.getAttribute("data-tab") === id;
-          b.setAttribute("aria-selected", on ? "true" : "false");
-          b.tabIndex = on ? 0 : -1;
-          if (on && focus) b.focus();
-        });
-        drawPanel();
-      };
-      tabs.forEach(function (t, k) {
-        var b = el("button", "st-tab", t.title || "");
-        b.type = "button";
-        b.setAttribute("role", "tab");
-        b.setAttribute("data-tab", t.id);
-        b.addEventListener("click", function () {
-          select(t.id, false);
-        });
-        b.addEventListener("keydown", function (ev) {
-          var d = ev.key === "ArrowRight" ? 1 : ev.key === "ArrowLeft" ? -1 : 0;
-          if (!d) return;
-          ev.preventDefault();
-          select(tabs[(k + d + tabs.length) % tabs.length].id, true);
-        });
-        buttons.push(b);
-        list.appendChild(b);
-      });
-      body.appendChild(list);
-      body.appendChild(panel);
-      body.appendChild(below);
-      select(active, false);
-    }
-    // "Your checks" with no Checks view to place it: the rows go in the
-    // numbers section, under its own served words.
-    var section = el("section", "st-section");
-    if (!checksPlaced && checkRows.length)
-      section.appendChild(checksList(checkRows, data, MAX_CHECKS));
-    if (copy.numbers)
-      section.appendChild(el("h3", "st-section-h", copy.numbers));
-    (summary.numbers || []).forEach(function (n) {
-      var row = el("div", "st-num-row");
-      row.appendChild(el("span", "st-num-label", words(n.label)));
-      row.appendChild(
-        el("span", "st-num-value st-value", words(n.value_words)),
-      );
-      var sub = [n.interval_words, n.sample_words].filter(function (x) {
-        return typeof x === "string" && x;
-      });
-      if (sub.length) row.appendChild(el("span", "st-num-sub", sub.join(SEP)));
-      section.appendChild(row);
-    });
-    section.appendChild(footingOf(summary));
     var notes = data.notes || {};
-    [data.method_line, notes.draft, notes.saved]
-      .concat(notes.not_measured || [], notes.stale || [])
-      .forEach(function (w) {
-        if (typeof w === "string" && w)
-          section.appendChild(el("p", "st-note", w));
-      });
+    var state = savedState();
+    var url = (env.links && env.links.app) || env.hero_url;
+    // the dashboard draws its one study link up top (no second link below)
+    setFrame("full", { "data-face": "1", "data-owns-link": url ? "1" : "0" });
+    var headEl = document.getElementById("card-head");
+    if (headEl) headEl.hidden = true;
+    if (typeof H.setOpenInAppUrl === "function") H.setOpenInAppUrl(url);
+    var dash = el("div", "sf-dash");
+    dash.appendChild(faceHead(env, summary, data));
+    var face = servedFace(summary, data);
+    if (face.hero) dash.appendChild(faceHero(face.hero, facePips(data)));
     if (notes.linked && notes.linked.words) {
       if (notes.linked.link)
-        section.appendChild(
+        dash.appendChild(
           linkButton(
             notes.linked.words,
             notes.linked.link,
-            "st-link st-link-small",
+            "st-link st-link-small st-linked",
           ),
         );
-      else section.appendChild(el("p", "st-note", notes.linked.words));
+      else dash.appendChild(el("p", "st-note st-linked", notes.linked.words));
     }
-    body.appendChild(section);
+    var chartLink = function (e) {
+      return e && e.v && links.chart ? fill(links.chart, { v: e.v }) : null;
+    };
+    var entries = (data.charts || []).filter(function (e) {
+      return e && e.title;
+    });
+    var checksView = entries.filter(function (e) {
+      return e.family === "Checks";
+    })[0];
+    var grid = entries.filter(function (e) {
+      return e.family !== "Checks";
+    });
+    var rows = ((data.checks && data.checks.rows) || []).filter(function (r) {
+      return r;
+    });
+    var numbers = (summary.numbers || []).filter(function (n) {
+      return n && n.label;
+    });
+    var by = entriesByIndex(data);
+
+    // ── one chart, focused ──
+    var focus = el("div", "sf-focus");
+    focus.hidden = true;
+    var lastTile = null;
+    var showFocus = function (e, from) {
+      focus.textContent = "";
+      lastTile = from || null;
+      var back = el(
+        "button",
+        "button-link button-quiet sf-back",
+        copy.all_charts || copy.charts,
+      );
+      back.type = "button";
+      back.addEventListener("click", function () {
+        showDash();
+      });
+      focus.appendChild(back);
+      var panel = el("div", "sf-chart sf-focus-panel");
+      panel.setAttribute("data-index", String(e.index));
+      var chart = e.form === "chart" ? e.chart : null;
+      if (chart) {
+        try {
+          panel.appendChild(
+            chartBlock(chart, data, {
+              state: state,
+              onState: saveState,
+              v: e.v,
+              face: true,
+            }),
+          );
+        } catch (err) {
+          if (!err.thumb) throw err;
+          panel.setAttribute("data-chart-error", err.message);
+        }
+      } else {
+        panel.appendChild(el("h3", "sf-focus-t", words(e.title)));
+        if (e.form === "thumb" && e.thumb)
+          drawThumbInto(panel, e.thumb, null, panel);
+        panel.appendChild(
+          el("p", "st-note", words(e.state_words || copy.full_chart_in_keel)),
+        );
+      }
+      focus.appendChild(panel);
+      if (e.lead) focus.appendChild(el("p", "sf-focus-lead", words(e.lead)));
+      var href = chartLink(e);
+      if (href && copy.open_chart)
+        focus.appendChild(
+          linkButton(copy.open_chart, href, "st-link sf-open-chart"),
+        );
+      dash.hidden = true;
+      focus.hidden = false;
+      state.tab = "v" + e.index;
+      saveState(state);
+      if (window.scrollTo) window.scrollTo(0, 0);
+      back.focus({ preventScroll: true });
+    };
+    var showDash = function () {
+      focus.hidden = true;
+      focus.textContent = "";
+      dash.hidden = false;
+      state.tab = null;
+      saveState(state);
+      if (lastTile) {
+        if (lastTile.scrollIntoView)
+          lastTile.scrollIntoView({ block: "center" });
+        lastTile.focus({ preventScroll: true });
+      }
+    };
+
+    // ── the selectors and the study link ──
+    var sections = [];
+    var bar = el("div", "sf-bar");
+    var seg = el("nav", "sf-seg");
+    bar.appendChild(seg);
+    if (url) {
+      var open = linkButton(
+        H.studyLinkLabel ? H.studyLinkLabel(url) : copy.open_chart,
+        url,
+        "button-link button-primary sf-open",
+      );
+      bar.appendChild(open);
+    }
+    dash.appendChild(bar);
+    var section = function (id, label, title) {
+      var sec = el("section", "sf-sec");
+      sec.id = "sf-" + id;
+      if (title) sec.appendChild(el("h3", "sf-sec-h", words(title)));
+      sections.push({ id: id, label: label, el: sec });
+      return sec;
+    };
+
+    // ── Charts: the key large, then the grid ──
+    if (data.key || grid.length) {
+      var charts = section("charts", copy.seg_charts || copy.charts, null);
+      if (data.key) {
+        var key = el("div", "sf-chart sf-key st-key-slot");
+        try {
+          key.appendChild(
+            chartBlock(data.key, data, {
+              state: state,
+              onState: saveState,
+              face: true,
+            }),
+          );
+          key.setAttribute("data-key", "chart");
+        } catch (err) {
+          if (!err.thumb) throw err;
+          key.setAttribute("data-chart-error", err.message);
+        }
+        charts.appendChild(key);
+        var keyHref = data.key_v ? chartLink({ v: data.key_v }) : null;
+        if (keyHref && copy.open_chart)
+          charts.appendChild(
+            linkButton(copy.open_chart, keyHref, "st-link sf-open-chart"),
+          );
+      }
+      if (grid.length) {
+        var g = el("div", "sf-grid");
+        grid.forEach(function (e) {
+          var tile = el("div", "sf-gtile");
+          tile.setAttribute("data-index", String(e.index));
+          var hit = el("button", "sf-gtile-hit");
+          hit.type = "button";
+          hit.title = e.title;
+          hit.appendChild(el("span", "sf-gtile-t", words(e.title)));
+          var pic = el("span", "sf-gtile-pic");
+          var drawn = e.form === "chart" ? miniChart(e.chart, "sf-mini") : null;
+          if (drawn) {
+            pic.appendChild(drawn);
+            tile.setAttribute("data-drawn", "chart");
+          } else if (
+            e.form === "chart" &&
+            e.chart &&
+            e.chart.kind === "table" &&
+            (e.chart.rows || []).length
+          ) {
+            pic.appendChild(miniTable(e.chart));
+            tile.setAttribute("data-drawn", "table");
+          } else if (e.form === "thumb" && e.thumb) {
+            drawThumbInto(pic, e.thumb, null, hit);
+            tile.setAttribute("data-drawn", "thumb");
+          } else {
+            pic.appendChild(
+              el(
+                "span",
+                "sf-gtile-w",
+                words(
+                  e.state_words ||
+                    (e.chart && (e.chart.note_words || e.chart.more_words)) ||
+                    copy.full_chart_in_keel,
+                ),
+              ),
+            );
+            tile.setAttribute("data-drawn", "words");
+          }
+          hit.appendChild(pic);
+          if (e.lead)
+            hit.appendChild(el("span", "sf-gtile-lead", words(e.lead)));
+          hit.addEventListener("click", function () {
+            showFocus(e, hit);
+          });
+          tile.appendChild(hit);
+          var href = chartLink(e);
+          if (href && copy.open_chart) {
+            var a = el("a", "sf-gtile-open", "↗");
+            a.href = href;
+            a.title = copy.open_chart;
+            a.setAttribute("aria-label", copy.open_chart + ": " + e.title);
+            a.addEventListener("click", function (ev) {
+              ev.preventDefault();
+              H.openLink(href);
+            });
+            tile.appendChild(a);
+          }
+          g.appendChild(tile);
+        });
+        charts.appendChild(g);
+      }
+      dash.appendChild(charts);
+    }
+
+    // ── Checks: one row a bar, its mark, its words, its view's small chart ──
+    if (rows.length) {
+      var checks = section(
+        "checks",
+        copy.seg_checks,
+        checksView ? checksView.title : copy.seg_checks,
+      );
+      var plain = noBars(data);
+      var list = el("ul", "sf-crows");
+      var rank = function (r) {
+        return r.locked ? 3 : r.met === true ? 0 : r.met === false ? 1 : 2;
+      };
+      rows
+        .map(function (r, k) {
+          return { r: r, k: k };
+        })
+        .sort(function (a, b) {
+          return plain ? a.k - b.k : rank(a.r) - rank(b.r) || a.k - b.k;
+        })
+        .forEach(function (x) {
+          var r = x.r;
+          var li = el("li", "sf-crow");
+          var st = checkState(r, plain);
+          li.setAttribute("data-state", st);
+          if (st !== "plain" && st !== "locked") {
+            var pip = el("span", "sf-pip sf-crow-pip");
+            pip.setAttribute(
+              "data-state",
+              st === "not_measured" ? "unmeasured" : st,
+            );
+            pip.setAttribute("aria-label", words(copy[st]));
+            pip.title = words(copy[st]);
+            li.appendChild(pip);
+          }
+          var text = el("div", "sf-crow-text");
+          text.appendChild(el("span", "sf-crow-l", words(r.label)));
+          var bits = r.locked
+            ? [copy.locked]
+            : [r.bar_words, r.interval_words, r.sample_words];
+          bits = bits.filter(function (w) {
+            return typeof w === "string" && w;
+          });
+          if (bits.length)
+            text.appendChild(el("span", "sf-crow-sub", bits.join(SEP)));
+          li.appendChild(text);
+          if (!r.locked)
+            li.appendChild(el("span", "sf-crow-v", words(r.value_words)));
+          var v = typeof r.view === "number" ? by[r.view] : null;
+          var mini =
+            v && v.form === "chart" ? miniChart(v.chart, "sf-mini") : null;
+          if (mini) {
+            var mb = el("button", "sf-crow-chart");
+            mb.type = "button";
+            mb.title = v.title;
+            mb.setAttribute("aria-label", v.title);
+            mb.setAttribute("data-index", String(v.index));
+            mb.appendChild(mini);
+            mb.addEventListener("click", function () {
+              showFocus(v, mb);
+            });
+            li.appendChild(mb);
+          } else {
+            // the chart's column stays, so every row's value lines up
+            var none = el("span", "sf-crow-none");
+            none.setAttribute("aria-hidden", "true");
+            li.appendChild(none);
+          }
+          list.appendChild(li);
+        });
+      checks.appendChild(list);
+      if (data.checks && data.checks.more_words)
+        checks.appendChild(
+          el("p", "sf-caption", words(data.checks.more_words)),
+        );
+      dash.appendChild(checks);
+    }
+
+    // ── Numbers: full labels, values, intervals and samples ──
+    if (numbers.length) {
+      var nums = section("numbers", copy.seg_numbers, copy.numbers);
+      numbers.forEach(function (n) {
+        var row = el("div", "st-num-row");
+        row.appendChild(el("span", "st-num-label", words(n.label)));
+        row.appendChild(
+          el("span", "st-num-value st-value", words(n.value_words)),
+        );
+        var sub = [n.interval_words, n.sample_words].filter(function (x) {
+          return typeof x === "string" && x;
+        });
+        if (sub.length)
+          row.appendChild(el("span", "st-num-sub", sub.join(SEP)));
+        nums.appendChild(row);
+      });
+      dash.appendChild(nums);
+    }
+
+    // the footing and the notes close the dashboard
+    var foot = el("div", "sf-foot");
+    if (summary.footing_line)
+      foot.appendChild(el("p", "sf-caption", words(summary.footing_line)));
+    [notes.draft, notes.saved]
+      .concat(notes.not_measured || [], notes.stale || [])
+      .forEach(function (w) {
+        if (typeof w === "string" && w) foot.appendChild(el("p", "st-note", w));
+      });
+    if (foot.children.length) dash.appendChild(foot);
+
+    // the selectors jump to their section; the one in view is marked
+    sections.forEach(function (sec) {
+      if (!sec.label) return;
+      var b = el("button", "sf-seg-b", sec.label);
+      b.type = "button";
+      b.setAttribute("aria-controls", sec.el.id);
+      b.addEventListener("click", function () {
+        if (sec.el.scrollIntoView)
+          sec.el.scrollIntoView({ block: "start", behavior: "smooth" });
+        mark(sec.id);
+      });
+      sec.button = b;
+      seg.appendChild(b);
+    });
+    var mark = function (id) {
+      sections.forEach(function (sec) {
+        if (sec.button)
+          sec.button.setAttribute(
+            "aria-current",
+            sec.id === id ? "true" : "false",
+          );
+      });
+    };
+    if (sections.length) mark(sections[0].id);
+    if (sections.length < 2) seg.hidden = true;
+    // the section whose top has passed the bar is the one in view (the first
+    // at the top of the page)
+    if (sections.length > 1 && window.addEventListener) {
+      var spy = function () {
+        if (dash.hidden) return;
+        var at = sections[0].id;
+        sections.forEach(function (sec) {
+          if (sec.el.getBoundingClientRect().top <= 96) at = sec.id;
+        });
+        mark(at);
+      };
+      window.addEventListener("scroll", spy, { passive: true });
+    }
+
+    body.appendChild(dash);
+    body.appendChild(focus);
+    // a thumbnail tapped inline opens Expand on its chart
+    var asked = /^v(\d+)$/.exec(String(state.tab || ""));
+    if (asked && by[Number(asked[1])]) {
+      var tile = dash.querySelector(
+        '.sf-gtile[data-index="' + asked[1] + '"] .sf-gtile-hit',
+      );
+      showFocus(by[Number(asked[1])], tile);
+    }
   }
 
   /** An older card for the same study: its receipt row; "Show" reopens it (13 §4.4). */
@@ -2092,12 +3362,13 @@
         state: summary.state_words || null,
         superseded: H.supersededLabel ? H.supersededLabel() : null,
         url: (env.links && env.links.app) || env.hero_url || null,
+        wordEnd: true,
         disclosure: {
           label: H.words && H.words.showStudy,
           build: function (into) {
             var data = cardDataOf(env);
             into.setAttribute("data-layout", "study");
-            into.appendChild(leadOf(summary));
+            into.appendChild(leadOf(summary, data));
             into.appendChild(keySlot(summary, data, savedState()));
             into.appendChild(tiles(summary));
             into.appendChild(footingOf(summary));
@@ -2118,6 +3389,7 @@
   function render(env) {
     var body = document.getElementById("card-body");
     if (!body) return;
+    applyPalette();
     body.textContent = "";
     body.removeAttribute("aria-busy");
     body.removeAttribute("data-run");

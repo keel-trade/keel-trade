@@ -343,7 +343,8 @@ def plan_name_violations(
 
     Allowed, and removed before the scan: the caller's own plan in the
     renderer's own-plan positions (``on <Own>``, ``Plan: <Own>.``,
-    ``<Own> doesn't include``), and the more clause itself — but only when
+    ``<Own> doesn't include``, ``<Own> screens cover``, ``<Own> runs the Check``), and the more clause (or a
+    feature wall's "are included on <names>.") itself — but only when
     its names are EXACTLY the served ``more``, in order. A clause naming any
     other set, a clause on a payload whose server named none (the top plan),
     or a plan name anywhere else is a violation.
@@ -352,12 +353,15 @@ def plan_name_violations(
 
     violations: list[str] = []
     text = text or ""
+    names_re = r"(?P<names>(?:[A-Z][\w-]*)(?:(?:, | and )[A-Z][\w-]*)*)"
+    # The more clause by kind and unit ("include more", "run more", "run faster", "include it", "screen every
+    # coin"), and the v3 feature wall's inclusion head ("Signal studies are included on Quant and Pro.").
     clause = re.compile(
-        r"(?:(?P<names>(?:[A-Z][\w-]*)(?:(?:, | and )[A-Z][\w-]*)*) "
-        r"(?:includes?|runs?) (?:more|faster|it)\b)"
+        rf"(?:{names_re} (?:(?:includes?|runs?) (?:more|faster|it)|screens? every coin)\b)"
+        rf"|(?:\b(?:is|are) included on {names_re.replace('names', 'incl')}\.)"
     )
     for m in clause.finditer(text):
-        names = m.group("names")
+        names = m.group("names") or m.group("incl")
         if not PLAN_NAME_RE.search(names):
             continue
         if not more or names != join_plan_names(list(more)):
@@ -373,6 +377,9 @@ def plan_name_violations(
             rf"\bon {re.escape(own)}\b",
             rf"\bPlan: {re.escape(own)}\.",
             rf"\b{re.escape(own)} doesn't include\b",
+            # Plans v3 (spec 02 §D): the coin cap's own-plan position, and a study type's included alternative.
+            rf"\b{re.escape(own)} screens cover\b",
+            rf"\b{re.escape(own)} runs the Check\b",
         ):
             text = re.sub(pattern, " ", text)
     violations += [f"plan name {m.group(0)!r}" for m in PLAN_NAME_RE.finditer(text)]
@@ -500,7 +507,9 @@ def pointer_violation(
     low = target.lower()
     if low.startswith("rule:") or low.startswith("skill:"):
         return None
-    if research and (low.startswith(RESEARCH_TOPIC_PREFIX) or normalize_topic(target) in RESEARCH_DOC_TOPICS):
+    if research and (
+        low.startswith(RESEARCH_TOPIC_PREFIX) or normalize_topic(target) in RESEARCH_DOC_TOPICS
+    ):
         return None  # served while Research is (``research`` surfaces only)
     topic = normalize_topic(target)
     if topic in SERVED_DOC_TOPICS or topic in HELP_NAMESPACES:
@@ -822,7 +831,7 @@ def served_faster(plan: str) -> list[dict]:
 
     out = cat.faster_plans(plan)
     for entry in out:
-        entry["floor"] = cat.floor_of(entry["plan"])
+        entry["floor"] = cat.floor_of(entry["plan"], entry["version"])
     return out
 
 
@@ -912,10 +921,10 @@ FIRST_WEEK = {
 
 #: The clause `FIRST_WEEK["backtest_runs"]` folds into a backtests line
 #: (Q-7601 fix round), exactly.
-FIRST_WEEK_CLAUSE = "(154 first-week extras until Tue 13 Oct)"
+FIRST_WEEK_CLAUSE = "(154 first-week extras until Oct 13)"
 #: An approved backtests line carrying it: the control every urgency seed in
 #: test_policy_scan.py is built from.
-FIRST_WEEK_SENTENCE = f"Backtests: 246 of 250 left {FIRST_WEEK_CLAUSE}; resets Tue 22 Sep."
+FIRST_WEEK_SENTENCE = f"Backtests: 246 of 250 left {FIRST_WEEK_CLAUSE}; resets Sep 22."
 
 
 def _me(plan: str, *, first_week: bool = False) -> dict:
@@ -985,6 +994,99 @@ def _floor(plan: str) -> str:
     from . import _plan_catalog as cat
 
     return cat.floor_of(plan)
+
+
+def _names_only(entries: list[dict]) -> list[dict]:
+    return [{k: e[k] for k in ("plan", "version", "name")} for e in entries]
+
+
+def coins_422_body(plan: str = "free", resolved: int = 180) -> dict:
+    """keel-api's coin-cap refusal (V3-API shape 1) on a run, save or copy: a 422 with the four-part wall, the
+    remedy whose `apply` the same call takes, and the agent's suggestion."""
+    from . import _plan_catalog as cat
+
+    limit = int(cat._value(plan, "v3", "screen_assets_max"))
+    names = cat.names(cat.higher_plans(plan, "screen_assets_max", "v3"))
+    more = f" {', '.join(names[:-1])} and {names[-1]} include more." if len(names) > 1 else ""
+    return {
+        "detail": {
+            "code": "SCREEN_COINS_OVER_PLAN",
+            "unit": "screen_assets_max",
+            "kind": "setting",
+            "message": (
+                f"{own_name(plan)} screens cover up to {limit} coins; this one covers {resolved}."
+                f"{more} Plans are changed in the Keel web app."
+            ),
+            "limit": limit,
+            "resolved": resolved,
+            "plan": plan,
+            "plan_name": own_name(plan),
+            "higher_plans": served_higher(plan, "screen_assets_max"),
+            "remedy": {
+                "kind": "narrow_universe",
+                "max_coins": limit,
+                "resolved_coins": resolved,
+                "apply": {"narrow_to_plan": True},
+                "words": f"Keeps the {limit} most traded of the {resolved}.",
+                "options": [
+                    {"mode": "top_volume", "top_n": limit},
+                    {"mode": "manual", "max": limit},
+                ],
+            },
+            "suggestion": (
+                f"Plan limit. Tell the user the coin limit and which plans include more; use the top {limit} or a "
+                f"{limit}-coin pick. Don't split the screen into several runs to get past it."
+            ),
+        }
+    }
+
+
+def _me_v3(plan: str = "free") -> dict:
+    """/v1/me on a plans v3 org: the screens block (saved, coins per screen, refresh) and the split floor (spec 02
+    §L3), as platform_auth.pricing serves them (names only on every new block)."""
+    from . import _plan_catalog as cat
+
+    body = _me_body(plan)
+    floor_paper = cat.floor_of(plan, "v3", "paper")
+    floor_live = cat.floor_of(plan, "v3")
+
+    def side(applies: str, floor: str) -> dict:
+        return {
+            "applies": applies,
+            "floor": floor,
+            "plan": plan,
+            "plan_name": own_name(plan),
+            "higher_plans": _names_only(cat.faster_plans(plan, "v3", applies)),
+        }
+
+    body["serving_floor"] = {
+        "floor": floor_paper,
+        "plan": plan,
+        "plan_name": own_name(plan),
+        "higher_plans": _names_only(cat.faster_plans(plan, "v3", "paper")),
+        "paper": side("paper", floor_paper),
+        "live": side("live", floor_live),
+    }
+    body["plan_status"]["screens"] = {
+        "saved": {
+            "unit": "screeners_max",
+            "limit": int(cat._value(plan, "v3", "screeners_max")),
+            "used": 1,
+            "remaining": int(cat._value(plan, "v3", "screeners_max")) - 1,
+            "higher_plans": _names_only(cat.higher_plans(plan, "screeners_max", "v3")),
+        },
+        "coins_per_screen": {
+            "limit": int(cat._value(plan, "v3", "screen_assets_max")),
+            "higher_plans": _names_only(cat.higher_plans(plan, "screen_assets_max", "v3")),
+        },
+        "refresh_min_minutes": {
+            "limit": int(cat._value(plan, "v3", "screener_refresh_min_minutes")),
+            "higher_plans": _names_only(
+                cat.higher_plans(plan, "screener_refresh_min_minutes", "v3")
+            ),
+        },
+    }
+    return body
 
 
 _ENTITLEMENTS = {
@@ -1175,6 +1277,14 @@ def runtime_payloads() -> dict[str, Payload]:
                 {("POST", "/v1/backtests"): (403, wall_403_body("pro"))},
             ),
             "plan_status_free": _call("keel_plan_usage", {}, {("GET", "/v1/me"): _me("free")}),
+            # Plans v3 (spec 02 §C4.1): the screens block and the split floor, on the listed profile.
+            "plan_status_v3": _call("keel_plan_usage", {}, {("GET", "/v1/me"): _me_v3("free")}),
+            # The coin cap (spec 02 §C4.3): an unsaved screen run over Free's coins per screen.
+            "screen_coins_wall": _call(
+                "keel_screener_run",
+                {"source": 'Globals(target_timeframe="1d")'},
+                {("POST", "/v1/result-runs"): (422, coins_422_body("free"))},
+            ),
             "plan_status_paid": _call("keel_plan_usage", {}, {("GET", "/v1/me"): _me("trader")}),
             # A first-week account (spec 01 §1.9): the one allowed time-limited
             # sentence must pass every family — the control arm for urgency.
@@ -1281,6 +1391,8 @@ _PAYLOAD_PLANS: dict[str, tuple[str, str]] = {
     "plan_status_paid": ("trader", "backtest_runs"),
     "plan_status_first_week": ("free", "backtest_runs"),
     "plan_status_30d": ("free", "backtest_runs"),
+    "plan_status_v3": ("free", "backtest_runs"),
+    "screen_coins_wall": ("free", "screen_assets_max"),
     "paid_wall_30d": ("trader", "backtest_runs"),
     "floor_run": ("free", "paper_live_clock_floor"),
     "paper_wall": ("free", "paper_strategies_max"),
@@ -1578,15 +1690,28 @@ KIND_FIXTURES: dict[str, dict[str, tuple[str, str] | None]] = {
     "cap": {
         "wall": ("paper_wall", "Paper strategies: 1 of 1 running on Free"),
         "notice": ("paper_last_slot", "Last paper slot in use (1 of 1)."),
-        "plan_usage": ("plan_status_full", "Paper strategies: 0 of 1 running."),
+        "plan_usage": ("plan_status_full", "Paper strategies: 0 of 1 running on Free."),
     },
     "floor": {
-        "wall": ("paper_floor_free", "Paper and live on Free need 1h or slower"),
-        "notice": ("floor_run", "Note: paper and live on Free need 1h or slower"),
-        "plan_usage": ("plan_status_free", "Paper and live timeframe: 1h or slower."),
+        "wall": ("paper_floor_free", "Paper and live on Free run at 1 hour or slower"),
+        "notice": ("floor_run", "Paper and live on Free run at 1 hour or slower"),
+        "plan_usage": ("plan_status_v3", "Paper on Free runs daily."),
+    },
+    # Plans v3 (spec 02 §C2): a size bound per action; no near notice (§D "—").
+    "setting": {
+        "wall": (
+            "screen_coins_wall",
+            "Free screens cover up to 30 coins; this one covers 180.",
+        ),
+        "notice": None,
+        "plan_usage": ("plan_status_v3", "Coins per screen: up to 30 on Free."),
     },
     "feature": {
-        "wall": ("screen_private_wall", "Private screen auto-refresh isn't on Free"),
+        # The v3 feature wall, inclusion first (spec 02 §D; a cap of 0 reads as a feature, PLANS-REVIEW R30).
+        "wall": (
+            "screen_private_wall",
+            "Private auto-refreshing screens are included on Trader, Quant and Pro.",
+        ),
         "notice": None,
         "plan_usage": ("plan_status_full", "Private auto-refreshing screens: not on Free."),
     },

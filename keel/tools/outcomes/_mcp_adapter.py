@@ -28,6 +28,7 @@ from ._channels import (
     card_line_retired,
     card_meta_move,
     is_error_envelope,
+    is_plan_limit_envelope,
     kind_for_tool,
     nonview_text_only,
     partition,
@@ -48,6 +49,7 @@ __all__ = [
     "DRAFT_CHECK_LINE",
     "CHANNEL_MAP",
     "ERROR_FIELDS",
+    "error_outcome",
     "operational_lines",
     "register_all",
     "view_tool_result",
@@ -127,8 +129,43 @@ def effective_input_schema(tool: OutcomeTool) -> dict:
     if _toolsets.PAPER_SDK_RELEASED and tool.paper_input_schema is not None:
         # The held paper form of an existing tool's schema (§3.11 item 1),
         # read at publication: a held process publishes HEAD's schema.
-        return tool.paper_input_schema
-    return tool.input_schema
+        return without_research_properties(tool.name, tool.paper_input_schema)
+    return without_research_properties(tool.name, tool.input_schema)
+
+
+#: MCP-FINAL batch 3 #6 (FINAL-LIST §D, one runtime switch): an existing tool's parameters that exist only for
+#: Research. While this caller is not served Research the tool publishes its pre-Research schema byte for byte (gate
+#: E's mcp leg); served, the parameters join it.
+RESEARCH_ONLY_PROPERTIES: dict[str, tuple[str, ...]] = {
+    "keel_share_create": ("views", "show_author"),
+}
+
+
+def without_research_properties(name: str, schema: dict) -> dict:
+    """``schema`` as this caller sees it: :data:`RESEARCH_ONLY_PROPERTIES` dropped while Research is not served."""
+    gone = RESEARCH_ONLY_PROPERTIES.get(name)
+    if not gone:
+        return schema
+    from ._toolsets import research_served
+
+    if research_served():
+        return schema
+    props = {k: v for k, v in (schema.get("properties") or {}).items() if k not in gone}
+    out = {**schema, "properties": props}
+    if isinstance(schema.get("required"), list):
+        out["required"] = [r for r in schema["required"] if r not in gone]
+    return out
+
+
+def input_schema_for(tool: OutcomeTool, *, research_served: bool) -> dict:
+    """The schema ``tool`` publishes in tools/list (its FastMCP ``parameters``) with Research served or not. The hosted
+    server builds its tools once (on the full profile, served), so its per-caller listing swaps a
+    :data:`RESEARCH_ONLY_PROPERTIES` tool's schema for the caller's state through this one function, as
+    ``listed_description_for`` does a description."""
+    from ._toolsets import research_served_context
+
+    with research_served_context(research_served):
+        return _mcp_parameters_schema(tool)
 
 
 def param_aliases(tool: OutcomeTool) -> dict[str, str]:
@@ -199,6 +236,26 @@ def outcome_ref_from_result(result: OutcomeResult) -> dict[str, Any]:
     if isinstance(dry_run, bool):
         ref["dry_run"] = dry_run
     return ref
+
+
+def error_outcome(envelope: dict[str, Any]) -> dict[str, bool]:
+    """What a returned error envelope records on the request outcome slot
+    (``keel.hosting.record_outcome``): ``plan_limit`` for a plan-limit
+    refusal, ``is_error`` for every other error.
+
+    The ONE verdict both MCP paths read (Q-8224). Locally there is no slot and
+    ``_flag_error`` alone decides the wire bit; on the hosted server the
+    dispatcher (services/mcp-server ``dispatch.on_call_tool``) re-applies
+    ``isError`` to any result whose slot says ``is_error`` (Q-2273 B1's belt).
+    Stamping ``is_error`` on every ``KeelError`` therefore put the bit back on
+    exactly the refusals ``_flag_error`` leaves it off (Q-8210 / spec 02 §F G9:
+    a plan limit is never a failed call), on the hosted server only. Both
+    decisions now come from :func:`is_plan_limit_envelope` on the same
+    envelope, so the two servers cannot disagree.
+    """
+    if is_plan_limit_envelope(envelope):
+        return {"plan_limit": True, "is_error": False}
+    return {"is_error": True}
 
 
 def _wire_error(envelope: dict[str, Any]) -> dict[str, Any]:
@@ -356,9 +413,12 @@ def _make_handler(tool: OutcomeTool, toolsets: frozenset[str]):
         except KeelError as e:
             # Spec §13.5 envelope comes straight off KeelError. Same
             # shape on the CLI side via output.emit_error so agents
-            # parse one structure across both channels.
-            record_outcome(is_error=True)
-            return json.dumps(_wire_error(e.to_envelope()), default=str)
+            # parse one structure across both channels. The slot's verdict
+            # is read off the SAME envelope the wire bit is (Q-8224): a plan
+            # limit records `plan_limit`, never `is_error`.
+            envelope = _wire_error(e.to_envelope())
+            record_outcome(**error_outcome(envelope))
+            return json.dumps(envelope, default=str)
         except Exception:  # noqa: BLE001
             record_outcome(is_error=True)
             # The exception's own text (a KeyError's repr, a parser's
@@ -445,6 +505,9 @@ _OPERATIONAL_FIELDS: tuple[tuple[str, str, str], ...] = (
     ("quota_notice", "quota", DATA),
     # The paper/live timeframe heads-up on a run (doc 07 §5, D-14).
     ("floor_notice", "plan", DATA),
+    # Plans v3 (spec 02 §C4.2, §C4.3a): the limits a composed source would meet, and what the coin cap kept.
+    ("plan_findings_notice", "plan limit", DATA),
+    ("plan_narrowed_notice", "plan kept", DATA),
     ("error_message", "error", DATA),
     ("info", "info", DATA),
     ("validation", "validation", DATA),
@@ -1182,6 +1245,10 @@ def _flag_error(result: Any, envelope_json: str) -> Any:
     except (TypeError, ValueError):
         return result
     if not is_error_envelope(envelope):
+        return result
+    # Q-7927: a plan limit is an expected outcome, not a tool failure; it keeps
+    # its envelope (code, words, retryable false) and goes without the bit.
+    if is_plan_limit_envelope(envelope):
         return result
     from fastmcp.tools import ToolResult
     from mcp.types import TextContent

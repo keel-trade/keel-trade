@@ -185,14 +185,19 @@ def test_every_view_tool_error_validates_through_the_real_server() -> None:
                     expected = [
                         envelope["message"],
                         *operational_lines(envelope),
-                        *recovery_lines(envelope),
+                        *recovery_lines(envelope, agent=True),
                     ]
                     if action.get("tool"):
                         call = next_call(action["tool"], action.get("args") or {}, app_url=link)
                         reason = str(action.get("reason") or "").strip()
                         expected.append(f"{reason} {call}" if reason else call)
+                    # D-403: no "error: <code>" line (STG-SURFACES #31 retired); the code is the envelope's
                     words, _, appended = text.partition("\n\n{")
-                    assert words.split("\n") == [*expected, f"View in Keel: {link}"], (name, args, text)
+                    assert words.split("\n") == [*expected, f"View in Keel: {link}"], (
+                        name,
+                        args,
+                        text,
+                    )
                     assert json.loads("{" + appended) == envelope, (name, args)
                     research.add(name)
                     arms += 1

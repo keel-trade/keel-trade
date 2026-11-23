@@ -635,90 +635,14 @@ def _step_catalog() -> dict:
     )
 
 
-def _param_line(param: dict) -> str:
-    """One parameter: its type, default (or required), when it resolves, its hard range, typical guidance, options
-    and length (R-23: what the full ``research_steps`` topic said per step, now said here only)."""
+def _step_pages() -> dict:
+    """Each step's ``step:<Name>`` page, rendered by libs/research's one renderer (``research.steps.catalog.
+    render_step_md``, which chat-api's ``get_step`` also serves) and bundled by build_data.py."""
     import json
 
-    default = (
-        "required"
-        if param.get("required")
-        else f"default `{json.dumps(param.get('default'), ensure_ascii=False)}`"
+    return json.loads(
+        resources.files("keel.data").joinpath("research_step_pages.json").read_text("utf-8")
     )
-    bits = [str(param.get("type") or ""), default]
-    if param.get("save_resolved"):
-        bits.append("resolved at save")
-    rng = param.get("range") or {}
-    if rng.get("hard_limit"):
-        bits.append(f"hard limit {rng['hard_limit']}")
-    if rng.get("typical_guidance"):
-        bits.append(f"typical {rng['typical_guidance']}")
-    options = (param.get("constraints") or {}).get("options")
-    if options is not None:
-        bits.append("one of " + ", ".join(json.dumps(o) for o in options))
-    if param.get("length"):
-        lo, hi = param["length"]
-        bits.append(f"{lo} to {hi} values" + (", distinct" if param.get("distinct") else ""))
-    about = f": {param['about']}" if param.get("about") else ""
-    return f"  - `{param.get('name')}` ({', '.join(b for b in bits if b)}){about}"
-
-
-def _render_step(step: dict) -> str:
-    """``step:<Name>``: one step in full, from the bundled catalog (07 §4.10). R-23 made ``research_steps`` an index
-    of one line per step, so everything it once said per step is said here: what the step accepts, each parameter
-    with its range and default, each output with its axes, condition and measures, its runs and cost, how it counts
-    versions tried, its plan gate, variant and example."""
-    lines = [f"# {step['name']}: {step.get('label', '')}", "", str(step.get("about", ""))]
-    lines.append("")
-    lines.append(f"- Category: {step.get('category')}, version {step.get('version')}.")
-    accepts = step.get("accepts") or {}
-    if accepts.get("types"):
-        note = f"; {accepts['note']}" if accepts.get("note") else ""
-        lines.append(f"- Accepts: {', '.join(accepts['types'])} ({accepts.get('arity')}{note}).")
-    params = step.get("params") or []
-    if params:
-        lines.append("- Parameters:")
-        lines.extend(_param_line(param) for param in params)
-    else:
-        lines.append("- Parameters: none.")
-    outputs = step.get("outputs") or []
-    if outputs:
-        lines.append("- Outputs:")
-        for out in outputs:
-            # RI-477 (D-299): a money measure shows its label, which names the return it reads
-            measures = ", ".join(
-                f"{m.get('name', '')} ({m['label']})"
-                if m.get("basis") and m.get("label")
-                else m.get("name", "")
-                for m in out.get("measures") or []
-            )
-            axes = " × ".join(str(a.get("name")) for a in out.get("axes") or [])
-            when = f" (when {out['when']})" if out.get("when") else ""
-            detail = "" if out.get("evidence", True) else "; detail, expires"
-            lines.append(f"  - `{out.get('name')}`{when}: {axes} → {measures}{detail}")
-    variant = step.get("variant")
-    if variant:  # D-296 (01 §4.9): the edit a variant step makes, null on every other step
-        edits = "; ".join(
-            f"{e.get('kind')} `{e.get('changes')}` through {e.get('through')}"
-            for e in variant.get("edits") or []
-        )
-        when = f" (when {variant['when']})" if variant.get("when") else ""
-        varies = ", ".join(f"`{v}`" for v in variant.get("varies") or [])
-        lines.append(
-            f"- Variant{when}: varies {varies}; edits {edits}. {variant.get('about', '')}".rstrip()
-        )
-    runs = ", ".join(f"{r.get('count')} {r.get('kind')}" for r in step.get("runs") or [])
-    if runs:
-        lines.append(f"- Runs: {runs}.")
-    if step.get("cost"):
-        lines.append(f"- Cost hint: {step['cost']}.")
-    if step.get("counts"):
-        lines.append(f"- Versions tried: {step['counts']}.")
-    if step.get("gate"):
-        lines.append(f"- Plan gate: {step['gate']}.")
-    if step.get("example"):
-        lines.append(f"- Example: `{step['example']}`")
-    return "\n".join(lines)
 
 
 def _step_result(name: str) -> OutcomeResult:
@@ -745,7 +669,7 @@ def _step_result(name: str) -> OutcomeResult:
         run_id=None,
         hero_url=None,
         share_url=None,
-        extra={"topic": _STEP_PREFIX + name, "body": _render_step(step), "source": "bundled"},
+        extra={"topic": _STEP_PREFIX + name, "body": _step_pages()[name], "source": "bundled"},
     )
 
 

@@ -88,7 +88,8 @@ def test_w1_the_paper_cap_wall_says_it_does_not_reset(paper_sdk_released):
     blob = _dump({**env, "suggestion": suggestion})
     assert "before a slot frees" in suggestion
     assert "once a slot frees" in env["resume"]["verify_call"]["reason"]
-    assert "stop one to free it" in env["talking_points"][0]
+    # The free way forward (spec 02 §D, J11): stopping one frees it, and a newer version is an update.
+    assert "Stopping one frees it" in env["talking_points"][1]
     # No claim of a reset anywhere on the envelope.
     assert not _RESET_CLAIM_RE.findall(blob), _RESET_CLAIM_RE.findall(blob)
     # No paper tool named on the full profile (R-59), no destination.

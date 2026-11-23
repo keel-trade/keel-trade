@@ -1,0 +1,259 @@
+{
+  "hero_url": "https://app.usekeel.io/research/new?plan=pln_00000000000000000000000003",
+  "url_line": "View in Keel: https://app.usekeel.io/research/new?plan=pln_00000000000000000000000003",
+  "edit": {
+    "kind": "new_study",
+    "cls": "new_study",
+    "also_changes": []
+  },
+  "study": {
+    "title": "MA Crossover (Golden Cross) Strategy",
+    "kind_label": {
+      "key": "map",
+      "name": "Map a strategy's settings",
+      "short": "Settings map"
+    },
+    "state": "planned",
+    "linked_to": [],
+    "linked_to_total": 0,
+    "set_aside": false,
+    "archived": false,
+    "can_delete": false
+  },
+  "footing": {
+    "days": {
+      "start": "2025-11-18",
+      "end": "2026-11-18"
+    },
+    "split": "2026-07-20",
+    "coins": {
+      "count": 8,
+      "chosen": "The coins MA Crossover (Golden Cross) Strategy trades",
+      "names_sha256": "110a9e9d13abf65b60a9f86a9a29c7e14904430513f79a8ca22a276f725953fa"
+    },
+    "costs": {
+      "fee": 0.00045,
+      "slippage": 0.00045
+    },
+    "delay": 0,
+    "leverage": 1.0,
+    "data": "snap_d96e8eccc0bce098",
+    "engine": "sha256:34f1a58a92cc952bb254bfcc0bac2f98ed8ce82f73c41d4204871597b3272487",
+    "engine_words": "This version of the engine",
+    "split_words": "Split on Jul 20, 2026: 244 days before, 121 after"
+  },
+  "stale": [],
+  "links": {
+    "app": "https://app.usekeel.io/research/new?plan=pln_00000000000000000000000003"
+  },
+  "plan_id": "pln_00000000000000000000000003",
+  "expires_at": "2026-11-20T02:48:54Z",
+  "class": "new_study",
+  "writes": "a new study, version 1",
+  "subjects": [
+    {
+      "ref": "Strategy(\"keel/ma_crossover_crypto@1\")",
+      "label": "MA Crossover (Golden Cross) Strategy",
+      "key": "s1",
+      "name": "MA Crossover (Golden Cross) Strategy",
+      "kind": "strategy",
+      "edits": []
+    }
+  ],
+  "source": "Study(\n    title=\"MA Crossover (Golden Cross) Strategy\",\n)\n\nSubjects(\n    s1=Strategy(\"keel/ma_crossover_crypto@1\"),\n)\n\nRun(\n    days=Days(\"2025-11-18\", \"2026-11-18\"),\n    split=Split(\"2026-07-20\"),\n    coins=Coins([\"BTC\", \"ETH\", \"SOL\", \"BNB\", \"XRP\", \"DOGE\", \"HYPE\", \"SUI\"], chosen=SubjectUniverse(\"s1\")),\n    costs=Costs(fee=0.00045, slippage=0.00045),\n    data=Data(\"snap_d96e8eccc0bce098\"),\n)\n\nSteps(\n    map=SettingsGrid(axes=[SettingAxis(\"step[1].branch[fast].step[0].window\", [5, 10, 15, 20, 25, 30], name=\"fast\", stamp=Stamp(\"EWMA\", version=1, param=\"window\", value=20, written=True)), SettingAxis(\"step[1].branch[slow].step[0].window\", [40, 60, 80, 100, 150, 200], name=\"slow\", stamp=Stamp(\"EWMA\", version=1, param=\"window\", value=50, written=True))]),\n    split=SplitCompare(grid=\"map\"),\n)\n\nViews(\n    Page(default=\"Fast × slow\", switch=[\"Fast × slow\", \"Before vs after the split\", \"Every setting\"]),\n    Heatmap(\"Fast × slow\", of=\"map\", x=Axis(\"slow\"), y=Axis(\"fast\"), colour=Raw(Control(\"measure\", \"sharpe\", options=[\"sharpe\", \"cagr\", \"max_drawdown\"])), marks=[Ring(Yours()), Box(Selected())], select=\"cell\"),\n    Scatter(\"Before vs after the split\", of=\"split\", x=Raw(\"sharpe_before\"), y=Raw(\"sharpe_after\")),\n    Distribution(\"Every setting\", of=\"map\", x=Raw(\"sharpe\"), marker=Final(\"map\", measure=\"sharpe\", at={\"fast\": 20, \"slow\": 50})),\n    Curve(\"Across fast\", of=\"map\", x=Axis(\"fast\"), y=Raw(\"sharpe\"), where=Is(\"slow\", Selected(\"slow\"))),\n    Curve(\"Across slow\", of=\"map\", x=Axis(\"slow\"), y=Raw(\"sharpe\"), where=Is(\"fast\", Selected(\"fast\"))),\n)\n",
+  "filled": [
+    {
+      "path": "/run/split",
+      "what": "Split on Jul 20, 2026: 244 days before, 122 after"
+    },
+    {
+      "path": "/steps/map",
+      "what": "Map a strategy's settings: added the default step map (SettingsGrid). It leaves out Nearby settings: the map has no cell at your strategy's own settings, because its axes skip your slow 50. Add that value to see your setting and its neighbours."
+    },
+    {
+      "path": "/steps/split",
+      "what": "Map a strategy's settings: added the default step split (SplitCompare)."
+    },
+    {
+      "path": "/page",
+      "what": "Map a strategy's settings: added the default view page."
+    },
+    {
+      "path": "/views/0",
+      "what": "Map a strategy's settings: added the default view Heatmap \"Fast × slow\"."
+    },
+    {
+      "path": "/views/1",
+      "what": "Map a strategy's settings: added the default view Scatter \"Before vs after the split\"."
+    },
+    {
+      "path": "/views/2",
+      "what": "Map a strategy's settings: added the default view Distribution \"Every setting\"."
+    },
+    {
+      "path": "/views/3",
+      "what": "Map a strategy's settings: added the default view Curve \"Across fast\"."
+    },
+    {
+      "path": "/views/4",
+      "what": "Map a strategy's settings: added the default view Curve \"Across slow\"."
+    },
+    {
+      "path": "/run/coins",
+      "what": "8 coins"
+    },
+    {
+      "path": "/run/data",
+      "what": "the store as of today"
+    },
+    {
+      "path": "/steps/map/axes/0/stamp",
+      "what": "stamp"
+    },
+    {
+      "path": "/steps/map/axes/1/stamp",
+      "what": "stamp"
+    }
+  ],
+  "issues": [
+    {
+      "code": "STUDY_PLAN_TOO_MANY_BACKTESTS",
+      "path": "/steps/map",
+      "message": "This map has 36 settings; this account runs up to 25 in one study.",
+      "severity": "warning",
+      "suggestion": "Cut the map to 25 settings or fewer."
+    }
+  ],
+  "steps": [
+    {
+      "id": "map",
+      "step": "SettingsGrid",
+      "label": "Every setting",
+      "to_run": 37,
+      "reused": 0,
+      "after": 0,
+      "not_valid": 0,
+      "kind": "backtest",
+      "runnable": false,
+      "locked": {
+        "unit": "research_backtests_max",
+        "words": "This map has 36 settings; the most this account's plan can run is 25. Narrow an axis."
+      }
+    },
+    {
+      "id": "split",
+      "step": "SplitCompare",
+      "label": "Before and after the split",
+      "to_run": 1,
+      "reused": 0,
+      "after": 0,
+      "not_valid": 0,
+      "kind": "analysis",
+      "runnable": false,
+      "locked": {
+        "unit": "research_backtests_max",
+        "words": "Before and after the split: the map it reads has 36 settings; the most this account's plan can run is 25. Narrow an axis of the map."
+      },
+      "ranges": "Days ahead: any value from 1 to 60"
+    }
+  ],
+  "runs": {
+    "children": 38,
+    "to_run": 38,
+    "reused": 0,
+    "joined": 0,
+    "after": 0,
+    "by_kind": {
+      "analysis": 2,
+      "backtest": 36
+    },
+    "engine_reruns": 0,
+    "not_valid": 0
+  },
+  "addresses_carried": [],
+  "addresses_changed": [],
+  "addresses_moved": [],
+  "estimate": {
+    "seconds_low": 21.75,
+    "seconds_central": 43.5,
+    "seconds_high": 87.0,
+    "evidence_bytes_high": 211424,
+    "wall_low_s": 21.8,
+    "wall_high_s": 87.0,
+    "queue_s": 0.0,
+    "background": true,
+    "uncalibrated": true,
+    "cost_model": "e4-2026-11-16b"
+  },
+  "allowance": {
+    "units": [
+      {
+        "unit": "research_studies",
+        "cost": 1,
+        "used": 0,
+        "limit": 40,
+        "resets_at": "2026-12-18"
+      }
+    ],
+    "within_allowance": true
+  },
+  "run_allowed": false,
+  "limits": [
+    {
+      "unit": "research_backtests_max",
+      "code": "STUDY_PLAN_TOO_MANY_BACKTESTS",
+      "moment": "map_size",
+      "steps": ["map"],
+      "limit": 25,
+      "used": 36
+    },
+    {
+      "unit": "research_backtests_max",
+      "code": "STUDY_PLAN_TOO_MANY_BACKTESTS",
+      "moment": "map_size",
+      "steps": ["split"]
+    }
+  ],
+  "locked": [
+    {
+      "step": "map",
+      "unit": "research_backtests_max",
+      "moment": "map_size",
+      "words": "This map has 36 settings; the most this account's plan can run is 25. Narrow an axis."
+    },
+    {
+      "step": "split",
+      "unit": "research_backtests_max",
+      "moment": "map_size",
+      "words": "Before and after the split: the map it reads has 36 settings; the most this account's plan can run is 25. Narrow an axis of the map."
+    }
+  ],
+  "versions_tried": {
+    "family": "fam:keel/ma_crossover_crypto",
+    "before": 0,
+    "added": 36,
+    "why": ""
+  },
+  "preview": {
+    "auto": false,
+    "auto_preview_max_runs": 20,
+    "auto_preview_max_seconds": 60.0
+  },
+  "words": {
+    "work": "38 runs · about 1 to 2 min, in the background · versions tried +36",
+    "allowance": "Used 0 of 40 studies; resets Dec 18. Pro includes more. Plans are changed in the Keel web app. Planning, reading, saving, and runs that reuse everything or run nothing, do not count.",
+    "limit": "This map has 36 settings; the most this account's plan can run is 25. Narrow an axis. Before and after the split: the map it reads has 36 settings; the most this account's plan can run is 25. Narrow an axis of the map. Pro includes more. Plans are changed in the Keel web app.",
+    "card_line": "Plan · Settings map · MA Crossover (Golden Cross) Strategy",
+    "strip": "needs a run · 38 runs",
+    "filled": "Filled in: Split on Jul 20, 2026: 244 days before, 122 after, Map a strategy's settings: added the default step map (SettingsGrid). It leaves out Nearby settings: the map has no cell at your strategy's own settings, because its axes skip your slow 50. Add that value to see your setting and its neighbours., Map a strategy's settings: added the default step split (SplitCompare)., Map a strategy's settings: added the default view page., Map a strategy's settings: added the default view Heatmap \"Fast × slow\"., Map a strategy's settings: added the default view Scatter \"Before vs after the split\"., Map a strategy's settings: added the default view Distribution \"Every setting\"., Map a strategy's settings: added the default view Curve \"Across fast\"., Map a strategy's settings: added the default view Curve \"Across slow\"., 8 coins, the store as of today, stamp, stamp",
+    "estimate": "Times are estimates until Keel has timed more runs like these."
+  },
+  "view": {
+    "kind": "study",
+    "mode": "plan",
+    "size": "receipt",
+    "at": "2026-11-19T02:48:54.280Z",
+    "seq": 6,
+    "markdown": "card: where the host draws Keel cards, the user sees what follows as a card carrying its name, links and ids, so a reply can call it by name; the ids and links here serve tool calls and hosts without cards.\n\nPlan · Map a strategy's settings · MA Crossover (Golden Cross) Strategy · a new study, version 1\n38 runs · about 1 to 2 min, in the background · versions tried +36\nTimes are estimates until Keel has timed more runs like these.\nUsed 0 of 40 studies; resets Dec 18. Pro includes more. Plans are changed in the Keel web app. Planning, reading, saving, and runs that reuse everything or run nothing, do not count.\nDays Nov 18, 2025 to Nov 18, 2026, split Jul 20, 2026 · 8 coins: the coins MA Crossover (Golden Cross) Strategy trades · costs 9 bp a fill · data as of Nov 18, 2026\nSteps (2): Every setting: not included in this account's plan · Before and after the split: not included in this account's plan\nThis map has 36 settings; this account runs up to 25 in one study.\nThis map has 36 settings; the most this account's plan can run is 25. Narrow an axis. Before and after the split: the map it reads has 36 settings; the most this account's plan can run is 25. Narrow an axis of the map. Pro includes more. Plans are changed in the Keel web app.\nView in Keel: https://app.usekeel.io/research/new?plan=pln_00000000000000000000000003"
+  }
+}

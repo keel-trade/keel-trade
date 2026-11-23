@@ -316,7 +316,7 @@ def render_reference(*, mdx: bool) -> str:
         parts.append(
             "---\n"
             "title: MCP Tool Reference\n"
-            "description: Generated reference for Keel MCP outcome tools and their CLI equivalents.\n"
+            'description: "Every Keel MCP outcome tool with its CLI equivalent: which ones the hosted endpoint registers, the opt-in live-write tools, and the CLI-only commands."\n'
             f'updated: "{keel_trade_release_date()}"\n'
             "---"
         )

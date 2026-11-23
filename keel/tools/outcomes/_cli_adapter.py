@@ -57,10 +57,13 @@ def _cli_input_schema(tool: OutcomeTool) -> dict:
     server's ``inputSchema`` (``_mcp_adapter.effective_input_schema``).
     """
     from . import _toolsets
+    from ._mcp_adapter import without_research_properties
 
+    # MCP-FINAL batch 3 #6: a Research-only parameter (share create's --views, --show-author) is a flag only while
+    # this caller is served Research, as on the MCP schema.
     if _toolsets.PAPER_SDK_RELEASED and tool.paper_input_schema is not None:
-        return tool.paper_input_schema
-    return tool.input_schema
+        return without_research_properties(tool.name, tool.paper_input_schema)
+    return without_research_properties(tool.name, tool.input_schema)
 
 
 def _cli_description(tool: OutcomeTool) -> str:
@@ -178,13 +181,25 @@ def _build_click_command(tool: OutcomeTool) -> click.Command:
             raise click.exceptions.Exit(1)
 
         _render(result, fmt)
+        if _refused_plan(tool, result):
+            # SDK-FIX (JOURNEYS J6 w14): a plan whose Run is refused (its served wall) exits non-zero, so a script
+            # that plans then runs stops here; the plan and its wall are printed above.
+            raise click.exceptions.Exit(1)
 
     # Decorate with options (reverse order: Click applies last decorator first).
     options: list = []
     for prop in sorted(properties.keys(), key=lambda p: (p != positional_arg, p)):
         if prop == positional_arg:
             continue
-        opt = _prop_to_option(prop, properties[prop], required=prop in required)
+        shape = properties[prop]
+        if tool.name.startswith("keel_research_") and isinstance(shape.get("description"), str):
+            shape = {**shape, "description": cli_flag_help(shape["description"])}
+        opt = _prop_to_option(
+            prop,
+            shape,
+            required=prop in required,
+            hidden=prop in CLI_HIDDEN_PROPS and prop not in required,
+        )
         options.append(opt)
     for old, new in sorted(aliases.items()):
         # The new property's shape minus its default, so an absent old flag
@@ -226,7 +241,7 @@ def _build_click_command(tool: OutcomeTool) -> click.Command:
     leaf = tool.cli_path[-1].replace("_", "-")
     from .research_cli import RESEARCH_CLI_HELP
 
-    said, examples = RESEARCH_CLI_HELP.get(tool.cli_path, (None, ()))
+    said, examples = RESEARCH_CLI_HELP.get(tool.cli_path) or CLI_HELP.get(tool.cli_path, (None, ()))
     # "\b" keeps Click from rewrapping the examples (a command must read as one line to be copied).
     epilog = "\b\nExamples:\n" + "\n".join(f"  {e}" for e in examples) if examples else None
     cmd = click.command(
@@ -235,6 +250,38 @@ def _build_click_command(tool: OutcomeTool) -> click.Command:
         epilog=epilog,
     )(cmd)
     return cmd
+
+
+#: A command's one-line help when its MCP description is written for an agent (STG-SURFACES #19: `keel app open`'s
+#: help read the listed tool's "Returns a link to view and manage this strategy", which the listed surface freezes,
+#: and named no study id). Research verbs carry theirs in ``research_cli.RESEARCH_CLI_HELP``.
+CLI_HELP: dict[tuple[str, ...], tuple[str, tuple[str, ...]]] = {
+    ("app", "open"): (
+        "Print the Keel web app link for a strategy (str_…), backtest (btr_…), running strategy (dep_…), "
+        "study (stu_…) or share id.",
+        ("keel app open stu_…", "keel app open <23-character share id>"),
+    ),
+}
+
+#: STG-SURFACES #27: a research flag's help is the research input schema's line, written for the MCP tools; on the
+#: terminal each tool call it names reads as the command that makes it. Every pair is held to occur in some research
+#: flag's line (``test_cli_research_flag_help``), so a reworded schema line cannot leave a dead entry here.
+CLI_FLAG_WORDS: tuple[tuple[str, str], ...] = (
+    ("keel_research_get(subject=…)", "`keel research get --subject '…'`"),
+    ("(keel_research_get serves it)", "(`keel research get stu_… --format json` serves it)"),
+    ("from keel_research_plan (pln_…)", "from `keel research plan` (pln_…)"),
+)
+
+#: Properties the CLI accepts but does not list in its help: `present` sizes the card a chat host draws, and a
+#: terminal draws no card (STG-SURFACES #27, "How this result displays in the chat").
+CLI_HIDDEN_PROPS = frozenset({"present"})
+
+
+def cli_flag_help(text: str) -> str:
+    """A flag's help with each MCP call it names as the `keel` command (:data:`CLI_FLAG_WORDS`)."""
+    for mcp, cli in CLI_FLAG_WORDS:
+        text = text.replace(mcp, cli)
+    return text
 
 
 # Conventional short-flag aliases. Adding via the prop-name table beats
@@ -392,13 +439,26 @@ def _one_line_help(description: str) -> str:
     return first_sentence
 
 
+def _refused_plan(tool: OutcomeTool, result: object) -> bool:
+    """A research plan answer whose Run is refused: ``run_allowed`` false with the served wall (``words.limit``)."""
+    if getattr(tool, "name", None) != "keel_research_plan":
+        return False
+    extra = getattr(result, "extra", None)
+    if not isinstance(extra, dict):
+        return False
+    words = extra.get("words") if isinstance(extra.get("words"), dict) else {}
+    return extra.get("run_allowed") is False and bool(words.get("limit"))
+
+
 def _emit_research_refusal(tool: OutcomeTool, err: KeelError, fmt: str) -> bool:
     """RI-251 (07 §3.4; COST-SDK residual 5): in human output a research refusal prints as its MCP text does (the
     served words, the next call as a ``keel`` command, ``View in Keel`` last;
     ``_research_commands.cli_refusal_text``) on stderr. False for any other tool, any structured format (the
     envelope stays byte for byte) and any error that is not a research refusal."""
-    if not (_is_human_format(fmt) and tool.name.startswith("keel_research_")):
+    if not tool.name.startswith("keel_research_"):
         return False
+    if not _is_human_format(fmt):
+        return _emit_research_refusal_json(err, fmt)
     from ._research_commands import cli_refusal_text
 
     text = cli_refusal_text(err.to_envelope())
@@ -407,6 +467,31 @@ def _emit_research_refusal(tool: OutcomeTool, err: KeelError, fmt: str) -> bool:
     import sys
 
     sys.stderr.write(text + "\n")
+    sys.stderr.flush()
+    return True
+
+
+def _emit_research_refusal_json(err: KeelError, fmt: str) -> bool:
+    """MCP-FINAL batch 3 #3: a research refusal in ``--format json`` named its next step by the MCP tool alone
+    (``"tool": "keel_research_get"``), a name a CLI caller cannot run. The envelope keeps every field (``tool`` and
+    ``args`` stay the machine id), and its next step gains ``command``, the ``keel`` command that makes it
+    (``_research_commands.cli_call``); its reason reads as the CLI's (``cli_text``). Any other error is untouched."""
+    from ._research_commands import cli_call, cli_text, refusal_link
+
+    envelope = err.to_envelope()
+    action = envelope.get("suggested_next_action")
+    if refusal_link(envelope) is None or not (isinstance(action, dict) and action.get("tool")):
+        return False
+    command = cli_call(str(action["tool"]), action.get("args") or {})
+    if command is None:
+        return False
+    action = {**action, "command": command}
+    if isinstance(action.get("reason"), str):
+        action["reason"] = cli_text(action["reason"])
+    import json
+    import sys
+
+    sys.stderr.write(json.dumps({**envelope, "suggested_next_action": action}, indent=2) + "\n")
     sys.stderr.flush()
     return True
 
@@ -467,12 +552,27 @@ def _refuse_agent_confirmation(tool: OutcomeTool, args: dict, fmt: str) -> None:
 
 def _confirm_destructive(tool: OutcomeTool, args: dict) -> None:
     """Prompt the user before a destructive action when they're at a
-    TTY without `--yes`."""
-    summary = ", ".join(f"{k}={v}" for k, v in args.items() if k != "yes") or "(no args)"
-    click.confirm(
-        f"This will run a DESTRUCTIVE action ({tool.name}) with: {summary}\nContinue?",
-        abort=True,
+    TTY without `--yes`.
+
+    STG-SURFACES #17: the person reads the command they ran, as they would
+    type it (``keel share create stu_… --views 0``,
+    ``_research_commands.cli_call``), never the MCP tool's name and its
+    ``key=value`` arguments."""
+    from ._research_commands import cli_call
+
+    given = {k: v for k, v in args.items() if k != "yes"}
+    command = cli_call(tool.name, given) or "keel " + " ".join(
+        p.replace("_", "-") for p in tool.cli_path
     )
+    what = CONFIRM_WORDS.get(tool.name, "a change that may not be undone")
+    click.confirm(f"This runs `{command}`, {what}.\nContinue?", abort=True)
+
+
+#: MCP-FINAL: a destructive verb whose effect is not "may not be undone" says what it does instead. A cancel stops a
+#: study's runs still to go; the finished ones are kept and the study can be resumed.
+CONFIRM_WORDS: dict[str, str] = {
+    "keel_research_cancel": "which stops the runs still to go; the finished runs are kept and the study can be resumed",
+}
 
 
 def _render_comparison(envelope: dict, markdown: str) -> None:
@@ -586,6 +686,17 @@ def _render(result: OutcomeResult, fmt: str) -> None:
             # link is a handoff URL) — still ends the output clickable.
             click.echo(envelope["url_line"])
     else:
+        view = envelope.get("view")
+        if (
+            isinstance(view, dict)
+            and view.get("kind") == "study"
+            and isinstance(view.get("markdown"), str)
+        ):
+            # AUDIT S3 #3: `--format json`'s text is the CLI's too, each next call the `keel` command that makes it
+            # (the text form's :func:`cli_text`); the MCP form stays MCP's.
+            from ._research_commands import cli_text
+
+            envelope = {**envelope, "view": {**view, "markdown": cli_text(view["markdown"])}}
         emit(envelope, _output_fmt(fmt))
 
 
@@ -633,6 +744,18 @@ _CLI_VERB_ALIASES: dict[tuple[str, ...], tuple[str, ...]] = {
 #: over outputs, not two). A3 A1: ``keel signals`` was "No such command".
 _CLI_PRESET_ALIASES: dict[tuple[str, ...], tuple[tuple[str, ...], dict]] = {
     ("signals", "search"): (("blocks", "search"), {"role": "signal"}),
+    # D-415 D5: ``keel signals list`` is ``keel research get --library mine`` (the user's own signals with their calls)
+    ("signals", "list"): (("research", "get"), {"library": "mine"}),
+}
+
+#: AUDIT S3 #14: what each preset alias does, in its own words, for ``keel <group> --help`` (whose command list read
+#: only "`keel blocks search --role signal`.") and the command's own help; the target command follows as "The same as
+#: …".
+_CLI_PRESET_HELP: dict[tuple[str, ...], str] = {
+    ("signals", "search"): (
+        "Find signals, Keel's library signals and your own, by terms, family or output type."
+    ),
+    ("signals", "list"): "List your signals, each with the exact call a study names it by.",
 }
 
 
@@ -643,11 +766,19 @@ def register_all(parent: click.Group, outcomes: dict[str, OutcomeTool]) -> None:
     command name. Any aliases declared in `_CLI_VERB_ALIASES` register
     the same Click command under additional names.
     """
-    group_cache: dict[tuple[str, ...], click.Group] = {(): parent}
+    from ._toolsets import is_research_tool, research_served
 
-    for tool in outcomes.values():
-        if tool.mcp_only:
-            continue
+    group_cache: dict[tuple[str, ...], click.Group] = {(): parent}
+    # `keel research` exists only while this caller's /v1/me serves Research
+    # (research.enabled on; FINAL-LIST §D): off, no verb and no help line.
+    served = research_served()
+    visible = {
+        name: tool
+        for name, tool in outcomes.items()
+        if not tool.mcp_only and (served or not is_research_tool(name))
+    }
+
+    for tool in visible.values():
         cmd = _build_click_command(tool)
         group_path = tool.cli_path[:-1]
         group = _ensure_group(parent, group_path, group_cache)
@@ -656,16 +787,18 @@ def register_all(parent: click.Group, outcomes: dict[str, OutcomeTool]) -> None:
         aliases = _CLI_VERB_ALIASES.get(tool.cli_path, ())
         for alias_name in aliases:
             group.add_command(cmd, name=alias_name)
-    by_path = {tool.cli_path: tool for tool in outcomes.values() if not tool.mcp_only}
+    by_path = {tool.cli_path: tool for tool in visible.values()}
     for path, (target, preset) in _CLI_PRESET_ALIASES.items():
         tool = by_path.get(target)
         if tool is None:
             continue
         group = _ensure_group(parent, path[:-1], group_cache)
-        group.add_command(_preset_command(tool, path[-1], preset))
+        group.add_command(_preset_command(tool, path[-1], preset, path))
 
 
-def _preset_command(tool: OutcomeTool, name: str, preset: dict) -> click.Command:
+def _preset_command(
+    tool: OutcomeTool, name: str, preset: dict, path: tuple[str, ...] = ()
+) -> click.Command:
     """An existing command under another group with some arguments preset (``_CLI_PRESET_ALIASES``): the same
     callback, each preset applied when the caller did not send that argument."""
     cmd = _build_click_command(tool)
@@ -680,12 +813,14 @@ def _preset_command(tool: OutcomeTool, name: str, preset: dict) -> click.Command
 
     target = " ".join(tool.cli_path)
     flags = " ".join(f"--{k.replace('_', '-')} {v}" for k, v in preset.items())
+    same = f"The same as `keel {target} {flags}`."
+    said = _CLI_PRESET_HELP.get(path)
     return click.Command(
         name=name,
         params=cmd.params,
         callback=preset_callback,
-        help=f"`keel {target} {flags}`: {cmd.help or ''}".strip(),
-        short_help=f"`keel {target} {flags}`.",
+        help=f"{said} {same}" if said else f"`keel {target} {flags}`: {cmd.help or ''}".strip(),
+        short_help=said or f"`keel {target} {flags}`.",
     )
 
 

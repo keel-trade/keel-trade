@@ -22,12 +22,14 @@ from keel.errors import (
     BACKTEST_ALLOWANCE_CLAUSE,
     EntitlementError,
     KeelError,
+    block_tier,
     floor_notice,
     more_plan_names,
     project_first_week,
     render_quota_notice,
 )
 from keel.hosting import record_outcome
+from keel.limit_copy import TIER_NO_NEAR_UNITS
 from pipeline_engine.backtest_config import BacktestConfig, adapt_legacy_initial_capital
 
 from . import register
@@ -363,20 +365,30 @@ def _quota_envelope_fields(blocks: Any) -> dict[str, Any]:
         return {}
     # An unlimited unit has no allowance to report (the headroom arm skips
     # it for the same reason), and its projection would be a bare `unit`.
-    notable = [b for b in blocks if isinstance(b, dict) and not b.get("unlimited")]
+    # A silent unit (compute, PLANS-REVIEW R7) is never a count: its block
+    # rides only once it is spent.
+    notable = [
+        b
+        for b in blocks
+        if isinstance(b, dict)
+        and not b.get("unlimited")
+        and (str(b.get("unit") or "") not in TIER_NO_NEAR_UNITS or block_tier(b) == "exhausted")
+    ]
     if not notable:
         return {}
     fields: dict[str, Any] = {"quota": [project_quota_block(b) for b in notable]}
+    # Ranked by THE near rule (block_tier, R17), not an older server's tier.
     ranked = sorted(
         notable,
         key=lambda b: (
-            _TIER_ORDER.index(b["tier"]) if b.get("tier") in _TIER_ORDER else len(_TIER_ORDER)
+            _TIER_ORDER.index(block_tier(b)) if block_tier(b) in _TIER_ORDER else len(_TIER_ORDER)
         ),
     )
-    # The first-week clause is folded INTO the line it rides (Q-7601 fix
-    # round): the allowance never makes a response carry a quota line, it is
-    # never a `next` step, and it rides only the backtests line it counts.
-    sentence = render_quota_notice(ranked[0])
+    # The first week rides the line it counts, in the row's own first-week
+    # words (R16): the allowance never makes a response carry a quota line,
+    # and it is never a `next` step. The most urgent block that HAS a line
+    # speaks (a spent silent unit rides `quota` with none).
+    sentence = next((t for t in (render_quota_notice(b) for b in ranked) if t), None)
     if sentence:
         fields["quota_notice"] = sentence
     return fields

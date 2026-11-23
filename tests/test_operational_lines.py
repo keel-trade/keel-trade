@@ -121,6 +121,18 @@ APPEARS: dict[str, tuple[dict, str]] = {
         {"view": _VIEW_BT, "floor_notice": "Note: paper and live on Free need 1h or slower."},
         "need 1h or slower",
     ),
+    # Plans v3 (spec 02 §C4.2, §C4.3a): compose's plan findings, and what the coin cap kept.
+    "plan limit": (
+        {
+            "view": _VIEW_BT,
+            "plan_findings_notice": "Free screens cover up to 30 coins; this one covers 42.",
+        },
+        "this one covers 42",
+    ),
+    "plan kept": (
+        {"view": _VIEW_BT, "plan_narrowed_notice": "Keeps the 30 most traded of the 180."},
+        "Keeps the 30 most traded",
+    ),
     "error": ({"view": _VIEW_BT, "error_message": "worker died"}, "worker died"),
     "info": ({"view": _VIEW_BT, "info": "Submitted; not waiting."}, "Submitted"),
     # keel_screener_view(include_view_source=true): the saved view's revision
@@ -280,6 +292,8 @@ ABSENT: dict[str, dict] = {
     "facts": {"view": {"kind": "strategy", "markdown": "x"}},
     "quota": {"view": _VIEW_BT, "quota": []},
     "plan": {"view": _VIEW_BT},
+    "plan limit": {"view": _VIEW_BT, "plan_findings": []},
+    "plan kept": {"view": _VIEW_BT, "plan_narrowed": None},
     "error": {"view": _VIEW_BT},
     "info": {"view": _VIEW_BT},
     "view source": {"view": _VIEW_BT},
@@ -319,10 +333,10 @@ def _labels(lines: list[str]) -> list[str]:
 
 
 def test_the_catalogue_is_exercised_in_full() -> None:
-    """Non-vacuity: every listed label has both arms (24), and the full
+    """Non-vacuity: every listed label has both arms (26), and the full
     profile's one extra label is counted separately."""
     labels = [label for _, label, _ in _OPERATIONAL_FIELDS]
-    assert len(labels) == 24 == len(set(labels))
+    assert len(labels) == 26 == len(set(labels))
     assert set(APPEARS) == set(ABSENT) == set(labels)
     assert [label for _, label, _ in _FULL_PROFILE_FIELDS] == ["deploy", "capital"]
 
@@ -353,7 +367,7 @@ def test_no_line_is_evaluative(monkeypatch) -> None:
             for word in EVALUATIVE:
                 assert word not in text, (label, word, line)
             checked += 1
-    assert checked == 24
+    assert checked == 26
 
 
 def test_the_first_week_sentence_rides_the_quota_line_only(monkeypatch) -> None:
@@ -396,7 +410,7 @@ def test_the_first_week_sentence_rides_the_quota_line_only(monkeypatch) -> None:
     fw = block["first_week"]
     assert carrying == [
         f"quota: {block['remaining']} of {block['limit']} backtests left "
-        f"({fw['remaining']} first-week extras until Tue 13 Oct); resets Tue 22 Sep."
+        f"({fw['remaining']} first-week extras until Oct 13); resets Sep 22."
     ], lines
     assert "next" in _labels(lines)  # non-vacuity: a `next` line was there to avoid
     for word in EVALUATIVE:

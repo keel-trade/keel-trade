@@ -20,9 +20,15 @@
               "family": "Lines",
               "kind": "line",
               "legend": null,
-              "marks": [],
+              "marks": [
+                {
+                  "at": 2735,
+                  "kind": "vline",
+                  "w": "Split · Apr 17, 2026"
+                }
+              ],
               "more_words": null,
-              "note_words": "Mar 23, 2025 to Oct 28, 2026 · showing 60 of 585 days",
+              "note_words": "Mar 23, 2025 to Oct 28, 2026 · showing 59 of 585 days",
               "read": {
                 "band": null,
                 "bins": null,
@@ -31,9 +37,9 @@
                 "sel": null,
                 "sel_rows": null,
                 "withheld": null,
-                "x": "Mar 23, 2025|Apr 2, 2025|Apr 12, 2025|Apr 23, 2025|May 3, 2025|May 13, 2025|May 23, 2025|Jun 3, 2025|Jun 13, 2025|Jun 14, 2025|Jun 23, 2025|Jul 3, 2025|Jul 14, 2025|Jul 24, 2025|Aug 3, 2025|Aug 13, 2025|Aug 24, 2025|Sep 3, 2025|Sep 13, 2025|Sep 23, 2025|Oct 4, 2025|Oct 14, 2025|Oct 24, 2025|Nov 3, 2025|Nov 14, 2025|Nov 24, 2025|Dec 4, 2025|Dec 14, 2025|Dec 25, 2025|Jan 4, 2026|Jan 14, 2026|Jan 24, 2026|Feb 4, 2026|Feb 14, 2026|Feb 24, 2026|Mar 6, 2026|Mar 17, 2026|Mar 27, 2026|Apr 6, 2026|Apr 16, 2026|Apr 25, 2026|Apr 27, 2026|May 7, 2026|May 17, 2026|May 27, 2026|Jun 7, 2026|Jun 17, 2026|Jun 27, 2026|Jul 7, 2026|Jul 18, 2026|Jul 28, 2026|Aug 7, 2026|Aug 17, 2026|Aug 28, 2026|Sep 7, 2026|Sep 17, 2026|Sep 27, 2026|Oct 8, 2026|Oct 18, 2026|Oct 28, 2026",
+                "x": "Mar 23, 2025|Apr 2, 2025|Apr 13, 2025|Apr 23, 2025|May 4, 2025|May 14, 2025|May 25, 2025|Jun 4, 2025|Jun 14, 2025|Jun 25, 2025|Jul 5, 2025|Jul 16, 2025|Jul 26, 2025|Aug 6, 2025|Aug 16, 2025|Aug 26, 2025|Sep 6, 2025|Sep 16, 2025|Sep 27, 2025|Oct 7, 2025|Oct 18, 2025|Oct 28, 2025|Nov 7, 2025|Nov 18, 2025|Nov 28, 2025|Dec 9, 2025|Dec 19, 2025|Dec 30, 2025|Jan 9, 2026|Jan 19, 2026|Jan 30, 2026|Feb 9, 2026|Feb 20, 2026|Mar 2, 2026|Mar 13, 2026|Mar 23, 2026|Apr 2, 2026|Apr 13, 2026|Apr 17, 2026|Apr 23, 2026|Apr 25, 2026|May 4, 2026|May 14, 2026|May 25, 2026|Jun 4, 2026|Jun 14, 2026|Jun 25, 2026|Jul 5, 2026|Jul 16, 2026|Jul 26, 2026|Aug 6, 2026|Aug 16, 2026|Aug 26, 2026|Sep 6, 2026|Sep 16, 2026|Sep 27, 2026|Oct 7, 2026|Oct 18, 2026|Oct 28, 2026",
                 "y": [
-                  "1.00×|1.00×|1.00×|1.01×|1.01×|0.99×|0.95×|0.97×|1.02×|1.03×|0.98×|0.98×|0.97×|0.95×|0.96×|0.96×|0.96×|0.95×|0.98×|0.99×|0.93×|0.87×|0.88×|0.87×|0.83×|0.85×|0.83×|0.78×|0.81×|0.85×|0.87×|0.84×|0.83×|0.83×|0.84×|0.81×|0.82×|0.83×|0.81×|0.76×|0.74×|0.76×|0.75×|0.75×|0.80×|0.80×|0.81×|0.85×|0.82×|0.80×|0.80×|0.83×|0.82×|0.80×|0.82×|0.81×|0.82×|0.86×|0.85×|0.86×"
+                  "1.00×|1.00×|1.01×|1.01×|1.01×|0.99×|0.94×|0.98×|1.03×|0.98×|0.99×|0.95×|0.95×|0.95×|0.97×|0.96×|0.94×|0.98×|0.98×|0.90×|0.89×|0.89×|0.85×|0.83×|0.83×|0.80×|0.79×|0.82×|0.85×|0.88×|0.82×|0.83×|0.82×|0.81×|0.81×|0.82×|0.83×|0.78×|0.75×|0.75×|0.74×|0.77×|0.76×|0.79×|0.81×|0.79×|0.86×|0.82×|0.80×|0.81×|0.82×|0.82×|0.81×|0.82×|0.82×|0.82×|0.86×|0.85×|0.86×"
                 ]
               },
               "series": [
@@ -43,33 +49,33 @@
                   "lo": null,
                   "name": null,
                   "ref": false,
-                  "y": "4w4w4k7S571ltaxM8a__1ezsySuYvPw1wLuw0M3No_c5enbtULXsT5JMQNYMdEVCU6UBVaPQQsUiO0EMAAFTCvDNNJNiPUYmRwNvODU6QtOERMPsSSauXMZ8"
+                  "y": "4w4w6T7S7O2crC0D__zb14udtVuKx9vVrs1A1Xj1gkhBYBS8UwMlKfSSYHewQsTzRMO3OoQ2TfIRCwDiAAF_FoLkOiK0Z2R7MiQASOStO3SMRaSSZdXMZ8"
                 }
               ],
               "title": "Before and after the split",
               "x": {
                 "label": "Day",
-                "n": 60,
-                "pos": "AABGCMDZEfFmGsH5I_JGKFLLMYNeOlPrQ4R-TEUKVXWdXkYqZ3a9cDdJeWfcgjhpi2j8lCmInVobpiqornr1s7uBvHwUxayhzn00163A4G5T6Z7g8m9z-5__",
+                "n": 59,
+                "pos": "AABGCTDZEnFtG6IAJGKTLZMmNsO6QARGSTTZUmVsW6YAZGaTbZcmdse5gAhGiTjZkmlsm5n_pFqTqvrZrnsmtsu5v_xFyTzZ0m1s253_5F6S7Y8m9s-5__",
                 "ticks": [
                   {
                     "at": 0,
                     "w": "Mar 2025"
                   },
                   {
-                    "at": 792,
+                    "at": 876,
                     "w": "Jul 2025"
                   },
                   {
-                    "at": 1655,
+                    "at": 1683,
                     "w": "Nov 2025"
                   },
                   {
-                    "at": 2440,
+                    "at": 2559,
                     "w": "Mar 2026"
                   },
                   {
-                    "at": 3233,
+                    "at": 3219,
                     "w": "Jun 2026"
                   },
                   {
@@ -122,12 +128,12 @@
                 {
                   "at": 3656,
                   "kind": "hline",
-                  "w": "Momentum rotation −0.44"
+                  "w": "As run −0.44"
                 },
                 {
                   "at": 0,
                   "kind": "vline",
-                  "w": "Momentum rotation · 0"
+                  "w": "Break-even · 0"
                 },
                 {
                   "at": 4095,
@@ -324,7 +330,7 @@
                 "sel": "variant:base|variant:top",
                 "sel_rows": null,
                 "withheld": null,
-                "x": "base|top",
+                "x": "All the coins|Top 30 coins",
                 "y": ["−0.44|0.86"]
               },
               "series": [
@@ -345,11 +351,11 @@
                 "ticks": [
                   {
                     "at": 1024,
-                    "w": "base"
+                    "w": "All the coins"
                   },
                   {
                     "at": 3071,
-                    "w": "top"
+                    "w": "Top 30 coins"
                   }
                 ]
               },
@@ -396,7 +402,7 @@
                 "sel": "variant:base|variant:without",
                 "sel_rows": null,
                 "withheld": null,
-                "x": "base|without",
+                "x": "All the coins|Without the best 5",
                 "y": ["−0.44|−1.13"]
               },
               "series": [
@@ -417,11 +423,11 @@
                 "ticks": [
                   {
                     "at": 1024,
-                    "w": "base"
+                    "w": "All the coins"
                   },
                   {
                     "at": 3071,
-                    "w": "without"
+                    "w": "Without the best 5"
                   }
                 ]
               },
@@ -558,20 +564,16 @@
                     "w": "1"
                   },
                   {
-                    "at": 788,
-                    "w": "71"
+                    "at": 1114,
+                    "w": "100"
                   },
                   {
-                    "at": 1654,
-                    "w": "148"
+                    "at": 2239,
+                    "w": "200"
                   },
                   {
-                    "at": 2441,
-                    "w": "218"
-                  },
-                  {
-                    "at": 3308,
-                    "w": "295"
+                    "at": 3364,
+                    "w": "300"
                   },
                   {
                     "at": 4095,
@@ -617,6 +619,7 @@
               "kind": "heat",
               "legend": {
                 "hi": "0.37",
+                "label": "Sharpe",
                 "lo": "−0.10",
                 "ramp": "div"
               },
@@ -695,7 +698,7 @@
               "kind": "bars",
               "legend": null,
               "marks": [],
-              "more_words": "88 more in Keel",
+              "more_words": "+88 more in Keel",
               "note_words": null,
               "read": {
                 "band": null,
@@ -707,7 +710,7 @@
                 "withheld": null,
                 "x": "SUI|HYPE|UMA|INJ|SUSHI|AXS|DOT|PENDLE|ARB|NOT|IMX|APE",
                 "y": [
-                  "−59.6%|−23.6%|−22.9%|−22.8%|−20.2%|21.3%|22.2%|22.3%|23.1%|27.1%|31.2%|35.2%"
+                  "59.6%|23.6%|22.9%|22.8%|20.2%|−21.3%|−22.2%|−22.3%|−23.1%|−27.1%|−31.2%|−35.2%"
                 ]
               },
               "series": [
@@ -717,7 +720,7 @@
                   "lo": null,
                   "name": null,
                   "ref": false,
-                  "y": "AAYTYzY4al2p3O3S326k9U__"
+                  "y": "__nsnMnHlaJWIxItIJFbCrAA"
                 }
               ],
               "title": "Where the return came from",
@@ -758,24 +761,24 @@
                 "pos": null,
                 "ticks": [
                   {
-                    "at": 415,
-                    "w": "−50.0%"
-                  },
-                  {
-                    "at": 1496,
+                    "at": 439,
                     "w": "−25.0%"
                   },
                   {
-                    "at": 2576,
+                    "at": 1519,
                     "w": "0.0%"
                   },
                   {
-                    "at": 3656,
+                    "at": 2599,
                     "w": "25.0%"
+                  },
+                  {
+                    "at": 3680,
+                    "w": "50.0%"
                   }
                 ]
               },
-              "zero": 2576
+              "zero": 1519
             },
             "family": "Bars",
             "form": "chart",
@@ -803,17 +806,17 @@
                 "sel": "group:up|group:down",
                 "sel_rows": null,
                 "withheld": null,
-                "x": "up|down",
-                "y": ["−0.3% (−34.7% to 32.9%)|−33.1% (−89.7% to 25.7%)"]
+                "x": "Up|Down",
+                "y": ["−1.9% (−30.5% to 36.9%)|−29.3% (−59.9% to 27.1%)"]
               },
               "series": [
                 {
                   "c": 0,
-                  "hi": "__8P",
-                  "lo": "ctAA",
+                  "hi": "__5i",
+                  "lo": "TcAA",
                   "name": null,
                   "ref": false,
-                  "y": "uqdj"
+                  "y": "mVUN"
                 }
               ],
               "title": "Up and down markets",
@@ -824,11 +827,11 @@
                 "ticks": [
                   {
                     "at": 1024,
-                    "w": "up"
+                    "w": "Up"
                   },
                   {
                     "at": 3071,
-                    "w": "down"
+                    "w": "Down"
                   }
                 ]
               },
@@ -838,16 +841,24 @@
                 "pos": null,
                 "ticks": [
                   {
-                    "at": 1326,
+                    "at": 418,
                     "w": "−50.0%"
                   },
                   {
-                    "at": 2996,
+                    "at": 1477,
+                    "w": "−25.0%"
+                  },
+                  {
+                    "at": 2535,
                     "w": "0.0%"
+                  },
+                  {
+                    "at": 3593,
+                    "w": "25.0%"
                   }
                 ]
               },
-              "zero": 2996
+              "zero": 2535
             },
             "family": "Bars",
             "form": "chart",
@@ -941,14 +952,15 @@
           "more_words": null,
           "rows": [
             {
-              "bar_words": "your bar ≥ 75th",
+              "bar_words": "your bar ≥ 75.0%",
               "interval_words": null,
               "label": "Share of 150 random books below yours",
               "locked": false,
               "met": false,
-              "sample_words": null,
+              "sample_words": "Mar 23, 2025 to Oct 28, 2026",
               "sel": "bar:0",
-              "value_words": "5th"
+              "value_words": "4.7%",
+              "view": 7
             },
             {
               "bar_words": "your bar ≥ 0.30",
@@ -956,9 +968,10 @@
               "label": "Share of Sharpe after the split",
               "locked": false,
               "met": null,
-              "sample_words": null,
+              "sample_words": "Mar 23, 2025 to Apr 16, 2026 against Apr 17 to Oct 28, 2026",
               "sel": "bar:1",
-              "value_words": "not measured"
+              "value_words": "not measured",
+              "view": 2
             },
             {
               "bar_words": "your bar ≥ 0.40",
@@ -966,49 +979,54 @@
               "label": "Nearby settings as a share of yours",
               "locked": false,
               "met": false,
-              "sample_words": null,
+              "sample_words": "Mar 23, 2025 to Oct 28, 2026",
               "sel": "bar:2",
-              "value_words": "0.24"
+              "value_words": "0.24 (nearby 0.082 against yours 0.34)",
+              "view": null
             },
             {
               "bar_words": "your bar ≥ 0.30",
-              "interval_words": "−2.99 to 0.04; against the base −1.20 to −0.93",
+              "interval_words": "−2.99 to 0.04; change from the strategy as it stands −1.20 to −0.93",
               "label": "Sharpe at twice the costs",
               "locked": false,
               "met": false,
-              "sample_words": null,
+              "sample_words": "Mar 23, 2025 to Oct 28, 2026",
               "sel": "bar:3",
-              "value_words": "−1.49"
+              "value_words": "−1.49",
+              "view": 3
             },
             {
               "bar_words": "your bar ≥ 0.30",
-              "interval_words": "−2.30 to 0.69; against the base −1.20 to 0.41",
+              "interval_words": "−2.30 to 0.69; change from the strategy as it stands −1.20 to 0.41",
               "label": "Sharpe a day late",
               "locked": false,
               "met": false,
-              "sample_words": null,
+              "sample_words": "Mar 23, 2025 to Oct 28, 2026",
               "sel": "bar:4",
-              "value_words": "−0.83"
+              "value_words": "−0.83",
+              "view": 4
             },
             {
               "bar_words": "your bar ≥ 0.30",
-              "interval_words": "−0.80 to 2.47; against the base −1.13 to 3.60",
+              "interval_words": "−0.80 to 2.47; change from the strategy as it stands −1.13 to 3.60",
               "label": "Sharpe on the top 30 coins",
               "locked": false,
               "met": true,
-              "sample_words": null,
+              "sample_words": "Mar 23, 2025 to Oct 28, 2026",
               "sel": "bar:5",
-              "value_words": "0.86"
+              "value_words": "0.86",
+              "view": 5
             },
             {
               "bar_words": "your bar ≥ 0.30",
-              "interval_words": "−2.65 to 0.38; against the base −1.43 to 0.02",
+              "interval_words": "−2.65 to 0.38; change from the strategy as it stands −1.43 to 0.02",
               "label": "Sharpe without its best 5 coins",
               "locked": false,
               "met": false,
-              "sample_words": null,
+              "sample_words": "Mar 23, 2025 to Oct 28, 2026",
               "sel": "bar:6",
-              "value_words": "−1.13"
+              "value_words": "−1.13",
+              "view": 6
             },
             {
               "bar_words": "your bar ≥ 0.30",
@@ -1016,9 +1034,10 @@
               "label": "Sharpe re-picking the settings every 30 days",
               "locked": false,
               "met": false,
-              "sample_words": null,
+              "sample_words": "Mar 23, 2025 to Oct 28, 2026",
               "sel": "bar:7",
-              "value_words": "−0.0084"
+              "value_words": "−0.0084",
+              "view": null
             },
             {
               "bar_words": "your bar ≥ 0.50",
@@ -1026,14 +1045,16 @@
               "label": "Sharpe discounted for versions tried",
               "locked": false,
               "met": false,
-              "sample_words": null,
+              "sample_words": "Mar 23, 2025 to Oct 28, 2026",
               "sel": "bar:8",
-              "value_words": "0.18"
+              "value_words": "0.18 chance the edge is real after 9 versions on the same days, about 2 separate",
+              "view": null
             }
           ]
         },
         "chips": [],
         "copy": {
+          "all_charts": "All charts",
           "charts": "Charts",
           "failed_cell": "Didn't finish",
           "full_chart_in_keel": "Open in Keel for the full chart",
@@ -1044,6 +1065,8 @@
           "lowest": "Lowest",
           "met": "met",
           "more_charts": "+8 more charts",
+          "more_steps": "",
+          "more_views": "+8 more charts",
           "not_measured": "not measured",
           "not_met": "not met",
           "not_run": "Not run yet",
@@ -1053,11 +1076,20 @@
           "open_chart": "Open this chart in Keel",
           "open_setting": "Open this setting in Keel",
           "points_in_keel": "Open in Keel to read each point",
+          "seg_charts": "Charts",
+          "seg_checks": "Checks",
+          "seg_numbers": "Numbers",
           "steps": "Steps",
           "yours": "Yours"
         },
         "focus": null,
         "head_words": null,
+        "hero": {
+          "label": "bars met",
+          "state": null,
+          "title": "Meets 1 of 9 of your bars; not met: Share of 150 random books below yours and 6 more",
+          "value": "1 of 9"
+        },
         "key": {
           "enc": "b64x2",
           "family": "Lines",
@@ -1153,7 +1185,7 @@
           "select": "https://app.usekeel.io/research/stu_000001?v={v}&sel={sel}",
           "study": "https://app.usekeel.io/research/stu_000001"
         },
-        "method_line": "Measured with Backtest v1, CostStress v1, RandomBooks v1, DeflatedSharpe v1",
+        "method_line": "Measured with the backtest, costs from none to six times, random books of the same size and Sharpe discounted for versions tried.",
         "more_charts_total": 8,
         "more_words": null,
         "notes": {
@@ -1164,8 +1196,33 @@
           "stale": ["Momentum rotation v3 has a newer version, v4."]
         },
         "rows": null,
+        "runs": null,
         "schema": "keel.research.card-data/2",
         "steps": [],
+        "thumbs": [2, 3, 4],
+        "tiles": [
+          {
+            "label": "At 2× costs",
+            "state": "not_met",
+            "sub": "your bar ≥ 0.30",
+            "title": "Sharpe at twice the costs · −1.49 · your bar ≥ 0.30",
+            "value": "−1.49"
+          },
+          {
+            "label": "Without best 5",
+            "state": "not_met",
+            "sub": "your bar ≥ 0.30",
+            "title": "Sharpe without its best 5 coins · −1.13 · your bar ≥ 0.30",
+            "value": "−1.13"
+          },
+          {
+            "label": "A day late",
+            "state": "not_met",
+            "sub": "your bar ≥ 0.30",
+            "title": "Sharpe a day late · −0.83 · your bar ≥ 0.30",
+            "value": "−0.83"
+          }
+        ],
         "top": null
       },
       "card_summary": {
@@ -1182,30 +1239,83 @@
           },
           "family": "Lines",
           "view_index": 1
+        },
+        "top5": {
+          "rows": [
+            {
+              "spark": null
+            },
+            {
+              "spark": null
+            },
+            {
+              "spark": null
+            },
+            {
+              "spark": null
+            },
+            {
+              "spark": null
+            }
+          ]
         }
       },
       "checks": {
         "rows": [
           {
-            "bar_default_words": "default ≥ 75th",
+            "bar_default_words": "default ≥ 75.0%",
+            "interval": null,
             "looser": {
               "bar": 0.375,
-              "bar_words": "your bar ≥ 38th",
+              "bar_words": "your bar ≥ 37.5%",
               "met": false
             },
+            "sample": {
+              "books": null,
+              "coins": null,
+              "coins_max": null,
+              "coins_median": null,
+              "coins_min": null,
+              "coverage": null,
+              "days": null,
+              "effective_days": null,
+              "excluded": null,
+              "first_day": "2025-03-23",
+              "last_day": "2026-10-28",
+              "shared_days": null,
+              "trades": null
+            },
+            "sample_line": "Mar 23, 2025 to Oct 28, 2026",
             "stricter": {
-              "bar": 1.0,
-              "bar_words": "your bar ≥ 100th",
+              "bar": 1.125,
+              "bar_words": "your bar ≥ 112.5%",
               "met": false
             }
           },
           {
             "bar_default_words": "default ≥ 0.30",
+            "interval": null,
             "looser": {
               "bar": 0.15,
               "bar_words": "your bar ≥ 0.15",
               "met": null
             },
+            "sample": {
+              "books": null,
+              "coins": null,
+              "coins_max": null,
+              "coins_median": null,
+              "coins_min": null,
+              "coverage": null,
+              "days": null,
+              "effective_days": null,
+              "excluded": null,
+              "first_day": "2025-03-23",
+              "last_day": "2026-10-28",
+              "shared_days": null,
+              "trades": null
+            },
+            "sample_line": "Mar 23, 2025 to Apr 16, 2026 against Apr 17 to Oct 28, 2026",
             "stricter": {
               "bar": 0.44999999999999996,
               "bar_words": "your bar ≥ 0.45",
@@ -1214,11 +1324,28 @@
           },
           {
             "bar_default_words": "default ≥ 0.40",
+            "interval": null,
             "looser": {
               "bar": 0.2,
               "bar_words": "your bar ≥ 0.20",
               "met": true
             },
+            "sample": {
+              "books": null,
+              "coins": null,
+              "coins_max": null,
+              "coins_median": null,
+              "coins_min": null,
+              "coverage": null,
+              "days": null,
+              "effective_days": null,
+              "excluded": null,
+              "first_day": "2025-03-23",
+              "last_day": "2026-10-28",
+              "shared_days": null,
+              "trades": null
+            },
+            "sample_line": "Mar 23, 2025 to Oct 28, 2026",
             "stricter": {
               "bar": 0.6000000000000001,
               "bar_words": "your bar ≥ 0.60",
@@ -1227,11 +1354,33 @@
           },
           {
             "bar_default_words": "default ≥ 0.30",
+            "interval": {
+              "hi": 0.037857194494790594,
+              "level": 0.95,
+              "lo": -2.988021841023226,
+              "method": "paired_bootstrap"
+            },
             "looser": {
               "bar": 0.15,
               "bar_words": "your bar ≥ 0.15",
               "met": false
             },
+            "sample": {
+              "books": null,
+              "coins": null,
+              "coins_max": null,
+              "coins_median": null,
+              "coins_min": null,
+              "coverage": null,
+              "days": null,
+              "effective_days": null,
+              "excluded": null,
+              "first_day": "2025-03-23",
+              "last_day": "2026-10-28",
+              "shared_days": null,
+              "trades": null
+            },
+            "sample_line": "Mar 23, 2025 to Oct 28, 2026",
             "stricter": {
               "bar": 0.44999999999999996,
               "bar_words": "your bar ≥ 0.45",
@@ -1240,11 +1389,33 @@
           },
           {
             "bar_default_words": "default ≥ 0.30",
+            "interval": {
+              "hi": 0.690034081514932,
+              "level": 0.95,
+              "lo": -2.2991493315209035,
+              "method": "paired_bootstrap"
+            },
             "looser": {
               "bar": 0.15,
               "bar_words": "your bar ≥ 0.15",
               "met": false
             },
+            "sample": {
+              "books": null,
+              "coins": null,
+              "coins_max": null,
+              "coins_median": null,
+              "coins_min": null,
+              "coverage": null,
+              "days": null,
+              "effective_days": null,
+              "excluded": null,
+              "first_day": "2025-03-23",
+              "last_day": "2026-10-28",
+              "shared_days": null,
+              "trades": null
+            },
+            "sample_line": "Mar 23, 2025 to Oct 28, 2026",
             "stricter": {
               "bar": 0.44999999999999996,
               "bar_words": "your bar ≥ 0.45",
@@ -1260,7 +1431,7 @@
   },
   "content": [
     {
-      "text": "card: where the host draws Keel cards, the user sees what follows as a card carrying its name, links and ids, so a reply can call it by name; the ids and links here serve tool calls and hosts without cards.\n\nCheck a strategy · Momentum rotation v3 · version 1 · Done · Oct 29\nUsed 0 of 400 studies; resets Dec 1. Planning, reading, saving, and runs that reuse everything or run nothing, do not count.\n1 of 9 bars met\nDays Mar 23, 2025 to Oct 29, 2026, split Apr 17, 2026 · 100 coins: the coins Momentum rotation trades · costs 9 bp a fill · data as of Oct 29, 2026\nMeasured with Backtest v1, CostStress v1, DelayStress v1, TopCoins v1, WithoutBestCoins v1, RandomBooks v1, RepickSettings v1, Neighbours v1, DeflatedSharpe v1, ResampledPaths v1, ReturnByCoin v1, MarketStates v1, CorrelationWithRunning v1.\nYour bars (9; met: 1):\n- Share of 150 random books below yours: 5th, no interval; sample not stated; your bar ≥ 75th; not met\n- Share of Sharpe after the split: not measured, interval withheld: Withheld: your setting's Sharpe is not positive, so a share of it has no meaning.; sample not stated; your bar ≥ 0.30; not measured\n- Nearby settings as a share of yours: 0.24, no interval; sample not stated; your bar ≥ 0.40; not met\n- Sharpe at twice the costs: −1.49, −2.99 to 0.04; against the base −1.20 to −0.93; sample not stated; your bar ≥ 0.30; not met\n- Sharpe a day late: −0.83, −2.30 to 0.69; against the base −1.20 to 0.41; sample not stated; your bar ≥ 0.30; not met\n- Sharpe on the top 30 coins: 0.86, −0.80 to 2.47; against the base −1.13 to 3.60; sample not stated; your bar ≥ 0.30; met\n- Sharpe without its best 5 coins: −1.13, −2.65 to 0.38; against the base −1.43 to 0.02; sample not stated; your bar ≥ 0.30; not met\n- Sharpe re-picking the settings every 30 days: −0.0084, no interval; sample not stated; your bar ≥ 0.30; not met\n- Sharpe discounted for versions tried: 0.18, no interval; sample not stated; your bar ≥ 0.50; not met\nRuns: 0 runs, 0 reused, none failed · versions tried: unknown\nCharts (13): Your checks · Growth of 1 · Before and after the split · Sharpe as costs rise · Sharpe when trading late · Sharpe on the top coins · Sharpe without the best coins · 150 random books · A year ahead, resampled · Re-picking the settings · Where the return came from · Up and down markets · How it moves with what you run — keel_research_get(study_id=\"stu_000001\", view=0) reads the numbers behind any of them.\nMomentum rotation v3 has a newer version, v4. Plan it in the app: keel_app_link(id=\"stu_000001\")\nView in Keel: https://app.usekeel.io/research/stu_000001",
+      "text": "card: where the host draws Keel cards, the user sees what follows as a card carrying its name, links and ids, so a reply can call it by name; the ids and links here serve tool calls and hosts without cards.\n\nCheck a strategy · Momentum rotation v3 · version 1 · Done · Oct 29\n1 of 9 bars met\nDays Mar 23, 2025 to Oct 29, 2026, split Apr 17, 2026 · 100 coins: the coins Momentum rotation trades · costs 9 bp a fill · data as of Oct 29, 2026\nIn short:\n- Total return over the window: −14.2%, no interval; 585 days\n- Sharpe over the window: −0.44, no interval; 585 days\n- Max drawdown over the window: −28.6%, no interval; 585 days\nYour checks (9; 1 met):\n- Share of 150 random books below yours: 4.7%, no interval; 150 books; your bar ≥ 75.0%; not met\n- Share of Sharpe after the split: not measured: your setting's Sharpe is not positive, so a share of it has no meaning; Mar 23, 2025 to Apr 16, 2026 against Apr 17 to Oct 28, 2026; your bar ≥ 0.30\n- Nearby settings as a share of yours: 0.24 (nearby 0.082 against yours 0.34), no interval; Mar 23, 2025 to Oct 28, 2026; your bar ≥ 0.40; not met\n- Sharpe at twice the costs: −1.49, −2.99 to 0.04; change from the strategy as it stands −1.20 to −0.93; 585 days; your bar ≥ 0.30; not met\n- Sharpe a day late: −0.83, −2.30 to 0.69; change from the strategy as it stands −1.20 to 0.41; Mar 23, 2025 to Oct 28, 2026; your bar ≥ 0.30; not met\n- Sharpe on the top 30 coins: 0.86, −0.80 to 2.47; change from the strategy as it stands −1.13 to 3.60; Mar 23, 2025 to Oct 28, 2026; your bar ≥ 0.30; met\n- Sharpe without its best 5 coins: −1.13, −2.65 to 0.38; change from the strategy as it stands −1.43 to 0.02; Mar 23, 2025 to Oct 28, 2026; your bar ≥ 0.30; not met\n- Sharpe re-picking the settings every 30 days: −0.0084, no interval; Mar 23, 2025 to Oct 28, 2026; your bar ≥ 0.30; not met\n- Sharpe discounted for versions tried: 0.18 chance the edge is real after 9 versions on the same days, about 2 separate, no interval; 585 days; your bar ≥ 0.50; not met\nRuns: 0 runs, 0 reused, none failed\nCharts (13): Your checks · Growth of 1 · Before and after the split · Sharpe as costs rise · Sharpe when trading late · Sharpe on the top coins · Sharpe without the best coins · 150 random books · A year ahead, resampled · Re-picking the settings · Where the return came from · Up and down markets · How it moves with what you run. keel_research_get(study_id=\"stu_000001\", view=0) reads the numbers behind any of them.\nMeasured with the backtest, costs from none to six times, random books of the same size and Sharpe discounted for versions tried.\nMomentum rotation v3 has a newer version, v4. Plan it in the app: keel_app_link(id=\"stu_000001\")\nView in Keel: https://app.usekeel.io/research/stu_000001",
       "type": "text"
     }
   ],
@@ -1287,18 +1458,18 @@
         "name": "Check a strategy",
         "short": "Check"
       },
-      "lead": "Meets 1 of 9 of your bars",
+      "lead": "Meets 1 of 9 of your bars; not met: Share of 150 random books below yours and 6 more",
       "maker": "you",
       "maker_words": "by you",
       "numbers": [
         {
-          "label": "Sharpe (daily) over the window",
+          "label": "Sharpe over the window",
           "measure": "sharpe",
           "ref": "base.summary",
           "sample": {
             "days": 585,
             "first_day": "2025-03-23",
-            "last_day": "2026-10-29"
+            "last_day": "2026-10-28"
           },
           "sample_words": "585 days",
           "unit": "ratio",
@@ -1313,7 +1484,7 @@
           "sample": {
             "days": 585,
             "first_day": "2025-03-23",
-            "last_day": "2026-10-29"
+            "last_day": "2026-10-28"
           },
           "sample_words": "585 days",
           "unit": "ratio",
@@ -1321,18 +1492,18 @@
           "value_words": "−1.49"
         },
         {
-          "label": "Share of random books below it",
+          "label": "Share of random books below yours",
           "measure": "share_below",
           "ref": "luck.summary",
           "sample": {
             "books": 150,
             "first_day": "2025-03-23",
-            "last_day": "2026-10-29"
+            "last_day": "2026-10-28"
           },
           "sample_words": "150 books",
-          "unit": "rank",
+          "unit": "fraction",
           "value": 0.04666666666666667,
-          "value_words": "5th"
+          "value_words": "4.7%"
         },
         {
           "label": "Sharpe discounted for versions tried",
@@ -1341,15 +1512,19 @@
           "sample": {
             "days": 585,
             "first_day": "2025-03-23",
-            "last_day": "2026-10-29"
+            "last_day": "2026-10-28"
           },
           "sample_words": "585 days",
           "unit": "probability",
           "value": 0.18438052887077372,
-          "value_words": "0.18"
+          "value_words": "0.18 chance the edge is real after 9 versions on the same days, about 2 separate"
         }
       ],
       "schema": "keel.research.card/2",
+      "short": {
+        "chip": "8 below",
+        "text": "Meets 1 of 9 bars"
+      },
       "state": "completed",
       "state_words": "Done · Oct 29",
       "title": "Momentum rotation v3",
@@ -1357,13 +1532,13 @@
         "kind": "checks",
         "rows": [
           {
-            "bar_words": "your bar ≥ 75th",
+            "bar_words": "your bar ≥ 75.0%",
             "label": "Share of 150 random books below yours",
             "met": false,
             "slot": 0,
-            "unit": "rank",
+            "unit": "fraction",
             "value": 0.04666666666666667,
-            "value_words": "5th"
+            "value_words": "4.7%"
           },
           {
             "bar_words": "your bar ≥ 0.30",
@@ -1376,9 +1551,10 @@
             "bar_words": "your bar ≥ 0.40",
             "label": "Nearby settings as a share of yours",
             "met": false,
+            "slot": 0,
             "unit": "ratio",
             "value": 0.24085861053329147,
-            "value_words": "0.24"
+            "value_words": "0.24 (nearby 0.082 against yours 0.34)"
           },
           {
             "bar_words": "your bar ≥ 0.30",
@@ -1410,38 +1586,30 @@
         {
           "bar": 0.75,
           "bar_index": 0,
-          "bar_words": "your bar ≥ 75th",
+          "bar_words": "your bar ≥ 75.0%",
+          "evidence": "measured",
           "label": "Share of 150 random books below yours",
           "locked": false,
           "measure": "share_below",
           "met": false,
           "op": ">=",
           "ref": "luck.summary",
-          "result": "Momentum rotation",
-          "sample": {
-            "first_day": "2025-03-23",
-            "last_day": "2026-10-29"
-          },
-          "sample_line": "Mar 23, 2025 to Oct 29, 2026",
-          "unit": "rank",
+          "sample_words": "Mar 23, 2025 to Oct 28, 2026",
+          "unit": "fraction",
           "value": 0.04666666666666667,
-          "value_words": "5th"
+          "value_words": "4.7%"
         },
         {
           "bar": 0.3,
           "bar_index": 1,
           "bar_words": "your bar ≥ 0.30",
+          "evidence": "measured",
           "label": "Share of Sharpe after the split",
           "locked": false,
           "measure": "after_share",
           "op": ">=",
           "ref": "base.split",
-          "result": "Momentum rotation",
-          "sample": {
-            "first_day": "2025-03-23",
-            "last_day": "2026-10-29"
-          },
-          "sample_line": "Mar 23, 2025 to Oct 29, 2026",
+          "sample_words": "Mar 23, 2025 to Apr 16, 2026 against Apr 17 to Oct 28, 2026",
           "unit": "ratio",
           "value_words": "not measured",
           "withheld_reason": "Withheld: your setting's Sharpe is not positive, so a share of it has no meaning."
@@ -1450,21 +1618,17 @@
           "bar": 0.4,
           "bar_index": 2,
           "bar_words": "your bar ≥ 0.40",
+          "evidence": "measured",
           "label": "Nearby settings as a share of yours",
           "locked": false,
           "measure": "share_of_yours",
           "met": false,
           "op": ">=",
           "ref": "nearby.summary",
-          "result": "subject",
-          "sample": {
-            "first_day": "2025-03-23",
-            "last_day": "2026-10-29"
-          },
-          "sample_line": "Mar 23, 2025 to Oct 29, 2026",
+          "sample_words": "Mar 23, 2025 to Oct 28, 2026",
           "unit": "ratio",
           "value": 0.24085861053329147,
-          "value_words": "0.24"
+          "value_words": "0.24 (nearby 0.082 against yours 0.34)"
         },
         {
           "at": {
@@ -1473,25 +1637,15 @@
           "bar": 0.3,
           "bar_index": 3,
           "bar_words": "your bar ≥ 0.30",
-          "interval": {
-            "hi": 0.037857194494790594,
-            "level": 0.95,
-            "lo": -2.988021841023226,
-            "method": "paired_bootstrap"
-          },
-          "interval_words": "−2.99 to 0.04; against the base −1.20 to −0.93",
+          "evidence": "measured",
+          "interval_words": "−2.99 to 0.04; change from the strategy as it stands −1.20 to −0.93",
           "label": "Sharpe at twice the costs",
           "locked": false,
           "measure": "sharpe",
           "met": false,
           "op": ">=",
           "ref": "costs",
-          "result": "Momentum rotation",
-          "sample": {
-            "first_day": "2025-03-23",
-            "last_day": "2026-10-29"
-          },
-          "sample_line": "Mar 23, 2025 to Oct 29, 2026",
+          "sample_words": "Mar 23, 2025 to Oct 28, 2026",
           "unit": "ratio",
           "value": -1.4905110283713174,
           "value_words": "−1.49"
@@ -1503,25 +1657,15 @@
           "bar": 0.3,
           "bar_index": 4,
           "bar_words": "your bar ≥ 0.30",
-          "interval": {
-            "hi": 0.690034081514932,
-            "level": 0.95,
-            "lo": -2.2991493315209035,
-            "method": "paired_bootstrap"
-          },
-          "interval_words": "−2.30 to 0.69; against the base −1.20 to 0.41",
+          "evidence": "measured",
+          "interval_words": "−2.30 to 0.69; change from the strategy as it stands −1.20 to 0.41",
           "label": "Sharpe a day late",
           "locked": false,
           "measure": "sharpe",
           "met": false,
           "op": ">=",
           "ref": "late",
-          "result": "Momentum rotation",
-          "sample": {
-            "first_day": "2025-03-23",
-            "last_day": "2026-10-29"
-          },
-          "sample_line": "Mar 23, 2025 to Oct 29, 2026",
+          "sample_words": "Mar 23, 2025 to Oct 28, 2026",
           "unit": "ratio",
           "value": -0.8269070748929542,
           "value_words": "−0.83"
@@ -1534,7 +1678,7 @@
         "units": [
           {
             "limit": 400,
-            "resets_at": "2026-12-18",
+            "resets_at": "2026-12-22",
             "unit": "research_studies",
             "used": 0
           }
@@ -1544,6 +1688,7 @@
         "executed": 0,
         "failed_content": 0,
         "failed_platform": 0,
+        "not_applicable": 0,
         "planned": 0,
         "reused": 0,
         "words": "0 runs, 0 reused, none failed"
@@ -1564,7 +1709,9 @@
         "fee": 0.00045,
         "slippage": 0.00045
       },
+      "costs_words": "9 bp a fill (fee 4.5 bp, slippage 4.5 bp)",
       "data": "snap_6c1f0e8a2b9d4f37",
+      "data_words": "Data as of Oct 29, 2026",
       "days": {
         "end": "2026-10-29",
         "start": "2025-03-23"
@@ -1587,6 +1734,28 @@
     },
     "page": {
       "default": 0,
+      "sections": [
+        {
+          "title": "Costs and timing",
+          "views": [3, 4, 5, 6],
+          "words": "higher costs, trading late and fewer coins"
+        },
+        {
+          "title": "Luck",
+          "views": [7, 8],
+          "words": "random books of the same size and a year of paths resampled from its own trades"
+        },
+        {
+          "title": "Later data and settings",
+          "views": [9, 11],
+          "words": "re-picking the settings as you go and up and down markets"
+        },
+        {
+          "title": "Where it came from",
+          "views": [10, 12],
+          "words": "the coins behind the return and how it moves with what you run"
+        }
+      ],
       "switch": [0, 1, 2]
     },
     "stale": [
@@ -1651,7 +1820,7 @@
       "total": 13
     },
     "words": {
-      "allowance": "Used 0 of 400 studies; resets Dec 1. Planning, reading, saving, and runs that reuse everything or run nothing, do not count."
+      "method": "Measured with the backtest, costs from none to six times, random books of the same size and Sharpe discounted for versions tried."
     }
   }
 }

@@ -1,0 +1,234 @@
+{
+  "hero_url": "https://app.usekeel.io/research/new?plan=pln_00000000000000000000000004",
+  "url_line": "View in Keel: https://app.usekeel.io/research/new?plan=pln_00000000000000000000000004",
+  "edit": {
+    "kind": "new_study",
+    "cls": "new_study",
+    "also_changes": []
+  },
+  "study": {
+    "title": "Momentum Strategy on Hyperliquid",
+    "kind_label": {
+      "key": "map",
+      "name": "Map a strategy's settings",
+      "short": "Settings map"
+    },
+    "state": "planned",
+    "linked_to": [],
+    "linked_to_total": 0,
+    "set_aside": false,
+    "archived": false,
+    "can_delete": false
+  },
+  "footing": {
+    "days": {
+      "start": "2025-11-18",
+      "end": "2026-11-18"
+    },
+    "split": "2026-07-20",
+    "coins": {
+      "count": 50,
+      "chosen": "The coins Momentum Strategy on Hyperliquid trades",
+      "names_sha256": "fff503fd68c419a5a9101671b853e93b914c87670f74d06ece30679a154e075d"
+    },
+    "costs": {
+      "fee": 0.00045,
+      "slippage": 0.00045
+    },
+    "delay": 0,
+    "leverage": 1.0,
+    "data": "snap_d96e8eccc0bce098",
+    "engine": "sha256:34f1a58a92cc952bb254bfcc0bac2f98ed8ce82f73c41d4204871597b3272487",
+    "engine_words": "This version of the engine",
+    "split_words": "Split on Jul 20, 2026: 244 days before, 121 after"
+  },
+  "stale": [],
+  "links": {
+    "app": "https://app.usekeel.io/research/new?plan=pln_00000000000000000000000004"
+  },
+  "plan_id": "pln_00000000000000000000000004",
+  "expires_at": "2026-11-20T02:50:26Z",
+  "class": "new_study",
+  "writes": "a new study, version 1",
+  "subjects": [
+    {
+      "ref": "Strategy(\"keel/momentum_hyperliquid@1\")",
+      "label": "Momentum Strategy on Hyperliquid",
+      "key": "s1",
+      "name": "Momentum Strategy on Hyperliquid",
+      "kind": "strategy",
+      "edits": []
+    }
+  ],
+  "source": "Study(\n    title=\"Momentum Strategy on Hyperliquid\",\n)\n\nSubjects(\n    s1=Strategy(\"keel/momentum_hyperliquid@1\"),\n)\n\nRun(\n    days=Days(\"2025-11-18\", \"2026-11-18\"),\n    split=Split(\"2026-07-20\"),\n    coins=Coins([\"AAVE\", \"ADA\", \"ARB\", \"AVAX\", \"BCH\", \"BNB\", \"BTC\", \"CHIP\", \"CRV\", \"DOGE\", \"DYDX\", \"ENA\", \"ETH\", \"FARTCOIN\", \"FET\", \"GRAM\", \"HYPE\", \"JTO\", \"JUP\", \"LINK\", \"LIT\", \"LTC\", \"MET\", \"MON\", \"MORPHO\", \"NEAR\", \"ONDO\", \"PAXG\", \"PENDLE\", \"PENGU\", \"PUMP\", \"SOL\", \"SPX\", \"SUI\", \"TAO\", \"TIA\", \"TRUMP\", \"TRX\", \"UNI\", \"VVV\", \"WIF\", \"WLD\", \"WLFI\", \"XLM\", \"XMR\", \"XPL\", \"XRP\", \"ZEC\", \"kBONK\", \"kPEPE\"], chosen=SubjectUniverse(\"s1\")),\n    costs=Costs(fee=0.00045, slippage=0.00045),\n    data=Data(\"snap_d96e8eccc0bce098\"),\n)\n\nSteps(\n    map=SettingsGrid(axes=[SettingAxis(\"var[selection].step[0].branch[momentum_filter].step[0].period\", [5, 7, 10, 14, 18, 21, 28, 35], name=\"lookback\", stamp=Stamp(\"ROC\", version=1, param=\"period\", value=14, written=True)), SettingAxis(\"step[1].branch[vol].step[0].window\", [\"10d\", \"20d\", \"36d\", \"50d\", \"70d\", \"90d\"], name=\"vol window\", stamp=Stamp(\"ReturnVolatility\", version=1, param=\"window\", value=\"36d\", written=True))]),\n    split=SplitCompare(grid=\"map\"),\n    nearby=Neighbours(grid=\"map\"),\n)\n\nViews(\n    Page(default=\"Lookback × vol window\", switch=[\"Lookback × vol window\", \"Before vs after the split\", \"Every setting\"]),\n    Heatmap(\"Lookback × vol window\", of=\"map\", x=Axis(\"vol window\"), y=Axis(\"lookback\"), colour=Raw(Control(\"measure\", \"sharpe\", options=[\"sharpe\", \"cagr\", \"max_drawdown\"])), marks=[Ring(Yours()), Box(Selected())], select=\"cell\"),\n    Scatter(\"Before vs after the split\", of=\"split\", x=Raw(\"sharpe_before\"), y=Raw(\"sharpe_after\")),\n    Distribution(\"Every setting\", of=\"map\", x=Raw(\"sharpe\"), marker=Final(\"map\", measure=\"sharpe\", at={\"lookback\": 14, \"vol window\": \"36d\"})),\n    Heatmap(\"The selected setting and its neighbours\", of=\"nearby\", x=Axis(\"vol window\"), y=Axis(\"lookback\"), colour=Raw(\"sharpe\"), marks=[Ring(Yours())]),\n    Curve(\"Across lookback\", of=\"map\", x=Axis(\"lookback\"), y=Raw(\"sharpe\"), where=Is(\"vol window\", Selected(\"vol window\"))),\n    Curve(\"Across vol window\", of=\"map\", x=Axis(\"vol window\"), y=Raw(\"sharpe\"), where=Is(\"lookback\", Selected(\"lookback\"))),\n)\n",
+  "filled": [
+    {
+      "path": "/run/split",
+      "what": "Split on Jul 20, 2026: 244 days before, 122 after"
+    },
+    {
+      "path": "/steps/map",
+      "what": "Map a strategy's settings: added the default step map (SettingsGrid)."
+    },
+    {
+      "path": "/steps/split",
+      "what": "Map a strategy's settings: added the default step split (SplitCompare)."
+    },
+    {
+      "path": "/steps/nearby",
+      "what": "Map a strategy's settings: added the default step nearby (Neighbours)."
+    },
+    {
+      "path": "/page",
+      "what": "Map a strategy's settings: added the default view page."
+    },
+    {
+      "path": "/views/0",
+      "what": "Map a strategy's settings: added the default view Heatmap \"Lookback × vol window\"."
+    },
+    {
+      "path": "/views/1",
+      "what": "Map a strategy's settings: added the default view Scatter \"Before vs after the split\"."
+    },
+    {
+      "path": "/views/2",
+      "what": "Map a strategy's settings: added the default view Distribution \"Every setting\"."
+    },
+    {
+      "path": "/views/3",
+      "what": "Map a strategy's settings: added the default view Heatmap \"The selected setting and its neighbours\"."
+    },
+    {
+      "path": "/views/4",
+      "what": "Map a strategy's settings: added the default view Curve \"Across lookback\"."
+    },
+    {
+      "path": "/views/5",
+      "what": "Map a strategy's settings: added the default view Curve \"Across vol window\"."
+    },
+    {
+      "path": "/run/coins",
+      "what": "50 coins"
+    },
+    {
+      "path": "/run/data",
+      "what": "the store as of today"
+    },
+    {
+      "path": "/steps/map/axes/0/stamp",
+      "what": "stamp"
+    },
+    {
+      "path": "/steps/map/axes/1/stamp",
+      "what": "stamp"
+    }
+  ],
+  "issues": [],
+  "steps": [
+    {
+      "id": "map",
+      "step": "SettingsGrid",
+      "label": "Every setting",
+      "to_run": 49,
+      "reused": 0,
+      "after": 0,
+      "not_valid": 0,
+      "kind": "backtest",
+      "runnable": true
+    },
+    {
+      "id": "split",
+      "step": "SplitCompare",
+      "label": "Before and after the split",
+      "to_run": 1,
+      "reused": 0,
+      "after": 0,
+      "not_valid": 0,
+      "kind": "analysis",
+      "runnable": true,
+      "ranges": "Days ahead: any value from 1 to 60"
+    },
+    {
+      "id": "nearby",
+      "step": "Neighbours",
+      "label": "Nearby settings",
+      "to_run": 1,
+      "reused": 0,
+      "after": 0,
+      "not_valid": 0,
+      "kind": "analysis",
+      "runnable": true
+    }
+  ],
+  "runs": {
+    "children": 51,
+    "to_run": 51,
+    "reused": 0,
+    "joined": 0,
+    "after": 0,
+    "by_kind": {
+      "analysis": 3,
+      "backtest": 48
+    },
+    "engine_reruns": 0,
+    "not_valid": 0
+  },
+  "addresses_carried": [],
+  "addresses_changed": [],
+  "addresses_moved": [],
+  "estimate": {
+    "seconds_low": 31.55,
+    "seconds_central": 63.1,
+    "seconds_high": 126.21,
+    "evidence_bytes_high": 281904,
+    "wall_low_s": 31.6,
+    "wall_high_s": 126.2,
+    "queue_s": 0.0,
+    "background": true,
+    "uncalibrated": true,
+    "cost_model": "e4-2026-11-16b"
+  },
+  "allowance": {
+    "units": [
+      {
+        "unit": "research_studies",
+        "cost": 1,
+        "used": 2,
+        "limit": 400,
+        "resets_at": "2026-12-18"
+      }
+    ],
+    "within_allowance": true
+  },
+  "run_allowed": true,
+  "limits": [],
+  "locked": [],
+  "versions_tried": {
+    "family": "fam:keel/momentum_hyperliquid",
+    "before": 414,
+    "added": 40,
+    "since": "2026-11-16",
+    "why": ""
+  },
+  "preview": {
+    "auto": false,
+    "auto_preview_max_runs": 20,
+    "auto_preview_max_seconds": 60.0
+  },
+  "words": {
+    "work": "51 runs · about 1 to 3 min, in the background · versions tried +40",
+    "allowance": "Used 2 of 400 studies; resets Dec 18. Planning, reading, saving, and runs that reuse everything or run nothing, do not count.",
+    "card_line": "Plan · Settings map · Momentum Strategy on Hyperliquid",
+    "strip": "needs a run · 51 runs",
+    "filled": "Filled in: Split on Jul 20, 2026: 244 days before, 122 after, Map a strategy's settings: added the default step map (SettingsGrid)., Map a strategy's settings: added the default step split (SplitCompare)., Map a strategy's settings: added the default step nearby (Neighbours)., Map a strategy's settings: added the default view page., Map a strategy's settings: added the default view Heatmap \"Lookback × vol window\"., Map a strategy's settings: added the default view Scatter \"Before vs after the split\"., Map a strategy's settings: added the default view Distribution \"Every setting\"., Map a strategy's settings: added the default view Heatmap \"The selected setting and its neighbours\"., Map a strategy's settings: added the default view Curve \"Across lookback\"., Map a strategy's settings: added the default view Curve \"Across vol window\"., 50 coins, the store as of today, stamp, stamp",
+    "estimate": "Times are estimates until Keel has timed more runs like these."
+  },
+  "view": {
+    "kind": "study",
+    "mode": "plan",
+    "size": "receipt",
+    "at": "2026-11-19T02:50:26.871Z",
+    "seq": 7,
+    "markdown": "card: where the host draws Keel cards, the user sees what follows as a card carrying its name, links and ids, so a reply can call it by name; the ids and links here serve tool calls and hosts without cards.\n\nPlan · Map a strategy's settings · Momentum Strategy on Hyperliquid · a new study, version 1\n51 runs · about 1 to 3 min, in the background · versions tried +40\nTimes are estimates until Keel has timed more runs like these.\nUsed 2 of 400 studies; resets Dec 18. Planning, reading, saving, and runs that reuse everything or run nothing, do not count.\nDays Nov 18, 2025 to Nov 18, 2026, split Jul 20, 2026 · 50 coins: the coins Momentum Strategy on Hyperliquid trades · costs 9 bp a fill · data as of Nov 18, 2026\nSteps (3): Every setting 49 · Before and after the split 1 · Nearby settings 1\nkeel_research_run(plan_id=\"pln_00000000000000000000000004\") runs this plan.\nView in Keel: https://app.usekeel.io/research/new?plan=pln_00000000000000000000000004"
+  }
+}

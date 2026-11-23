@@ -50,9 +50,9 @@ def load_reference(topic: str | None = None) -> dict[str, Any]:
     Returns:
         Dict with topic name(s) and content.
     """
-    from keel.tools.outcomes._toolsets import screen_topic_withheld
+    from keel.tools.outcomes._toolsets import research_topic_withheld, screen_topic_withheld
 
-    topics = [t for t in TOPICS if not screen_topic_withheld(t)]
+    topics = [t for t in TOPICS if not screen_topic_withheld(t) and not research_topic_withheld(t)]
     if topic is None:
         return {
             "topics": topics,

@@ -14,7 +14,9 @@
               "note_words": null,
               "read": {
                 "band": [
-                  "−0.028 to 0.011|−0.038 to 0.011|−0.046 to 0.012|−0.059 to 0.017|−0.076 to 0.029|not measured to not measured|not measured to not measured"
+                  "−0.039 to 0.002|−0.055 to −0.004|−0.062 to −0.006|−0.077 to −0.010|−0.089 to −0.004||",
+                  "−0.005 to 0.032|−0.001 to 0.041|0.003 to 0.051|−0.008 to 0.063|−0.015 to 0.066||",
+                  "−0.036 to 0.006|−0.047 to 0.003|−0.054 to 0.0004|−0.064 to 0.004|−0.073 to 0.017||"
                 ],
                 "bins": null,
                 "cells": null,
@@ -22,20 +24,76 @@
                 "sel": null,
                 "sel_rows": null,
                 "withheld": {
-                  "5": "15 separate 10-day stretches; an interval needs at least 20.",
-                  "6": "11 separate 14-day stretches; an interval needs at least 20."
+                  "5": "14 separate 10-day stretches; an interval needs at least 20.",
+                  "6": "10 separate 14-day stretches; an interval needs at least 20."
                 },
                 "x": "1|2|3|5|7|10|14",
-                "y": ["−0.009|−0.013|−0.017|−0.021|−0.023|−0.028|−0.036"]
+                "y": [
+                  "−0.018|−0.029|−0.034|−0.044|−0.047|−0.044|−0.047",
+                  "0.014|0.020|0.027|0.028|0.026|0.021|0.028",
+                  "−0.015|−0.022|−0.027|−0.030|−0.028|−0.027|−0.025",
+                  "−0.005|−0.016|−0.021|−0.031|−0.034|−0.038|−0.048",
+                  "−0.014|−0.023|−0.028|−0.037|−0.042|−0.048|−0.050",
+                  "0.014|0.020|0.027|0.028|0.026|0.021|0.028",
+                  "0.014|0.020|0.027|0.028|0.026|0.021|0.028"
+                ]
               },
               "series": [
                 {
-                  "c": 0,
-                  "hi": "1E1H1r4c__....",
-                  "lo": "c3XCR-KbAA....",
-                  "name": "(no longer available)",
+                  "c": 1,
+                  "hi": "ltjHiOgmjI....",
+                  "lo": "U2OMLeE8AA....",
+                  "name": "7-day momentum",
                   "ref": false,
-                  "y": "o9mEj1hbgAc4YQ"
+                  "y": "dSYqW2SxRkSjRS"
+                },
+                {
+                  "c": 2,
+                  "hi": "xy1s53-b__....",
+                  "lo": "iykLl6hpew....",
+                  "name": "Skill-weighted mix of Size, by 30-day dollar volume, 28-day momentum, 7-day funding carry",
+                  "ref": false,
+                  "y": "qSs8v4wCvYtOwQ"
+                },
+                {
+                  "c": 3,
+                  "hi": "nZl_k4mgro....",
+                  "lo": "V9RkOkKoGp....",
+                  "name": "Size, by 30-day dollar volume",
+                  "ref": false,
+                  "y": "erbyZuYkZIZwap"
+                },
+                {
+                  "c": 4,
+                  "hi": null,
+                  "lo": null,
+                  "name": "28-day momentum",
+                  "ref": false,
+                  "y": "ioeBcQYFWlVQQ9"
+                },
+                {
+                  "c": 5,
+                  "hi": null,
+                  "lo": null,
+                  "name": "7-day funding carry",
+                  "ref": false,
+                  "y": "e9bXZaVrTUQ1QT"
+                },
+                {
+                  "c": 6,
+                  "hi": null,
+                  "lo": null,
+                  "name": "1-day reversal",
+                  "ref": false,
+                  "y": "qSs8v4wCvYtOwQ"
+                },
+                {
+                  "c": 7,
+                  "hi": null,
+                  "lo": null,
+                  "name": "Mix of Size, by 30-day dollar volume, 28-day momentum, 7-day funding carry",
+                  "ref": false,
+                  "y": "qSs8v4wCvYtOwQ"
                 }
               ],
               "title": "Ranking skill, 1 to 14 days ahead",
@@ -76,12 +134,16 @@
                 "pos": null,
                 "ticks": [
                   {
-                    "at": 1007,
+                    "at": 1037,
                     "w": "−0.050"
                   },
                   {
-                    "at": 2957,
+                    "at": 2351,
                     "w": "0.000"
+                  },
+                  {
+                    "at": 3665,
+                    "w": "0.050"
                   }
                 ]
               }
@@ -96,9 +158,109 @@
             "v": "Ranking%20skill%2C%201%20to%2014%20days%20ahead"
           },
           {
-            "chart": null,
+            "chart": {
+              "enc": "b64x2",
+              "family": "River",
+              "kind": "river",
+              "legend": {
+                "hi": "first",
+                "label": "Each day's place by Rank IC, rolling",
+                "lo": "last",
+                "ramp": "seq"
+              },
+              "marks": [],
+              "more_words": null,
+              "names": [
+                "Skill-weighted mix of Size, by 30-day dollar volume, 28-day momentum, 7-day funding carry",
+                "Size, by 30-day dollar volume",
+                "28-day momentum",
+                "7-day momentum",
+                "1-day reversal",
+                "Mix of Size, by 30-day dollar volume, 28-day momentum, 7-day funding carry",
+                "7-day funding carry"
+              ],
+              "note_words": null,
+              "read": null,
+              "rows": [
+                "vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvglqvqgvvvvqvqgaaaaaaglqqvqqq",
+                "---------ggaaaaaa000000050000000000000555aa55lqlllvvvvvvgvvv",
+                "---008cccaagggggggggagg5055aaaaaqv55al000gvgvvvvvvqqqqaa5500",
+                "------06655555550555555ggga55555l5ag5qaaa00000gggggg0555aaaa",
+                "vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvglqvqgvvvvqvqgaaaaaaglqqvqqq",
+                "vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvglqvqgvvvvqvqgaaaaaaglqqvqqq",
+                "-----060000000005aaagaaaaaggggggvqvavvggg55aaqlqqqlll0000055"
+              ],
+              "series": [],
+              "title": "Which led, and when",
+              "x": {
+                "label": "Day",
+                "n": 60,
+                "pos": null,
+                "ticks": [
+                  {
+                    "at": 0,
+                    "w": "May 2026"
+                  },
+                  {
+                    "at": 833,
+                    "w": "Jun 2026"
+                  },
+                  {
+                    "at": 1666,
+                    "w": "Jul 2026"
+                  },
+                  {
+                    "at": 2429,
+                    "w": "Aug 2026"
+                  },
+                  {
+                    "at": 3262,
+                    "w": "Sep 2026"
+                  },
+                  {
+                    "at": 4095,
+                    "w": "Oct 2026"
+                  }
+                ]
+              },
+              "y": {
+                "label": "Result",
+                "n": 7,
+                "pos": null,
+                "ticks": [
+                  {
+                    "at": 3802,
+                    "w": "Skill-weighted mix of Size, by 30-day dollar volume, 28-day momentum, 7-day funding carry"
+                  },
+                  {
+                    "at": 3218,
+                    "w": "Size, by 30-day dollar volume"
+                  },
+                  {
+                    "at": 2632,
+                    "w": "28-day momentum"
+                  },
+                  {
+                    "at": 2048,
+                    "w": "7-day momentum"
+                  },
+                  {
+                    "at": 1462,
+                    "w": "1-day reversal"
+                  },
+                  {
+                    "at": 878,
+                    "w": "Mix of Size, by 30-day dollar volume, 28-day momentum, 7-day funding carry"
+                  },
+                  {
+                    "at": 292,
+                    "w": "7-day funding carry"
+                  }
+                ]
+              }
+            },
             "family": "River",
-            "form": "title",
+            "form": "chart",
             "index": 2,
             "lead": null,
             "state_words": null,
@@ -113,10 +275,16 @@
                   "w": "Result"
                 },
                 {
-                  "w": "Measure"
+                  "w": "First day"
                 },
                 {
-                  "w": "Value"
+                  "w": "Last day"
+                },
+                {
+                  "w": "Coins"
+                },
+                {
+                  "w": "Data"
                 }
               ],
               "enc": "b64x2",
@@ -124,28 +292,59 @@
               "kind": "table",
               "legend": null,
               "marks": [],
-              "more_words": "143 more rows",
-              "note_words": null,
+              "more_words": null,
+              "note_words": "Compared on the same days, coins, costs and data.",
               "read": null,
               "rows": [
-                ["(no longer available)", "first_day", "not measured"],
-                ["(no longer available 2)", "first_day", "not measured"],
-                ["(no longer available 3)", "first_day", "not measured"],
-                ["(no longer available 4)", "first_day", "not measured"],
-                ["(no longer available 5)", "first_day", "not measured"],
-                ["(no longer available 6)", "first_day", "not measured"],
-                ["(no longer available 7)", "first_day", "not measured"],
                 [
-                  "Mix of (no longer available), (no longer available), (no longer available)",
-                  "first_day",
-                  "not measured"
+                  "7-day momentum",
+                  "May 4, 2026",
+                  "Oct 30, 2026",
+                  "60 coins",
+                  "snapshot 1"
                 ],
                 [
-                  "Skill-weighted mix of (no longer available), (no longer available), (no longer available)",
-                  "first_day",
-                  "not measured"
+                  "28-day momentum",
+                  "May 4, 2026",
+                  "Oct 30, 2026",
+                  "60 coins",
+                  "snapshot 1"
                 ],
-                ["(no longer available)", "last_day", "not measured"]
+                [
+                  "7-day funding carry",
+                  "May 4, 2026",
+                  "Oct 30, 2026",
+                  "60 coins",
+                  "snapshot 1"
+                ],
+                [
+                  "Size, by 30-day dollar volume",
+                  "May 4, 2026",
+                  "Oct 30, 2026",
+                  "60 coins",
+                  "snapshot 1"
+                ],
+                [
+                  "1-day reversal",
+                  "May 4, 2026",
+                  "Oct 30, 2026",
+                  "60 coins",
+                  "snapshot 1"
+                ],
+                [
+                  "Mix of Size, by 30-day dollar volume, 28-day momentum, 7-day funding carry",
+                  "May 4, 2026",
+                  "Oct 30, 2026",
+                  "60 coins",
+                  "snapshot 1"
+                ],
+                [
+                  "Skill-weighted mix of Size, by 30-day dollar volume, 28-day momentum, 7-day funding carry",
+                  "May 4, 2026",
+                  "Oct 30, 2026",
+                  "60 coins",
+                  "snapshot 1"
+                ]
               ],
               "series": [],
               "title": "Side by side",
@@ -162,9 +361,92 @@
             "v": "Side%20by%20side"
           },
           {
-            "chart": null,
+            "chart": {
+              "enc": "b64x2",
+              "family": "Bars",
+              "kind": "bars",
+              "legend": null,
+              "marks": [],
+              "more_words": null,
+              "note_words": null,
+              "read": {
+                "band": null,
+                "bins": null,
+                "cells": null,
+                "ring_words": null,
+                "sel": "result:Skill-weighted%20mix%20of%20Size%2C%20by%2030-day%20dollar%20volume%2C%2028-day%20momentum%2C%207-day%20funding%20carry|result:1-day%20reversal|result:7-day%20funding%20carry|result:28-day%20momentum|result:Mix%20of%20Size%2C%20by%2030-day%20dollar%20volume%2C%2028-day%20momentum%2C%207-day%20funding%20carry|result:7-day%20momentum|result:Size%2C%20by%2030-day%20dollar%20volume",
+                "sel_rows": null,
+                "withheld": null,
+                "x": "Skill-weighted mix of Size, by 30-day dollar volume, 28-day momentum, 7-day funding carry|1-day reversal|7-day funding carry|28-day momentum|Mix of Size, by 30-day dollar volume, 28-day momentum, 7-day funding carry|7-day momentum|Size, by 30-day dollar volume",
+                "y": [
+                  "not measured|0.002|0.004|−0.002|not measured|−0.015|−0.005"
+                ]
+              },
+              "series": [
+                {
+                  "c": 0,
+                  "hi": null,
+                  "lo": null,
+                  "name": null,
+                  "ref": false,
+                  "y": "..6S__rf..AAhY"
+                }
+              ],
+              "title": "What each adds beyond the others",
+              "x": {
+                "label": "Result",
+                "n": 7,
+                "pos": null,
+                "ticks": [
+                  {
+                    "at": 292,
+                    "w": "Skill-weighted mix of Size, by 30-day dollar volume, 28-day momentum, 7-day funding carry"
+                  },
+                  {
+                    "at": 878,
+                    "w": "1-day reversal"
+                  },
+                  {
+                    "at": 1462,
+                    "w": "7-day funding carry"
+                  },
+                  {
+                    "at": 2632,
+                    "w": "Mix of Size, by 30-day dollar volume, 28-day momentum, 7-day funding carry"
+                  },
+                  {
+                    "at": 3218,
+                    "w": "7-day momentum"
+                  },
+                  {
+                    "at": 3802,
+                    "w": "Size, by 30-day dollar volume"
+                  }
+                ]
+              },
+              "y": {
+                "label": "Rank IC left over",
+                "n": null,
+                "pos": null,
+                "ticks": [
+                  {
+                    "at": 1039,
+                    "w": "−0.010"
+                  },
+                  {
+                    "at": 2128,
+                    "w": "−0.005"
+                  },
+                  {
+                    "at": 3217,
+                    "w": "0.000"
+                  }
+                ]
+              },
+              "zero": 3217
+            },
             "family": "Bars",
-            "form": "title",
+            "form": "chart",
             "index": 4,
             "lead": null,
             "state_words": null,
@@ -180,7 +462,7 @@
               "legend": null,
               "marks": [],
               "more_words": null,
-              "note_words": "Jun 12, 2026 to Oct 29, 2026 · showing 58 of 140 days",
+              "note_words": "Jun 23, 2026 to Oct 29, 2026 · showing 59 of 129 days",
               "read": {
                 "band": null,
                 "bins": null,
@@ -189,9 +471,9 @@
                 "sel": null,
                 "sel_rows": null,
                 "withheld": null,
-                "x": "Jun 12, 2026|Jun 14, 2026|Jun 17, 2026|Jun 19, 2026|Jun 22, 2026|Jun 24, 2026|Jun 27, 2026|Jun 29, 2026|Jul 2, 2026|Jul 4, 2026|Jul 6, 2026|Jul 9, 2026|Jul 11, 2026|Jul 14, 2026|Jul 16, 2026|Jul 19, 2026|Jul 21, 2026|Jul 23, 2026|Jul 26, 2026|Jul 28, 2026|Jul 31, 2026|Aug 2, 2026|Aug 5, 2026|Aug 7, 2026|Aug 10, 2026|Aug 12, 2026|Aug 14, 2026|Aug 17, 2026|Aug 19, 2026|Aug 22, 2026|Aug 24, 2026|Aug 27, 2026|Aug 29, 2026|Aug 31, 2026|Sep 3, 2026|Sep 5, 2026|Sep 8, 2026|Sep 10, 2026|Sep 13, 2026|Sep 15, 2026|Sep 18, 2026|Sep 20, 2026|Sep 22, 2026|Sep 25, 2026|Sep 27, 2026|Sep 30, 2026|Oct 2, 2026|Oct 5, 2026|Oct 7, 2026|Oct 9, 2026|Oct 12, 2026|Oct 14, 2026|Oct 17, 2026|Oct 19, 2026|Oct 22, 2026|Oct 24, 2026|Oct 27, 2026|Oct 29, 2026",
+                "x": "Jun 23, 2026|Jun 25, 2026|Jun 27, 2026|Jun 30, 2026|Jul 2, 2026|Jul 4, 2026|Jul 6, 2026|Jul 9, 2026|Jul 11, 2026|Jul 13, 2026|Jul 15, 2026|Jul 18, 2026|Jul 20, 2026|Jul 22, 2026|Jul 24, 2026|Jul 27, 2026|Jul 29, 2026|Jul 31, 2026|Aug 2, 2026|Aug 5, 2026|Aug 7, 2026|Aug 9, 2026|Aug 11, 2026|Aug 14, 2026|Aug 16, 2026|Aug 18, 2026|Aug 20, 2026|Aug 23, 2026|Aug 25, 2026|Aug 27, 2026|Aug 29, 2026|Sep 1, 2026|Sep 3, 2026|Sep 5, 2026|Sep 7, 2026|Sep 10, 2026|Sep 12, 2026|Sep 14, 2026|Sep 16, 2026|Sep 19, 2026|Sep 21, 2026|Sep 23, 2026|Sep 25, 2026|Sep 28, 2026|Sep 30, 2026|Oct 2, 2026|Oct 4, 2026|Oct 7, 2026|Oct 9, 2026|Oct 11, 2026|Oct 13, 2026|Oct 14, 2026|Oct 16, 2026|Oct 18, 2026|Oct 20, 2026|Oct 22, 2026|Oct 25, 2026|Oct 27, 2026|Oct 29, 2026",
                 "y": [
-                  "1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00|1.00"
+                  "0.75|0.73|0.71|0.70|0.69|0.69|0.70|0.70|0.70|0.70|0.70|0.71|0.71|0.71|0.73|0.76|0.76|0.75|0.75|0.75|0.74|0.74|0.73|0.73|0.74|0.74|0.75|0.75|0.75|0.75|0.75|0.76|0.76|0.76|0.77|0.77|0.77|0.76|0.75|0.76|0.76|0.76|0.76|0.77|0.77|0.77|0.77|0.78|0.77|0.77|0.78|0.78|0.78|0.77|0.77|0.77|0.76|0.76|0.75"
                 ]
               },
               "series": [
@@ -199,35 +481,35 @@
                   "c": 0,
                   "hi": null,
                   "lo": null,
-                  "name": "mom7,mom30",
+                  "name": "7-day momentum and 28-day momentum",
                   "ref": false,
-                  "y": "f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_f_"
+                  "y": "rVcjPGDJBwAAFMHAHTHdGWJgMIPZdht1vSsgrtmIitgbdGeIhHlVnxqXo9oKsdvLu3xV002_1Kv-rTtcwKvDyX306g6p6F7A4C6Z_A__8e5o3W3Lz0yusJ"
                 }
               ],
               "title": "How they move together over time",
               "x": {
                 "label": "Day",
-                "n": 58,
-                "pos": "AAA7CTDOEnFiG6H1JNKILDMbNWOvPqRCR9S4UQVLWkXeY3ZybKcFdAeYfTgshni_j6k1mNnIohpbq0rvtHuCu9wVxQypzk08132y4K5F6d7Y8x9s_E__",
+                "n": 59,
+                "pos": "AABACADgEgFgGgIAJAKALAMgNgOgPgRASATAUAVgWgXgYgaAbAcAdAegfggfhfi_j_k_l_nfofpfqfr_s_t_u_wfxfyfzf0_1_2_3_4f5f6f7f8f9_-___",
                 "ticks": [
                   {
                     "at": 0,
                     "w": "Jun 2026"
                   },
                   {
-                    "at": 795,
+                    "at": 864,
                     "w": "Jul 2026"
                   },
                   {
-                    "at": 1650,
+                    "at": 1664,
                     "w": "Aug 2026"
                   },
                   {
-                    "at": 2445,
+                    "at": 2527,
                     "w": "Sep 2026"
                   },
                   {
-                    "at": 3300,
+                    "at": 3295,
                     "w": "Oct 2026"
                   }
                 ]
@@ -238,8 +520,20 @@
                 "pos": null,
                 "ticks": [
                   {
-                    "at": 2047,
-                    "w": "1.00"
+                    "at": 372,
+                    "w": "0.700"
+                  },
+                  {
+                    "at": 1505,
+                    "w": "0.725"
+                  },
+                  {
+                    "at": 2637,
+                    "w": "0.750"
+                  },
+                  {
+                    "at": 3770,
+                    "w": "0.775"
                   }
                 ]
               }
@@ -269,37 +563,90 @@
                 "ring_words": null,
                 "sel": null,
                 "sel_rows": null,
-                "withheld": null,
-                "x": "1",
-                "y": ["−0.009", "−0.009"]
+                "withheld": {
+                  "5": "16 separate 10-day stretches; an interval needs at least 20.",
+                  "6": "11 separate 14-day stretches; an interval needs at least 20."
+                },
+                "x": "1|2|3|5|7|10|14",
+                "y": [
+                  "0.014|0.020|0.027|0.028|0.026|0.021|0.028",
+                  "0.014|0.020|0.027|0.028|0.026|0.021|0.028",
+                  "−0.014|−0.023|−0.028|−0.037|−0.042|−0.048|−0.050",
+                  "−0.015|−0.022|−0.027|−0.030|−0.028|−0.027|−0.025",
+                  "−0.005|−0.016|−0.021|−0.031|−0.034|−0.038|−0.048"
+                ]
               },
               "series": [
                 {
                   "c": 1,
                   "hi": null,
                   "lo": null,
-                  "name": "Mix of (no longer available), (no longer available), (no longer available)",
+                  "name": "Mix of Size, by 30-day dollar volume, 28-day momentum, 7-day funding carry",
                   "ref": false,
-                  "y": "f_"
+                  "y": "0C5V_P_i-O55__"
                 },
                 {
                   "c": 2,
                   "hi": null,
                   "lo": null,
-                  "name": "Skill-weighted mix of (no longer available), (no longer available), (no longer available)",
+                  "name": "Skill-weighted mix of Size, by 30-day dollar volume, 28-day momentum, 7-day funding carry",
                   "ref": false,
-                  "y": "f_"
+                  "y": "0C5V_P_i-O55__"
+                },
+                {
+                  "c": 3,
+                  "hi": null,
+                  "lo": null,
+                  "name": "7-day funding carry",
+                  "ref": false,
+                  "y": "dXWLSPKxGDBFAA"
+                },
+                {
+                  "c": 4,
+                  "hi": null,
+                  "lo": null,
+                  "name": "Size, by 30-day dollar volume",
+                  "ref": false,
+                  "y": "cyW_S4QjRtS9Uv"
+                },
+                {
+                  "c": 5,
+                  "hi": null,
+                  "lo": null,
+                  "name": "28-day momentum",
+                  "ref": false,
+                  "y": "ktbfX8PlMmJ7BU"
                 }
               ],
               "title": "Your mix against its parts",
               "x": {
                 "label": "Days ahead",
-                "n": 1,
-                "pos": null,
+                "n": 7,
+                "pos": "AAE7J2TsdisT__",
                 "ticks": [
                   {
-                    "at": 2047,
+                    "at": 0,
                     "w": "1"
+                  },
+                  {
+                    "at": 315,
+                    "w": "2"
+                  },
+                  {
+                    "at": 630,
+                    "w": "3"
+                  },
+                  {
+                    "at": 1890,
+                    "w": "7"
+                  },
+                  {
+                    "at": 2835,
+                    "w": "10"
+                  },
+                  {
+                    "at": 4095,
+                    "w": "14"
                   }
                 ]
               },
@@ -309,8 +656,20 @@
                 "pos": null,
                 "ticks": [
                   {
-                    "at": 2047,
-                    "w": "−0.009"
+                    "at": 514,
+                    "w": "−0.040"
+                  },
+                  {
+                    "at": 1567,
+                    "w": "−0.020"
+                  },
+                  {
+                    "at": 2619,
+                    "w": "0.000"
+                  },
+                  {
+                    "at": 3671,
+                    "w": "0.020"
                   }
                 ]
               }
@@ -328,6 +687,7 @@
         "checks": null,
         "chips": [],
         "copy": {
+          "all_charts": "All charts",
           "charts": "Charts",
           "failed_cell": "Didn't finish",
           "full_chart_in_keel": "Open in Keel for the full chart",
@@ -338,6 +698,8 @@
           "lowest": "Lowest",
           "met": "met",
           "more_charts": "+2 more charts",
+          "more_steps": "",
+          "more_views": "+3 more charts",
           "not_measured": "not measured",
           "not_met": "not met",
           "not_run": "Not run yet",
@@ -347,20 +709,30 @@
           "open_chart": "Open this chart in Keel",
           "open_setting": "Open this setting in Keel",
           "points_in_keel": "Open in Keel to read each point",
+          "seg_charts": "Charts",
+          "seg_checks": "Checks",
+          "seg_numbers": "Numbers",
           "steps": "Steps",
           "yours": "Yours"
         },
         "focus": null,
         "head_words": null,
+        "hero": {
+          "label": "Distinct results",
+          "state": null,
+          "title": "Effective number of different results · 1.77 · May 4 to Oct 29, 2026",
+          "value": "1.77"
+        },
         "key": {
-          "cols": 6,
-          "d": "-----gg----ggg---gggg--ggggg-ggggggg",
+          "cols": 4,
+          "d": "0234--s-u-v-qsu-",
           "enc": "b64x2",
           "family": "Heatmap",
           "kind": "heat",
           "legend": {
-            "hi": "1.000",
-            "lo": "1.000",
+            "hi": "0.870",
+            "label": "Rank correlation",
+            "lo": "−0.579",
             "ramp": "div"
           },
           "marks": [],
@@ -370,80 +742,64 @@
           "read": {
             "band": null,
             "bins": null,
-            "cells": "not measured|not measured|not measured|not measured|not measured|1.000|1.000|not measured|not measured|not measured|not measured|1.000|1.000|1.000|not measured|not measured|not measured|1.000|1.000|1.000|1.000|not measured|not measured|1.000|1.000|1.000|1.000|1.000|not measured|1.000|1.000|1.000|1.000|1.000|1.000|1.000",
+            "cells": "−0.579|−0.504|−0.447|−0.380|not measured|not measured|0.751|not measured|0.844|not measured|0.870|not measured|0.632|0.732|0.827|not measured",
             "ring_words": null,
-            "sel": "result:%28no%20longer%20available%202%29|result:%28no%20longer%20available%203%29|result:%28no%20longer%20available%204%29|result:%28no%20longer%20available%205%29|result:%28no%20longer%20available%206%29|result:%28no%20longer%20available%29",
-            "sel_rows": "result_b:%28no%20longer%20available%202%29|result_b:%28no%20longer%20available%203%29|result_b:%28no%20longer%20available%204%29|result_b:%28no%20longer%20available%205%29|result_b:%28no%20longer%20available%206%29|result_b:%28no%20longer%20available%207%29",
+            "sel": "result:28-day%20momentum|result:7-day%20funding%20carry|result:7-day%20momentum|result:Size%2C%20by%2030-day%20dollar%20volume",
+            "sel_rows": "result_b:1-day%20reversal|result_b:28-day%20momentum|result_b:7-day%20funding%20carry|result_b:Size%2C%20by%2030-day%20dollar%20volume",
             "withheld": null,
-            "x": "(no longer available 2)|(no longer available 3)|(no longer available 4)|(no longer available 5)|(no longer available 6)|(no longer available)",
+            "x": "28-day momentum|7-day funding carry|7-day momentum|Size, by 30-day dollar volume",
             "y": [
-              "(no longer available 2)|(no longer available 3)|(no longer available 4)|(no longer available 5)|(no longer available 6)|(no longer available 7)"
+              "1-day reversal|28-day momentum|7-day funding carry|Size, by 30-day dollar volume"
             ]
           },
           "ring": null,
-          "rows": 6,
+          "rows": 4,
           "series": [],
           "title": "How alike they are",
           "values_in_cells": true,
           "x": {
             "label": "Result",
-            "n": 6,
+            "n": 4,
             "pos": null,
             "ticks": [
               {
-                "at": 341,
-                "w": "(no longer available 2)"
+                "at": 512,
+                "w": "28-day momentum"
               },
               {
-                "at": 1024,
-                "w": "(no longer available 3)"
+                "at": 1536,
+                "w": "7-day funding carry"
               },
               {
-                "at": 1706,
-                "w": "(no longer available 4)"
+                "at": 2559,
+                "w": "7-day momentum"
               },
               {
-                "at": 2389,
-                "w": "(no longer available 5)"
-              },
-              {
-                "at": 3071,
-                "w": "(no longer available 6)"
-              },
-              {
-                "at": 3754,
-                "w": "(no longer available)"
+                "at": 3583,
+                "w": "Size, by 30-day dollar volume"
               }
             ]
           },
           "y": {
             "label": "Compared with",
-            "n": 6,
+            "n": 4,
             "pos": null,
             "ticks": [
               {
-                "at": 341,
-                "w": "(no longer available 2)"
+                "at": 512,
+                "w": "1-day reversal"
               },
               {
-                "at": 1024,
-                "w": "(no longer available 3)"
+                "at": 1536,
+                "w": "28-day momentum"
               },
               {
-                "at": 1706,
-                "w": "(no longer available 4)"
+                "at": 2559,
+                "w": "7-day funding carry"
               },
               {
-                "at": 2389,
-                "w": "(no longer available 5)"
-              },
-              {
-                "at": 3071,
-                "w": "(no longer available 6)"
-              },
-              {
-                "at": 3754,
-                "w": "(no longer available 7)"
+                "at": 3583,
+                "w": "Size, by 30-day dollar volume"
               }
             ]
           }
@@ -454,7 +810,7 @@
           "select": "https://app.usekeel.io/research/stu_000003?v={v}&sel={sel}",
           "study": "https://app.usekeel.io/research/stu_000003"
         },
-        "method_line": "Measured with Correlations v1, RankIC v1",
+        "method_line": "Measured with how alike they are and how well it ranks, by days ahead. Returns include funding.",
         "more_charts_total": 2,
         "more_words": null,
         "notes": {
@@ -465,25 +821,69 @@
           "stale": []
         },
         "rows": null,
+        "runs": null,
         "schema": "keel.research.card-data/2",
         "steps": [],
+        "thumbs": [1, 2, 4],
+        "tiles": [
+          {
+            "label": "7-day momentum",
+            "state": null,
+            "sub": "Next-day skill",
+            "title": "How well it ranks, next day, 7-day momentum · −0.018 · 157 days · 157 effective days · 60 coins",
+            "value": "−0.018"
+          },
+          {
+            "label": "Skill-weighted mix of Size, by 30-day dollar volume, 28-day momentum, 7-day funding carry",
+            "state": null,
+            "sub": "Next-day skill",
+            "title": "How well it ranks, next day, Skill-weighted mix of Size, by 30-day dollar volume, 28-day momentum, 7-day funding carry · 0.014 · 173 days · 173 effective days · 60 coins",
+            "value": "0.014"
+          },
+          {
+            "label": "Size, by 30-day dollar volume",
+            "state": null,
+            "sub": "Next-day skill",
+            "title": "How well it ranks, next day, Size, by 30-day dollar volume · −0.015 · 150 days · 150 effective days · 60 coins",
+            "value": "−0.015"
+          }
+        ],
         "top": {
           "lines": [
-            "Highest: Result (no longer available) · Compared with (no longer available 2) at 1.000",
-            "Lowest: Result (no longer available) · Compared with (no longer available 2) at 1.000"
+            "Highest: 7-day momentum and 7-day funding carry, rank correlation 0.870",
+            "Lowest: 28-day momentum and 1-day reversal, rank correlation −0.579"
           ]
         }
       },
       "card_summary": {
         "thumb": {
           "facts": {
-            "c": 6,
-            "d": "-----ff----fff---ffff--fffff-fffffff",
-            "r": 6,
+            "c": 4,
+            "d": "0234--s-u-v-qsu-",
+            "r": 4,
             "ramp": "div"
           },
           "family": "Heatmap",
           "view_index": 0
+        },
+        "top5": {
+          "rows": [
+            {
+              "spark": null
+            },
+            {
+              "spark": null
+            },
+            {
+              "spark": null
+            },
+            {
+              "spark": null
+            },
+            {
+              "spark": null
+            }
+          ]
         }
       }
     },
@@ -493,13 +893,13 @@
   },
   "content": [
     {
-      "text": "card: where the host draws Keel cards, the user sees what follows as a card carrying its name, links and ids, so a reply can call it by name; the ids and links here serve tool calls and hosts without cards.\n\nCompare · Signals, side by side · version 1 · Done · Oct 29\nUsed 0 of 400 studies; resets Dec 1. Planning, reading, saving, and runs that reuse everything or run nothing, do not count.\nEffective number of different results, all: 1.00\nDays May 4, 2026 to Oct 30, 2026 · 60 coins: top 60 by 30-day volume, picked Oct 31, kept fixed · no costs · data as of Oct 30, 2026\nMeasured with Ranks v1, SameFooting v1, RankIC v1, ICOverTime v1, Correlations v1, PairOverTime v1, WhatsLeft v1, SignalMix v1.\nIn short:\n- Effective number of different results, all: 1.00, no interval; sample not stated\n- How well it ranks, next day, (no longer available): −0.009, −0.028 to 0.011; 168 days · 168 effective days · 60 coins\nRuns: 0 runs, 0 reused, none failed · versions tried: unknown\nCharts (7): How alike they are · Ranking skill, 1 to 14 days ahead · Which led, and when · Side by side · What each adds beyond the others · How they move together over time · Your mix against its parts — keel_research_get(study_id=\"stu_000003\", view=0) reads the numbers behind any of them.\nView in Keel: https://app.usekeel.io/research/stu_000003",
+      "text": "card: where the host draws Keel cards, the user sees what follows as a card carrying its name, links and ids, so a reply can call it by name; the ids and links here serve tool calls and hosts without cards.\n\nCompare · Signals, side by side · version 1 · Done · Oct 29\nEffective number of different results: 1.77\nDays May 4, 2026 to Oct 30, 2026 · 60 coins: top 60 by 30-day volume, picked Oct 31, kept fixed · no costs · data as of Oct 30, 2026\nIn short:\n- Effective number of different results: 1.77, no interval; May 4 to Oct 29, 2026\n- How well it ranks, next day, 7-day momentum: −0.018, −0.039 to 0.002; 157 days · 157 effective days · 60 coins\n- How well it ranks, next day, Skill-weighted mix of Size, by 30-day dollar volume, 28-day momentum, 7-day funding carry: 0.014, −0.005 to 0.032; 173 days · 173 effective days · 60 coins\n- How well it ranks, next day, Size, by 30-day dollar volume: −0.015, −0.036 to 0.006; 150 days · 150 effective days · 60 coins\nRuns: 0 runs, 0 reused, none failed\nCharts (7): How alike they are · Ranking skill, 1 to 14 days ahead · Which led, and when · Side by side · What each adds beyond the others · How they move together over time · Your mix against its parts. keel_research_get(study_id=\"stu_000003\", view=0) reads the numbers behind any of them.\nMeasured with how alike they are and how well it ranks, by days ahead. Returns include funding.\nView in Keel: https://app.usekeel.io/research/stu_000003",
       "type": "text"
     }
   ],
   "structuredContent": {
     "base": {
-      "evidence_hash": "cd1429c22ebcc002ef26ef01a5bdcca966e838b47b6238284d40eb80dc9cafbc",
+      "evidence_hash": "8ec68df7d7931a4a22c7de07c2fcf4efaf546e0244d459681a9ee5b60614dd3f",
       "revision": 1,
       "version": 1
     },
@@ -508,41 +908,42 @@
     "card_summary": {
       "footer": {
         "runs_words": "no new runs",
-        "subject": "(no longer available) vs (no longer available 2) and 7 more"
+        "subject": "7-day momentum vs 28-day momentum and 5 more"
       },
       "footing_line": "179 days · 60 coins · no costs · some numbers use fewer days or coins",
       "headline": {
         "chips": [],
-        "text": "Effective number of different results, all: 1.00"
+        "text": "Effective number of different results: 1.77"
       },
       "kind_label": {
         "key": "compare",
         "name": "Compare",
         "short": "Compare"
       },
-      "lead": "Effective number of different results, all 1.00",
+      "lead": "Most alike of 10 pairs: 7-day momentum · 7-day funding carry at 0.870",
       "maker": "you",
       "maker_words": "by you",
       "numbers": [
         {
-          "label": "Effective number of different results, all",
+          "label": "Effective number of different results",
           "measure": "effective_number",
           "ref": "alike.summary",
           "sample": {
             "coins_max": 60.0,
             "coins_median": 60.0,
             "coins_min": 60.0,
-            "coverage": 1.0,
+            "coverage": 0.88268156424581,
             "first_day": "2026-05-04",
             "last_day": "2026-10-29"
           },
+          "sample_words": "May 4 to Oct 29, 2026",
           "unit": "ratio",
-          "value": 1.0,
-          "value_words": "1.00"
+          "value": 1.769821113061838,
+          "value_words": "1.77"
         },
         {
-          "interval_words": "−0.028 to 0.011",
-          "label": "How well it ranks, next day, (no longer available)",
+          "interval_words": "−0.039 to 0.002",
+          "label": "How well it ranks, next day, 7-day momentum",
           "measure": "ic",
           "ref": "skill",
           "sample": {
@@ -550,29 +951,111 @@
             "coins_max": 60.0,
             "coins_median": 60.0,
             "coins_min": 60.0,
-            "coverage": 1.0,
-            "days": 168,
-            "effective_days": 168.0,
+            "coverage": 0.88268156424581,
+            "days": 157,
+            "effective_days": 157.0,
             "excluded": {
               "no_forward_price": 60
             },
-            "first_day": "2026-05-04",
-            "last_day": "2026-10-29"
+            "first_day": "2026-05-25",
+            "last_day": "2026-10-28"
           },
-          "sample_words": "168 days · 168 effective days · 60 coins",
+          "sample_words": "157 days · 157 effective days · 60 coins",
           "unit": "score",
-          "value": -0.008612511411900134,
-          "value_words": "−0.009"
+          "value": -0.018155078463055023,
+          "value_words": "−0.018"
+        },
+        {
+          "interval_words": "−0.005 to 0.032",
+          "label": "How well it ranks, next day, Skill-weighted mix of Size, by 30-day dollar volume, 28-day momentum, 7-day funding carry",
+          "measure": "ic",
+          "ref": "skill",
+          "sample": {
+            "coins": 60,
+            "coins_max": 60.0,
+            "coins_median": 60.0,
+            "coins_min": 60.0,
+            "coverage": 0.88268156424581,
+            "days": 173,
+            "effective_days": 173.0,
+            "excluded": {
+              "no_forward_price": 60
+            },
+            "first_day": "2026-05-09",
+            "last_day": "2026-10-28"
+          },
+          "sample_words": "173 days · 173 effective days · 60 coins",
+          "unit": "score",
+          "value": 0.013520454461499421,
+          "value_words": "0.014"
+        },
+        {
+          "interval_words": "−0.036 to 0.006",
+          "label": "How well it ranks, next day, Size, by 30-day dollar volume",
+          "measure": "ic",
+          "ref": "skill",
+          "sample": {
+            "coins": 60,
+            "coins_max": 60.0,
+            "coins_median": 60.0,
+            "coins_min": 60.0,
+            "coverage": 0.88268156424581,
+            "days": 150,
+            "effective_days": 150.0,
+            "excluded": {
+              "no_forward_price": 60
+            },
+            "first_day": "2026-06-01",
+            "last_day": "2026-10-28"
+          },
+          "sample_words": "150 days · 150 effective days · 60 coins",
+          "unit": "score",
+          "value": -0.01475520978049458,
+          "value_words": "−0.015"
         }
       ],
       "schema": "keel.research.card/2",
+      "short": {
+        "text": "10 pairs · most alike 0.870"
+      },
       "state": "completed",
       "state_words": "Done · Oct 29",
       "title": "Signals, side by side",
       "top5": {
-        "kind": "checks",
-        "rows": [],
-        "total": 0
+        "kind": "pairs",
+        "rows": [
+          {
+            "label": "7-day momentum · 7-day funding carry",
+            "unit": "score",
+            "value": 0.869676879301916,
+            "value_words": "0.870"
+          },
+          {
+            "label": "28-day momentum · 7-day funding carry",
+            "unit": "score",
+            "value": 0.8436105365344968,
+            "value_words": "0.844"
+          },
+          {
+            "label": "7-day momentum · Size, by 30-day dollar volume",
+            "unit": "score",
+            "value": 0.8265820711787122,
+            "value_words": "0.827"
+          },
+          {
+            "label": "7-day momentum · 28-day momentum",
+            "unit": "score",
+            "value": 0.750778873175038,
+            "value_words": "0.751"
+          },
+          {
+            "label": "7-day funding carry · Size, by 30-day dollar volume",
+            "unit": "score",
+            "value": 0.7319093419989733,
+            "value_words": "0.732"
+          }
+        ],
+        "total": 10
       },
       "version": 1
     },
@@ -582,7 +1065,7 @@
         "units": [
           {
             "limit": 400,
-            "resets_at": "2026-12-18",
+            "resets_at": "2026-12-22",
             "unit": "research_studies",
             "used": 0
           }
@@ -592,6 +1075,7 @@
         "executed": 0,
         "failed_content": 0,
         "failed_platform": 0,
+        "not_applicable": 0,
         "planned": 0,
         "reused": 0,
         "words": "0 runs, 0 reused, none failed"
@@ -609,7 +1093,9 @@
         "names_sha256": "038394ed76754d6837a48cc1438cbc6a3b24c9f21f0b7227896ec43e7b0e960c"
       },
       "costs": "none",
+      "costs_words": "No costs",
       "data": "snap_6c1f0e8a2b9d4f37",
+      "data_words": "Data as of Oct 30, 2026",
       "days": {
         "end": "2026-10-30",
         "start": "2026-05-04"
@@ -630,6 +1116,23 @@
     },
     "page": {
       "default": 0,
+      "sections": [
+        {
+          "title": "What each adds",
+          "views": [4],
+          "words": "skill left once the others are taken out"
+        },
+        {
+          "title": "Do they move together",
+          "views": [5],
+          "words": "the pair's correlation over time"
+        },
+        {
+          "title": "Combining them",
+          "views": [6],
+          "words": "your mix against its parts"
+        }
+      ],
       "switch": [0, 1, 2, 3]
     },
     "stale": [],
@@ -642,7 +1145,7 @@
     "study": {
       "archived": false,
       "can_delete": true,
-      "evidence_hash": "cd1429c22ebcc002ef26ef01a5bdcca966e838b47b6238284d40eb80dc9cafbc",
+      "evidence_hash": "8ec68df7d7931a4a22c7de07c2fcf4efaf546e0244d459681a9ee5b60614dd3f",
       "kind_label": {
         "key": "compare",
         "name": "Compare",
@@ -661,7 +1164,7 @@
       "version": 1
     },
     "subjects": {
-      "total": 9
+      "total": 7
     },
     "url_line": "View in Keel: https://app.usekeel.io/research/stu_000003",
     "view": {
@@ -677,7 +1180,7 @@
       "total": 7
     },
     "words": {
-      "allowance": "Used 0 of 400 studies; resets Dec 1. Planning, reading, saving, and runs that reuse everything or run nothing, do not count."
+      "method": "Measured with how alike they are and how well it ranks, by days ahead. Returns include funding."
     }
   }
 }

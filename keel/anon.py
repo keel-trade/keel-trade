@@ -160,7 +160,7 @@ def _save_or_refuse(config: KeelConfig) -> None:
             "minted on the next. Set KEEL_API_KEY, or run `keel auth login --key "
             "<token>` with a writable home directory.",
             suggestion="Set KEEL_API_KEY or run `keel auth login --key <token>`.",
-            docs_url="https://app.usekeel.io/settings?tab=api-keys",
+            docs_url=_api_keys_url(),
         )
 
 
@@ -559,3 +559,10 @@ __all__ = [
     "pending_claim_public",
     "resolve_pending_claim",
 ]
+
+
+def _api_keys_url() -> str:
+    """The API-keys page on the app this process links (``keel.config.api_keys_url``)."""
+    from keel.config import api_keys_url
+
+    return api_keys_url()

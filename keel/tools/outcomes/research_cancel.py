@@ -24,9 +24,17 @@ PROPERTIES = dict(_SCHEMA["properties"])
 
 
 def _run_set_of(args, ctx) -> str:
+    given = args.get("run_set_id")
+    if isinstance(given, str) and given.startswith("stu_") and not args.get("study_id"):
+        # FINAL-JOURNEYS S3-11 (FIX-13): `keel research cancel stu_… --yes` sent the study id as a run set and keel-api
+        # refused it by its pattern, with a hint about strategy source. A study id given there names that study:
+        # its latest version's run (or --version's) stops, as --study-id does.
+        args = {**args, "study_id": given, "run_set_id": None}
     if args.get("run_set_id"):
         if args.get("study_id"):
             invalid("Send run_set_id, or study_id with version, not both.")
+        if not str(args["run_set_id"]).startswith("rus_"):
+            invalid("Send a study id (stu_…) or its run's id (rus_…).")
         return args["run_set_id"]
     if not args.get("study_id"):
         invalid("Send run_set_id, or study_id with version.")
@@ -54,12 +62,28 @@ def _study_of(env: dict) -> str | None:
     return found if found and found.startswith("stu_") else None
 
 
+def _left_to_run(env: dict) -> bool:
+    """MCP-FINAL: a resume is offered only for a run set the cancel stopped with runs left (state ``cancelled`` or
+    ``cancel_requested``, fewer done than its children); a cancel of a COMPLETED run set stops nothing and has nothing
+    to resume, so "Resume later" there named a plan that resumes nothing."""
+    if env.get("state") not in ("cancelled", "cancel_requested"):
+        return False
+    progress = env.get("progress") if isinstance(env.get("progress"), dict) else {}
+    children, done = progress.get("children"), progress.get("done")
+    if isinstance(children, int) and isinstance(done, int):
+        return done < children
+    return True
+
+
 def _handler(args, ctx):
     rus = _run_set_of(args, ctx)
     env = call(ctx, "post", f"/v1/research/run-sets/{seg(rus)}/cancel", body={})
-    lines = [str(env.get("words") or ""), str((env.get("progress") or {}).get("words") or "")]
+    # MCP-FINAL S3 (POLISH): the served sentence says the stop once ("Stopped. 0 settings done; nothing is charged
+    # for the rest."); the tile's words ("Stopped at 0 of 12 settings") only when no sentence is served
+    said = str(env.get("words") or "")
+    lines = [said or str((env.get("progress") or {}).get("words") or "")]
     study_id = args.get("study_id") or _study_of(env)
-    if study_id:
+    if study_id and _left_to_run(env):
         # A3 #12: the Again form takes study_id with resume (07 §4.1); a call without it is a usage error, and a
         # cancel by run_set_id once wrote exactly that. The run set's study is read from the served link
         # (``/research/{study_id}``), the one place the cancel answer names it.

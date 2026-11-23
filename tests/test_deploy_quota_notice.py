@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 
+from keel.errors import join_plan_names
 from keel.tools.outcomes.backtest_run import served_quota_fields
 
 from . import _plan_catalog as cat
@@ -33,7 +34,7 @@ def test_the_last_slot_object_renders_the_notice_and_names_only():
     fields = served_quota_fields(_LAST_SLOT)
     more = cat.names(cat.higher_plans("free", "paper_strategies_max"))
     assert fields["quota_notice"] == (
-        f"Last paper slot in use (1 of 1). {' and '.join(more)} run more."
+        f"Last paper slot in use (1 of 1). {join_plan_names(more)} run more."
     )
     assert fields["quota"] == [
         {"unit": "paper_strategies_max", "limit": 1, "used": 1, "remaining": 0, "more_plans": more}

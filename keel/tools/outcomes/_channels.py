@@ -125,6 +125,10 @@ class ChannelSpec:
     #: keel-api for its card (``card=full``) on every profile, so with the flag off (its default, the local full
     #: profile) card_data rode into model context: 12,743 B a study read against 13 §3.5's 8,000.
     always_move_card: bool = False
+    #: MCP-FINAL S2 (13 §3.5): a structuredContent bound in bytes, kept at RUNTIME: past it, ``fit_steps`` move members to
+    #: the card in order until it fits (``_fit``), never failing the call. 0: unbounded.
+    structured_max: int = 0
+    fit_steps: tuple[tuple[str, ...], ...] = ()
 
 
 def _without_nulls(value: Any) -> Any:
@@ -397,6 +401,13 @@ _STRATEGY = ChannelSpec(
             "workspace_sync",
             "quota",
             "quota_notice",
+            # Plans v3 (spec 02 §C4.2, §C4.3a): the limits this source would meet (compose's dry run), what the
+            # coin cap kept on a save, and their one line each; names only.
+            "plan_findings",
+            "plan_findings_notice",
+            "plan_check_error",
+            "plan_narrowed",
+            "plan_narrowed_notice",
             "library_facts",
             "reference",
             "fork_note",
@@ -552,7 +563,32 @@ def _study_reduce(envelope: dict) -> dict:
     view = envelope.get("view")
     if isinstance(view, dict):
         reduced["view"] = dict(view)  # view.markdown leaves by the drop row
+    _drop_uniform_results(reduced)
     return reduced
+
+
+def _drop_uniform_results(reduced: dict) -> None:
+    """MCP-FINAL S2: a check row's ``result`` names the result its bar reads. When every row names the same one, the
+    study's own subject (its card's footer subject, else its title), it says nothing the study does not: a title of up
+    to 200 characters was repeated on each of the five rows. A Compare's rows name different results and keep them."""
+    rows = (
+        (reduced.get("checks") or {}).get("rows")
+        if isinstance(reduced.get("checks"), dict)
+        else None
+    )
+    if not isinstance(rows, list) or not rows:
+        return
+    # a summary row (luck.summary) reads no one result and serves ``result: null``: it names nothing, so it does not
+    # make the rows non-uniform (staging's Checks all carry one, so a set with None never dropped anything)
+    named = {r.get("result") for r in rows if isinstance(r, dict) and r.get("result") is not None}
+    card = reduced.get("card_summary") if isinstance(reduced.get("card_summary"), dict) else {}
+    subject = (card.get("footer") or {}).get("subject") or card.get("title")
+    if not subject and isinstance(reduced.get("study"), dict):
+        subject = reduced["study"].get("title")
+    if len(named) == 1 and subject and named == {subject}:
+        for r in rows:
+            if isinstance(r, dict):
+                r.pop("result", None)
 
 
 #: The study kind's structured fields: every research envelope field (07 §3.1,
@@ -575,11 +611,12 @@ _STUDY_FIELDS = frozenset(
         "views",
         "notes",
         "notes_total",
+        # SV-36 (63deac5b4a): an Entries study's fixed inputs line on the study read
+        "entries_inputs_words",
         "saved",
         "page",
         "can_run",
         "can_retry",
-        "source",
         "subjects",
         "quota",
         "quota_notice",
@@ -588,7 +625,6 @@ _STUDY_FIELDS = frozenset(
         "class",
         "writes",
         "linked_reason",
-        "filled",
         "issues",
         "runs",
         "addresses_carried",
@@ -679,7 +715,34 @@ _LIST_ROW_CARD = frozenset(
 #: structuredContent they put five real fixtures back over 13 §3.5's 8,000 B (chk_v3 reads 8,029, run-partial 8,491).
 #: They ride ``_meta["keel/card"]`` on the reduced rows, so the card's merge puts them back by index.
 _CHECK_ROW_CARD = frozenset(
-    f"checks.rows[].{field}" for field in ("stricter", "looser", "bar_default_words")
+    f"checks.rows[].{field}"
+    # CARD-FIX: a row's `sample_line` (D-347, the app's sample line) repeats its `sample_words` on every real row (the
+    # D9 string the text quotes); with the lead naming its misses, run-partial read 8,017 B of structuredContent.
+    # MCP-FINAL S2: a row's raw ``interval`` ({lo, hi, level, method}) and ``sample`` ({first_day, ...}) dicts are the
+    # card's; the model reads the served ``interval_words`` and ``sample_words`` (D9: one string per number) and keeps
+    # the raw ``value`` (13 §3.2: raw values stay for an agent that needs precision). A real 7-bar Trader Check spent
+    # ~517 B a row against 13 §3.5's ≈ 290.
+    for field in ("stricter", "looser", "bar_default_words", "sample_line", "interval", "sample")
+)
+
+#: CARD-RENDER (13 §3.5): four real staging plan results read 8,265-14,386 B of structuredContent against 8,000
+#: (``filled`` 3.2 KB, ``source`` 2.8 KB, ``words`` 2.5 KB). A plan keeps what the model plans and runs by (its id,
+#: steps, counts, issues, the work, count and wall words); these are the card's or the app's, never the model's:
+#: ``filled`` and ``words.filled`` (what the template filled in: the footing and the steps say it), the plan card's
+#: line and its no-plan-name count and wall (D-381 (1)), and the app's proposal-strip note. A plan's ``source``
+#: leaves by the drop row (D-353: structuredContent never carries a source; up to 131,072 B, so not the card's
+#: either: the card draws none).
+_PLAN_CARD = frozenset(
+    {
+        "filled",
+        "words.filled",
+        "words.card_line",
+        "words.card_allowance",
+        "words.card_limit",
+        "words.strip",
+        # each step's run words, for the plan card's step list (the text writes the counts itself)
+        "steps[].words",
+    }
 )
 
 _STUDY = ChannelSpec(
@@ -691,7 +754,7 @@ _STUDY = ChannelSpec(
     # by this, and its up-to-50 refs stay out of the budget. `coin_choices` is
     # New study's Coins row (06 §3.10): the app's, never an agent's. `runs_on` (WL-SV-31) is the home's per-template
     # capability line on a list read, the app's too.
-    drop=frozenset({"headline", "view.markdown", "mix", "coin_choices", "runs_on"}),
+    drop=frozenset({"headline", "view.markdown", "mix", "coin_choices", "runs_on", "source"}),
     # D-332 (6), 13 §3.1, §3.8 (WL-AG-09): the card's own data rides `_meta["keel/card"]`, read by no model: the
     # thumb (up to 3,000 B; a real chk_v3 read was 8,051 B of structuredContent with it), `card_data` on its own
     # top-level key (RI-612: the adapter's merge drops array items past the structured array's length, so 40 card
@@ -701,12 +764,26 @@ _STUDY = ChannelSpec(
     # A data read's rows (`data`, and the library's items) are written whole in the text block (07 §3.2 rule 4,
     # raw values included) and ride the card for the chart card: CARDUI measured a Map's view-0 page at 12,230 B of
     # structuredContent with its 25 rows in it. The page's facts and cursor stay.
-    card=frozenset({"card_summary.thumb", "card_data", "data"}) | _LIST_ROW_CARD | _CHECK_ROW_CARD,
+    # R4 (06 §3.5): a top row's sparkline is the thumb's own series, card data like the thumb, never the model's.
+    card=frozenset({"card_summary.thumb", "card_summary.top5.rows[].spark", "card_data", "data"})
+    | _LIST_ROW_CARD
+    | _CHECK_ROW_CARD
+    | _PLAN_CARD,
     reduce=_study_reduce,
     # D-352 (5): CARDUI measured six real fixtures over 13 §3.5's 8,000 B, 125 B of each chk_v3 read being
     # `prop_target_words: null` on every check row.
     omit_nulls=True,
     always_move_card=True,
+    structured_max=8_000,
+    # Least read first; each step's members move to the card (the card draws them as before), the text block is
+    # untouched (built from the envelope), and the model keeps the study, its counts, links, can_run and the bars'
+    # count and met.
+    fit_steps=(
+        ("checks.rows[].withheld_reason", "checks.rows[].bar", "checks.rows[].op"),
+        ("card_summary.numbers[].sample", "card_summary.top5"),
+        ("footing", "words", "progress"),
+        ("checks.rows", "card_summary.numbers"),
+    ),
 )
 
 #: kind → its channel spec (spec 02 §3).
@@ -740,6 +817,9 @@ CHANNEL_MAP: dict[str, ChannelSpec] = {
                 "revision",
                 "check",
                 "units",
+                # Plans v3 (spec 02 §C4.3a): what the coin cap kept, and its one line.
+                "plan_narrowed",
+                "plan_narrowed_notice",
             }
         ),
         card=frozenset({"latest", "hero", "graphs"}),
@@ -801,6 +881,42 @@ def is_error_envelope(envelope: Any) -> bool:
         and "message" in envelope
         and "suggested_next_action" in envelope
     )
+
+
+#: The codes a plan limit refuses with (mcp-conversion D-8, `keel.errors.QUOTA_CODES`): carried as the envelope's own
+#: code, or under ``detail.code`` / ``example.code`` beside ``insufficient_entitlements`` (a quota 403, a research wall).
+PLAN_LIMIT_CODES = frozenset({"quota_exhausted", "quota_cap_reached", "plan_feature_unavailable"})
+#: A plan limit refused under its own code: the screen refresh floor (the plan's fastest auto-refresh, a 403), the
+#: coins per screen (a 422, plans v3 spec 02 §C4.3) and the paper/live timeframe floor (a 422 wherever no tool turns
+#: it into a handoff). Spec 02 §F G9: a plan limit is never a failed call.
+PLAN_LIMIT_OWN_CODES = frozenset(
+    {"SCREENER_REFRESH_BELOW_FLOOR", "SCREEN_COINS_OVER_PLAN", "SERVING_CLOCK_BELOW_PLAN_FLOOR"}
+)
+
+
+def is_plan_limit_envelope(envelope: Any) -> bool:
+    """An error envelope whose refusal is a PLAN LIMIT (Q-7927): an expected outcome the person can read, not a
+    failed call. The MCP adapter leaves ``isError`` off for it, so Claude's listing health badge (which counts
+    ``isError: true`` results) does not read a spent allowance as a broken tool; the envelope itself, its code, words
+    and "don't retry" instruction, is unchanged.
+
+    One of: a handoff that carries a ``limit_view`` (a backtest or paper wall: a quota or the paper floor); a quota
+    code as the envelope's own code; ``insufficient_entitlements`` with a quota code under ``detail`` or ``example``
+    (a quota 403, a research wall); a plan-limit code of the API's own (the screen refresh floor). A scope-missing
+    403, a sign-in handoff, a 404 or a 5xx stays an error."""
+    if not is_error_envelope(envelope):
+        return False
+    code = envelope.get("code")
+    if code == "handoff_required":
+        return isinstance(envelope.get("limit_view"), dict)
+    if code in PLAN_LIMIT_CODES or code in PLAN_LIMIT_OWN_CODES:
+        return True
+    if code == "insufficient_entitlements":
+        for key in ("detail", "example"):
+            inner = envelope.get(key)
+            if isinstance(inner, dict) and inner.get("code") in PLAN_LIMIT_CODES:
+                return True
+    return False
 
 
 # ── Path helpers ──────────────────────────────────────────────────────
@@ -874,6 +990,34 @@ def unassigned_paths(envelope: dict, kind: str) -> list[str]:
     return missing
 
 
+def _bytes(value: Any) -> int:
+    import json
+
+    return len(json.dumps(value, separators=(",", ":"), ensure_ascii=False, default=str).encode())
+
+
+def _fit(structured: dict, card: dict, spec: ChannelSpec, kind: str) -> None:
+    """MCP-FINAL S2 (13 §3.5): structuredContent past ``spec.structured_max`` (a 200-character title, its subject's
+    name on every row, a linked study and a Draft) gives members to the card step by step (``spec.fit_steps``) until it
+    fits; a step that moves nothing is skipped. Never raises: a call never fails on its size. Logged with what moved."""
+    size = _bytes(structured)
+    if size <= spec.structured_max:
+        return
+    moved: list[str] = []
+    for step in spec.fit_steps:
+        for path in step:
+            taken = _pop_path(structured, _split(path))
+            if taken is not None:
+                _merge(card, taken)
+                moved.append(path)
+        if _bytes(structured) <= spec.structured_max:
+            break
+    _log.warning(
+        "channel map: %s structuredContent %s B over %s B; moved %s to the card (now %s B)",
+        kind, size, spec.structured_max, moved, _bytes(structured),
+    )  # fmt: skip
+
+
 def partition(
     envelope: dict,
     kind: str,
@@ -910,6 +1054,8 @@ def partition(
                 _merge(card, taken)
     if spec.omit_nulls:
         structured = _without_nulls(structured)
+    if spec.structured_max:
+        _fit(structured, card, spec, kind)
     if not spec.open:
         for path in unassigned_paths(structured, kind):
             _log.warning("channel map: %s field %r has no declared home", kind, path)

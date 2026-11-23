@@ -128,6 +128,28 @@ def test_the_inflight_table_matches_each_tools_real_schema() -> None:
         assert bool(rule.get("dryRun")) == ("dry_run" in props), tool
 
 
+def test_research_tools_are_told_apart_by_their_own_arguments() -> None:
+    """CARD-RENDER skeleton-* (13 §4.3): with no ``toolInfo`` every research tool fit every call, so a run or a read
+    waited as a plan's 48 px row and jumped 300-600 px. ``only`` names arguments no other tool of the kind takes
+    (they pick the tool); ``wants`` gates a tool on one of its own arguments being sent. Both are the tools' real
+    schema properties, and an ``only`` key is no other study tool's property. SEED: add ``"study_id"`` to
+    keel_research_get's ``only`` -> the exclusivity arm reds (the plan and the run take it too)."""
+    table = _inflight_table()
+    schemas = _schemas()
+    study = {t: r for t, r in table.items() if r["kind"] == "study"}
+    checked = 0
+    for tool, rule in study.items():
+        props = set(schemas[tool].get("properties", {}))
+        for key in rule.get("only", []) + rule.get("wants", []):
+            assert key in props, (tool, key)
+            checked += 1
+        others = set().union(*(set(schemas[t].get("properties", {})) for t in study if t != tool))
+        assert not set(rule.get("only", [])) & others, (tool, set(rule.get("only", [])) & others)
+    assert checked > 30  # non-vacuity: the plan's, the run's and the read's keys
+    assert table["keel_research_run"]["only"] and table["keel_research_get"]["only"]
+    assert table["keel_research_plan"]["wants"]
+
+
 def test_the_inflight_default_size_is_the_servers_default() -> None:
     """The one size rule the server states as a function is checked against
     that function: a submitted run is a receipt unless `present="view"`."""

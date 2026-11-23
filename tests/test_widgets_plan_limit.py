@@ -149,7 +149,7 @@ def test_a_plan_limit_is_a_calm_state_on_both_dialects(states: dict) -> None:
 
 def test_the_card_draws_the_d14_facts_only(states: dict) -> None:
     """doc 07 §5: headline, reset, the plans that include more and where
-    plans change, and the "doesn't use this allowance" note — other plans by
+    plans change, and the backtest wall's free way (PLANS-REVIEW R6) — other plans by
     NAME only, never a number of theirs."""
     for arm in ("openaiLimit", "mcpLimit"):
         text = states[arm]["text"]
@@ -157,7 +157,8 @@ def test_the_card_draws_the_d14_facts_only(states: dict) -> None:
         assert "Resets " in text, text
         assert "Trader and Pro include more. Plans are changed in the Keel web app." in text
         assert (
-            "Composing, validating and reading existing results don't use this allowance." in text
+            "Screen runs use the same backtests." in text
+            and "keep refreshing without using any" in text
         )
         # The server DID send higher_plans with limits (non-vacuity: WALL_403
         # carries them); no number of theirs is drawn.

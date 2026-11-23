@@ -19,12 +19,11 @@ from mcp.types import Icon
 
 from keel.api_path import seg
 from keel.mcp._branding import (
-    KEEL_ICON_256_DATA_URI,
     KEEL_ICON_256_SIZES,
     KEEL_ICON_256_URL,
-    KEEL_ICON_DATA_URI,
     KEEL_ICON_MIME,
     KEEL_ICON_SIZES,
+    KEEL_ICON_URL,
     KEEL_WEBSITE_URL,
 )
 from pipeline_engine.reference.system import assemble as _assemble
@@ -88,22 +87,16 @@ def create_server() -> FastMCP:
     """
 
     from keel.hosting import is_hosted
-    from keel.tools.outcomes import OUTCOMES, paper_deploy_loaded
+    from keel.tools.outcomes import OUTCOMES
     from keel.tools.outcomes import _bootstrap as _outcomes_bootstrap
     from keel.tools.outcomes._mcp_adapter import register_all as _outcomes_mcp_register
-    from keel.tools.outcomes._toolsets import is_listed_profile, load_toolsets
+    from keel.tools.outcomes._toolsets import load_toolsets, research_served
 
-    active_toolsets = load_toolsets()
-    live_write_loaded = "live-write" in active_toolsets
-    # The operating core's `paper` section rides the tool (S06 §3.9 row 3):
-    # false while the paper SDK is held, so the instructions are HEAD's.
-    paper_loaded = paper_deploy_loaded(active_toolsets)
-
-    instructions = (
-        listed_instructions()
-        if is_listed_profile()
-        else _full_instructions(live_write_loaded, hosted=is_hosted(), paper_loaded=paper_loaded)
-    )
+    load_toolsets()  # an invalid KEEL_TOOLSETS raises here, at server creation, on every profile
+    # Research 07 §5.3: a local server has one caller, so its /v1/me decides. The hosted server is built once for
+    # every caller, so its built string is the Research-off one; services/mcp-server swaps in the caller's at
+    # initialize (instructions_for).
+    instructions = instructions_for(research_served=not is_hosted() and research_served())
 
     # serverInfo.version = the published keel-trade wheel version (not the
     # FastMCP framework version FastMCP would otherwise report) — this is the
@@ -124,25 +117,11 @@ def create_server() -> FastMCP:
         version=_keel_version,
         instructions=instructions,
         website_url=KEEL_WEBSITE_URL,
-        # serverInfo.icons — the Keel mark, embedded so it ships in the wheel.
-        # Surfaced by Cursor / Claude Desktop connector UIs (claude.ai custom
-        # connectors do not render it yet, but the field is correct).
+        # serverInfo.icons: the Keel mark as https URLs only, never a data: URI. The SDK stamps serverInfo on
+        # every result's _meta, so an embedded PNG rode every tool call (STG-SURFACES #5, ~22.4 KB a result).
         icons=[
-            Icon(
-                src=KEEL_ICON_256_URL,
-                mimeType=KEEL_ICON_MIME,
-                sizes=KEEL_ICON_256_SIZES,
-            ),
-            Icon(
-                src=KEEL_ICON_256_DATA_URI,
-                mimeType=KEEL_ICON_MIME,
-                sizes=KEEL_ICON_256_SIZES,
-            ),
-            Icon(
-                src=KEEL_ICON_DATA_URI,
-                mimeType=KEEL_ICON_MIME,
-                sizes=KEEL_ICON_SIZES,
-            ),
+            Icon(src=KEEL_ICON_256_URL, mimeType=KEEL_ICON_MIME, sizes=KEEL_ICON_256_SIZES),
+            Icon(src=KEEL_ICON_URL, mimeType=KEEL_ICON_MIME, sizes=KEEL_ICON_SIZES),
         ],
     )
 
@@ -434,10 +413,45 @@ def create_server() -> FastMCP:
 # `profiles: [full]` in the corpus and never reach the listed string.
 
 
-def _listed_instructions(paper_listed: bool, screens_listed: bool = False) -> str:
+def _listed_instructions(
+    paper_listed: bool, screens_listed: bool = False, research_served: bool = False
+) -> str:
     """The listed profile's instructions, assembled from the corpus."""
     return _assemble.instructions(
-        "listed", paper_listed=paper_listed, screens_listed=screens_listed
+        "listed",
+        paper_listed=paper_listed,
+        screens_listed=screens_listed,
+        research_served=research_served,
+    )
+
+
+def instructions_for(*, research_served: bool) -> str:
+    """This server's instructions for a caller who is (or is not) served Research (Research 07 §5.3).
+
+    The profile, toolsets and listed flags are this process's (read at call time, so a hosted request's bound
+    listed host answers for its caller); only the research line varies. Research off is the string
+    ``create_server`` builds for the hosted server, byte for byte."""
+    from keel.hosting import is_hosted
+    from keel.tools.outcomes import paper_deploy_loaded
+    from keel.tools.outcomes._toolsets import (
+        is_listed_profile,
+        listed_paper_enabled,
+        listed_screens_enabled,
+        load_toolsets,
+    )
+
+    if is_listed_profile():
+        return _listed_instructions(
+            listed_paper_enabled(), listed_screens_enabled(), research_served=research_served
+        )
+    active = load_toolsets()
+    # The operating core's `paper` section rides the tool (S06 §3.9 row 3):
+    # false while the paper SDK is held, so the instructions are HEAD's.
+    return _full_instructions(
+        "live-write" in active,
+        hosted=is_hosted(),
+        paper_loaded=paper_deploy_loaded(active),
+        research_served=research_served,
     )
 
 
@@ -453,7 +467,11 @@ def listed_instructions() -> str:
 
 
 def _full_instructions(
-    live_write_loaded: bool, *, hosted: bool = False, paper_loaded: bool = False
+    live_write_loaded: bool,
+    *,
+    hosted: bool = False,
+    paper_loaded: bool = False,
+    research_served: bool = False,
 ) -> str:
     """Instructions for the full (local MCP / CLI) profile.
 
@@ -464,11 +482,15 @@ def _full_instructions(
     before — the condition is the corpus section's
     ``when: live_write_absent`` key. The ``paper`` section is emitted only
     when ``keel_paper_deploy`` is loaded (``when: paper_loaded``, S06 §3.9
-    row 3).
+    row 3). The ``research`` section is emitted only when ``research_served``
+    (a local server whose caller is served Research, ``when: research_served``).
     """
     profile = "full-hosted" if hosted else "full-local"
     return _assemble.instructions(
-        profile, live_write_loaded=live_write_loaded, paper_loaded=paper_loaded
+        profile,
+        live_write_loaded=live_write_loaded,
+        paper_loaded=paper_loaded,
+        research_served=research_served,
     )
 
 

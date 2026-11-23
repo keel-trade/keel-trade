@@ -43,7 +43,7 @@ PROPERTIES = {
     "source_file": {"type": "string", "description": "A local study/1 document path."},
 }
 PROPERTIES["present"] = present_param_schema(
-    "`receipt`, which on a run is the run card: one fixed height for its progress, then its result"
+    "`receipt`: one short card that shows the run's progress, then its result"
 )
 
 #: 00 §A.3's run-set states from which nothing more runs.
@@ -73,23 +73,32 @@ def state_of(env: dict) -> str:
 
 
 def wait_for(ctx, env: dict, *, wait: bool) -> dict:
-    """Poll the study within the shared budget; a failed read keeps what we had."""
+    """Poll the study within the shared budget; a failed read keeps what we had.
+
+    JOURNEYS J6 (SDK-FIX): a run that is done at its answer (every run reused) still answers with the study read's
+    result. keel-api's run answer serves no headline or bars (it reads no outputs), so a Map whose 28 runs were all
+    reused answered "28 of 28 runs done" and nothing else: the one final read below runs for it too."""
     study_id = (env.get("study") or {}).get("study_id")
     version = (env.get("study") or {}).get("version")
-    if not wait or not study_id or state_of(env) in TERMINAL:
+    if not wait or not study_id:
+        return env
+    if state_of(env) in TERMINAL and (env.get("headline") or env.get("checks")):
         return env
     started = time.monotonic()
+    path = f"/v1/research/studies/{seg(study_id)}"
+
+    def read(params: dict) -> dict:
+        # The submit's quota stays the call's answer about what it spent.
+        got = call(ctx, "get", path, params=params)
+        return {**got, **{k: env[k] for k in ("quota", "quota_notice") if k in env}}
+
     try:
+        # AUDIT S3 #9: the polls read the state only; keel-api builds `card_data` (the chart, the check words) only on
+        # the one read the answer draws, the last. A ?card=full poll every 2 s rebuilt it ~45 times a call.
         while state_of(env) not in TERMINAL and time.monotonic() - started < _poll_budget_s(ctx):
             time.sleep(2)
-            read = call(
-                ctx,
-                "get",
-                f"/v1/research/studies/{seg(study_id)}",
-                params={"version": version, **CARD_FULL},
-            )
-            # The submit's quota stays the call's answer about what it spent.
-            env = {**read, **{k: env[k] for k in ("quota", "quota_notice") if k in env}}
+            env = read({"version": version})
+        env = read({"version": version, **CARD_FULL})
     except KeelError:
         pass
     return env
@@ -105,7 +114,17 @@ def _handler(args, ctx):
         if not form:
             invalid("Send plan_id, or a plan form with max_runs.")
         if args.get("max_runs") is None:
-            invalid("A direct run states max_runs (the most runs it may start).")
+            # POLISH (MCP-FINAL S3): the refusal's next call is the valid one, the plan of this same form (its plan_id
+            # then runs with no max_runs), never ``{"tool": null}``
+            from keel.errors import UsageError
+
+            err = UsageError("A direct run states max_runs (the most runs it may start).")
+            err.recovery_tool = "keel_research_plan"
+            err.recovery_tool_args = {
+                k: v for k, v in args.items() if k not in ("max_runs", "wait", "present")
+            }
+            err.suggestion = "Plan it first, then run its plan_id; or send max_runs:"
+            raise err
         body = {"plan": form, "max_runs": args["max_runs"]}
     env = wait_for(ctx, submit(ctx, body), wait=args.get("wait", True))
     # D-328 D5 (13 §2.1, §2.6): a run answers as the fixed-height run card, its progress or its compact result;

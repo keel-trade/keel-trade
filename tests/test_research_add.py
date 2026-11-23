@@ -109,7 +109,7 @@ def test_the_cli_add_prints_the_served_add_words(_api, monkeypatch) -> None:
     assert f"{LEAD}: {ADD_WORDS}" in text, text[:1500]  # RI-049: printed as served
     assert _api.add_plan.call_count == 1 and not _api.plans.called
     assert json.loads(_api.add_plan.calls.last.request.content) == {"add": [REF]}
-    reused = [n for n in SIGNALS if f"{n} reused" in text]
+    reused = [n for n in SIGNALS if f"{n}: reused" in text]
     assert len(reused) == 7, text[:1500]  # non-vacuity: every reused signal printed
 
 

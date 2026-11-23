@@ -51,6 +51,14 @@ def read_study(args: dict, ctx) -> dict:
     return call(ctx, "get", _study_path(args), params=params)
 
 
+def _is_view(row: dict, view) -> bool:
+    """A study read's view row is the one ``view`` names, by its index or its exact title. The CLI passes
+    ``--view 0`` as text, so an index is matched as its number too (STG-SURFACES #3: the chart's rows were titled
+    "0 (version 1)" instead of "Your bars")."""
+    index = row.get("index")
+    return (index is not None and str(index) == str(view)) or row.get("title") == view
+
+
 def _share_view_index(share: dict, view) -> int:
     """A shared chart by its index or exact title, as the share read lists it (the public route takes the index)."""
     for row in share.get("views") or []:
@@ -148,11 +156,7 @@ def _data(args: dict, ctx, *, limit: int = LIST_ROWS_MAX):
     study = read_study({k: args.get(k) for k in ("study_id", "version")}, ctx)
     version = args.get("version") or (study.get("study") or {}).get("version")
     index = next(
-        (
-            row.get("index")
-            for row in study.get("views") or []
-            if row.get("index") == args.get("view") or row.get("title") == args.get("view")
-        ),
+        (row.get("index") for row in study.get("views") or [] if _is_view(row, args.get("view"))),
         None,
     )
     params = {
@@ -176,7 +180,7 @@ def _data(args: dict, ctx, *, limit: int = LIST_ROWS_MAX):
     )
     title = str(args.get("output") or args.get("view"))
     for row in study.get("views") or []:
-        if row.get("index") == args.get("view") or row.get("title") == args.get("view"):
+        if _is_view(row, args.get("view")):
             title = row.get("title") or title
     call_args = {
         k: args.get(k)
@@ -188,6 +192,21 @@ def _data(args: dict, ctx, *, limit: int = LIST_ROWS_MAX):
     text = f"{text}\nView in Keel: {link}" if link else text
     env = {**page, "links": study.get("links") or {}}
     return study_result(env, text, size="view", mode="chart")
+
+
+#: MCP-FINAL r2: the address read's ``by_reason`` counts in words, never the keys ("3 inert, 15 settable, 2 wiring"),
+#: each as its rows' served why-not words say it (research.words: "has no effect while …", "wires the strategy
+#: together; it is not a setting"). A reason with no words here raises: a new served key needs its words first.
+ADDRESS_REASON_WORDS: dict[str, str] = {
+    "settable": "you can set",
+    "bound": "bound to another setting",
+    "wiring": "that wire the strategy together",
+    "infra": "that Keel sets",
+    "follows_declaration": "that follow a declaration",
+    "dead": "that nothing reads",
+    "inert": "with no effect as the strategy stands",
+    "unsupported": "a study cannot vary",
+}
 
 
 def _addresses(args: dict, ctx):
@@ -206,7 +225,7 @@ def _addresses(args: dict, ctx):
         f"Addresses of {args['subject']}: {len(rows)} shown of {total}"
         + (
             " ("
-            + ", ".join(f"{n} {k.replace('_', ' ')}" for k, n in sorted(by_reason.items()))
+            + ", ".join(f"{n} {ADDRESS_REASON_WORDS[k]}" for k, n in sorted(by_reason.items()) if n)
             + ")"
             if by_reason
             else ""
@@ -221,10 +240,10 @@ def _addresses(args: dict, ctx):
         if isinstance(bound_to, list):
             bound_to = ", ".join(str(b) for b in bound_to)
         bound = f" (bound to {bound_to})" if bound_to else ""
-        lines.append(
-            f"- {row.get('address')} = {json.dumps(row.get('value'))}"
-            f" · {row.get('component')} v{row.get('version')}{bound}{why}"
-        )
+        # MCP-FINAL #9: a declaration's address (execution.*, globals.*) belongs to no component, so it names none
+        # (it read "· None vNone"); a step's names its component and version
+        made = f" · {row.get('component')} v{row.get('version')}" if row.get("component") else ""
+        lines.append(f"- {row.get('address')} = {json.dumps(row.get('value'))}{made}{bound}{why}")
     pagination = page.get("pagination") or {}
     if pagination.get("has_more") and pagination.get("cursor"):
         more = {k: args.get(k) for k in ("subject", "include") if args.get(k) is not None}
@@ -247,21 +266,59 @@ def _subject_url(subject: str, ctx) -> str:
     return app_url_for("strategy", found.group(1), ctx) if found else research_url(ctx)
 
 
-def _list(args: dict, ctx):
-    """The user's studies (07 §4.4 with no id): GET /v1/research/studies."""
+#: AUDIT S3 #5: a list header's per-state counts, in the words the study card's state line uses for each state
+#: (``research.card_summary.state_words``: Planned, Running, Stopping, Stopped, Didn't finish, Done, "Done · 2 didn't
+#: finish"), never the enum key ("completed partial", "cancel requested"). Keyed by every state keel-api serves (the
+#: test holds this to ``StudyState``); an unknown key raises rather than printing a key.
+STATE_COUNT_WORDS: dict[str, str] = {
+    "planned": "planned",
+    "running": "running",
+    "cancel_requested": "stopping",
+    "cancelled": "stopped",
+    "failed": "didn't finish",
+    "completed": "done",
+    "completed_partial": "done with runs that didn't finish",
+}
+
+
+def _by_state_order(states: dict) -> list[tuple[str, int]]:
+    """The served ``by_state`` counts in the order a study moves through them."""
+    order = list(STATE_COUNT_WORDS)
+    unknown = [k for k in states if k not in STATE_COUNT_WORDS]
+    if unknown:
+        raise ValueError(f"no list words for study state(s) {unknown!r}")
+    return sorted(((k, int(n)) for k, n in states.items()), key=lambda kv: order.index(kv[0]))
+
+
+def _list(args: dict, ctx, *, most: int | None = None):
+    """The user's studies (07 §4.4 with no id): GET /v1/research/studies.
+
+    ``most`` (the CLI's list, R-22: 100 on the CLI, 25 on MCP; STG-SURFACES #28): read on, page by page (the route
+    serves at most :data:`LIST_ROWS_MAX` a page), until that many studies are read or there are no more; the text
+    then names the rest's cursor as one read does."""
+    want = most if most is not None else (args.get("limit") or LIST_ROWS_MAX)
     params = {
-        "limit": args.get("limit") or LIST_ROWS_MAX,
+        "limit": min(want, LIST_ROWS_MAX),
         "cursor": args.get("cursor"),
         **CARD_FULL,
     }
     page = call(ctx, "get", "/v1/research/studies", params=params)
     rows = list(page.get("data") or [])
+    while most is not None and len(rows) < want:
+        more = page.get("pagination") or {}
+        if not (more.get("has_more") and more.get("cursor")):
+            break
+        params = {**params, "limit": min(want - len(rows), LIST_ROWS_MAX), "cursor": more["cursor"]}
+        page = call(ctx, "get", "/v1/research/studies", params=params)
+        rows += list(page.get("data") or [])
     states = page.get("by_state") or {}
     lines = [
         f"Studies: {len(rows)} shown of {int(page.get('studies_total') or 0)}"
         + (
-            " (" + ", ".join(f"{n} {k.replace('_', ' ')}" for k, n in sorted(states.items())) + ")"
-            if states
+            " ("
+            + ", ".join(f"{n:,} {STATE_COUNT_WORDS[k]}" for k, n in _by_state_order(states) if n)
+            + ")"
+            if any(states.values())
             else ""
         )
     ]
@@ -274,6 +331,18 @@ def _list(args: dict, ctx):
     pagination = page.get("pagination") or {}
     if pagination.get("has_more") and pagination.get("cursor"):
         lines.append("More: " + next_call("keel_research_get", {"cursor": pagination["cursor"]}))
+    if not rows and not int(page.get("studies_total") or 0) and not args.get("cursor"):
+        # STG-SURFACES #25: an org with no study is told how to start one (a Check of one of its strategies).
+        # AUDIT S3 #12: the list of the reader's strategies comes first, so the placeholder is one it can fill
+        lines.append(
+            "Start one: "
+            + next_call("keel_strategy_search", {})
+            + " lists your strategies; "
+            + next_call(
+                "keel_research_plan", {"template": "check", "subjects": ['Strategy("str_…@3")']}
+            )
+            + " checks one, with its id and version in place of str_…@3."
+        )
     from ._research_commands import research_url
 
     lines.append(f"View in Keel: {research_url(ctx)}")
@@ -302,11 +371,9 @@ def _project(args: dict, ctx):
 
 def project_url(project_id: str, ctx) -> str:
     """The project's app page, ``link_routes.json``'s ``project`` route (SERVE's, 13 §3.6)."""
-    from .open_in_app import research_link
+    from .open_in_app import app_base, research_link
 
-    return research_link(
-        "project", project_id, origin=str(getattr(ctx, "app_url", "https://app.usekeel.io"))
-    )
+    return research_link("project", project_id, origin=app_base(ctx))
 
 
 #: R-24 (WL-AG-08): each library kind's route kind and the subject call a study names an item by (07 §4.10,
@@ -331,10 +398,80 @@ def _library_call(item: dict) -> str:
     return f"Strategy({ref})"
 
 
+#: D-415 D5: the user's own signals: keel-api's strategies list, ``kind=signal`` (the one owner of "this pipeline is a
+#: signal", ``routers/strategies._SIGNAL_HEAD_SQL``), one page.
+MINE_LISTED = 100
+_SIGNAL_ROLES = frozenset({"signal", "filter", "event", "regime"})
+
+
+def _mine(args: dict, ctx):
+    """D-415 D5 (SIGNALS-FIRST): ``library="mine"``, the user's own signals in the library list's shape: each by its
+    name and version with the exact call a study names it by, ``Output("str_…@n", output="…")``, its output read from
+    the user's blocks at that version (``GET /v1/blocks?scope=mine``; the strategies list serves no output names). A
+    signal whose output could not be read says so, never a guessed call. ``keel signals list`` is this read."""
+    listing = call(
+        ctx,
+        "get",
+        "/v1/strategies",
+        params={"kind": "signal", "limit": MINE_LISTED, "sort": "updated_desc"},
+    )
+    rows = [
+        r for r in listing.get("data") or [] if isinstance(r, dict) and r.get("kind") == "signal"
+    ]
+    outputs: dict[str, str] = {}
+    if rows:
+        blocks = call(ctx, "get", "/v1/blocks", params={"scope": "mine", "limit": 50})
+        for item in blocks.get("items") or []:
+            if isinstance(item, dict) and item.get("role") in _SIGNAL_ROLES:
+                outputs.setdefault(str(item.get("ref")), str(item.get("output")))
+    items = []
+    for r in rows:
+        sid, version = r.get("id") or r.get("strategy_id"), r.get("current_sequence")
+        ref = f"{sid}@{version}" if isinstance(sid, str) and isinstance(version, int) else None
+        output = outputs.get(ref or "")
+        items.append(
+            {
+                "label": r.get("name"),
+                "ref": ref,
+                "version": version,
+                "output": output,
+                "writes": f"Output({json.dumps(ref)}, output={json.dumps(output)})"
+                if ref and output
+                else None,
+                "made_from_study_id": r.get("made_from_study_id"),
+            }
+        )
+    shown = items[:LIST_ROWS_MAX]
+    lines = [f"Your signals: {len(shown)} shown of {len(items)}"]
+    for item in shown:
+        said = item["writes"] or (
+            "not saved yet" if item["ref"] is None else "its output could not be read just now"
+        )
+        lines.append(f"- {item['label']} · v{item['version']} · {said}")
+    first = next((i for i in shown if i["writes"]), None)
+    if first:
+        example = next_call(
+            "keel_research_plan", {"template": "signal", "subjects": [first["writes"]]}
+        )
+        lines.append(f"Study one: {example}")
+    elif not items:
+        lines.append(
+            "None yet. Make one from a signal comparison's mix (keel_research_make_signal), "
+            'or list Keel\'s with library="signals".'
+        )
+    from ._research_commands import research_url
+
+    link = research_url(ctx)
+    lines.append(f"View in Keel: {link}")
+    out = {"data": items, "total": len(items), "links": {"app": link}, "card_line": lines[0]}
+    return study_result(out, "\n".join(lines), size="receipt", mode="library")
+
+
 def _library(args: dict, ctx):
     """R-24 (A3 #1, 07 §4.10): Keel's library, ``GET /v1/research/library?kind=…``, so an agent on the hosted
     connector (where keel_blocks_search is not listed) finds the pinned refs a study names. Each item is written
-    with its exact subject call and the plan that studies it; a one-row receipt card (13 §2.1)."""
+    with its exact subject call and the plan that studies it; a one-row receipt card (13 §2.1). ``"mine"`` lists the
+    user's own signals the same way (``_mine``, D-415 D5)."""
     others = [
         k
         for k in ("study_id", "share_id", "subject", "project_id", "view", "output")
@@ -342,6 +479,8 @@ def _library(args: dict, ctx):
     ]
     if others:
         invalid("library lists Keel's library; send it without " + ", ".join(others) + ".")
+    if args["library"] == "mine":
+        return _mine(args, ctx)
     kind, noun = _LIBRARY[args["library"]]
     env = call(ctx, "get", "/v1/research/library", params={"kind": kind})
     items = [i for i in env.get("data") or [] if isinstance(i, dict)]
@@ -371,7 +510,9 @@ def _library(args: dict, ctx):
 
     link = research_url(ctx)
     lines.append(f"View in Keel: {link}")
-    out = {**env, "data": items, "total": len(items), "links": {"app": link}}
+    # CARD-RENDER receipt-library (13 §2.1, D8): the one-row receipt names what it read in the text's own first line
+    # (never "Untitled"); the library route serves no card line of its own
+    out = {**env, "data": items, "total": len(items), "links": {"app": link}, "card_line": lines[0]}
     return study_result(out, "\n".join(lines), size="receipt", mode="library")
 
 
@@ -434,7 +575,18 @@ def _handler(args, ctx):
     base = read_base(env)
     if base is not None:
         env = {**env, "base": base}
+    if never_ran(env):
+        # 13 §5's Planned row (D-381 (2)): a saved Draft that never ran has nothing to draw as a study; its card is
+        # the plan receipt with the Draft's served words, never an empty study frame
+        return study_result(env, study_text(env), size="receipt", mode="plan")
     return study_result(env, study_text(env), size=present_choice(args) or "view", mode="study")
+
+
+def never_ran(env: dict) -> bool:
+    """A study read whose version is a Draft no run has touched (``study.state`` ``planned``, 13 §5): no run set, no
+    card summary, nothing measured."""
+    study = env.get("study") if isinstance(env.get("study"), dict) else {}
+    return study.get("state") == "planned" and not env.get("card_summary")
 
 
 TOOL = register_research(

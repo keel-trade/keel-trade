@@ -1,22 +1,32 @@
-"""serverInfo.icons carries a 256 px Keel mark within host connector limits.
+"""serverInfo.icons: the Keel mark as https URLs, 256 px first, and never a ``data:`` URI.
 
-ChatGPT's connector form caps icons at 256 px and 10 KB; hosts that honour
-``serverInfo.icons`` should find a mark inside those bounds, declared before the
-512 px one. The embedded 256 px copy must decode to exactly the PNG shipped on
-the site, so the https and data: sources are the same image.
+ChatGPT's connector form caps icons at 256 px and 10 KB; hosts that honour ``serverInfo.icons`` find a mark inside
+those bounds, declared before the 512 px one. Each URL names a PNG the site serves (``services/keel-site/public``).
+
+STG-SURFACES #5 (every MCP tool, not research only): the MCP SDK stamps ``serverInfo`` on every result's
+``_meta["io.modelcontextprotocol/serverInfo"]``, so the two embedded PNGs rode every tool call (22.4 KB of a 23.5 KB
+``keel_plan_usage`` answer; a 40-step plan at 56.8 KB against D-328's 60,000 B cap). The bound below holds a core
+tool's whole ``_meta`` small. SEED (reversed by reversing the edit): a ``data:`` icon back in ``create_server``'s
+``icons`` -> both the URL-only arm and the ``_meta`` bound red. Control: the MCPB bundle's own icon file arm is green
+under the seed (it never read the embedded copy). Non-vacuity: the stamp is present, so the bound measures a real
+serverInfo.
 """
 
 from __future__ import annotations
 
-import base64
+import asyncio
+import json
 import pathlib
 import struct
 
-from keel.mcp import _branding
-
 
 REPO = pathlib.Path(__file__).resolve().parents[4]
-SITE_PNG = REPO / "services/keel-site/public/brand/keel-app-icon-256.png"
+SITE = REPO / "services/keel-site/public"
+SDK = pathlib.Path(__file__).resolve().parents[1]
+SERVER_INFO_META_KEY = "io.modelcontextprotocol/serverInfo"
+#: A core tool result's whole ``_meta``: the SDK's stamp (name, version, website, two icon URLs) and FastMCP's own
+#: block, with room to spare; an embedded PNG is ~22,000 B.
+META_BOUND = 2_000
 
 
 def _png_size(raw: bytes) -> tuple[int, int]:
@@ -24,32 +34,51 @@ def _png_size(raw: bytes) -> tuple[int, int]:
     return struct.unpack(">II", raw[16:24])
 
 
-def _embedded_256() -> bytes:
-    prefix = "data:image/png;base64,"
-    assert _branding.KEEL_ICON_256_DATA_URI.startswith(prefix)
-    return base64.b64decode(_branding.KEEL_ICON_256_DATA_URI[len(prefix) :])
-
-
-def test_embedded_256_icon_is_within_host_limits() -> None:
-    raw = _embedded_256()
-    assert _png_size(raw) == (256, 256)
-    assert len(raw) <= 10 * 1024, len(raw)
-    assert _branding.KEEL_ICON_256_SIZES == ["256x256"]
-
-
-def test_embedded_256_icon_is_the_site_asset() -> None:
-    assert SITE_PNG.exists()
-    assert _embedded_256() == SITE_PNG.read_bytes()
-    assert _branding.KEEL_ICON_256_URL.endswith("/brand/keel-app-icon-256.png")
-
-
-def test_server_declares_256_first_then_512() -> None:
+def test_the_server_declares_url_icons_only_256_first() -> None:
     from keel.mcp.server import create_server
 
     icons = create_server()._mcp_server.icons  # type: ignore[attr-defined]
     sizes = [tuple(i.sizes or []) for i in icons]
-    # Non-vacuous: three icons, the 256 mark ahead of the 512 one.
-    assert len(icons) == 3, sizes
-    assert sizes[0] == ("256x256",) and sizes[-1] == ("512x512",)
-    assert str(icons[0].src).startswith("https://")
-    assert str(icons[1].src).startswith("data:image/png;base64,")
+    assert len(icons) == 2, sizes  # non-vacuous: the 256 and the 512 mark
+    assert sizes == [("256x256",), ("512x512",)]
+    assert all(str(i.src).startswith("https://usekeel.io/brand/") for i in icons), [i.src for i in icons]
+    assert not any(str(i.src).startswith("data:") for i in icons)
+
+
+def test_each_icon_url_names_a_png_the_site_serves() -> None:
+    from keel.mcp import _branding
+
+    for url, size in ((_branding.KEEL_ICON_256_URL, 256), (_branding.KEEL_ICON_URL, 512)):
+        path = SITE / url.removeprefix("https://usekeel.io/")
+        assert path.exists(), path
+        assert _png_size(path.read_bytes()) == (size, size)
+    assert len((SITE / "brand/keel-app-icon-256.png").read_bytes()) <= 10 * 1024
+
+
+def test_the_mcpb_bundle_still_ships_its_own_icon_file() -> None:
+    """Control: the desktop bundle copies ``scripts/icon.png`` and names it in its manifest; the server's icons
+    never fed it."""
+    icon = SDK / "scripts" / "icon.png"
+    assert icon.exists() and _png_size(icon.read_bytes())[0] >= 256
+    manifest = json.loads((SDK / "scripts" / "manifest.template.json").read_text())
+    assert manifest["icon"] == "icon.png"
+    assert 'ICON_SRC = SCRIPTS_DIR / "icon.png"' in (SDK / "scripts" / "build_mcpb.py").read_text()
+
+
+def test_a_core_tool_results_meta_stays_small(monkeypatch) -> None:
+    """Every tool result carries the serverInfo stamp; a core tool's whole ``_meta`` stays under ``META_BOUND``."""
+    from fastmcp import Client
+
+    from keel.mcp.server import create_server
+
+    monkeypatch.setenv("KEEL_SERVER_PROFILE", "full")
+
+    async def meta_of(tool: str) -> dict:
+        async with Client(create_server()) as client:
+            result = await client.call_tool_mcp(tool, {})
+            return dict(result.meta or {})
+
+    meta = asyncio.run(meta_of("keel_plan_usage"))
+    assert SERVER_INFO_META_KEY in meta  # non-vacuity: the stamp is there to measure
+    size = len(json.dumps(meta, separators=(",", ":")))
+    assert size < META_BOUND, size

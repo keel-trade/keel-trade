@@ -7,23 +7,26 @@
   },
   "content": [
     {
-      "text": "This study was not run and nothing was charged. You have used 3 of 3 studies; they reset Dec 3. Planning, reading, saving and runs that reuse every result do not count. Trader and Pro include more. Plans are changed in the Keel web app.\nView in Keel: https://app.usekeel.io/research\n\n{\"code\": \"insufficient_entitlements\", \"message\": \"This study was not run and nothing was charged. You have used 3 of 3 studies; they reset Dec 3. Planning, reading, saving and runs that reuse every result do not count. Trader and Pro include more. Plans are changed in the Keel web app.\", \"what_was_expected\": \"Plan limit; don't retry before the reset. Tell the user the numbers.\", \"example\": {}, \"suggested_next_action\": {\"tool\": null, \"args\": {}}, \"detail\": {\"code\": \"quota_exhausted\", \"unit\": \"research_studies\", \"card_words\": \"This study was not run and nothing was charged. You have used 3 of 3 studies; they reset Dec 3. Planning, reading, saving and runs that reuse every result do not count.\", \"links\": {\"app\": \"https://app.usekeel.io/research\"}}, \"exit_code\": 6, \"retryable\": false}",
+      "text": "This study can't run yet, and nothing was charged. You have used 2 of 2 studies; they reset Dec 3. Planning, reading, saving and runs that reuse every result do not count. Saved as a Draft, this study can run from Dec 3. Trader, Quant and Pro include more. Plans are changed in the Keel web app.\nPlan limit; don't retry before the reset. Tell the user the numbers.\nView in Keel: https://staging-app.tailf4d598.ts.net/research\n\n{\"code\": \"insufficient_entitlements\", \"message\": \"This study can't run yet, and nothing was charged. You have used 2 of 2 studies; they reset Dec 3. Planning, reading, saving and runs that reuse every result do not count. Saved as a Draft, this study can run from Dec 3. Trader, Quant and Pro include more. Plans are changed in the Keel web app.\", \"what_was_expected\": \"Plan limit; don't retry before the reset. Tell the user the numbers.\", \"example\": {}, \"suggested_next_action\": {\"tool\": null, \"args\": {}}, \"detail\": {\"code\": \"quota_exhausted\", \"unit\": \"research_studies\", \"remedy\": {\"kind\": \"save_for_reset\", \"resets_at\": \"2026-12-03T00:00:00Z\"}, \"links\": {\"app\": \"https://staging-app.tailf4d598.ts.net/research\"}}, \"exit_code\": 6, \"retryable\": false}",
       "type": "text"
     }
   ],
   "structuredContent": {
     "code": "insufficient_entitlements",
     "detail": {
-      "card_words": "This study was not run and nothing was charged. You have used 3 of 3 studies; they reset Dec 3. Planning, reading, saving and runs that reuse every result do not count.",
       "code": "quota_exhausted",
       "links": {
-        "app": "https://app.usekeel.io/research"
+        "app": "https://staging-app.tailf4d598.ts.net/research"
+      },
+      "remedy": {
+        "kind": "save_for_reset",
+        "resets_at": "2026-12-03T00:00:00Z"
       },
       "unit": "research_studies"
     },
     "example": {},
     "exit_code": 6,
-    "message": "This study was not run and nothing was charged. You have used 3 of 3 studies; they reset Dec 3. Planning, reading, saving and runs that reuse every result do not count. Trader and Pro include more. Plans are changed in the Keel web app.",
+    "message": "This study can't run yet, and nothing was charged. You have used 2 of 2 studies; they reset Dec 3. Planning, reading, saving and runs that reuse every result do not count. Saved as a Draft, this study can run from Dec 3. Trader, Quant and Pro include more. Plans are changed in the Keel web app.",
     "retryable": false,
     "suggested_next_action": {
       "args": {},

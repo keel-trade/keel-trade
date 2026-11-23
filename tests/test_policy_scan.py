@@ -351,7 +351,7 @@ def listed_surface(request):
     KEEL_EXECUTION_MODE=hosted — the deployment configuration a
     directory registration actually runs — once with KEEL_LISTED_PAPER off
     and once on (paper SDK released; S06 §3.4.3, AC-06-6)."""
-    from keel.mcp.server import create_server
+    from keel.mcp.server import create_server, instructions_for
 
     paper = _LISTED_STATE_SPECS[request.param][2]
     with listed_flag_state(paper, request.param):
@@ -368,7 +368,14 @@ def listed_surface(request):
             }
             for t in tools
         ]
-        surface = ListedSurface((tools_json, server.instructions or "", {p.name for p in prompts}))
+        # A served caller's instructions are swapped in at initialize (services/mcp-server), so a research-on
+        # state scans what that caller reads, not the built (Research-off) string.
+        instructions = (
+            instructions_for(research_served=True)
+            if request.param in _RESEARCH_ON_STATES
+            else server.instructions
+        )
+        surface = ListedSurface((tools_json, instructions or "", {p.name for p in prompts}))
         surface.paper = paper
         surface.screens = request.param in _SCREENS_ON_STATES
         surface.research = request.param in _RESEARCH_ON_STATES
@@ -1848,9 +1855,9 @@ def test_g4_plan_payloads_carry_no_url_and_no_upsell(g4_payloads):
     assert (
         g4_payloads["critical_run"]
         .structured["quota_notice"]
-        .startswith("4 of 50 backtests left; resets Mon 28 Sep.")
+        .startswith("4 of 50 backtests left; resets Sep 28.")
     )
-    assert g4_payloads["floor_run"].structured["floor_notice"].startswith("Note: paper and live")
+    assert g4_payloads["floor_run"].structured["floor_notice"].startswith("Paper and live on Free")
 
 
 # ─── The timeframe-floor refusal (plan change spec 01 §C10/§C11, §L7) ────
@@ -1885,18 +1892,23 @@ def test_floor_refusal_is_a_plan_limit_handoff_with_structured_facts(
     floor wall as the message, the plans that run faster named and their
     floors never — and it passes every plan scan."""
     payload = g4_payloads[name]
-    assert payload.is_error, name
+    # Q-7927 (plans spec 02 §C0 test 4, G9): a plan limit is not an error.
+    assert not payload.is_error, name
     body = payload.structured
     assert body["code"] == "handoff_required", body
     assert body["detail"]["code"] == "SERVING_CLOCK_BELOW_PLAN_FLOOR", body
     assert body["detail"]["floor"] == floor and body["detail"]["requested"] == requested
     own = payload.own_plan
-    assert body["message"].startswith(f"Paper and live on {own} need {floor} or slower"), body
+    from keel.limit_copy import floor_words
+
+    assert body["message"].startswith(f"Paper and live on {own} run {floor_words(floor)}"), body
     # The agent-facing message names the DSL field, as the talking points do;
     # only the card's `limit_view` keeps plain words (Q-7601 fix round).
-    assert f"Change `target_timeframe` to {floor} or slower." in body["message"], body
+    assert f"Change `target_timeframe` to {floor} to deploy it" in body["message"], body
     assert body["message"] == " ".join(body["talking_points"]), body
-    assert body["limit_view"]["reset"] == f"Change the strategy's timeframe to {floor} or slower."
+    assert (
+        body["limit_view"]["reset"] == f"Change the strategy's timeframe to {floor} to deploy it."
+    )
     assert set(body["limit_view"]) >= {"headline", "reset", "plans"}, body["limit_view"]
     assert body["limit_details"]["more_plans"] == list(payload.more_plans)
     assert payload.more_plans, "non-vacuity: a v2 plan below Pro has faster plans"
@@ -1929,8 +1941,10 @@ def test_floor_refusal_scan_reds_on_a_pitch_and_on_an_unserved_plan():
     finally:
         errors.floor_change_line = real
     assert refused.is_error and refused.structured.get("code") != "handoff_required", refused
+    from . import _plan_catalog as cat
+
     control = sf.paper_floor_payload("1h", "15min")
-    control.own_plan, control.more_plans = "Free", ("Trader", "Pro")
+    control.own_plan, control.more_plans = "Free", tuple(cat.names(cat.faster_plans("free")))
     assert _plan_payload_violations(control) == []
     control.more_plans = ("Pro",)
     assert any("more clause" in h for h in _plan_payload_violations(control))
@@ -1940,9 +1954,9 @@ def test_floor_refusal_scan_reds_on_a_pitch_and_on_an_unserved_plan():
 
 #: The 30-day payloads and the phrase each must render (non-vacuity).
 _PERIOD_30D_TEXT = {
-    "plan_status_30d": "Backtests: 21 of 25 left; resets Sun 29 Nov.",
-    "critical_run_30d": "4 of 25 backtests left; resets Sun 29 Nov.",
-    "paid_wall_30d": "Backtests: 1,000 of 1,000 used on Trader; resets Sun 29 Nov.",
+    "plan_status_30d": "Backtests: 4 of 25 used on Free; resets Nov 29.",
+    "critical_run_30d": "4 of 25 backtests left; resets Nov 29.",
+    "paid_wall_30d": "Backtests: 1,000 of 1,000 used on Trader; resets Nov 29.",
 }
 
 
@@ -1981,13 +1995,14 @@ def test_30d_scan_reds_on_monthly_wording(monkeypatch):
     the call) or reds the scans — and the sentence the control renders
     (test_30d_words_pass_d12) is gone."""
     import keel.errors as errors
-    from keel.tools.outcomes import plan_status
+    import keel.limit_copy as limit_copy
 
     def monthly(when):
         return f"{when.day} {when:%b} (monthly)"
 
+    # The one date renderer every v3 row reads, and the pre-v3 path's.
+    monkeypatch.setattr(limit_copy, "reset_words", monthly)
     monkeypatch.setattr(errors, "format_reset_date", monthly)
-    monkeypatch.setattr(plan_status, "format_reset_date", monthly)
     seeded = sf.period_30d_payloads()
     for name in ("plan_status_30d", "critical_run_30d"):
         payload = seeded[name]
@@ -2025,7 +2040,7 @@ def test_g4_plan_name_rule_can_fail():
 
     trader_more = tuple(cat.names(cat.higher_plans("trader", "backtest_runs")))
     free_more = tuple(cat.names(cat.higher_plans("free", "backtest_runs")))
-    trader_wall = "Backtests: 1,000 of 1,000 used on Trader; resets Mon 28 Sep."
+    trader_wall = "Backtests: 1,000 of 1,000 used on Trader; resets Sep 28."
     seeds = {
         "Starter on a Trader wall": (
             trader_wall + " Starter and Pro include more.",
@@ -2034,23 +2049,27 @@ def test_g4_plan_name_rule_can_fail():
         ),
         "named in passing": (trader_wall + " Starter is also a plan.", "Trader", trader_more),
         "clause on a Pro wall": (
-            "Backtests: 4,000 of 4,000 used on Pro; resets Mon 28 Sep. Trader includes more.",
+            "Backtests: 4,000 of 4,000 used on Pro; resets Sep 28. Trader includes more.",
             "Pro",
             (),
         ),
     }
     for what, (text, own, more) in seeds.items():
         assert sf.plan_name_violations(text, own=own, more=more), what
+    from keel.errors import more_clause
+
     web = "Plans are changed in the Keel web app."
+    free_clause = more_clause("consumable", list(free_more))
+    trader_clause = more_clause("consumable", list(trader_more))
     controls = (
         (
-            f"Backtests: 25 of 25 used on Free; resets Mon 28 Sep. Trader and Pro include more. {web}",
+            f"Backtests: 25 of 25 used on Free; resets Sep 28. {free_clause} {web}",
             "Free",
             free_more,
         ),
-        (f"{trader_wall} Pro includes more. {web}", "Trader", trader_more),
+        (f"{trader_wall} {trader_clause} {web}", "Trader", trader_more),
         (
-            "Plan: Free. Trader and Pro include more; plans are changed in the Keel web app.",
+            f"Plan: Free. {free_clause[:-1]}; plans are changed in the Keel web app.",
             "Free",
             free_more,
         ),
@@ -2075,13 +2094,14 @@ def test_every_v2_limit_kind_has_a_wall_notice_and_plan_usage_fixture(g4_payload
         assert set(slots) == {"wall", "notice", "plan_usage"}, kind
         for slot, entry in slots.items():
             if entry is None:
-                assert (kind, slot) == ("feature", "notice"), (kind, slot)
+                # Spec 02 §D: no near notice for a feature or a size setting.
+                assert (kind, slot) in (("feature", "notice"), ("setting", "notice")), (kind, slot)
                 continue
             name, sentence = entry
             assert name in g4_payloads, (kind, slot, name)
             assert sentence in g4_payloads[name].text, (kind, slot, g4_payloads[name].text[:400])
             checked += 1
-    assert checked == 11
+    assert checked == 13
 
 
 def test_every_plans_yaml_unit_a_tool_can_hit_has_a_renderer_row():
@@ -2093,7 +2113,7 @@ def test_every_plans_yaml_unit_a_tool_can_hit_has_a_renderer_row():
 
     SEED (run 2026-11-16): delete the `paper_strategies_max` row — this reds;
     flip `research_studies` to CAP — this reds on the kind."""
-    from keel.errors import CAP, CONSUMABLE, FEATURE, FLOOR, LIMIT_UNITS
+    from keel.errors import CAP, CONSUMABLE, FEATURE, FLOOR, LIMIT_UNITS, SETTING
 
     from . import _plan_catalog as cat
 
@@ -2112,7 +2132,11 @@ def test_every_plans_yaml_unit_a_tool_can_hit_has_a_renderer_row():
         utype = decl.get("type")
         if unit in not_on_agent_surface or decl.get("silent"):
             continue
-        if utype == "setting" and unit != "screener_refresh_min_minutes":
+        if utype == "setting" and unit not in (
+            "screener_refresh_min_minutes",
+            "screen_assets_max",
+            "research_backtests_max",
+        ):
             continue  # research settings bound a study's shape, never a plan wall
         if utype == "boolean" and not unit.startswith("feature:research"):
             continue  # platform features no agent tool is refused on
@@ -2121,14 +2145,19 @@ def test_every_plans_yaml_unit_a_tool_can_hit_has_a_renderer_row():
             missing.append(unit)
             continue
         checked += 1
-        if type_to_kind.get(utype) != row.kind:
+        expected = (
+            SETTING
+            if unit in ("screen_assets_max", "research_backtests_max")
+            else type_to_kind.get(utype)
+        )
+        if expected != row.kind:
             disagree.append((unit, utype, row.kind))
     assert not missing, f"units an agent tool can hit with no LIMIT_UNITS row: {missing}"
     assert not disagree, f"rows whose kind disagrees with plans.yaml: {disagree}"
     assert checked >= 15, checked
     # The floor is not a unit: it is every catalog plan's attr.
     assert LIMIT_UNITS["paper_live_clock_floor"].kind == FLOOR
-    assert all(cat.floor_of(p) for p, _ in cat.paid_rows())
+    assert all(cat.floor_of(p, v) for p, v in cat.paid_rows())
 
 
 def test_limit_unit_labels_match_the_served_label_table():
@@ -2192,9 +2221,9 @@ def test_g4_family_control_arms():
     ):
         assert sf.family_hits(retired, scope="strict"), retired
     for kept in (
-        "Backtests: 50 of 50 used on Free; resets Mon 29 Sep.",
+        "Backtests: 50 of 50 used on Free; resets Sep 29.",
         "Composing, validating and reading existing results don't use this allowance.",
-        "4 of 50 backtests left; resets Mon 29 Sep.",
+        "4 of 50 backtests left; resets Sep 29.",
         "Read-only monitoring of the strategies running on the caller's account.",
         "Plans are changed in the Keel web app.",
     ):
@@ -2215,7 +2244,7 @@ def test_g4_family_control_arms():
 #
 # A first-week allowance is the one time-limited number an agent surface
 # states, and it is stated as a fact folded into the backtests line:
-# "(154 first-week extras until Tue 13 Oct)" (Q-7601 fix round). The family below is how that sentence could
+# "(154 first-week extras until Oct 13)" (Q-7601 fix round). The family below is how that sentence could
 # drift into a push — and it is refused by every guard that reads agent copy:
 # the runtime emit guard (`assert_neutral_wall_text`), the talking-point
 # validator (`validate_talking_points`) and the G4 strict scan
@@ -2301,7 +2330,7 @@ def test_the_approved_first_week_sentence_passes_every_guard():
 #: (Q-7601 fix round): the first-week part's own count and end DATE, no
 #: window phrase and no "then" pot (both stay in the structured block). It
 #: keeps the approved vocabulary and states no other plan, price or push.
-BOTH_POTS_SENTENCE = "65 of 75 backtests left (40 first-week extras until Fri 6 Nov)."
+BOTH_POTS_SENTENCE = "65 of 75 backtests left (40 first-week extras until Nov 6)."
 
 
 def test_the_both_pots_sentence_is_rendered_and_passes_every_guard():
@@ -2353,9 +2382,13 @@ def test_g4_first_week_payloads_carry_the_sentence_and_nothing_else(g4_payloads)
         for p in plan.structured["talking_points"]
     ), plan.structured
     run = g4_payloads["critical_run_first_week"]
+    from keel.errors import more_clause
+
+    from . import _plan_catalog as cat
+
     assert run.structured["quota_notice"] == (
-        "4 of 50 backtests left (4 first-week extras until Tue 13 Oct); resets Mon 28 Sep. "
-        "Trader and Pro include more."
+        "4 of 50 backtests left (4 first-week extras until Oct 13); resets Sep 28. "
+        + more_clause("consumable", cat.names(cat.higher_plans("free", "backtest_runs")))
     ), run.structured.get("quota_notice")
     for payload in (plan, run):
         for text in payload.strings():
@@ -2780,6 +2813,9 @@ _STUDY_ENVELOPE_FIELDS = frozenset(
         "time_words",
         "card_line",
         "card_words",
+        # MCP-CARDS (D-420): the run face's dots read the study read's progress counts by state
+        # (keel-api StudyProgress.by_status: running, failed, cancelled)
+        "by_status",
     }
 )
 

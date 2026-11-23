@@ -1,0 +1,577 @@
+{
+  "_provenance": "SDK-FIX 2026-11-20: card_summary of two Compare runs on staging fc5ff7629a (MCP-FINAL phase 2, results-p2/p2-run-compare-{clocks,three}.json, structuredContent.card_summary), as served by keel-api. The study read serves headline.measures as the same numbers in the same order (research.lifecycle: headline measures = numbers[:4], card numbers = numbers[:4]). SDK-FIX added a Signal study (get-empty-signal.json, stu_01m7rg6pk79460y9c5ck1cgm35) and two curated share reads (p2-share-crypto-momentum-factor.json, p2-share-funding-rate-signal-hype.json): two ('ic', 'ic') tiles, next day and 7 days ahead.",
+  "two": {
+    "study_id": "stu_01m7xm4c2xke87ny39rz21nd79",
+    "card_summary": {
+      "schema": "keel.research.card/2",
+      "kind_label": {
+        "key": "compare",
+        "name": "Compare",
+        "short": "Compare"
+      },
+      "maker": "your_agent",
+      "maker_words": "by your agent",
+      "state": "completed",
+      "state_words": "Done · Nov 20",
+      "title": "MACD Crossover Strategy (Crypto) vs RSI Oversold-Recovery Strategy (Crypto)",
+      "version": 1,
+      "headline": {
+        "text": "Sharpe (daily) over the window, MACD Crossover Strategy (Crypto): 0.87",
+        "chips": []
+      },
+      "lead": "Highest Sharpe of 2 results: MACD Crossover Strategy (Crypto) at 0.87",
+      "top5": {
+        "kind": "results",
+        "rows": [
+          {
+            "label": "MACD Crossover Strategy (Crypto)",
+            "value": 0.8686520352742987,
+            "unit": "ratio",
+            "slot": 1,
+            "value_words": "0.87"
+          },
+          {
+            "label": "RSI Oversold-Recovery Strategy (Crypto)",
+            "value": -1.1161217428683863,
+            "unit": "ratio",
+            "slot": 2,
+            "value_words": "−1.12"
+          }
+        ],
+        "total": 2
+      },
+      "numbers": [
+        {
+          "label": "Sharpe (daily) over the window, MACD Crossover Strategy (Crypto)",
+          "value": 0.8686520352742987,
+          "unit": "ratio",
+          "ref": "base.summary",
+          "measure": "sharpe",
+          "sample": {
+            "days": 365,
+            "first_day": "2025-11-19",
+            "last_day": "2026-11-19"
+          },
+          "value_words": "0.87",
+          "sample_words": "365 days"
+        },
+        {
+          "label": "Sharpe (daily) over the window, RSI Oversold-Recovery Strategy (Crypto)",
+          "value": -1.1161217428683863,
+          "unit": "ratio",
+          "ref": "base.summary",
+          "measure": "sharpe",
+          "sample": {
+            "days": 365,
+            "first_day": "2025-11-19",
+            "last_day": "2026-11-19"
+          },
+          "value_words": "−1.12",
+          "sample_words": "365 days"
+        },
+        {
+          "label": "Sharpe, MACD Crossover Strategy (Crypto) against RSI Oversold-Recovery Strategy (Crypto)",
+          "value": 1.984773778142685,
+          "unit": "ratio",
+          "ref": "diff",
+          "measure": "difference",
+          "sample": {
+            "shared_days": 365,
+            "first_day": "2025-11-19",
+            "last_day": "2026-11-19"
+          },
+          "value_words": "1.98",
+          "sample_words": "365 shared days",
+          "interval_words": "0.24 to 3.52"
+        },
+        {
+          "label": "Effective number of different results, all",
+          "value": 1.9994522112675683,
+          "unit": "ratio",
+          "ref": "alike.summary",
+          "measure": "effective_number",
+          "sample": {
+            "first_day": "2025-11-19",
+            "last_day": "2026-11-19"
+          },
+          "value_words": "2.00",
+          "sample_words": "Nov 19, 2025 to Nov 19, 2026"
+        }
+      ],
+      "footing_line": "365 days · 15 coins · 9 bp a fill",
+      "footer": {
+        "subject": "MACD Crossover Strategy (Crypto) vs RSI Oversold-Recovery Strategy (Crypto)",
+        "runs_words": "9 runs"
+      }
+    }
+  },
+  "three": {
+    "study_id": "stu_01m7xm5081k1btwdk81sme5gvc",
+    "card_summary": {
+      "schema": "keel.research.card/2",
+      "kind_label": {
+        "key": "compare",
+        "name": "Compare",
+        "short": "Compare"
+      },
+      "maker": "your_agent",
+      "maker_words": "by your agent",
+      "state": "completed",
+      "state_words": "Done · Nov 20",
+      "title": "MA Crossover (Golden Cross) Strategy vs Momentum Strategy on Hyperliquid and 1 more",
+      "version": 1,
+      "headline": {
+        "text": "Sharpe (daily) over the window, Momentum Strategy on Hyperliquid: 0.76",
+        "chips": []
+      },
+      "lead": "Highest Sharpe of 3 results: Momentum Strategy on Hyperliquid at 0.76",
+      "top5": {
+        "kind": "results",
+        "rows": [
+          {
+            "label": "Momentum Strategy on Hyperliquid",
+            "value": 0.7570358498712224,
+            "unit": "ratio",
+            "slot": 2,
+            "value_words": "0.76"
+          },
+          {
+            "label": "MA Crossover (Golden Cross) Strategy",
+            "value": -0.08907669450431907,
+            "unit": "ratio",
+            "slot": 1,
+            "value_words": "−0.089"
+          },
+          {
+            "label": "Regime Rotation (BTC Trend Switch)",
+            "value": -0.15565202624159769,
+            "unit": "ratio",
+            "slot": 3,
+            "value_words": "−0.16"
+          }
+        ],
+        "total": 3
+      },
+      "numbers": [
+        {
+          "label": "Sharpe (daily) over the window, Momentum Strategy on Hyperliquid",
+          "value": 0.7570358498712224,
+          "unit": "ratio",
+          "ref": "base.summary",
+          "measure": "sharpe",
+          "sample": {
+            "days": 365,
+            "first_day": "2025-11-19",
+            "last_day": "2026-11-19"
+          },
+          "value_words": "0.76",
+          "sample_words": "365 days"
+        },
+        {
+          "label": "Sharpe (daily) over the window, Regime Rotation (BTC Trend Switch)",
+          "value": -0.15565202624159769,
+          "unit": "ratio",
+          "ref": "base.summary",
+          "measure": "sharpe",
+          "sample": {
+            "days": 365,
+            "first_day": "2025-11-19",
+            "last_day": "2026-11-19"
+          },
+          "value_words": "−0.16",
+          "sample_words": "365 days"
+        },
+        {
+          "label": "Sharpe (daily) over the window, MA Crossover (Golden Cross) Strategy",
+          "value": -0.08907669450431907,
+          "unit": "ratio",
+          "ref": "base.summary",
+          "measure": "sharpe",
+          "sample": {
+            "days": 365,
+            "first_day": "2025-11-19",
+            "last_day": "2026-11-19"
+          },
+          "value_words": "−0.089",
+          "sample_words": "365 days"
+        },
+        {
+          "label": "Sharpe, MA Crossover (Golden Cross) Strategy against Regime Rotation (BTC Trend Switch)",
+          "value": 0.06657533173727861,
+          "unit": "ratio",
+          "ref": "diff",
+          "measure": "difference",
+          "sample": {
+            "shared_days": 365,
+            "first_day": "2025-11-19",
+            "last_day": "2026-11-19"
+          },
+          "value_words": "0.067",
+          "sample_words": "365 shared days",
+          "interval_words": "−0.723 to 0.877"
+        }
+      ],
+      "footing_line": "365 days · 8 coins · 9 bp a fill",
+      "footer": {
+        "subject": "MA Crossover (Golden Cross) Strategy vs Momentum Strategy on Hyperliquid and 1 more",
+        "runs_words": "11 runs"
+      }
+    }
+  },
+  "signal": {
+    "study_id": "stu_01m7rg6pk79460y9c5ck1cgm35",
+    "share_id": null,
+    "card_summary": {
+      "schema": "keel.research.card/2",
+      "kind_label": {
+        "key": "signal",
+        "name": "Study a signal",
+        "short": "Signal study"
+      },
+      "maker": "your_agent",
+      "maker_words": "by your agent",
+      "state": "completed",
+      "state_words": "Done · Nov 18",
+      "title": "7-day momentum",
+      "version": 1,
+      "headline": {
+        "text": "How well it ranks, next day: −0.017 (t −1.5)",
+        "chips": []
+      },
+      "lead": "Highest of 9 horizons: 10 days ahead at 0.018",
+      "top5": {
+        "kind": "horizons",
+        "rows": [
+          {
+            "label": "1 day ahead",
+            "value": -0.01730993813956177,
+            "unit": "score",
+            "slot": 0,
+            "value_words": "−0.017",
+            "interval": {
+              "lo": -0.042901984042939864,
+              "hi": 0.008282107763816323
+            }
+          },
+          {
+            "label": "3 days ahead",
+            "value": -0.004142857142857143,
+            "unit": "score",
+            "slot": 0,
+            "value_words": "−0.004",
+            "interval": {
+              "lo": -0.04964838832442293,
+              "hi": 0.04136267403870864
+            }
+          },
+          {
+            "label": "7 days ahead",
+            "value": 0.011612803175981639,
+            "unit": "score",
+            "slot": 0,
+            "value_words": "0.012",
+            "interval": {
+              "lo": -0.047680311236276265,
+              "hi": 0.07090591758823954
+            }
+          },
+          {
+            "label": "14 days ahead",
+            "value": 0.0032890365448504963,
+            "unit": "score",
+            "slot": 0,
+            "value_words": "0.003",
+            "interval": {
+              "lo": -0.06843557704801743,
+              "hi": 0.07501365013771842
+            }
+          },
+          {
+            "label": "30 days ahead",
+            "value": -0.04415525703952467,
+            "unit": "score",
+            "slot": 0,
+            "value_words": "−0.044"
+          }
+        ],
+        "total": 9
+      },
+      "numbers": [
+        {
+          "label": "How well it ranks, next day",
+          "value": -0.01730993813956177,
+          "unit": "score",
+          "ref": "ic",
+          "measure": "ic",
+          "sample": {
+            "days": 353,
+            "effective_days": 353.0,
+            "coins": 49,
+            "first_day": "2025-11-16",
+            "last_day": "2026-11-16",
+            "coverage": 0.9972677595628415,
+            "coins_min": 95.0,
+            "coins_median": 97.0,
+            "coins_max": 100.0,
+            "excluded": {
+              "no_funding": 393,
+              "no_forward_price": 100
+            }
+          },
+          "value_words": "−0.017",
+          "sample_words": "353 days · 353 effective days · 49 coins",
+          "interval_words": "−0.043 to 0.008"
+        },
+        {
+          "label": "How well it ranks, 7 days ahead",
+          "value": 0.011612803175981639,
+          "unit": "score",
+          "ref": "ic",
+          "measure": "ic",
+          "sample": {
+            "days": 329,
+            "effective_days": 47.0,
+            "coins": 49,
+            "first_day": "2025-11-16",
+            "last_day": "2026-11-16",
+            "coverage": 0.9972677595628415,
+            "coins_min": 95.0,
+            "coins_median": 97.0,
+            "coins_max": 100.0,
+            "excluded": {
+              "no_funding": 393,
+              "no_forward_price": 100
+            }
+          },
+          "value_words": "0.012",
+          "sample_words": "329 days · 47 effective days · 49 coins",
+          "interval_words": "−0.048 to 0.071"
+        },
+        {
+          "label": "Top fifth minus bottom fifth, next day",
+          "value": 0.00024052953874927004,
+          "unit": "fraction",
+          "ref": "fifths.spread",
+          "measure": "spread",
+          "sample": {
+            "days": 353,
+            "effective_days": 353.0,
+            "coins": 49,
+            "first_day": "2025-11-16",
+            "last_day": "2026-11-16",
+            "coverage": 0.9972677595628415,
+            "coins_min": 95.0,
+            "coins_median": 97.0,
+            "coins_max": 100.0,
+            "excluded": {
+              "no_funding": 393,
+              "no_forward_price": 100
+            }
+          },
+          "value_words": "< 0.1%",
+          "sample_words": "353 days · 353 effective days · 49 coins",
+          "interval_words": "−0.2% to 0.3%"
+        },
+        {
+          "label": "Top group turnover a day",
+          "value": 0.2859943977591036,
+          "unit": "fraction",
+          "ref": "turnover.summary",
+          "measure": "top_turnover",
+          "sample": {
+            "days": 358,
+            "first_day": "2025-11-16",
+            "last_day": "2026-11-16",
+            "coverage": 0.9972677595628415,
+            "coins_min": 95.0,
+            "coins_median": 97.0,
+            "coins_max": 100.0
+          },
+          "value_words": "28.6%",
+          "sample_words": "358 days"
+        }
+      ],
+      "footing_line": "365 days · 100 coins · no costs · some numbers use fewer days or coins",
+      "footer": {
+        "subject": "7-day momentum",
+        "runs_words": "14 runs"
+      }
+    }
+  },
+  "share_momentum": {
+    "study_id": null,
+    "share_id": "sM45cwd8rQqG8m7kSwfg9Dg",
+    "card_summary": {
+      "schema": "keel.research.card/2",
+      "kind_label": {
+        "key": "signal",
+        "name": "Study a signal",
+        "short": "Signal study"
+      },
+      "maker": "keel",
+      "maker_words": "by Keel",
+      "state": "completed",
+      "state_words": "Done · Nov 17",
+      "title": "Does 28-day momentum rank the next days' crypto returns, and for how long?",
+      "headline": {
+        "text": "How well it ranks, next day: -0.004 (t -0.4)",
+        "chips": []
+      },
+      "lead": "How well it ranks, next day −0.004",
+      "top5": {
+        "kind": "checks",
+        "rows": [],
+        "total": 0
+      },
+      "numbers": [
+        {
+          "label": "How well it ranks, next day",
+          "value": -0.003640411265677044,
+          "unit": "score",
+          "ref": "ic",
+          "measure": "ic",
+          "sample": {
+            "days": 742,
+            "effective_days": 742.0,
+            "coins": 37
+          },
+          "value_words": "−0.004",
+          "sample_words": "742 days · 742 effective days · 37 coins"
+        },
+        {
+          "label": "How well it ranks, 7 days ahead",
+          "value": 0.015082161530200963,
+          "unit": "score",
+          "ref": "ic",
+          "measure": "ic",
+          "sample": {
+            "days": 718,
+            "effective_days": 102.0,
+            "coins": 37
+          },
+          "value_words": "0.015",
+          "sample_words": "718 days · 102 effective days · 37 coins"
+        },
+        {
+          "label": "Top fifth minus bottom fifth",
+          "value": 0.002510577456540218,
+          "unit": "fraction",
+          "ref": "fifths.spread",
+          "measure": "spread",
+          "sample": {
+            "days": 742,
+            "effective_days": 742.0,
+            "coins": 37
+          },
+          "value_words": "0.3%",
+          "sample_words": "742 days · 742 effective days · 37 coins"
+        },
+        {
+          "label": "Top group turnover a day",
+          "value": 0.13207264138899527,
+          "unit": "fraction",
+          "ref": "turnover.summary",
+          "measure": "top_turnover",
+          "sample": {
+            "days": 747
+          },
+          "value_words": "13.2%",
+          "sample_words": "747 days"
+        }
+      ],
+      "footing_line": "775 days · 60 coins · no costs · some numbers use fewer days or coins",
+      "footer": {
+        "subject": "Study a signal",
+        "runs_words": "17 runs"
+      }
+    }
+  },
+  "share_funding": {
+    "study_id": null,
+    "share_id": "48pe1MnJJcUuXeuZDDsDaDi",
+    "card_summary": {
+      "schema": "keel.research.card/2",
+      "kind_label": {
+        "key": "signal",
+        "name": "Study a signal",
+        "short": "Signal study"
+      },
+      "maker": "keel",
+      "maker_words": "by Keel",
+      "state": "completed",
+      "state_words": "Done · Nov 17",
+      "title": "Do coins with high funding do worse over the next days?",
+      "headline": {
+        "text": "How well it ranks, next day: 0.012 (t 1.8)",
+        "chips": []
+      },
+      "lead": "How well it ranks, next day 0.012",
+      "top5": {
+        "kind": "checks",
+        "rows": [],
+        "total": 0
+      },
+      "numbers": [
+        {
+          "label": "How well it ranks, next day",
+          "value": 0.012176948615042125,
+          "unit": "score",
+          "ref": "ic",
+          "measure": "ic",
+          "sample": {
+            "days": 764,
+            "effective_days": 764.0,
+            "coins": 38
+          },
+          "value_words": "0.012",
+          "sample_words": "764 days · 764 effective days · 38 coins"
+        },
+        {
+          "label": "How well it ranks, 7 days ahead",
+          "value": 0.026606855087406255,
+          "unit": "score",
+          "ref": "ic",
+          "measure": "ic",
+          "sample": {
+            "days": 740,
+            "effective_days": 105.0,
+            "coins": 37
+          },
+          "value_words": "0.027",
+          "sample_words": "740 days · 105 effective days · 37 coins"
+        },
+        {
+          "label": "Top fifth minus bottom fifth",
+          "value": 0.00021269557648674085,
+          "unit": "fraction",
+          "ref": "fifths.spread",
+          "measure": "spread",
+          "sample": {
+            "days": 764,
+            "effective_days": 764.0,
+            "coins": 38
+          },
+          "value_words": "< 0.1%",
+          "sample_words": "764 days · 764 effective days · 38 coins"
+        },
+        {
+          "label": "Top group turnover a day",
+          "value": 0.10455522486772488,
+          "unit": "fraction",
+          "ref": "turnover.summary",
+          "measure": "top_turnover",
+          "sample": {
+            "days": 769
+          },
+          "value_words": "10.5%",
+          "sample_words": "769 days"
+        }
+      ],
+      "footing_line": "775 days · 60 coins · no costs · some numbers use fewer days or coins",
+      "footer": {
+        "subject": "Study a signal",
+        "runs_words": "17 runs"
+      }
+    }
+  }
+}

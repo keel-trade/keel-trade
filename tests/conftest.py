@@ -21,6 +21,36 @@ from unittest.mock import patch
 import httpx
 import pytest
 
+# ─────────────────────────────────────────────────────────────────────────
+# Research on the local surfaces (FINAL-LIST §D)
+# ─────────────────────────────────────────────────────────────────────────
+#
+# Unbound, a local surface (the CLI, a full-profile `keel mcp serve`) serves
+# Research exactly when its caller's /v1/me does (`_research_local`). The
+# suite has no caller (and no network), so it would read "not served" and
+# drop every research verb. The suite runs as a caller Research is served
+# to, from the first import on (`keel.cli.main` registers its commands at
+# import, during collection), so it is patched here, at conftest import,
+# rather than in a fixture. `research_served_bound()` stays None: a test of
+# the unbound wording is unchanged. Tests of the read itself use the
+# `real_local_research_read` fixture.
+from keel.tools.outcomes import _research_local as _research_local_module  # noqa: E402
+
+
+_REAL_LOCAL_RESEARCH_SERVED = _research_local_module.local_research_served
+patch.object(_research_local_module, "local_research_served", lambda: True).start()
+
+
+@pytest.fixture
+def real_local_research_read(monkeypatch):
+    """The real `/v1/me` read for this test (its process cache cleared before and after)."""
+    _research_local_module.forget()
+    monkeypatch.setattr(
+        _research_local_module, "local_research_served", _REAL_LOCAL_RESEARCH_SERVED
+    )
+    yield _research_local_module
+    _research_local_module.forget()
+
 
 # ─────────────────────────────────────────────────────────────────────────
 # Network airlock

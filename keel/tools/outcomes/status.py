@@ -270,8 +270,10 @@ def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
                 }
 
             # A plan grant (plan-grants spec 01 §7): only a paid org can hold
-            # one, so free and anon orgs never make this second call.
-            if org.get("plan") in ("starter", "trader", "pro"):
+            # one, so free and anon orgs never make this second call. Paid is
+            # every rung of the plan ladder above the unpaid ones, never a
+            # list of paid ids (spec 02 §C4.10: a Quant org got no grant).
+            if is_paid_plan(org.get("plan")):
                 grant = _plan_grant(config)
                 if grant:
                     body["identity"]["plan_grant"] = grant
@@ -490,6 +492,16 @@ STATUS = register(
         handler=_handler,
     )
 )
+
+
+#: The plan ladder's unpaid rungs (``platform_auth.config.TIER_LADDER`` starts ``anon``, ``free``); every other
+#: plan an org holds is paid, whatever it is named, so a new tier (``quant``, plans v3) needs no SDK change.
+UNPAID_PLANS: frozenset[str] = frozenset({"anon", "free"})
+
+
+def is_paid_plan(plan: object) -> bool:
+    """Whether an org's served plan id is a paid rung (anything on the ladder above ``free``)."""
+    return isinstance(plan, str) and bool(plan) and plan not in UNPAID_PLANS
 
 
 def _plan_grant(config) -> dict | None:

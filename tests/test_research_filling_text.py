@@ -30,7 +30,7 @@ def test_in_flight_the_first_line_carries_the_progress_and_the_read_call() -> No
     lines = text.splitlines()
     assert (
         lines[0]
-        == "Map a strategy's settings · Lookback × hold · version 1 · running · 212 of 384 settings done"
+        == "Map a strategy's settings · Lookback × hold · version 1 · Running · 212 of 384 settings done"
     )
     assert 'keel_research_get(study_id="stu_map") reads it as it fills in.' in lines
     assert text.count("212 of 384 settings done") == 1
@@ -40,7 +40,7 @@ def test_a_finished_study_reads_as_before() -> None:
     text = rv.study_text(_study("completed", None))
     assert (
         text.splitlines()[0]
-        == "Map a strategy's settings · Lookback × hold · version 1 · completed"
+        == "Map a strategy's settings · Lookback × hold · version 1 · Done"  # AUDIT-WORDS M1: never the raw state
     )
     assert "fills in" not in text
 
@@ -67,7 +67,7 @@ def test_a_filling_page_leads_with_its_served_words() -> None:
     )
     lines = text.splitlines()
     assert lines[1] == "212 of 384 settings done · the map fills in as runs finish"
-    assert lines[2] == "Rows 1–2 of 384 (212 computed)", (
+    assert lines[2] == "Rows 1–2 of 384 (212 measured)", (
         "the hatched rest is the words' remainder, not repeated"
     )
 

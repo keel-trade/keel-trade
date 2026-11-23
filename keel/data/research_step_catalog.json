@@ -131,7 +131,7 @@
       "version": 1,
       "category": "Run",
       "label": "The backtest",
-      "about": "Runs the strategy's pipeline over the study's days and coins and serves its daily returns and summary.",
+      "about": "Runs the strategy over the study's days and coins and gives its daily returns and summary.",
       "group": "run",
       "section": "1.1",
       "accepts": {
@@ -253,7 +253,7 @@
               "precision": "exact",
               "sign": "nonpositive",
               "sample": ["days"],
-              "label": "Fall from the high since the start"
+              "label": "Largest fall from a high, as a share of the starting stake"
             },
             {
               "name": "total_return",
@@ -269,7 +269,7 @@
               "precision": "exact",
               "sign": "nonnegative",
               "sample": ["days"],
-              "label": "Turnover"
+              "label": "Turnover a day"
             },
             {
               "name": "days",
@@ -514,7 +514,7 @@
       "version": 1,
       "category": "Run",
       "label": "Daily ranks",
-      "about": "Runs the output's pipeline on the sealed data path over the study's days and coins and serves its daily values.",
+      "about": "Works out the signal's value for every coin on every day of the study.",
       "group": "run",
       "section": "1.2",
       "accepts": {
@@ -686,7 +686,7 @@
       "version": 1,
       "category": "Run",
       "label": "Stored results",
-      "about": "Reads a pipeline run Keel already stored (a paper run or a stored backtest) with its own provenance.",
+      "about": "Brings in a result Keel already has, such as a paper run or a saved backtest.",
       "group": "run",
       "section": "1.3",
       "accepts": {
@@ -977,7 +977,7 @@
       "version": 1,
       "category": "Variant",
       "label": "Costs from none to six times",
-      "about": "Runs the strategy with its fees and slippage multiplied, funding unchanged, and serves each arm's result.",
+      "about": "Runs the strategy with fees and slippage at several multiples, funding unchanged, and shows each result.",
       "group": "check",
       "section": "2.1",
       "accepts": {
@@ -997,6 +997,7 @@
             "hard_limit": "[0, 10]",
             "note": "hard_limit is the only range the validator rejects; typical_guidance is where values usually sit - a value outside it is valid."
           },
+          "range_words": "any value from 0 to 10",
           "length": [2, 8],
           "distinct": true,
           "required": false,
@@ -1197,7 +1198,7 @@
       "version": 1,
       "category": "Variant",
       "label": "Trading 1 to 3 days late",
-      "about": "Runs the strategy with its orders filled days late (the strategy's own rules are not delayed).",
+      "about": "Runs the strategy with its orders filled days late, to show how much the timing of its trades matters.",
       "group": "check",
       "section": "2.2",
       "accepts": {
@@ -1217,6 +1218,7 @@
             "hard_limit": "[1, 10]",
             "note": "hard_limit is the only range the validator rejects; typical_guidance is where values usually sit - a value outside it is valid."
           },
+          "range_words": "any value from 1 to 10",
           "length": [1, 5],
           "distinct": true,
           "required": false,
@@ -1356,7 +1358,7 @@
       "version": 1,
       "category": "Variant",
       "label": "Only the most traded coins",
-      "about": "Runs the strategy on a manual basket of the study's most traded coins, the first of its ordered coin set.",
+      "about": "Runs the strategy on only the study's most traded coins.",
       "group": "check",
       "section": "2.3",
       "accepts": {
@@ -1375,6 +1377,7 @@
             "hard_limit": "[5, 200]",
             "note": "hard_limit is the only range the validator rejects; typical_guidance is where values usually sit - a value outside it is valid."
           },
+          "range_words": "any value from 5 to 200",
           "required": false,
           "default": 30,
           "save_resolved": false,
@@ -1511,7 +1514,7 @@
       "version": 1,
       "category": "Variant",
       "label": "Without its best coins",
-      "about": "Runs the strategy on the study's coins less its best ones, those of largest positive contribution.",
+      "about": "Runs the strategy without the coins that made it the most money.",
       "group": "check",
       "section": "2.4",
       "accepts": {
@@ -1532,6 +1535,7 @@
             "hard_limit": "[1, 20]",
             "note": "hard_limit is the only range the validator rejects; typical_guidance is where values usually sit - a value outside it is valid."
           },
+          "range_words": "any value from 1 to 20",
           "required": false,
           "default": 5,
           "save_resolved": false,
@@ -1667,7 +1671,7 @@
       "version": 1,
       "category": "Control",
       "label": "Random books of the same size",
-      "about": "Re-simulates random weight samples holding as many coins as the strategy and compares its Sharpe with theirs.",
+      "about": "Builds random books holding as many coins as the strategy and compares its Sharpe with theirs.",
       "group": "check",
       "section": "2.5",
       "accepts": {
@@ -1687,6 +1691,7 @@
             "hard_limit": "[20, 1000]",
             "note": "hard_limit is the only range the validator rejects; typical_guidance is where values usually sit - a value outside it is valid."
           },
+          "range_words": "any value from 20 to 1000",
           "required": false,
           "default": 100,
           "save_resolved": false,
@@ -1763,24 +1768,24 @@
             },
             {
               "name": "share_below",
-              "unit": "rank",
+              "unit": "fraction",
               "precision": "exact",
               "sign": "nonnegative",
               "label": "Share of random books below yours"
             },
             {
               "name": "share_below_cagr",
-              "unit": "rank",
+              "unit": "fraction",
               "precision": "exact",
               "sign": "nonnegative",
               "label": "Share of random books below yours (CAGR)"
             },
             {
               "name": "share_below_drawdown",
-              "unit": "rank",
+              "unit": "fraction",
               "precision": "exact",
               "sign": "nonnegative",
-              "label": "not matched for volatility"
+              "label": "Share of random books with a deeper drawdown"
             },
             {
               "name": "books",
@@ -1815,9 +1820,7 @@
       "seeded": true,
       "gate": null,
       "views": ["Distribution", "Table"],
-      "templates": {
-        "check": "D"
-      },
+      "templates": {},
       "tests": [
         "M-BOOK-CA1",
         "M-BOOK-KA1",
@@ -1852,7 +1855,7 @@
       "version": 1,
       "category": "Split",
       "label": "Re-picking the settings as you go",
-      "about": "Re-picks the best setting from a grid every few days using only the days before, and follows what it picked.",
+      "about": "Every few days, switches to the grid setting that did best lately (by Sharpe unless you pick another measure), to show what choosing settings by their past results would have earned.",
       "group": "check",
       "section": "2.6",
       "accepts": {
@@ -1881,6 +1884,7 @@
             "hard_limit": "[20, 730]",
             "note": "hard_limit is the only range the validator rejects; typical_guidance is where values usually sit - a value outside it is valid."
           },
+          "range_words": "any value from 20 to 730",
           "distinct": true,
           "required": false,
           "default": [60, 90, 180, 365],
@@ -1899,6 +1903,7 @@
             "hard_limit": "[1, 180]",
             "note": "hard_limit is the only range the validator rejects; typical_guidance is where values usually sit - a value outside it is valid."
           },
+          "range_words": "any value from 1 to 180",
           "distinct": true,
           "required": false,
           "default": [7, 14, 30, 60],
@@ -1943,7 +1948,7 @@
             "total_return": "Total return",
             "max_drawdown": "Max drawdown",
             "vol": "Volatility",
-            "turnover": "Turnover"
+            "turnover": "Turnover a day"
           }
         }
       ],
@@ -2136,7 +2141,7 @@
       "version": 1,
       "category": "Measure",
       "label": "Nearby settings",
-      "about": "Compares the selected setting's Sharpe with the settings one step away on each axis of a grid.",
+      "about": "Compares your setting's Sharpe with the settings one step away on each side.",
       "group": "check",
       "section": "2.7",
       "accepts": {
@@ -2324,7 +2329,7 @@
       "gate": null,
       "views": ["Bars", "Table", "Heatmap"],
       "templates": {
-        "check": "c: the Check has a grid",
+        "check": "c: the Check has a grid, on every plan: over the Check's own grid, without feature:research_repick it is a locked row that never runs or counts",
         "map": "d"
       },
       "tests": [
@@ -2352,7 +2357,7 @@
       "version": 1,
       "category": "Measure",
       "label": "Sharpe discounted for versions tried",
-      "about": "Discounts the Sharpe for the number of versions of the strategy's family Keel has seen tried.",
+      "about": "Lowers the Sharpe to allow for how many versions of the strategy have been tried.",
       "group": "check",
       "section": "2.8",
       "accepts": {
@@ -2503,7 +2508,7 @@
       "version": 1,
       "category": "Resample",
       "label": "A year ahead, resampled",
-      "about": "Builds years ahead from stretches of consecutive days of the strategy's own daily returns and serves the spread of outcomes.",
+      "about": "Builds many possible years ahead from stretches of the strategy's own daily returns and shows the spread of outcomes.",
       "group": "check",
       "section": "2.9",
       "accepts": {
@@ -2522,6 +2527,7 @@
             "hard_limit": "[30, 730]",
             "note": "hard_limit is the only range the validator rejects; typical_guidance is where values usually sit - a value outside it is valid."
           },
+          "range_words": "any value from 30 to 730",
           "required": false,
           "default": 365,
           "save_resolved": false,
@@ -2539,6 +2545,7 @@
             "hard_limit": "[200, 10000]",
             "note": "hard_limit is the only range the validator rejects; typical_guidance is where values usually sit - a value outside it is valid."
           },
+          "range_words": "any value from 200 to 10000",
           "required": false,
           "default": 2000,
           "save_resolved": false,
@@ -2805,7 +2812,7 @@
               "unit": "fraction",
               "precision": "exact",
               "sign": "signed",
-              "label": "Share of capital"
+              "label": "Return added, as a share of the starting stake"
             }
           ],
           "evidence": true
@@ -2866,7 +2873,7 @@
       "version": 1,
       "category": "Split",
       "label": "Up and down markets",
-      "about": "Splits the strategy's days by a regime pipeline's labels and serves its return in each.",
+      "about": "Splits the strategy's days by market state and shows its return in each.",
       "group": "check",
       "section": "2.11",
       "accepts": {
@@ -3032,7 +3039,7 @@
       "version": 1,
       "category": "Measure",
       "label": "Alike what you already run",
-      "about": "Correlates the strategy's daily returns with what the account already runs on paper or live.",
+      "about": "Shows how closely the strategy's daily returns move with what you already run on paper or live.",
       "group": "check",
       "section": "2.12",
       "accepts": {
@@ -3159,7 +3166,7 @@
       "version": 1,
       "category": "Measure",
       "label": "How well it ranks, by days ahead",
-      "about": "Measures the daily rank correlation between the signal and the coins' forward returns, by days ahead.",
+      "about": "Measures how well the signal's ranking of coins matched their returns over the next days.",
       "group": "signal",
       "section": "3.1",
       "accepts": {
@@ -3178,6 +3185,7 @@
             "hard_limit": "[1, 60]",
             "note": "hard_limit is the only range the validator rejects; typical_guidance is where values usually sit - a value outside it is valid."
           },
+          "range_words": "any value from 1 to 60",
           "length": [1, 12],
           "distinct": true,
           "required": false,
@@ -3231,7 +3239,7 @@
               "unit": "score",
               "precision": "exact",
               "sign": "signed",
-              "label": "t-statistic"
+              "label": "T-statistic"
             },
             {
               "name": "days",
@@ -3323,7 +3331,7 @@
       "version": 1,
       "category": "Measure",
       "label": "Fifths, as bars and as paths",
-      "about": "Splits the coins each day into groups by the signal and serves each group's forward return.",
+      "about": "Splits the coins each day into groups by the signal (fifths by default) and shows each group's return over the next days.",
       "group": "signal",
       "section": "3.2",
       "accepts": {
@@ -3354,6 +3362,7 @@
             "hard_limit": "[1, 60]",
             "note": "hard_limit is the only range the validator rejects; typical_guidance is where values usually sit - a value outside it is valid."
           },
+          "range_words": "any value from 1 to 60",
           "required": false,
           "default": 1,
           "save_resolved": false,
@@ -3493,7 +3502,7 @@
       "version": 1,
       "category": "Split",
       "label": "Before and after the split",
-      "about": "Compares a signal's ranking skill, or a grid's settings, before and after the study's split day.",
+      "about": "Compares the signal's ranking skill, or a grid's settings, before and after the study's split day.",
       "group": "signal",
       "section": "3.3",
       "accepts": {
@@ -3513,6 +3522,7 @@
             "hard_limit": "[1, 60]",
             "note": "hard_limit is the only range the validator rejects; typical_guidance is where values usually sit - a value outside it is valid."
           },
+          "range_words": "any value from 1 to 60",
           "length": [1, 12],
           "distinct": true,
           "required": false,
@@ -3722,7 +3732,7 @@
       "version": 1,
       "category": "Control",
       "label": "Against chance",
-      "about": "Compares the signal's skill with the skill it shows against every admissible shift of the forward returns.",
+      "about": "Compares the signal's ranking skill with what it scores against the same returns shifted in time, to show whether it beats chance.",
       "group": "signal",
       "section": "3.4",
       "accepts": {
@@ -3741,6 +3751,7 @@
             "hard_limit": "[1, 60]",
             "note": "hard_limit is the only range the validator rejects; typical_guidance is where values usually sit - a value outside it is valid."
           },
+          "range_words": "any value from 1 to 60",
           "required": false,
           "default": 1,
           "save_resolved": false,
@@ -3875,7 +3886,7 @@
       "version": 1,
       "category": "Measure",
       "label": "Ranking skill through time, and by month",
-      "about": "Serves the signal's rank IC over a rolling window and by calendar month.",
+      "about": "Shows how well the signal ranked coins over a rolling window and in each calendar month.",
       "group": "signal",
       "section": "3.5",
       "accepts": {
@@ -3894,6 +3905,7 @@
             "hard_limit": "[20, 180]",
             "note": "hard_limit is the only range the validator rejects; typical_guidance is where values usually sit - a value outside it is valid."
           },
+          "range_words": "any value from 20 to 180",
           "required": false,
           "default": 60,
           "save_resolved": false,
@@ -3911,6 +3923,7 @@
             "hard_limit": "[1, 60]",
             "note": "hard_limit is the only range the validator rejects; typical_guidance is where values usually sit - a value outside it is valid."
           },
+          "range_words": "any value from 1 to 60",
           "required": false,
           "default": 1,
           "save_resolved": false,
@@ -4034,7 +4047,7 @@
       "version": 1,
       "category": "Measure",
       "label": "Turnover and coverage",
-      "about": "Serves how much the signal's top group changes each day and how many coins it covers.",
+      "about": "Shows how much the signal's top group changes each day and how many coins it covers.",
       "group": "signal",
       "section": "3.6",
       "accepts": {
@@ -4076,7 +4089,7 @@
               "unit": "fraction",
               "precision": "exact",
               "sign": "nonnegative",
-              "label": "Top turnover"
+              "label": "Top group turnover a day"
             },
             {
               "name": "rank_stability",
@@ -4110,7 +4123,7 @@
               "unit": "fraction",
               "precision": "exact",
               "sign": "nonnegative",
-              "label": "Top turnover"
+              "label": "Top group turnover a day"
             },
             {
               "name": "rank_stability",
@@ -4179,7 +4192,7 @@
       "version": 1,
       "category": "Measure",
       "label": "Alike other signals",
-      "about": "Measures how alike the signal ranks, scores and picks against Keel's and your other signals.",
+      "about": "Measures how alike the signal's ranks, scores and picks are to Keel's and your other signals.",
       "group": "signal",
       "section": "3.7",
       "accepts": {
@@ -4346,7 +4359,7 @@
       "version": 1,
       "category": "Measure",
       "label": "What's left after the others",
-      "about": "Measures the signal's ranking skill alone and after taking out what a set of other signals explains.",
+      "about": "Measures the signal's ranking skill on its own and after removing what other signals already explain.",
       "group": "signal",
       "section": "3.8",
       "accepts": {
@@ -4377,6 +4390,7 @@
             "hard_limit": "[1, 60]",
             "note": "hard_limit is the only range the validator rejects; typical_guidance is where values usually sit - a value outside it is valid."
           },
+          "range_words": "any value from 1 to 60",
           "required": false,
           "default": 1,
           "save_resolved": false,
@@ -4488,7 +4502,7 @@
       "version": 1,
       "category": "Measure",
       "label": "The ranking on the last day",
-      "about": "Serves the signal's ranks and groups on the study's last day.",
+      "about": "Shows the signal's ranking and groups on the study's last day.",
       "group": "signal",
       "section": "3.9",
       "accepts": {
@@ -4599,7 +4613,7 @@
       "version": 1,
       "category": "Measure",
       "label": "Inside the filter against outside it",
-      "about": "Compares the forward returns of coins inside the filter with those outside it.",
+      "about": "Compares the returns of coins inside the filter with those outside it over the next days.",
       "group": "signal",
       "section": "3.10",
       "accepts": {
@@ -4618,6 +4632,7 @@
             "hard_limit": "[1, 60]",
             "note": "hard_limit is the only range the validator rejects; typical_guidance is where values usually sit - a value outside it is valid."
           },
+          "range_words": "any value from 1 to 60",
           "length": [1, 12],
           "distinct": true,
           "required": false,
@@ -4732,7 +4747,7 @@
       "version": 1,
       "category": "Measure",
       "label": "Returns in each regime",
-      "about": "Serves the coins' forward returns in each of the regime's labels.",
+      "about": "Shows the coins' returns over the next days in each market state.",
       "group": "signal",
       "section": "3.11",
       "accepts": {
@@ -4751,6 +4766,7 @@
             "hard_limit": "[1, 60]",
             "note": "hard_limit is the only range the validator rejects; typical_guidance is where values usually sit - a value outside it is valid."
           },
+          "range_words": "any value from 1 to 60",
           "length": [1, 12],
           "distinct": true,
           "required": false,
@@ -4867,7 +4883,7 @@
       "version": 1,
       "category": "Measure",
       "label": "Ranking skill when acting late",
-      "about": "Measures the signal's rank IC with the forward return starting days after the decision.",
+      "about": "Measures how well the signal ranks coins when you act a few days after it.",
       "group": "signal",
       "section": "3.12",
       "accepts": {
@@ -4886,6 +4902,7 @@
             "hard_limit": "[1, 3]",
             "note": "hard_limit is the only range the validator rejects; typical_guidance is where values usually sit - a value outside it is valid."
           },
+          "range_words": "any value from 1 to 3",
           "required": false,
           "default": 1,
           "save_resolved": false,
@@ -4903,6 +4920,7 @@
             "hard_limit": "[1, 60]",
             "note": "hard_limit is the only range the validator rejects; typical_guidance is where values usually sit - a value outside it is valid."
           },
+          "range_words": "any value from 1 to 60",
           "length": [1, 12],
           "distinct": true,
           "required": false,
@@ -4999,8 +5017,8 @@
       "name": "SameFooting",
       "version": 1,
       "category": "Control",
-      "label": "Same footing",
-      "about": "Lists every fact two results were computed under and says which differ.",
+      "label": "What they ran on",
+      "about": "Lists what each result ran on, such as its days, coins and costs, and says which differ.",
       "group": "compare",
       "section": "4.1",
       "accepts": {
@@ -5083,7 +5101,7 @@
       "version": 1,
       "category": "Measure",
       "label": "Difference against a baseline",
-      "about": "Measures each result's difference from a baseline on the same days, with a paired interval.",
+      "about": "Measures each result's difference from a baseline over the same days, with its likely range.",
       "group": "compare",
       "section": "4.2",
       "accepts": {
@@ -5243,7 +5261,7 @@
       "version": 1,
       "category": "Measure",
       "label": "How alike they are",
-      "about": "Measures how alike the results are, as rankings for signals or as daily returns for strategies.",
+      "about": "Measures how alike the results are: their rankings for signals, their daily returns for strategies.",
       "group": "compare",
       "section": "4.3",
       "accepts": {
@@ -5263,6 +5281,7 @@
             "hard_limit": "[1, 60]",
             "note": "hard_limit is the only range the validator rejects; typical_guidance is where values usually sit - a value outside it is valid."
           },
+          "range_words": "any value from 1 to 60",
           "required": false,
           "default": 1,
           "save_resolved": false,
@@ -5514,7 +5533,7 @@
       "version": 1,
       "category": "Measure",
       "label": "A pair over time",
-      "about": "Serves a pair's rolling correlation and its correlation in up and down markets.",
+      "about": "Shows how closely a pair moves together over time, and in up and down markets.",
       "group": "compare",
       "section": "4.4",
       "accepts": {
@@ -5544,6 +5563,7 @@
             "hard_limit": "[20, 365]",
             "note": "hard_limit is the only range the validator rejects; typical_guidance is where values usually sit - a value outside it is valid."
           },
+          "range_words": "any value from 20 to 365",
           "required": false,
           "default": null,
           "save_resolved": false,
@@ -5692,7 +5712,7 @@
       "version": 1,
       "category": "Measure",
       "label": "Mixing the signals",
-      "about": "Compares mixes of the signals, each a derived combiner pipeline, with their parts.",
+      "about": "Compares mixes of the signals with the signals on their own.",
       "group": "compare",
       "section": "4.5",
       "accepts": {
@@ -5722,6 +5742,7 @@
             "hard_limit": "[1, 60]",
             "note": "hard_limit is the only range the validator rejects; typical_guidance is where values usually sit - a value outside it is valid."
           },
+          "range_words": "any value from 1 to 60",
           "required": false,
           "default": 1,
           "save_resolved": false,
@@ -5772,7 +5793,7 @@
               "unit": "fraction",
               "precision": "exact",
               "sign": "nonnegative",
-              "label": "Turnover"
+              "label": "Turnover a day"
             }
           ],
           "evidence": true
@@ -5884,7 +5905,7 @@
       "version": 1,
       "category": "Measure",
       "label": "Running them together",
-      "about": "Shows what holding the strategies together would have returned; a what-if on stored results, before rebalancing costs.",
+      "about": "Shows what holding the strategies together would have returned, from their saved results and before rebalancing costs.",
       "group": "compare",
       "section": "4.6",
       "accepts": {
@@ -6054,7 +6075,7 @@
       "version": 1,
       "category": "Measure",
       "label": "Paper against the backtest",
-      "about": "Reads the paper run's gap from its parity backtest at the pinned commit.",
+      "about": "Shows how far the paper run has drifted from a backtest of the same version over the same days.",
       "group": "compare",
       "section": "4.7",
       "accepts": {
@@ -6323,7 +6344,7 @@
       "version": 2,
       "category": "Axis",
       "label": "Every setting",
-      "about": "Runs the strategy at every combination of the chosen settings, one run per cell.",
+      "about": "Runs the strategy at every combination of the settings you choose.",
       "group": "map",
       "section": "5.1",
       "accepts": {
@@ -6339,7 +6360,7 @@
           "required": true,
           "save_resolved": false,
           "keyed": true,
-          "about": "1 to 3 axes: SettingAxis(address, values, name=) with 2 to 50 values inside the parameter's hard domain, or Overlay(\"leverage\", values in (0, 10]) / Overlay(\"vol_cap\", values in (0, 5])",
+          "about": "Each axis is SettingAxis(address, values, name=), its values inside that setting's hard domain, or Overlay(\"leverage\", values), each any value above 0 and up to 10, or Overlay(\"vol_cap\", values), each any value above 0 and up to 5",
           "label": "Settings to sweep"
         }
       ],
@@ -6389,7 +6410,7 @@
               "precision": "exact",
               "sign": "nonnegative",
               "sample": ["days"],
-              "label": "Turnover"
+              "label": "Turnover a day"
             },
             {
               "name": "total_return",
@@ -6523,7 +6544,7 @@
       "version": 2,
       "category": "Measure",
       "label": "Returns after the event, against random dates",
-      "about": "Serves the average return around each event or entry against the same coins on random dates.",
+      "about": "Shows the average return around each event or entry, against the same coins on random dates.",
       "group": "entries",
       "section": "6.1",
       "accepts": {
@@ -6542,6 +6563,7 @@
             "hard_limit": "[0, 30]",
             "note": "hard_limit is the only range the validator rejects; typical_guidance is where values usually sit - a value outside it is valid."
           },
+          "range_words": "any value from 0 to 30",
           "required": false,
           "default": 10,
           "save_resolved": false,
@@ -6559,6 +6581,7 @@
             "hard_limit": "[1, 60]",
             "note": "hard_limit is the only range the validator rejects; typical_guidance is where values usually sit - a value outside it is valid."
           },
+          "range_words": "any value from 1 to 60",
           "required": false,
           "default": 30,
           "save_resolved": false,
@@ -6576,6 +6599,7 @@
             "hard_limit": "[5, 50]",
             "note": "hard_limit is the only range the validator rejects; typical_guidance is where values usually sit - a value outside it is valid."
           },
+          "range_words": "any value from 5 to 50",
           "required": false,
           "default": 20,
           "save_resolved": false,
@@ -6593,6 +6617,7 @@
             "hard_limit": "[500, 5000]",
             "note": "hard_limit is the only range the validator rejects; typical_guidance is where values usually sit - a value outside it is valid."
           },
+          "range_words": "any value from 500 to 5000",
           "required": false,
           "default": 2000,
           "save_resolved": false,
@@ -6621,16 +6646,6 @@
           "keyed": true,
           "about": "events only; entries take each trade's side",
           "label": "Side"
-        },
-        {
-          "name": "price_only",
-          "type": "bool",
-          "required": false,
-          "default": false,
-          "save_resolved": false,
-          "keyed": true,
-          "about": "forward returns leave out funding (RL-8 M5)",
-          "label": "Price only"
         }
       ],
       "outputs": [
@@ -6790,7 +6805,7 @@
       "version": 1,
       "category": "Measure",
       "label": "Skill among entries",
-      "about": "Measures whether entries with a stronger stored setup value did better than their random dates.",
+      "about": "Measures whether entries with a stronger setup did better than the same coins on random dates.",
       "group": "entries",
       "section": "6.2",
       "accepts": {
@@ -6818,6 +6833,7 @@
             "hard_limit": "[1, 60]",
             "note": "hard_limit is the only range the validator rejects; typical_guidance is where values usually sit - a value outside it is valid."
           },
+          "range_words": "any value from 1 to 60",
           "length": [1, 12],
           "distinct": true,
           "required": false,
@@ -6837,6 +6853,7 @@
             "hard_limit": "[5, 50]",
             "note": "hard_limit is the only range the validator rejects; typical_guidance is where values usually sit - a value outside it is valid."
           },
+          "range_words": "any value from 5 to 50",
           "required": false,
           "default": 20,
           "save_resolved": false,
@@ -6855,6 +6872,7 @@
             "hard_limit": "[500, 5000]",
             "note": "hard_limit is the only range the validator rejects; typical_guidance is where values usually sit - a value outside it is valid."
           },
+          "range_words": "any value from 500 to 5000",
           "required": false,
           "default": 2000,
           "save_resolved": false,
@@ -6900,7 +6918,7 @@
               },
               "sample": ["trades"],
               "withheld": "below 30 entries",
-              "label": "Rank IC"
+              "label": "Entry strength (its size, from 0) vs the return in the trade's direction"
             },
             {
               "name": "entries",
@@ -6953,7 +6971,7 @@
       "version": 1,
       "category": "Measure",
       "label": "Best and worst move inside each trade, in R",
-      "about": "Serves each trade's best and worst move inside the trade, in units of its risk at entry.",
+      "about": "Shows each trade's best and worst move while it was open, in units of its risk at entry.",
       "group": "entries",
       "section": "6.3",
       "accepts": {
@@ -7185,7 +7203,7 @@
       "version": 1,
       "category": "Measure",
       "label": "Exits by reason, and what came after",
-      "about": "Groups trades by why they exited and serves what each group returned and what came after.",
+      "about": "Groups trades by why they exited and shows what each group returned and what happened next.",
       "group": "entries",
       "section": "6.4",
       "accepts": {
@@ -7204,6 +7222,7 @@
             "hard_limit": "[1, 30]",
             "note": "hard_limit is the only range the validator rejects; typical_guidance is where values usually sit - a value outside it is valid."
           },
+          "range_words": "any value from 1 to 30",
           "distinct": true,
           "required": false,
           "default": [1, 5, 10],
@@ -7355,7 +7374,7 @@
       "version": 1,
       "category": "Axis",
       "label": "Stop × target",
-      "about": "Replays the same entries with other stops and targets, or runs the strategy at each, and serves each pair.",
+      "about": "Tries the strategy's entries with other stops and targets and shows the result of each pair.",
       "group": "entries",
       "section": "6.5",
       "accepts": {
@@ -7375,6 +7394,7 @@
             "hard_limit": "(0, 0.5]",
             "note": "hard_limit is the only range the validator rejects; typical_guidance is where values usually sit - a value outside it is valid."
           },
+          "range_words": "any value above 0 and up to 0.5",
           "length": [2, 12],
           "distinct": true,
           "required": false,
@@ -7395,6 +7415,7 @@
             "hard_limit": "(0, 2]",
             "note": "hard_limit is the only range the validator rejects; typical_guidance is where values usually sit - a value outside it is valid."
           },
+          "range_words": "any value above 0 and up to 2",
           "length": [2, 12],
           "distinct": true,
           "required": false,
@@ -7496,7 +7517,52 @@
             }
           ],
           "evidence": true,
-          "note": "same entries; a different stop or target that would have changed later entries is not modelled"
+          "note": "same entries, replayed on daily closes; a different stop or target that would have changed later entries is not modelled"
+        },
+        {
+          "name": "stops.reference",
+          "axes": [
+            {
+              "name": "result",
+              "kind": "run",
+              "role": "entity"
+            }
+          ],
+          "measures": [
+            {
+              "name": "reference",
+              "unit": "label",
+              "precision": "label",
+              "sign": "signed",
+              "label": "Compared with"
+            },
+            {
+              "name": "mean_result",
+              "unit": "fraction",
+              "precision": "exact",
+              "sign": "signed",
+              "sample": ["trades"],
+              "label": "Mean result before fees and funding",
+              "basis": "gross"
+            },
+            {
+              "name": "win_rate",
+              "unit": "fraction",
+              "precision": "exact",
+              "sign": "nonnegative",
+              "label": "Win rate before fees and funding",
+              "basis": "gross"
+            },
+            {
+              "name": "trades",
+              "unit": "count",
+              "precision": "count",
+              "sign": "nonnegative",
+              "label": "Trades"
+            }
+          ],
+          "evidence": true,
+          "note": "your own exits, read the same way as the cells: on the same trades' daily closes (replay), or the base run's own trades (runs)"
         }
       ],
       "runs": [
@@ -7555,7 +7621,7 @@
       "version": 1,
       "category": "Measure",
       "label": "Trade stats",
-      "about": "Serves the strategy's trade counts, hold times, win rate and expectancy; each money measure says whether it reads the return before or after fees and funding.",
+      "about": "Shows the strategy's trade count, hold times, win rate and expectancy; each money figure says whether it is before or after fees and funding.",
       "group": "entries",
       "section": "6.6",
       "accepts": {
@@ -7703,7 +7769,7 @@
       "version": 1,
       "category": "Resample",
       "label": "Trades in a random order",
-      "about": "Replays the trades in random orders and shows where the real order's drawdown sits among them.",
+      "about": "Shuffles the order of the trades many times and shows how the real drawdown compares.",
       "group": "entries",
       "section": "6.7",
       "accepts": {
@@ -7738,6 +7804,7 @@
             "hard_limit": "[200, 10000]",
             "note": "hard_limit is the only range the validator rejects; typical_guidance is where values usually sit - a value outside it is valid."
           },
+          "range_words": "any value from 200 to 10000",
           "required": false,
           "default": 2000,
           "save_resolved": false,
@@ -7814,7 +7881,7 @@
             },
             {
               "name": "share_deeper",
-              "unit": "rank",
+              "unit": "fraction",
               "precision": "exact",
               "sign": "nonnegative",
               "label": "Share of orders with a deeper drawdown"
@@ -7894,5 +7961,10 @@
         "S-PROP-2"
       ]
     }
+  },
+  "run_settings": {
+    "delay": "a whole number of days, any value from 0 to 30",
+    "leverage": "any value above 0 and up to 10",
+    "vol_cap": "any value above 0 and up to 5, or None"
   }
 }

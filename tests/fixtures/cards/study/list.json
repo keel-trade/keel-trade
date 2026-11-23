@@ -6,6 +6,7 @@
         "checks": null,
         "chips": [],
         "copy": {
+          "all_charts": "All charts",
           "charts": "Charts",
           "failed_cell": "Didn't finish",
           "full_chart_in_keel": "Open in Keel for the full chart",
@@ -24,21 +25,27 @@
           "open_chart": "Open this chart in Keel",
           "open_setting": "Open this setting in Keel",
           "points_in_keel": "Open in Keel to read each point",
+          "seg_charts": "Charts",
+          "seg_checks": "Checks",
+          "seg_numbers": "Numbers",
           "steps": "Steps",
           "yours": "Yours"
         },
         "focus": null,
         "head_words": "Your studies · 12 studies · 2 running",
+        "hero": null,
         "key": null,
         "key_v": null,
         "links": null,
         "method_line": null,
         "more_charts_total": 0,
-        "more_words": null,
+        "more_words": "+7 more studies",
         "notes": null,
         "rows": [
           {
-            "lead_number_words": "Sharpe (daily) over the window −0.44",
+            "lead_number_label": "Sharpe over the window",
+            "lead_number_value": "−0.44",
+            "lead_number_words": "Sharpe over the window: −0.44",
             "link": "https://app.usekeel.io/research/stu_000012",
             "thumb": {
               "facts": {
@@ -56,7 +63,9 @@
             }
           },
           {
-            "lead_number_words": "Sharpe (daily) over the window −0.44",
+            "lead_number_label": "Sharpe over the window",
+            "lead_number_value": "−0.44",
+            "lead_number_words": "Sharpe over the window: −0.44",
             "link": "https://app.usekeel.io/research/stu_000011",
             "thumb": {
               "facts": {
@@ -74,146 +83,32 @@
             }
           },
           {
+            "lead_number_label": null,
+            "lead_number_value": null,
             "lead_number_words": null,
             "link": "https://app.usekeel.io/research/stu_000010",
             "thumb": null
           },
           {
+            "lead_number_label": null,
+            "lead_number_value": null,
             "lead_number_words": null,
             "link": "https://app.usekeel.io/research/stu_000009",
             "thumb": null
           },
           {
+            "lead_number_label": null,
+            "lead_number_value": null,
             "lead_number_words": null,
             "link": "https://app.usekeel.io/research/stu_000008",
             "thumb": null
-          },
-          {
-            "lead_number_words": "After the event against random dates, 5 days −0.9%",
-            "link": "https://app.usekeel.io/research/stu_000007",
-            "thumb": {
-              "facts": {
-                "enc": "b64",
-                "series": [
-                  {
-                    "c": 1,
-                    "y": "zhTOMVTZk2z54phnaiegonobXbQSOMPHPKNMRJAOC"
-                  },
-                  {
-                    "c": 2,
-                    "y": "622z0yxuwyz121346786653569-_85768_6457775"
-                  }
-                ],
-                "zero": 51
-              },
-              "family": "Curve",
-              "view_index": 0
-            }
-          },
-          {
-            "lead_number_words": "Rank among nearby settings 1",
-            "link": "https://app.usekeel.io/research/stu_000006",
-            "thumb": {
-              "facts": {
-                "enc": "b64",
-                "series": [
-                  {
-                    "c": 0,
-                    "y": "__A"
-                  }
-                ]
-              },
-              "family": "Curve",
-              "view_index": 0
-            }
-          },
-          {
-            "lead_number_words": "Nearby settings as a share of yours −0.78",
-            "link": "https://app.usekeel.io/research/stu_000005",
-            "thumb": {
-              "facts": {
-                "c": 16,
-                "d": "gqqakfpglfhicnbk3plikbhejl4jlhagdiurol6cikdcdgec4lbdiefijbgcf3ejqflldhg0leglf4kp51dijppbqlg34ievpgfhkapefkvelblcihq1h3lekllcjfk44ca4jmvjic2ql4qjgcckfiirqifnfcggoaknil63dkqic7ckbhp44vkhbapjk7kqb4hlleji7ilggkhkldildde342hkcjpgejg7hncf44fhpf4le3bl3j5hjglf9iovhegobhhcgbojf4jk55eggeaeh6paged4lfe4lhegflqvojjjdikjdllb44aidalkccklbhnmgijbdgqeoimc5lufdqqib5lgikracgkb4cq5qfee4gclvlejie3kp93b",
-                "r": 24,
-                "ramp": "div"
-              },
-              "family": "Heatmap",
-              "view_index": 0
-            }
-          },
-          {
-            "lead_number_words": "Sharpe (daily) over the window, Momentum rotation v4 −0.44",
-            "link": "https://app.usekeel.io/research/stu_000004",
-            "thumb": {
-              "facts": {
-                "enc": "b64",
-                "series": [
-                  {
-                    "c": 0,
-                    "y": "666_36ts74u0puy1rt12jedXQSRGOXcTRSSLOQRFABDHKITVQQLLLKLOQZVY"
-                  }
-                ],
-                "zero": 58
-              },
-              "family": "Lines",
-              "view_index": 0
-            }
-          },
-          {
-            "lead_number_words": "Effective number of different results, all 1.00",
-            "link": "https://app.usekeel.io/research/stu_000003",
-            "thumb": {
-              "facts": {
-                "c": 6,
-                "d": "-----ff----fff---ffff--fffff-fffffff",
-                "r": 6,
-                "ramp": "div"
-              },
-              "family": "Heatmap",
-              "view_index": 0
-            }
-          },
-          {
-            "lead_number_words": "How well it ranks, next day −0.006",
-            "link": "https://app.usekeel.io/research/stu_000002",
-            "thumb": {
-              "facts": {
-                "enc": "b64",
-                "series": [
-                  {
-                    "c": 0,
-                    "hi": "_9971vrss",
-                    "lo": "picWQHACC",
-                    "y": "0vsoibWXh"
-                  }
-                ],
-                "zero": 58
-              },
-              "family": "Curve",
-              "view_index": 0
-            }
-          },
-          {
-            "lead_number_words": "Sharpe (daily) over the window −0.44",
-            "link": "https://app.usekeel.io/research/stu_000001",
-            "thumb": {
-              "facts": {
-                "enc": "b64",
-                "series": [
-                  {
-                    "c": 0,
-                    "y": "666_36ts74u0puy1rt12jedXQSRGOXcTRSSLOQRFABDHKITVQQLLLKLOQZVY"
-                  }
-                ],
-                "zero": 58
-              },
-              "family": "Lines",
-              "view_index": 1
-            }
           }
         ],
+        "runs": null,
         "schema": "keel.research.card-data/2",
         "steps": [],
+        "thumbs": [],
+        "tiles": [],
         "top": null
       },
       "studies": [
@@ -326,13 +221,20 @@
           "archived": false,
           "card_version": 1,
           "finished_at": "2026-10-29T12:00:00+00:00",
-          "headline": "After the event against random dates, 5 days: −0.9%",
+          "headline": "After the event against random dates, 5 days: −0.90%",
           "maker": "you",
           "notes_total": 0,
           "plan_id": null,
           "project_ids": [],
           "set_aside": false,
-          "stale": [],
+          "stale": [
+            {
+              "kind": "newer_subject",
+              "offer": null,
+              "short": "v4 is out",
+              "words": "Momentum rotation v3 has a newer version, v4."
+            }
+          ],
           "state": "completed",
           "version": 1
         },
@@ -361,7 +263,7 @@
           "archived": false,
           "card_version": 1,
           "finished_at": "2026-10-29T12:00:00+00:00",
-          "headline": "Nearby settings as a share of yours: −0.78",
+          "headline": "Nearby settings as a share of yours: −0.78 (nearby −0.23 against yours 0.29)",
           "maker": "you",
           "notes_total": 0,
           "plan_id": null,
@@ -382,7 +284,7 @@
           "archived": false,
           "card_version": 1,
           "finished_at": "2026-10-29T12:00:00+00:00",
-          "headline": "Sharpe (daily) over the window, Momentum rotation v4: −0.44",
+          "headline": "Sharpe over the window, Momentum rotation v4: −0.44",
           "maker": "you",
           "notes_total": 0,
           "plan_id": null,
@@ -403,7 +305,7 @@
           "archived": false,
           "card_version": 1,
           "finished_at": "2026-10-29T12:00:00+00:00",
-          "headline": "Effective number of different results, all: 1.00",
+          "headline": "Effective number of different results: 1.77",
           "maker": "you",
           "notes_total": 0,
           "plan_id": null,
@@ -417,7 +319,7 @@
           "archived": false,
           "card_version": 1,
           "finished_at": "2026-10-29T12:00:00+00:00",
-          "headline": "How well it ranks, next day: −0.006 (t -1.2)",
+          "headline": "How well it ranks, next day: −0.010 (t −2.4)",
           "maker": "you",
           "notes_total": 0,
           "plan_id": null,
@@ -456,7 +358,7 @@
   },
   "content": [
     {
-      "text": "card: where the host draws Keel cards, the user sees what follows as a card carrying its name, links and ids, so a reply can call it by name; the ids and links here serve tool calls and hosts without cards.\n\nStudies: 12 shown of 12 (1 cancelled, 7 completed, 1 completed partial, 1 failed, 2 running)\n- stu_000012 · Check · Momentum rotation v3 · Done · Oct 29 · 2 didn't finish — 1 of 9 bars met\n- stu_000011 · Check · Momentum rotation v3 · Stopped — 1 of 9 bars met\n- stu_000010 · Check · Momentum rotation v3 · Didn't finish\n- stu_000009 · Check · Momentum rotation v3 · Queued\n- stu_000008 · Check · Momentum rotation v3 · Running\n- stu_000007 · Entries and exits · Near-high breakout v2, entries and exits · Done · Oct 29 — After the event against random dates, 5 days: −0.9%\n- stu_000006 · Settings map · T · Done · Oct 29\n- stu_000005 · Settings map · Lookback × hold · Done · Oct 29 — Nearby settings as a share of yours: −0.78\n- stu_000004 · Compare · Momentum rotation v3 vs v4 · Done · Oct 29 — Sharpe (daily) over the window, Momentum rotation v4: −0.44\n- stu_000003 · Compare · Signals, side by side · Done · Oct 29 — Effective number of different results, all: 1.00\n- stu_000002 · Signal study · Low volatility · Done · Oct 29 — How well it ranks, next day: −0.006 (t -1.2)\n- stu_000001 · Check · Momentum rotation v3 · Done · Oct 29 — 1 of 9 bars met\nView in Keel: https://app.usekeel.io/research",
+      "text": "card: where the host draws Keel cards, the user sees what follows as a card carrying its name, links and ids, so a reply can call it by name; the ids and links here serve tool calls and hosts without cards.\n\nStudies: 12 shown of 12 (2 running, 1 stopped, 1 didn't finish, 7 done, 1 done with runs that didn't finish)\n- stu_000012 · Check · Momentum rotation v3 · Done · Oct 29 · 2 didn't finish — 1 of 9 bars met\n- stu_000011 · Check · Momentum rotation v3 · Stopped at 9 of 26 runs — 1 of 9 bars met\n- stu_000010 · Check · Momentum rotation v3 · Didn't finish\n- stu_000009 · Check · Momentum rotation v3 · Queued\n- stu_000008 · Check · Momentum rotation v3 · Running\n- stu_000007 · Entries and exits · Momentum rotation v3, entries and exits · Done · Oct 29 — After the event against random dates, 5 days: −0.90%\n- stu_000006 · Settings map · Lookback map of Momentum rotation v3 · Done · Oct 29\n- stu_000005 · Settings map · Lookback × hold · Done · Oct 29 — Nearby settings as a share of yours: −0.78 (nearby −0.23 against yours 0.29)\n- stu_000004 · Compare · Momentum rotation v3 vs v4 · Done · Oct 29 — Sharpe over the window, Momentum rotation v4: −0.44\n- stu_000003 · Compare · Signals, side by side · Done · Oct 29 — Effective number of different results: 1.77\n- stu_000002 · Signal study · Size, by 30-day dollar volume · Done · Oct 29 — How well it ranks, next day: −0.010 (t −2.4)\n- stu_000001 · Check · Momentum rotation v3 · Done · Oct 29 — 1 of 9 bars met\nView in Keel: https://staging-app.tailf4d598.ts.net/research",
       "type": "text"
     }
   ],
@@ -468,9 +370,9 @@
       "failed": 1,
       "running": 2
     },
-    "hero_url": "https://app.usekeel.io/research",
+    "hero_url": "https://staging-app.tailf4d598.ts.net/research",
     "links": {
-      "app": "https://app.usekeel.io/research"
+      "app": "https://staging-app.tailf4d598.ts.net/research"
     },
     "pagination": {
       "has_more": false
@@ -482,6 +384,7 @@
           "name": "Check a strategy",
           "short": "Check"
         },
+        "plan_rows": [],
         "state_words": "Done · Oct 29 · 2 didn't finish",
         "study_id": "stu_000012",
         "title": "Momentum rotation v3"
@@ -492,7 +395,8 @@
           "name": "Check a strategy",
           "short": "Check"
         },
-        "state_words": "Stopped",
+        "plan_rows": [],
+        "state_words": "Stopped at 9 of 26 runs",
         "study_id": "stu_000011",
         "title": "Momentum rotation v3"
       },
@@ -502,6 +406,7 @@
           "name": "Check a strategy",
           "short": "Check"
         },
+        "plan_rows": [],
         "state_words": "Didn't finish",
         "study_id": "stu_000010",
         "title": "Momentum rotation v3"
@@ -512,6 +417,7 @@
           "name": "Check a strategy",
           "short": "Check"
         },
+        "plan_rows": [],
         "state_words": "Queued",
         "study_id": "stu_000009",
         "title": "Momentum rotation v3"
@@ -521,6 +427,13 @@
           "key": "check",
           "name": "Check a strategy",
           "short": "Check"
+        },
+        "plan_rows": [],
+        "progress": {
+          "children": 26,
+          "done": 9,
+          "percent": 34,
+          "words": "Running 34%"
         },
         "state_words": "Running",
         "study_id": "stu_000008",
@@ -532,9 +445,10 @@
           "name": "Entries and exits",
           "short": "Entries and exits"
         },
+        "plan_rows": [],
         "state_words": "Done · Oct 29",
         "study_id": "stu_000007",
-        "title": "Near-high breakout v2, entries and exits"
+        "title": "Momentum rotation v3, entries and exits"
       },
       {
         "kind_label": {
@@ -542,9 +456,10 @@
           "name": "Map a strategy's settings",
           "short": "Settings map"
         },
+        "plan_rows": [],
         "state_words": "Done · Oct 29",
         "study_id": "stu_000006",
-        "title": "T"
+        "title": "Lookback map of Momentum rotation v3"
       },
       {
         "kind_label": {
@@ -552,6 +467,7 @@
           "name": "Map a strategy's settings",
           "short": "Settings map"
         },
+        "plan_rows": [],
         "state_words": "Done · Oct 29",
         "study_id": "stu_000005",
         "title": "Lookback × hold"
@@ -562,6 +478,7 @@
           "name": "Compare",
           "short": "Compare"
         },
+        "plan_rows": [],
         "state_words": "Done · Oct 29",
         "study_id": "stu_000004",
         "title": "Momentum rotation v3 vs v4"
@@ -572,6 +489,7 @@
           "name": "Compare",
           "short": "Compare"
         },
+        "plan_rows": [],
         "state_words": "Done · Oct 29",
         "study_id": "stu_000003",
         "title": "Signals, side by side"
@@ -582,9 +500,10 @@
           "name": "Study a signal",
           "short": "Signal study"
         },
+        "plan_rows": [],
         "state_words": "Done · Oct 29",
         "study_id": "stu_000002",
-        "title": "Low volatility"
+        "title": "Size, by 30-day dollar volume"
       },
       {
         "kind_label": {
@@ -592,18 +511,19 @@
           "name": "Check a strategy",
           "short": "Check"
         },
+        "plan_rows": [],
         "state_words": "Done · Oct 29",
         "study_id": "stu_000001",
         "title": "Momentum rotation v3"
       }
     ],
     "studies_total": 12,
-    "url_line": "View in Keel: https://app.usekeel.io/research",
+    "url_line": "View in Keel: https://staging-app.tailf4d598.ts.net/research",
     "view": {
-      "at": "2026-11-17T00:00:16.000Z",
+      "at": "2026-11-17T00:00:19.000Z",
       "kind": "study",
       "mode": "list",
-      "seq": 17,
+      "seq": 20,
       "size": "view"
     }
   }

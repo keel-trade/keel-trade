@@ -31,8 +31,14 @@ REPO_ROOT = Path(__file__).resolve().parents[4]
 PLANS_YAML = REPO_ROOT / "libs" / "platform_auth" / "plans.yaml"
 SHARED_CASES = REPO_ROOT / "libs" / "platform_auth" / "fixtures" / "limit_copy_cases.json"
 
-#: The floor attr every catalog plan declares (plans.yaml `attrs`).
+#: The floor attr every catalog plan declares (plans.yaml `attrs`): the live floor, and the paper floor too
+#: wherever a plan declares no ``paper_clock_floor`` of its own (plans v3 split them on Free, brief §3 C).
 FLOOR_ATTR = "paper_live_clock_floor"
+PAPER_FLOOR_ATTR = "paper_clock_floor"
+
+#: Units where a LOWER declared value is the better plan (a refresh floor in minutes), as
+#: ``platform_auth.config.LOWER_IS_BETTER_UNITS``.
+LOWER_IS_BETTER = frozenset({"screener_refresh_min_minutes"})
 
 
 @lru_cache(maxsize=1)
@@ -55,7 +61,9 @@ def _version(version: str) -> dict[str, Any]:
 def display_name(plan: str, version: str = "v2") -> str:
     """The catalog's display name: an optional ``attrs.<plan>.display_name``,
     else the capitalised id (doc 07 §6.1)."""
-    attrs = (_version(version).get("attrs") or {}).get(plan) or {}
+    # v1 is plans.yaml's top-level ``plans`` table, which declares no attrs: its names are the capitalised ids.
+    declared = catalog()["versions"].get(version) or {}
+    attrs = (declared.get("attrs") or {}).get(plan) or {}
     name = attrs.get("display_name")
     return name if isinstance(name, str) and name else plan.capitalize()
 
@@ -71,12 +79,22 @@ def _value(plan: str, version: str, unit: str) -> float:
 
 
 def higher_plans(plan: str, unit: str, version: str = "v2") -> list[dict[str, str]]:
-    """The served ``higher_plans`` for ``plan`` on ``unit`` (names only)."""
+    """The served ``higher_plans`` for ``plan`` on ``unit`` (names only): every catalog paid row, in ladder order,
+    whose own (plan, version) declares a better value (lower for :data:`LOWER_IS_BETTER`)."""
     ours = _value(plan, version, unit)
+    lower = unit in LOWER_IS_BETTER
     out = []
     for row_plan, row_version in paid_rows():
-        if _value(row_plan, row_version, unit) > ours:
-            out.append({"plan": row_plan, "version": row_version, "name": display_name(row_plan)})
+        theirs = _value(row_plan, row_version, unit)
+        better = (0 < theirs < ours) if lower else theirs > ours
+        if better:
+            out.append(
+                {
+                    "plan": row_plan,
+                    "version": row_version,
+                    "name": display_name(row_plan, row_version),
+                }
+            )
     return out
 
 
@@ -88,19 +106,30 @@ def _minutes(clock: str) -> int:
     return int(n) * {"min": 1, "h": 60, "d": 1440}[unit]
 
 
-def floor_of(plan: str, version: str = "v2") -> str:
-    return (_version(version)["attrs"][plan])[FLOOR_ATTR]
+def floor_of(plan: str, version: str = "v2", applies: str | None = None) -> str:
+    """The plan's floor; ``applies="paper"`` reads its paper floor (the live one where it declares none)."""
+    attrs = _version(version)["attrs"][plan]
+    if applies == "paper" and isinstance(attrs.get(PAPER_FLOOR_ATTR), str):
+        return attrs[PAPER_FLOOR_ATTR]
+    return attrs[FLOOR_ATTR]
 
 
-def faster_plans(plan: str, version: str = "v2") -> list[dict[str, str]]:
-    """The served ``higher_plans`` on the paper/live timeframe floor."""
-    ours = _minutes(floor_of(plan, version))
+def faster_plans(
+    plan: str, version: str = "v2", applies: str | None = None
+) -> list[dict[str, str]]:
+    """The served ``higher_plans`` on the paper (``applies="paper"``) or live timeframe floor."""
+    ours = _minutes(floor_of(plan, version, applies))
     out = []
     for row_plan, row_version in paid_rows():
-        attrs = (_version(row_version).get("attrs") or {}).get(row_plan) or {}
-        theirs = attrs.get(FLOOR_ATTR)
-        if isinstance(theirs, str) and _minutes(theirs) < ours:
-            out.append({"plan": row_plan, "version": row_version, "name": display_name(row_plan)})
+        theirs = floor_of(row_plan, row_version, applies)
+        if _minutes(theirs) < ours:
+            out.append(
+                {
+                    "plan": row_plan,
+                    "version": row_version,
+                    "name": display_name(row_plan, row_version),
+                }
+            )
     return out
 
 

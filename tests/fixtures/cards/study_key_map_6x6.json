@@ -1,0 +1,101 @@
+{
+  "source": "card_data.key of a real 6 x 6 settings map (Momentum Strategy on Hyperliquid, lookback x max weight), read from staging through keel_research_get on 2026-11-20 (CARD-FINAL's map-done recording). The study fixtures' maps are 24 x 16 and carry no values in their cells; CARD-360's cell-value arm draws this one.",
+  "key": {
+    "family": "Heatmap",
+    "title": "Lookback × max weight",
+    "enc": "b64x2",
+    "x": {
+      "label": "Max weight",
+      "n": 6,
+      "pos": null,
+      "ticks": [
+        {
+          "at": 341,
+          "w": "0.05"
+        },
+        {
+          "at": 1024,
+          "w": "0.1"
+        },
+        {
+          "at": 1706,
+          "w": "0.15"
+        },
+        {
+          "at": 2389,
+          "w": "0.2"
+        },
+        {
+          "at": 3071,
+          "w": "0.25"
+        },
+        {
+          "at": 3754,
+          "w": "0.3"
+        }
+      ]
+    },
+    "y": {
+      "label": "Lookback",
+      "n": 6,
+      "pos": null,
+      "ticks": [
+        {
+          "at": 341,
+          "w": "7"
+        },
+        {
+          "at": 1024,
+          "w": "10"
+        },
+        {
+          "at": 1706,
+          "w": "14"
+        },
+        {
+          "at": 2389,
+          "w": "21"
+        },
+        {
+          "at": 3071,
+          "w": "28"
+        },
+        {
+          "at": 3754,
+          "w": "35"
+        }
+      ]
+    },
+    "series": [],
+    "marks": [],
+    "read": {
+      "x": "0.05|0.1|0.15|0.2|0.25|0.3",
+      "y": ["7|10|14|21|28|35"],
+      "band": null,
+      "withheld": null,
+      "cells": "0.82|0.86|0.91|0.95|0.94|0.93|0.82|0.85|0.92|1.01|1.00|0.99|0.80|0.83|0.87|0.92|0.93|0.92|0.54|0.54|0.46|0.35|0.34|0.35|0.71|0.76|0.64|0.62|0.61|0.60|0.73|0.68|0.66|0.73|0.70|0.69",
+      "bins": null,
+      "sel": "max weight:0.05|max weight:0.1|max weight:0.15|max weight:0.2|max weight:0.25|max weight:0.3",
+      "sel_rows": "lookback:7|lookback:10|lookback:14|lookback:21|lookback:28|lookback:35",
+      "ring_words": "Your setting: Max weight 0.15, Lookback 14: 0.87"
+    },
+    "legend": {
+      "lo": "0.34",
+      "hi": "1.01",
+      "ramp": "div",
+      "label": "Sharpe"
+    },
+    "note_words": "Marked: your setting and the 3 best and the 3 worst; the cell you pick is outlined too",
+    "more_words": null,
+    "kind": "heat",
+    "cols": 6,
+    "rows": 6,
+    "d": "morsssmnrvvulnorrr995001hjedccigfihg",
+    "ring": 14,
+    "outline": {
+      "high": [9, 10, 11],
+      "low": [22, 21, 23]
+    },
+    "values_in_cells": true
+  }
+}

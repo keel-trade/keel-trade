@@ -148,13 +148,20 @@ def _unit_block(entry: dict) -> dict[str, Any] | None:
 
 
 def _fraction(block: dict) -> str:
-    from keel.errors import _label_for_unit, render_first_week_clause
+    from keel.errors import _label_for_unit, first_week_bonus, render_first_week_clause
 
     label = block.get("label") or _label_for_unit(str(block.get("unit") or ""))
     text = f"{block['remaining']:,} of {block['limit']:,} {label}"
-    clause = render_first_week_clause(block)
-    if clause:
-        text += f" {clause}"
+    bonus = first_week_bonus(block) if block.get("unit") == "backtest_runs" else None
+    if bonus is not None:
+        # The v3 rows' first-week words (PLANS-REVIEW R16): the period's own allowance beside the bonus.
+        text += f" ({block['limit'] - bonus:,} plus your first-week {bonus:,})"
+    else:
+        clause = render_first_week_clause(
+            block
+        )  # a bonus that runs past the reset keeps the pre-v3 clause
+        if clause:
+            text += f" {clause}"
     reserved = block.get("reserved")
     if isinstance(reserved, int) and not isinstance(reserved, bool) and reserved > 0:
         text += f" ({reserved:,} reserved by runs in flight)"
@@ -165,10 +172,12 @@ def quota_sentences(summary: Any) -> str | None:
     """Line 2's sentences: one per finite unit the server sent; units that
     share a period and a reset instant are joined into one sentence.
 
-    While the server reports a first-week allowance with some left on the
-    backtest-runs unit, its clause is folded into that unit's fraction
-    (``errors.render_first_week_clause`` — the same words ``keel_plan_usage``
-    and the run notice use).
+    While the server reports a first-week allowance on the backtest-runs
+    unit, the fraction says the period's allowance beside it ("(20 plus your
+    first-week 20)", the v3 rows' words that ``keel_plan_usage`` and the run
+    notice use; a bonus that runs past the reset keeps the pre-v3 clause,
+    ``errors.render_first_week_clause``). A silent unit (compute) is not
+    listed.
     """
     from keel.errors import (
         _label_for_unit,
@@ -176,8 +185,14 @@ def quota_sentences(summary: Any) -> str | None:
         quota_period_phrase,
         quota_reset_instant,
     )
+    from keel.limit_copy import TIER_NO_NEAR_UNITS
 
-    blocks = [b for b in (_unit_block(e) for e in summary or []) if b is not None]
+    # A silent unit (compute, PLANS-REVIEW R7) is never a count; its refusal names it when it is spent.
+    blocks = [
+        b
+        for b in (_unit_block(e) for e in summary or [])
+        if b is not None and str(b.get("unit") or "") not in TIER_NO_NEAR_UNITS
+    ]
     if not blocks:
         return None
     sentences: list[str] = []

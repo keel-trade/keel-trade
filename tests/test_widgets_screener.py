@@ -12,15 +12,23 @@ ROOT = Path(__file__).resolve().parents[1]
 CARD_COPY = {
     "pass_now": "{passing} of {of} coins",
     "tie": "{n} coins tie at {value} at the cutoff",
-    "view_rev": "view revision {n}",
     "more_in_keel": "+{k} more in Keel",
     "show": "Show",
     "show_all": "All ({n})",
-    "expand": "Open the interactive chart",
     "scrub": "Move through the window",
-    "latest_note": "The numbers and the table show the latest values.",
-    "sorted_within": "Sorted within the {n} shown.",
-    "more_views": "More views in Keel",
+    "kind": "Screen",
+    "as_of": "as of {time}",
+    "coins": "{n} coins",
+    "more_in_expand": "{k} more in Expand",
+    "across": "Across {count} coins",
+    "new": "new",
+    "since_last": "Since the last bar",
+    "entered_asset": "{asset} entered the screen since the last bar",
+    "left_asset": "{asset} left the screen since the last bar",
+    "tie_more": "+{n} more tie at {value}",
+    "label_unit": "{label} ({unit})",
+    "overview": "All views",
+    "sort": "Sort",
 }
 
 
@@ -48,7 +56,21 @@ def _string_literals(source: str) -> list[str]:
 
 
 #: Space-separated tokens that are class lists or directives, not prose.
-_CODE_TOKENS = {"use", "strict", "noopener", "noreferrer", "chart", "muted", "tall", "ml", "dim"}
+_CODE_TOKENS = {
+    "use",
+    "strict",
+    "noopener",
+    "noreferrer",
+    "chart",
+    "muted",
+    "tall",
+    "ml",
+    "dim",
+    # the shared button pair (card.css, D-420d)
+    "button-link",
+    "button-quiet",
+    "button-primary",
+}
 
 
 def _english(literal: str) -> bool:
@@ -143,11 +165,11 @@ def test_card_states_both_dialects_and_sizes(tmp_path):
         "suggested_next_action": {},
     }
     path = tmp_path / "input.json"
-    # 30 of 30 is no filter (Q-3635): no pass sentence; "+25 more" counts
-    # the set (30) against the five legend entries, never the universe.
-    words = ["+25 more in Keel"]
+    # 30 of 30 is no filter (Q-3635): the count is "30 coins", served; an
+    # envelope that serves no card words draws no count at all.
+    words = ["30 coins"]
     expect = {
-        "view": {"lines": 8, "absent": [*words, "pass now", "Show"]},
+        "view": {"lines": 8, "absent": [*words, "pass now", "Show", "more in"]},
         "served": {
             "lines": 8,
             "present": words,
@@ -158,11 +180,12 @@ def test_card_states_both_dialects_and_sizes(tmp_path):
         "scatter": {
             "dots": rows,
             "passing": len(passing),
-            "nums": len(passing),
-            "present": list(QUADRANTS.values()),
+            # a corner word yields to a coin's name where they would touch; the
+            # lower corners hold no top-ranked coin here
+            "present": list(QUADRANTS.values())[2:],
         },
-        # a Table view draws the set's rows, no legend, no coloured row wash
-        "table": {"rows": len(passing), "passing": 0, "nums": 0},
+        # a Table view draws the set's top rows inline (here both)
+        "table": {"rows": len(passing)},
         "receipt": {},
         "failed": {},
     }

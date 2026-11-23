@@ -178,6 +178,7 @@ def record_outcome(
     validation_ok: bool | None = None,
     issue_codes: list[str] | tuple[str, ...] | None = None,
     doc_ref: str | None = None,
+    plan_limit: bool | None = None,
 ) -> None:
     """Record the object(s) this tool call produced or touched.
 
@@ -212,6 +213,13 @@ def record_outcome(
     ``doc_ref`` is the name of the help document Keel SERVED (Q-2377) —
     Keel's own resource id, like a strategy id — never the topic text the
     caller typed. It must match :data:`OUTCOME_DOC_REF_RE`.
+
+    ``plan_limit`` says the call was refused at a PLAN LIMIT (Q-8224, plans
+    v3 spec 02 §F G9): an expected outcome the person can read, never a
+    failed call, so it is recorded INSTEAD of ``is_error`` and the hosted
+    dispatcher leaves MCP ``isError`` off exactly as the local server does.
+    The MCP adapter is its one writer (``_mcp_adapter.error_outcome``, the
+    same ``is_plan_limit_envelope`` verdict that decides the wire bit).
     """
     slot = _REQUEST_OUTCOME.get()
     if slot is None:
@@ -231,6 +239,7 @@ def record_outcome(
         ("dry_run", dry_run),
         ("is_error", is_error),
         ("validation_ok", validation_ok),
+        ("plan_limit", plan_limit),
     ):
         if value is None:
             continue

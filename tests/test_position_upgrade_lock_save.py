@@ -118,6 +118,11 @@ class _Client:
         self.calls.append(("PATCH", path, json))
         return {"strategy_id": "str_1", "current_sequence": 5, "head_commit_id": "cmt_new"}
 
+    def post(self, path: str, json: dict | None = None, **kw: Any) -> Any:
+        # The dry run's plan check (plans v3 spec 02 §C4.2): a read that finds nothing here.
+        self.calls.append(("POST", path, json))
+        return {"plan_findings": []} if path == "/v1/strategies/validate" else {}
+
     def bodies(self, verb: str) -> list[dict]:
         return [body for v, _p, body in self.calls if v == verb]
 

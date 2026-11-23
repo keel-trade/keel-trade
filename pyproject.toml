@@ -1,6 +1,6 @@
 [project]
 name = "keel-trade"
-version = "0.10.0"
+version = "0.11.0"
 description = "Keel — CLI and MCP server for building and backtesting Hyperliquid strategies with your AI assistant"
 readme = "AGENTS.md"
 requires-python = ">=3.11"

@@ -354,9 +354,9 @@ LISTED_SCREEN_ANNOTATION_JUSTIFICATIONS: dict[str, AnnotationJustification] = {
 
 LISTED_RESEARCH_APPEND_ONLY: dict[str, str] = {
     "keel_research_run": (
-        "Each call saves a new study or a new study version and adds new runs; a never-run "
-        "Draft it runs is saved in its place (it holds no runs or results), and no version "
-        "that ran and no run is edited or removed."
+        "Each call saves a new study or a new study version and adds new runs; no version "
+        "that ran and no run is edited or removed. The one record a run saves over is the "
+        "study's own never-run Draft, a document that holds no runs or results."
     ),
 }
 
@@ -382,7 +382,9 @@ LISTED_RESEARCH_ANNOTATION_JUSTIFICATIONS: dict[str, AnnotationJustification] = 
     ),
     "keel_research_run": AnnotationJustification(
         "Saves the study and starts its runs, which are recorded in the caller's workspace.",
-        "Append-only: " + LISTED_RESEARCH_APPEND_ONLY["keel_research_run"],
+        # AUDIT S3 #13: for directory review the reason says what it adds and the one thing it saves over (a never-run
+        # Draft), never "Append-only:", which that second sentence contradicts
+        LISTED_RESEARCH_APPEND_ONLY["keel_research_run"],
         "Computes on Keel's own market data inside the caller's workspace; places no orders "
         "and publishes nothing. With a share_id it copies the shared study's published "
         "snapshot (never its author's source) into the caller's workspace, as a read of a "

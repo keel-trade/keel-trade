@@ -1,0 +1,281 @@
+{
+  "_meta": {
+    "keel/card": {
+      "card_data": {
+        "charts": [],
+        "checks": null,
+        "chips": ["Draft · not run yet"],
+        "copy": {
+          "all_charts": "All charts",
+          "charts": "Charts",
+          "failed_cell": "Didn't finish",
+          "full_chart_in_keel": "Open in Keel for the full chart",
+          "highest": "Highest",
+          "hint_pointer": "Hover or tap the chart for values",
+          "hint_touch": "Tap the chart for values",
+          "locked": "not included in this account's plan",
+          "lowest": "Lowest",
+          "met": "met",
+          "more_charts": "",
+          "more_steps": "+8 more steps",
+          "more_views": "",
+          "not_measured": "not measured",
+          "not_met": "not met",
+          "not_run": "Not run yet",
+          "not_valid": "Not a valid setting",
+          "numbers": "The numbers",
+          "open_bar": "Open this bar in Keel",
+          "open_chart": "Open this chart in Keel",
+          "open_setting": "Open this setting in Keel",
+          "points_in_keel": "Open in Keel to read each point",
+          "seg_charts": "Charts",
+          "seg_checks": "Checks",
+          "seg_numbers": "Numbers",
+          "steps": "Steps",
+          "yours": "Yours"
+        },
+        "focus": null,
+        "head_words": null,
+        "hero": null,
+        "key": null,
+        "key_v": null,
+        "links": {
+          "chart": "https://app.usekeel.io/research/stu_000013?v={v}",
+          "select": "https://app.usekeel.io/research/stu_000013?v={v}&sel={sel}",
+          "study": "https://app.usekeel.io/research/stu_000013"
+        },
+        "method_line": "Measured with the backtest, costs from none to six times, trading 1 to 3 days late and 10 more checks.",
+        "more_charts_total": 0,
+        "more_words": null,
+        "notes": {
+          "draft": "25 runs",
+          "linked": null,
+          "not_measured": [],
+          "saved": null,
+          "stale": ["Momentum rotation v3 has a newer version, v4."]
+        },
+        "rows": null,
+        "runs": 25,
+        "schema": "keel.research.card-data/2",
+        "steps": [
+          {
+            "label": "The backtest",
+            "state": "planned",
+            "words": "2 runs"
+          },
+          {
+            "label": "Costs from none to six times",
+            "state": "planned",
+            "words": "6 runs"
+          },
+          {
+            "label": "Trading 1 to 3 days late",
+            "state": "planned",
+            "words": "4 runs"
+          },
+          {
+            "label": "Only the most traded coins",
+            "state": "planned",
+            "words": "1 run"
+          },
+          {
+            "label": "Without its best coins",
+            "state": "planned",
+            "words": "2 runs"
+          },
+          {
+            "label": "Random books of the same size",
+            "state": "planned",
+            "words": "2 runs"
+          },
+          {
+            "label": "Re-picking the settings as you go",
+            "state": "planned",
+            "words": "1 run"
+          },
+          {
+            "label": "Nearby settings",
+            "state": "planned",
+            "words": "1 run"
+          }
+        ],
+        "thumbs": [],
+        "tiles": [],
+        "top": null
+      }
+    },
+    "ui": {
+      "resourceUri": "ui://keel/cards/study.html"
+    }
+  },
+  "content": [
+    {
+      "text": "card: where the host draws Keel cards, the user sees what follows as a card carrying its name, links and ids, so a reply can call it by name; the ids and links here serve tool calls and hosts without cards.\n\nCheck a strategy · Momentum rotation v3 · version 1 · Planned\nDays Mar 23, 2025 to Oct 29, 2026, split Apr 17, 2026 · 100 coins: the coins Momentum rotation trades · costs 9 bp a fill · data as of Oct 29, 2026\nRuns: 0 runs, 0 reused, none failed\nCharts (13): Your checks · Growth of 1 · Before and after the split · Sharpe as costs rise · Sharpe when trading late · Sharpe on the top coins · Sharpe without the best coins · 150 random books · A year ahead, resampled · Re-picking the settings · Where the return came from · Up and down markets · How it moves with what you run. keel_research_get(study_id=\"stu_000013\", view=0) reads the numbers behind any of them.\nMeasured with the backtest, costs from none to six times, trading 1 to 3 days late and 10 more checks.\nMomentum rotation v3 has a newer version, v4. Plan it in the app: keel_app_link(id=\"stu_000013\")\nVersion 1 is a saved Draft that has not run yet: 25 runs. keel_research_plan(study_id=\"stu_000013\", version=1) plans its run; keel_research_run runs that plan.\nView in Keel: https://app.usekeel.io/research/stu_000013",
+      "type": "text"
+    }
+  ],
+  "structuredContent": {
+    "base": {
+      "evidence_hash": "39d12a6a11826154a9f5ec9190144873b7f9ebad4ea9438c3debdaeff71bc893",
+      "revision": 1,
+      "version": 1
+    },
+    "can_retry": false,
+    "can_run": true,
+    "counts": {
+      "allowance": {
+        "units": [
+          {
+            "limit": 400,
+            "resets_at": "2026-12-22",
+            "unit": "research_studies",
+            "used": 0
+          }
+        ]
+      },
+      "runs": {
+        "executed": 0,
+        "failed_content": 0,
+        "failed_platform": 0,
+        "not_applicable": 0,
+        "planned": 0,
+        "reused": 0,
+        "words": "0 runs, 0 reused, none failed"
+      },
+      "versions_tried": {
+        "added": 0,
+        "family": "",
+        "why": ""
+      }
+    },
+    "footing": {
+      "coins": {
+        "chosen": "The coins Momentum rotation trades",
+        "count": 100,
+        "names_sha256": "6892dc8e601171fcb382e7a0d253cf7c697378343e093731f8e5efcd580a72bd"
+      },
+      "costs": {
+        "fee": 0.00045,
+        "slippage": 0.00045
+      },
+      "costs_words": "9 bp a fill (fee 4.5 bp, slippage 4.5 bp)",
+      "data": "snap_6c1f0e8a2b9d4f37",
+      "data_words": "Data as of Oct 29, 2026",
+      "days": {
+        "end": "2026-10-29",
+        "start": "2025-03-23"
+      },
+      "delay": 0,
+      "engine": "",
+      "leverage": 1.0,
+      "split": "2026-04-17",
+      "split_words": "Split on Apr 17, 2026: 390 days before, 195 after"
+    },
+    "hero_url": "https://app.usekeel.io/research/stu_000013",
+    "links": {
+      "app": "https://app.usekeel.io/research/stu_000013"
+    },
+    "locked": [],
+    "not_measured": [],
+    "notes": {
+      "notes_total": 0
+    },
+    "page": {
+      "default": 0,
+      "sections": [
+        {
+          "title": "Costs and timing",
+          "views": [3, 4, 5, 6],
+          "words": "higher costs, trading late and fewer coins"
+        },
+        {
+          "title": "Luck",
+          "views": [7, 8],
+          "words": "random books of the same size and a year of paths resampled from its own trades"
+        },
+        {
+          "title": "Later data and settings",
+          "views": [9, 11],
+          "words": "re-picking the settings as you go and up and down markets"
+        },
+        {
+          "title": "Where it came from",
+          "views": [10, 12],
+          "words": "the coins behind the return and how it moves with what you run"
+        }
+      ],
+      "switch": [0, 1, 2]
+    },
+    "stale": [
+      {
+        "kind": "newer_subject",
+        "offer": {
+          "plan": {
+            "base": {
+              "evidence_hash": "39d12a6a11826154a9f5ec9190144873b7f9ebad4ea9438c3debdaeff71bc893",
+              "revision": 1,
+              "version": 1
+            },
+            "study_id": "stu_000013"
+          },
+          "ref": "str_momrotpro00000000000000000@4"
+        },
+        "short": "v4 is out",
+        "words": "Momentum rotation v3 has a newer version, v4."
+      }
+    ],
+    "steps": {
+      "by_status": {
+        "planned": 13
+      },
+      "total": 13
+    },
+    "study": {
+      "archived": false,
+      "can_delete": true,
+      "counter": "400 of 400 studies left · resets Dec 1",
+      "draft": {
+        "can_run": true,
+        "steps_needing_run": 13,
+        "steps_words": "13 steps need a run",
+        "version": 1,
+        "words": "25 runs"
+      },
+      "evidence_hash": "39d12a6a11826154a9f5ec9190144873b7f9ebad4ea9438c3debdaeff71bc893",
+      "kind_label": {
+        "key": "check",
+        "name": "Check a strategy",
+        "short": "Check"
+      },
+      "linked_to": [],
+      "linked_to_total": 0,
+      "presentation_hash": "a083fb140a6abdc66daa55e6701a2a316f92e62885bbbb140b14107904c36d28",
+      "question": "How does v3 do against costs, delay, luck and later data?",
+      "revision": 1,
+      "set_aside": false,
+      "state": "planned",
+      "study_id": "stu_000013",
+      "title": "Momentum rotation v3",
+      "version": 1
+    },
+    "subjects": {
+      "total": 1
+    },
+    "url_line": "View in Keel: https://app.usekeel.io/research/stu_000013",
+    "view": {
+      "at": "2026-11-17T00:00:20.000Z",
+      "kind": "study",
+      "mode": "plan",
+      "object": "stu_000013",
+      "seq": 21,
+      "size": "receipt",
+      "version": 1
+    },
+    "views": {
+      "total": 13
+    },
+    "words": {
+      "method": "Measured with the backtest, costs from none to six times, trading 1 to 3 days late and 10 more checks."
+    }
+  }
+}

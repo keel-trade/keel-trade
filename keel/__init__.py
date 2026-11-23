@@ -3,7 +3,7 @@
 # Kept equal to pyproject.toml's [project].version by
 # tests/test_version.py — the fallback identity for contexts where the
 # wheel metadata is absent (.mcpb bundle, source checkouts).
-__version__ = "0.10.0"
+__version__ = "0.11.0"
 
 # The first keel-trade release that carries screens (INV-71, spec 06 §D6.6):
 # older wheels vendor a parser that refuses `Outputs`, so the screen reference

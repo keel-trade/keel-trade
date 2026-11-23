@@ -68,7 +68,7 @@ rules: [R-QUOTA]
 
 ---
 
-Plan limits name the user's numbers, the reset, and which plans include more; a plan-limit refusal is not retryable, and prices are not part of it. keel_plan_usage answers at any time.
+Plan limits name the user's numbers, the reset and which plans include more, not prices; a plan-limit refusal is not retryable.
 
 Runs and compute are metered per period; paper and live slots are capped, and paper and live strategies run at or slower than the plan's fastest timeframe. Metered units: backtest runs and compute refill on a period. keel_plan_usage reports limit, remaining and the reset instant, and spends nothing, so the remaining allowance is known before several runs. The server's numbers are the ones reported; a call refused for a plan limit is not retryable and no re-login clears it.
 

@@ -39,6 +39,7 @@ __all__ = [
     "register_research",
     "usage_refusal",
     "research_url",
+    "strip_other_plans",
     "study_result",
 ]
 
@@ -113,6 +114,17 @@ def _conflict_read(args: Args, detail: Detail) -> dict[str, Any]:
     if isinstance(version, int) and not isinstance(version, bool):
         out["version"] = version
     return out
+
+
+def _library_kind(args: Args, detail: Detail) -> str:
+    """The library list a refused ``keel/…`` reference belongs in (AUDIT S2-3): ``strategies`` when the call names it
+    as a ``Strategy(…)``, else ``signals`` (an ``Output(…)``, the library's other subject call, 01 §2.4)."""
+    ref = detail.get("ref")
+    for subject in args.get("subjects") or [] if isinstance(args, Mapping) else []:
+        text = str(subject)
+        if text.lstrip().startswith("Strategy(") and (not ref or str(ref) in text):
+            return "strategies"
+    return "signals"
 
 
 #: 07 §3.4's expected words for a revision conflict: a presentation revision moved (view_set), or (RI-482/RI-483) an
@@ -192,7 +204,8 @@ REFUSALS: dict[str, tuple[str | None, Builder | None, str | Callable[[Detail], s
     "RESEARCH_NOT_RUN_YET": (
         "keel_research_get",
         _study,
-        "The study's progress names what has run.",
+        # AUDIT-WORDS M26: the step in the reader's words
+        "Read the study to see which parts have run.",
     ),
     "RESEARCH_CURSOR_INVALID": (
         "keel_research_get",
@@ -202,7 +215,9 @@ REFUSALS: dict[str, tuple[str | None, Builder | None, str | Callable[[Detail], s
     "RESEARCH_STUDY_NOT_FOUND": (
         "keel_research_get",
         lambda a, d: {},
-        "A study id you can read; keel_research_get with no id lists your studies.",
+        # AUDIT S3 #3: the reason names no tool; the call after it is written for this caller's surface (the CLI's
+        # `keel research get`), so the CLI never reads an MCP tool name.
+        "A study id you can read; this lists your studies:",
     ),
     "STUDY_SUBJECT_NOT_FOUND": (
         "keel_help",
@@ -233,6 +248,28 @@ REFUSALS: dict[str, tuple[str | None, Builder | None, str | Callable[[Detail], s
         lambda a, d: {},
         "A plan id you made; plan the study again to get one (a plan lasts 24 hours).",
     ),
+    # AUDIT S2-3: the research 404s keel-api nests (errors._research_not_found keeps their codes); each says where a
+    # readable id comes from, never the strategy advice the generic 404 carried.
+    "RESEARCH_SHARE_NOT_FOUND": (
+        None,
+        None,
+        "A share link that is still live: ask whoever shared it for the link again.",
+    ),
+    "RESEARCH_PROJECT_NOT_FOUND": (
+        "keel_research_brief",
+        lambda a, d: {},
+        "A project id you can read; the brief lists your projects.",
+    ),
+    "RESEARCH_STEP_NOT_FOUND": (
+        "keel_help",
+        lambda a, d: {"topic": "research_steps"},
+        "A step the catalog names; the research_steps help topic lists every step.",
+    ),
+    "RESEARCH_LIBRARY_ITEM_NOT_FOUND": (
+        "keel_research_get",
+        lambda a, d: {"library": _library_kind(a, d)},
+        "An item Keel's library lists: the library read names each item and the call that uses it.",
+    ),
     "RESEARCH_VIEW_NOT_FOUND": (
         "keel_research_get",
         _study,
@@ -249,10 +286,16 @@ REFUSALS: dict[str, tuple[str | None, Builder | None, str | Callable[[Detail], s
         "The share cannot be copied as it stands: ask its author to share it again, or plan the study from a "
         "template on your own subjects.",
     ),
+    # STG-SURFACES #23: the next step is the delete itself with its shares revoked, for THIS study (the CLI writes
+    # `keel research delete stu_… --revoke-shares`); the words once named the flag with no study id. The verb is
+    # CLI-only, as the refusal is.
     "RESEARCH_DELETE_SHARED": (
-        None,
-        None,
-        "The study has active shares: revoke them with the delete (keel research delete --revoke-shares).",
+        "keel_research_delete",
+        lambda a, d: {
+            "study_id": a.get("study_id") or d.get("study_id"),
+            "revoke_shares": True,
+        },
+        "Revoke its shares with the delete:",
     ),
     # RI-504 / RI-516: a costed call (a run, run-draft, resume or retry) sent with no Idempotency-Key header. The
     # SDK's own verbs always send one; a caller of the raw API learns what to send, and that nothing ran.
@@ -323,8 +366,11 @@ def refused_text(detail: Mapping[str, Any], args: Args | None = None) -> str | N
         line = f"{i['path']} · {i['message']}" if i.get("path") else str(i["message"])
         # RI-237: the text no longer carries the envelope (07 §3.2 rule 11), so each issue's served fix and near
         # misses (07 §3.4: `suggestion`, `valid`) are written here, as served.
-        if isinstance(i.get("suggestion"), str) and i["suggestion"].strip():
-            line += f" {i['suggestion'].strip()}"
+        # MCP-FINAL p2: an address issue serves its near miss in both (``research.addresses._not_found``), and
+        # the line read "Did you mean X? Did you mean X?": a fix the message already says is not said again
+        fix = i.get("suggestion").strip() if isinstance(i.get("suggestion"), str) else ""
+        if fix and fix not in str(i["message"]):
+            line += f" {fix}"
         lines.append(line)
         valid = i.get("valid")
         if isinstance(valid, list) and valid:
@@ -350,26 +396,56 @@ def apply_research_refusal(
     """
     code = refusal_code(err)
     detail = err.detail if isinstance(getattr(err, "detail", None), dict) else {}
+    caller = tool  # the tool that was called (``tool`` below becomes the next one)
     if app_url:
         # 07 §3.2 rule 9, §3.4 (RI-237): every research answer, refusals included, links into the app: the
         # study's page when the call names a study, else Research's home (keel-api's ``study_link`` rule for a
         # plan with no study). The MCP text ends with it (:func:`refusal_text`) and the card's
-        # structured content carries it.
-        err.detail = detail = {**detail, "links": {"app": _study_link(app_url, args)}}
+        # structured content carries it. CARD-RENDER refusal-notfound: a study that is not there has no page, so
+        # its refusal links Research's home, never the id it could not find.
+        missing = code in STUDY_MISSING
+        err.detail = detail = {
+            **detail,
+            "links": {"app": app_url if missing else _study_link(app_url, args)},
+        }
     if tool in PLAN_TOOLS:
         text = refused_text(detail, args)
         if text is not None:
             err.args = (text,)
     if code in NO_NEXT or isinstance(err, EntitlementError):
         err.recovery_tool, err.recovery_tool_args = None, None
-        if code == "RESEARCH_PAUSED":
-            err.suggestion = None
         return err
-    row = REFUSALS.get(code)
+    row = REFUSALS.get(code) or _study_issue_row(code, args)
     if row is None:
         return err
     tool, build, expected = row
     built = build(args, detail) if build else None
+    if code == "STUDY_SUBJECT_NOT_FOUND" and detail.get("valid"):
+        # MCP-FINAL batch 2 #5: a name the study does not hold (make_signal's mix) is refused with the names it does
+        # hold (``detail.valid``, written as the "valid (N): …" line); the fix is one of them, not the help topic.
+        # POLISH (MCP-FINAL S3): the next call is that same call on the first valid name, never ``{"tool": null}``.
+        valid = [str(v) for v in detail["valid"]]
+        tool = "keel_research_make_signal" if caller == "keel_research_make_signal" else None
+        built = {**args, "subject": valid[0]} if tool else None
+        expected = (
+            "One of the names listed as valid, e.g.:"
+            if tool
+            else "One of the names listed as valid."
+        )
+    elif code == "STUDY_SUBJECT_NOT_FOUND" and caller == "keel_research_make_signal":
+        # POLISH (MCP-FINAL S3): a study that holds no mix at all (a Map, a Check) cannot make a signal; the valid
+        # action is a Compare of two or more signals, whose SignalMix step mixes them (research_steps "compare").
+        tool, built = "keel_research_plan", {"template": "compare"}
+        expected = (
+            "A study with a mix: a Compare of two or more signals mixes them (its SignalMix step); plan one with"
+            " your signals as subjects:"
+        )
+    elif code in STUDY_MISSING and isinstance(args, Mapping) and args.get("run_set_id"):
+        # POLISH (MCP-FINAL S3): a run id that is not the caller's is answered as an absent study (08 §3.9); its next
+        # step names a run, never "a study id": the study list, each study read naming its run.
+        expected = (
+            "A run of yours: each of your studies' reads names its run; this lists your studies:"
+        )
     if tool is not None:
         from ._toolsets import is_listed_profile, listed_profile_tools
 
@@ -384,6 +460,42 @@ def apply_research_refusal(
     err.suggestion = expected(detail) if callable(expected) else expected
     err.retryable = False
     return err
+
+
+def _study_issue_row(code: str, args: Args) -> tuple[str | None, Builder | None, str] | None:
+    """MCP-FINAL batch 2 #2: a study the validator refused (a ``STUDY_*`` issue with no REFUSALS row) carried the
+    envelope's ``{"tool": null}`` and the generic "Change that input and retry". Its next step is the read that names
+    the fix: a refused address reads the subject's addresses, a reference Keel's library does not hold reads the
+    library, and every other issue reads the research help topic, which has each form. ``None`` for any other code."""
+    if not code.startswith("STUDY_"):
+        return None
+    if code.startswith(_ADDRESS_CODES):
+        subjects = args.get("subjects") if isinstance(args, Mapping) else None
+        for subject in subjects if isinstance(subjects, list) else []:
+            match = _PINNED_REF.search(str(subject))
+            if match:
+                ref = match.group(1)
+                return (
+                    "keel_research_get",
+                    lambda a, d, ref=ref: {"subject": f'Strategy("{ref}")'},
+                    "An address the subject has; this lists them:",
+                )
+    if code == "STUDY_LIBRARY_REF_UNKNOWN":
+        return (
+            "keel_research_get",
+            lambda a, d: {"library": _library_kind(a, d)},
+            "An item Keel's library holds; this lists each with its reference:",
+        )
+    return (
+        "keel_help",
+        lambda a, d: {"topic": "research"},
+        "Fix what each issue names and plan again; the research help topic has every form:",
+    )
+
+
+#: The refusals that say the named study is not there (none to read or none of the caller's): their link is
+#: Research's home (CARD-RENDER refusal-notfound linked the missing id's page).
+STUDY_MISSING = frozenset({"RESEARCH_STUDY_NOT_FOUND"})
 
 
 def refusal_link(envelope: Mapping[str, Any]) -> str | None:
@@ -417,16 +529,15 @@ def usage_refusal(
     """RI-286 (07 §3.2 rules 9 and 11, §3.4): a research tool's argument refusal (the adapter's missing-argument
     pre-flight, FastMCP's argument validation) carries the app link every research answer carries
     (``detail.links.app``: :func:`_study_link` over Research's page for this caller, ``app_url`` or
-    ``KEEL_APP_URL`` or the context's default), so its MCP text is :func:`refusal_text`'s (its words, its next call,
+    ``keel.config.configured_app_origin``: ``KEEL_APP_URL``, else the configured API's app), so its MCP text is :func:`refusal_text`'s (its words, its next call,
     then "View in Keel: {url}", no envelope). Any other tool's envelope is returned unchanged, byte for byte."""
     if not (tool or "").startswith("keel_research_"):
         return dict(envelope)
-    import os
     from types import SimpleNamespace
 
-    from ._base import ToolContext
+    from keel.config import configured_app_origin
 
-    base = app_url or os.environ.get("KEEL_APP_URL") or ToolContext.app_url
+    base = app_url or configured_app_origin()
     detail = envelope.get("detail") if isinstance(envelope.get("detail"), Mapping) else {}
     link = _study_link(research_url(SimpleNamespace(app_url=base)), args)
     return {**envelope, "detail": {**detail, "links": {"app": link}}}
@@ -445,28 +556,49 @@ def refusal_text(envelope: Mapping[str, Any], lines: Sequence[str] = ()) -> str 
     link = refusal_link(envelope)
     if link is None:
         return None
-    body = [str(envelope.get("message") or "").strip(), *lines, *recovery_lines(envelope)]
+    # STG-SURFACES #32: a plan wall's instruction ("Plan limit; don't retry before the reset.") is the agent's, so the
+    # MCP text keeps it (the CLI, read by a person, does not: :func:`cli_refusal_text`)
+    body = [
+        str(envelope.get("message") or "").strip(),
+        *lines,
+        *recovery_lines(envelope, agent=True),
+    ]
     action = envelope.get("suggested_next_action")
     if isinstance(action, Mapping) and action.get("tool"):
         args = action.get("args") if isinstance(action.get("args"), Mapping) else {}
         call = next_call(str(action["tool"]), args, app_url=link)
         reason = str(action.get("reason") or "").strip()
-        body.append(f"{reason} {call}" if reason else call)
+        # a call the words already make (a refused plan's "The addresses of …: keel_research_get(…)") is not said
+        # twice
+        if not any(call in str(line) for line in body):
+            body.append(f"{reason} {call}" if reason else call)
+    # D-403 (AUDIT-WORDS E21/M25): no "error: <code>" line; the code stays in the structured content for the agent,
+    # so a relayed text never shows a code to the user
     return _cap(body, f"View in Keel: {link}")
 
+
+#: The start of every plan limit's what-was-expected (``errors.quota_suggestion``).
+PLAN_LIMIT_EXPECTED = "Plan limit;"
 
 #: The what-was-expected every refusal without a research row reads (``errors.py``'s generic default): never
 #: repeated in the text, which already says what failed.
 _GENERIC_EXPECTED = (
     "change that input and retry",
     "The message says what this call needs.",
+    # STG-SURFACES #21: the envelope's default when an error names no expectation (``KeelError.to_envelope``); the
+    # refusal's own words already say what is missing ("Send --ref-kind … for this ref.")
+    "Valid input matching the tool's schema.",
+    # STG-SURFACES #20: a removed share's 410 (``errors.GONE_EXPECTED``); its served words already say it was removed
+    "It was removed;",
+    # AUDIT S3 #2: the paused refusal's (``errors.RESEARCH_PAUSED_EXPECTED``); its text is the one plain message
+    "Research isn't available on Keel yet.",
     # A plan limit's (errors.quota_suggestion, D-14 rule 5): the served wall already says which limit and when; the
-    # instruction rides the envelope after the words.
-    "Plan limit;",
+    # instruction rides the envelope after the words (and, on MCP, the text: recovery_lines' ``agent``).
+    PLAN_LIMIT_EXPECTED,
 )
 
 
-def recovery_lines(envelope: Mapping[str, Any]) -> list[str]:
+def recovery_lines(envelope: Mapping[str, Any], *, agent: bool = False) -> list[str]:
     """D-344 (2), CONFORM-MCP F3: what a recovery needs, in words, on the text channel: the refusal's near misses
     (``detail.valid``, as 07 §4.12's refused plan writes them) and, when it names no recovery tool, what was expected
     (a share with no coins: "ask its author to share it again, or …"). A probe of ``RESEARCH_MEASURE_UNKNOWN`` read
@@ -480,7 +612,22 @@ def recovery_lines(envelope: Mapping[str, Any]) -> list[str]:
     action = envelope.get("suggested_next_action")
     expected = str(envelope.get("what_was_expected") or "").strip()
     no_tool = not (isinstance(action, Mapping) and action.get("tool"))
-    if no_tool and expected and not any(g.lower() in expected.lower() for g in _GENERIC_EXPECTED):
+    # ``agent``: the MCP text keeps the plan wall's instruction (STG-SURFACES #32)
+    generic = tuple(g for g in _GENERIC_EXPECTED if not (agent and g == PLAN_LIMIT_EXPECTED))
+    # AUDIT S3 #1: never what the words already said: a research 429's message ends "Rate limit, not a plan limit."
+    # and its expected is the same instruction with the wait, so the MCP text said it twice
+    said = str(envelope.get("message") or "").lower()
+    lead = expected.split(";", 1)[0].strip().rstrip(".").lower()
+    # AUDIT-WORDS E12: a served sentence that already says when to try again ("Research can't plan right now; try
+    # again in a few minutes.") is not followed by the generic 5xx wait (two different waits)
+    waits = "try again" in said and "try again" in expected.lower()
+    if (
+        no_tool
+        and expected
+        and not any(g.lower() in expected.lower() for g in generic)
+        and not (lead and lead in said)
+        and not waits
+    ):
         out.append(expected)
     return out
 
@@ -495,6 +642,10 @@ def cli_call(tool: str, args: Mapping[str, Any]) -> str | None:
     from . import OUTCOMES
     from ._cli_adapter import _flag_name, positional_arg_of
 
+    if tool == "keel_research_get" and not any(v is not None for v in args.values()):
+        # MCP-FINAL batch 3 #2: a get with nothing named lists the studies; the CLI's verb for that is `keel research
+        # list` ("this lists your studies: keel research get" read as a read of nothing)
+        tool = "keel_research_list" if "keel_research_list" in OUTCOMES else tool
     target = OUTCOMES.get(tool)
     if target is None or target.mcp_only or not target.cli_path:
         return None
@@ -513,6 +664,26 @@ def cli_call(tool: str, args: Mapping[str, Any]) -> str | None:
             text = item if isinstance(item, str) else json.dumps(item, ensure_ascii=False)
             words += [flag, shlex.quote(text)]
     return " ".join(words)
+
+
+#: ``next_call`` writes JSON's literals (``resume=true``); Python's ``literal_eval`` knows only its own.
+_JSON_NAMES = {"true": True, "false": False, "null": None}
+
+
+def _call_literal(node):
+    """One argument of a generated next call as its value: a Python literal, or one of JSON's ``true`` / ``false`` /
+    ``null`` (STG-SURFACES #6: ``keel_research_plan(study_id="stu_…", resume=true)`` raised in ``literal_eval``, so
+    the cancel's resume step stayed an MCP call on the CLI). Anything else raises ``ValueError`` (the call stays as
+    written)."""
+    import ast
+
+    if isinstance(node, ast.Name) and node.id in _JSON_NAMES:
+        return _JSON_NAMES[node.id]
+    if isinstance(node, (ast.List, ast.Tuple)):
+        return [_call_literal(e) for e in node.elts]
+    if isinstance(node, ast.Dict):
+        return {_call_literal(k): _call_literal(v) for k, v in zip(node.keys, node.values)}
+    return ast.literal_eval(node)
 
 
 def cli_text(markdown: str) -> str:
@@ -548,7 +719,7 @@ def cli_text(markdown: str) -> str:
         try:
             node = ast.parse(call_text, mode="eval").body
             if isinstance(node, ast.Call) and not node.args and isinstance(node.func, ast.Name):
-                args = {kw.arg: ast.literal_eval(kw.value) for kw in node.keywords if kw.arg}
+                args = {kw.arg: _call_literal(kw.value) for kw in node.keywords if kw.arg}
                 command = cli_call(node.func.id, args)
         except (SyntaxError, ValueError):
             command = None
@@ -556,7 +727,43 @@ def cli_text(markdown: str) -> str:
         out.append(command or call_text)
         pos = end
     out.append(markdown[pos:])
-    return "".join(out)
+    # MCP-FINAL batch 3 #1: a share read's "Make it yours" names the app link with the CLI's own command beside it
+    # (for an MCP reader, who has no copy verb); on the CLI the command alone is the step.
+    text = re.sub(r"keel app open (\S+) \(the CLI: (keel research copy \S+)\)", r"\2", "".join(out))
+    # AUDIT-WORDS M34: on the CLI a never-run Draft has its own verb, so its next step is that one command
+    return re.sub(
+        r"keel research plan (stu_\S+) --version (\d+) plans its run; keel research run runs that plan\.",
+        r"keel research run-draft \1 --version \2 runs it.",
+        _cli_names(text),
+    )
+
+
+def _cli_names(text: str) -> str:
+    """SDK-FINAL (AUDIT S3 #3's class, seen on a TTY): a tool named bare in served or written words ("plans its run;
+    keel_research_run runs that plan.") reads as the ``keel`` command on the CLI ("keel research run runs that plan.");
+    an MCP-only tool, or a name the registry does not know, stays as written."""
+    import re
+
+    from . import OUTCOMES
+
+    def command(found: re.Match) -> str:
+        target = OUTCOMES.get(found.group(0))
+        if target is None or target.mcp_only or not target.cli_path:
+            return found.group(0)
+        return " ".join(["keel", *(p.replace("_", "-") for p in target.cli_path)])
+
+    return re.sub(r"\bkeel_[a-z_]+\b(?!\()", command, text)
+
+
+def _cli_words(line: str) -> str:
+    """AUDIT-WORDS E22: a refusal line as a person reads it on the CLI: the agent's half of a rate limit ("Rate
+    limit, not a plan limit; retry in a few seconds.") is left out; the served wait before it stays."""
+    import re
+
+    line = re.sub(r"\s*Rate limit, not a plan limit(?:;[^.]*)?\.", "", line).strip()
+    # AUDIT-WORDS E20: a refused plan's issue lines lead with the document path an agent edits
+    # ("/steps/map/axes/0 · …"); on the CLI the person reads the issue itself
+    return re.sub(r"(?m)^/[\w/.\[\]-]+ · ", "", line)
 
 
 def cli_refusal_text(envelope: Mapping[str, Any]) -> str | None:
@@ -569,15 +776,21 @@ def cli_refusal_text(envelope: Mapping[str, Any]) -> str | None:
     link = refusal_link(envelope)
     if link is None:
         return None
-    body = [str(envelope.get("message") or "").strip(), *recovery_lines(envelope)]
+    # AUDIT S3 #3: every line is the CLI's (:func:`cli_text`), so a call inside the served words or a recovery line
+    # reads as the `keel` command that makes it, as the next call does
+    body = [
+        cli_text(_cli_words(line))
+        for line in [str(envelope.get("message") or "").strip(), *recovery_lines(envelope)]
+    ]
     action = envelope.get("suggested_next_action")
     if isinstance(action, Mapping) and action.get("tool"):
         args = action.get("args") if isinstance(action.get("args"), Mapping) else {}
         call = cli_call(str(action["tool"]), args) or next_call(
             str(action["tool"]), args, app_url=link
         )
-        reason = str(action.get("reason") or "").strip()
-        body.append(f"{reason} {call}" if reason else call)
+        reason = cli_text(str(action.get("reason") or "").strip())
+        if not any(call in str(line) for line in body):
+            body.append(f"{reason} {call}" if reason else call)
     return _cap(body, f"View in Keel: {link}")
 
 
@@ -597,11 +810,11 @@ CARD_FULL: dict[str, str] = {"card": "full"}
 
 
 def research_url(ctx: Any) -> str:
-    """The app's Research page for this caller: ``ctx.app_url`` plus the ``home`` route (07 §5.1,
-    ``open_in_app.research_link``)."""
-    from .open_in_app import research_link
+    """The app's Research page for this caller: ``open_in_app.app_base`` (``KEEL_APP_URL``, a context that names
+    an app, else the configured API's app) plus the ``home`` route (07 §5.1, ``open_in_app.research_link``)."""
+    from .open_in_app import app_base, research_link
 
-    return research_link("home", origin=str(getattr(ctx, "app_url", "https://app.usekeel.io")))
+    return research_link("home", origin=app_base(ctx))
 
 
 def call(
@@ -644,7 +857,68 @@ def call(
         result = client.delete(path, **clean)
     else:  # pragma: no cover - a programming error
         raise ValueError(method)
-    return result if isinstance(result, dict) else {"items": result}
+    out = result if isinstance(result, dict) else {"items": result}
+    from ._toolsets import is_listed_profile
+
+    # Value-and-pricing spec 02 §C3.2 (MC D-12, Q-2080): the listed profile shows no other plans' features, in the
+    # card's data and the text alike, so the strip happens here, where every research tool reads keel-api.
+    return strip_other_plans(out) if is_listed_profile() else out
+
+
+#: The served words that present another plan's features (spec 02 §C3.2): the runs-without line names the steps
+#: another plan adds, ``adds`` is the app's group line, ``runs_on`` the home's capability badge.
+_OTHER_PLAN_WORDS = frozenset({"runs_without", "adds", "runs_on"})
+
+
+def _other_plan_row(item: Any) -> bool:
+    """A list item that presents another plan's feature: a check row over a step the reader's plan does not run
+    (``locked: true``), a plan step it does not run (``locked`` served), or a read step whose run state is
+    ``locked``."""
+    if not isinstance(item, Mapping):
+        return False
+    lock = item.get("locked")
+    if lock is True or (isinstance(lock, Mapping) and lock):
+        return True
+    state = item.get("run_state")
+    return isinstance(state, Mapping) and state.get("state") == "locked"
+
+
+def strip_other_plans(env: Any) -> Any:
+    """The LISTED profile's research answer (spec 02 §C3.2, §C5.8 "MCP listed profile: none"; MC D-12, Q-2080): no
+    locked check rows, no plan steps or read steps another plan runs, no ``locked[]`` rows and no words that present
+    another plan's features (:data:`_OTHER_PLAN_WORDS`), at any depth (the card's data and what the text renders
+    from). A limit the person reaches keeps its words, which name the plans (MC D-14): ``words.limit``, the
+    refusals, the remedies. Returns a new value; ``env`` is not changed."""
+    if isinstance(env, Mapping):
+        # A plan's issue line over a step it does not run (STUDY_PLAN_STEP_NOT_INCLUDED at /steps/<id>) is that row
+        # again, in the validator's words: it goes with the row.
+        gone = {
+            f"/steps/{s.get('id')}"
+            for s in env.get("steps") or []
+            if _other_plan_row(s) and isinstance(s, Mapping) and s.get("id")
+        }
+        out: dict[str, Any] = {}
+        for key, value in env.items():
+            if key == "locked" and isinstance(value, list):
+                out[key] = []
+            elif key in _OTHER_PLAN_WORDS:
+                continue
+            elif key == "issues" and isinstance(value, list) and gone:
+                out[key] = [
+                    strip_other_plans(i)
+                    for i in value
+                    if not (
+                        isinstance(i, Mapping)
+                        and i.get("code") == "STUDY_PLAN_STEP_NOT_INCLUDED"
+                        and i.get("path") in gone
+                    )
+                ]
+            else:
+                out[key] = strip_other_plans(value)
+        return out
+    if isinstance(env, list):
+        return [strip_other_plans(item) for item in env if not _other_plan_row(item)]
+    return env
 
 
 def read_source(args: Mapping[str, Any]) -> str | None:

@@ -29,15 +29,16 @@ count against the account; a run that reuses everything, or runs nothing, does n
 for example `Output("keel/momentum_7d@1", output="momentum_7d")`; study one with
 `keel_research_plan(template="signal", subjects=[that call])`. `library="benchmarks"` lists the benchmarks
 (`Strategy("keel/btc_hold@1")`, BTC held) and `library="market_states"` the market states, each added to a study
-with `add=[…]`; `library="strategies"` lists Keel's library strategies. Copy the call as written: the refs are pinned
-with `@version`.
+with `add=[…]`; `library="strategies"` lists Keel's library strategies. `library="mine"` lists the user's own
+signals the same way, each with its call (`Output("str_…@2", output="mix")`); the CLI's `keel signals list` is that
+read. Copy the call as written: the refs are pinned with `@version`.
 
 ## The five templates (plan's template form)
 
 `keel_research_plan(template=…, subjects=[…])`, each subject a `study/1` subject call:
 
-- `check` a strategy: costs, delay, fewer coins, without its best coins, random books, re-picking the settings,
-  nearby settings and the Sharpe discounted for the versions tried. `subjects=['Strategy("str_…@3")']`.
+- `check` a strategy: costs, delay, fewer coins, without its best coins, re-picking the settings, nearby settings
+  and the Sharpe discounted for the versions tried (random books is a step you add by hand). `subjects=['Strategy("str_…@3")']`.
 - `signal`: how well a signal ranks the coins 1 to 30 days ahead, each fifth over time, against chance, and what is
   left after Keel's signals. `subjects=['Output("str_…@1", output="…")']`.
 - `compare`: two to eight strategies or signals side by side on one footing.
@@ -77,13 +78,14 @@ A study document has six sections, in this order: `Study`, `Subjects`, `Run`, `S
 `keel_help(topic="research_steps")` lists every step, and `keel_help(topic="step:CostStress")` serves one step
 in full with its parameters and an example.
 
-A check of a strategy, with one bar and two charts:
+A check of a strategy, with one bar and two charts. Both examples use Keel's library (`keel/<name>@1`), so they plan
+as written; for the user's own strategy, put its pinned `str_…@n` ref in `Subjects`:
 
 ```study
-Study(title="Momentum rotation v3, costs and delay")
-Subjects(v3=Strategy("str_momrot00000000000000000000@3"))
+Study(title="Equal weight top 30, costs and delay")
+Subjects(ew=Strategy("keel/equal_weight_top30@1"))
 Run(days=Days("2025-03-23", "2026-10-29"), split=Split("2026-04-17"),
-    coins=Coins(chosen=SubjectUniverse("v3")), costs=Costs(fee=0.00045, slippage=0.00045))
+    coins=Coins(chosen=SubjectUniverse("ew")), costs=Costs(fee=0.00045, slippage=0.00045))
 Steps(
     base=Backtest(),
     costs=CostStress(multiples=[0, 1, 2, 4]),
@@ -100,8 +102,8 @@ Views(
 A signal study:
 
 ```study
-Study(title="Low volatility")
-Subjects(low_vol=Output("str_keellowvol0000000000000000@1", output="low_volatility"))
+Study(title="7-day momentum")
+Subjects(mom=Output("keel/momentum_7d@1", output="momentum_7d"))
 Run(days=Days("2025-03-23", "2026-10-29"), coins=Coins(chosen=TopByVolume(100, days=30, on="2025-03-23", market="perp")), costs=NoCosts())
 Steps(
     ranks=Ranks(),

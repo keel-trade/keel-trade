@@ -24,10 +24,10 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 from keel.errors import KeelError, translate_http_error
 from keel.tools.outcomes import OUTCOMES, _bootstrap
 from keel.tools.outcomes._base import ToolContext
+
 from tests._research_delta import (
     RESEARCH_ADDITIONS,
     RESEARCH_CLI_ONLY,
@@ -37,7 +37,7 @@ from tests._research_delta import (
 
 _bootstrap()
 
-PAUSED = json.dumps({"detail": "Research is paused.", "code": "RESEARCH_PAUSED"})
+PAUSED = json.dumps({"detail": "Research isn't available yet.", "code": "RESEARCH_PAUSED"})
 SDK = Path(__file__).resolve().parents[1]
 
 
@@ -127,7 +127,6 @@ def test_the_registry_carries_07s_table() -> None:
 
 def test_the_cli_has_every_verb_and_mcp_none_of_the_cli_only() -> None:
     import click
-
     from keel.tools.outcomes._cli_adapter import register_all as cli_register_all
     from keel.tools.outcomes._mcp_adapter import loaded_tool_names
 
@@ -177,13 +176,25 @@ def _largest_read() -> dict:
     view = env["views"][0]
     env["views"] = [{**view, "index": i, "title": f"View {i} of the study"} for i in range(24)]
     subject = env["subjects"][0]
-    env["subjects"] = [{**subject, "ref": f'Strategy("str_{i:028d}@3")', "label": f"Strategy {i} v3"} for i in range(50)]
-    env["notes"] = [{"kind": "note", "author_role": "agent", "date": "2026-10-29", "body": "x" * 200}] * 5
+    env["subjects"] = [
+        {**subject, "ref": f'Strategy("str_{i:028d}@3")', "label": f"Strategy {i} v3"}
+        for i in range(50)
+    ]
+    env["notes"] = [
+        {"kind": "note", "author_role": "agent", "date": "2026-10-29", "body": "x" * 200}
+    ] * 5
     env["notes_total"] = 12
     env["source"] = "Study()\n" * 10_000
     env["card_summary"] = SHAPES["card_summary_v2_max_thumb"]
     env["card_data"] = SHAPES["card_data_v2"]
-    env["view"] = {"kind": "study", "size": "view", "markdown": "x" * 7_000, "object": "stu_a", "at": "t", "seq": 1}
+    env["view"] = {
+        "kind": "study",
+        "size": "view",
+        "markdown": "x" * 7_000,
+        "object": "stu_a",
+        "at": "t",
+        "seq": 1,
+    }
     return env
 
 
@@ -192,7 +203,12 @@ def _largest_list() -> dict:
     page = json.loads(json.dumps(SHAPES["list"]))
     row = page["data"][0]
     rows = [
-        {**row, "study_id": f"stu_{i:024d}", "title": f"Momentum rotation v{i}", "card_summary": SHAPES["card_summary_v2_max_thumb"]}
+        {
+            **row,
+            "study_id": f"stu_{i:024d}",
+            "title": f"Momentum rotation v{i}",
+            "card_summary": SHAPES["card_summary_v2_max_thumb"],
+        }
         for i in range(25)
     ]
     page.pop("data")  # the SDK's list envelope names its rows `studies` (research_get._list)
@@ -210,12 +226,17 @@ def test_the_largest_study_read_is_within_the_card_budget() -> None:
     from keel.tools.outcomes import _channels
 
     env = _largest_read()
-    assert 2_500 < _compact(env["card_summary"]["thumb"]) <= 3_000  # not vacuous: the real largest thumb
+    assert (
+        2_500 < _compact(env["card_summary"]["thumb"]) <= 3_000
+    )  # not vacuous: the real largest thumb
     structured, card = _channels.partition(env, "study", move_card=True)
     size = _compact(structured)
     assert size <= 8_000, size
     assert "thumb" not in structured["card_summary"] and "card_data" not in structured
-    assert card["card_summary"]["thumb"] == env["card_summary"]["thumb"] and card["card_data"] == env["card_data"]
+    assert (
+        card["card_summary"]["thumb"] == env["card_summary"]["thumb"]
+        and card["card_data"] == env["card_data"]
+    )
     assert _compact(card) <= 40_000
     text = env["view"]["markdown"]
     assert len(text.encode()) + size + _compact(card) <= 60_000
@@ -247,12 +268,19 @@ def test_d359_the_full_profile_keeps_card_data_out_of_model_context(monkeypatch)
     result = view_tool_result(json.dumps(env), tool_name="keel_research_get")
     structured = result.structured_content
     size = _compact(structured)
-    assert "card_data" not in structured and "thumb" not in structured.get("card_summary", {}), sorted(structured)
+    assert "card_data" not in structured and "thumb" not in structured.get("card_summary", {}), (
+        sorted(structured)
+    )
     assert size <= 8_000, size
     card = (result.meta or {}).get(_channels.CARD_META_KEY) or {}
-    assert card.get("card_data") == env["card_data"] and card["card_summary"]["thumb"] == env["card_summary"]["thumb"]
+    assert (
+        card.get("card_data") == env["card_data"]
+        and card["card_summary"]["thumb"] == env["card_summary"]["thumb"]
+    )
     spec = _channels.CHANNEL_MAP["backtest"]
-    assert spec.card and not spec.always_move_card  # control: the probe rule still governs other kinds
+    assert (
+        spec.card and not spec.always_move_card
+    )  # control: the probe rule still governs other kinds
 
 
 def test_d363_a_check_rows_lens_and_default_ride_the_card_not_model_context(monkeypatch) -> None:
@@ -263,17 +291,23 @@ def test_d363_a_check_rows_lens_and_default_ride_the_card_not_model_context(monk
     value words (what a reply quotes) stay in structuredContent."""
     from keel.tools.outcomes import _channels
 
-    fx = json.loads((Path(__file__).parent / "fixtures" / "cards" / "study" / "study-chk_v3.json").read_text())
+    fx = json.loads(
+        (Path(__file__).parent / "fixtures" / "cards" / "study" / "study-chk_v3.json").read_text()
+    )
     env = json.loads(json.dumps(fx["structuredContent"]))
     _channels._merge(env, json.loads(json.dumps(fx["_meta"]["keel/card"])))
     rows = env["checks"]["rows"]
-    assert rows and all("stricter" in r and "bar_default_words" in r for r in rows)  # not vacuous: ENGINE's fields
+    assert rows and all(
+        "stricter" in r and "bar_default_words" in r for r in rows
+    )  # not vacuous: ENGINE's fields
     structured, card = _channels.partition(env, "study")
     assert _compact(structured) <= 8_000, _compact(structured)
     for row in structured["checks"]["rows"]:
         assert not {"stricter", "looser", "bar_default_words"} & set(row), sorted(row)
         assert row.get("bar_words") and row.get("value_words")  # control: what a reply quotes stays
-    assert [r.get("stricter") for r in card["checks"]["rows"]] == [r.get("stricter") for r in rows[: len(card["checks"]["rows"])]]
+    assert [r.get("stricter") for r in card["checks"]["rows"]] == [
+        r.get("stricter") for r in rows[: len(card["checks"]["rows"])]
+    ]
 
 
 def test_406_a_headline_measures_spark_never_reaches_model_context() -> None:
@@ -288,7 +322,11 @@ def test_406_a_headline_measures_spark_never_reaches_model_context() -> None:
     from keel.tools.outcomes import _research_view as rv
 
     env = _largest_read()
-    measure = {**env["headline"]["measures"][0], "unit_words": "ratio", "spark": {"enc": "b64x2", "s": "A" * 1_200}}
+    measure = {
+        **env["headline"]["measures"][0],
+        "unit_words": "ratio",
+        "spark": {"enc": "b64x2", "s": "A" * 1_200},
+    }
     env["headline"] = {**env["headline"], "measures": [measure] * 4}
     structured, card = _channels.partition(env, "study", move_card=True)
     blob = json.dumps(structured)
@@ -311,11 +349,20 @@ def test_the_largest_list_read_keeps_its_row_cards_out_of_model_context() -> Non
     assert whole > 8_000, whole  # the measurement RI-610 asked for: over budget with the row cards
     structured, card = _channels.partition(env, "study", move_card=True)
     assert _compact(structured) <= 8_000, _compact(structured)
-    assert all(set(r) == {"study_id", "kind_label", "title", "state_words"} for r in structured["studies"])
+    assert all(
+        set(r) == {"study_id", "kind_label", "title", "state_words"} for r in structured["studies"]
+    )
     assert len(card["studies"]) == 25 and card["studies"][0]["card_summary"]["title"]
-    with_rows = {**env, "card_data": {"rows": [{"link": "u", "lead_number_words": "Sharpe 1.95", "thumb": None}] * 25}}
+    with_rows = {
+        **env,
+        "card_data": {
+            "rows": [{"link": "u", "lead_number_words": "Sharpe 1.95", "thumb": None}] * 25
+        },
+    }
     structured, card = _channels.partition(with_rows, "study", move_card=True)
-    assert "card_summary" not in card["studies"][0] and len(card["card_data"]["rows"]) == 25  # card_data.rows instead
+    assert (
+        "card_summary" not in card["studies"][0] and len(card["card_data"]["rows"]) == 25
+    )  # card_data.rows instead
 
 
 def _unreduced(env: dict, spec) -> dict:
@@ -334,7 +381,10 @@ def test_the_text_holds_its_bound_and_keeps_the_link() -> None:
 
     text = study_text(_largest_read())
     assert len(text) <= TEXT_MAX_CHARS
-    assert text.splitlines()[-1] == "View in Keel: https://app.usekeel.io/research/stu_chkv3000000000000000000000"
+    assert (
+        text.splitlines()[-1]
+        == "View in Keel: https://app.usekeel.io/research/stu_chkv3000000000000000000000"
+    )
 
 
 # ── AT-7: no verdict words in research-owned copy ────────────────────────────
@@ -367,7 +417,10 @@ def test_research_copy_carries_no_verdict() -> None:
     for name, text in copy.items():
         if name == "_research_view.py":
             # The module declares the list it scans with; its templates must not use them.
-            text = text.split("VERDICT_WORDS = (")[0] + text.split(")\n", 1)[-1].split("VERDICT_WORDS")[-1]
+            text = (
+                text.split("VERDICT_WORDS = (")[0]
+                + text.split(")\n", 1)[-1].split("VERDICT_WORDS")[-1]
+            )
         hits = pattern.findall(text)
         assert not hits, (name, hits)
 
@@ -421,8 +474,12 @@ def test_a_next_call_names_only_a_served_tool(monkeypatch) -> None:
 
     monkeypatch.setenv("KEEL_SERVER_PROFILE", "listed")
     with research_served_context(True):
-        assert next_call("keel_research_get", {"study_id": "stu_a"}).startswith("keel_research_get(")
-        assert next_call("keel_research_view_set", {"study_id": "stu_a"}).startswith("keel_app_link(")
+        assert next_call("keel_research_get", {"study_id": "stu_a"}).startswith(
+            "keel_research_get("
+        )
+        assert next_call("keel_research_view_set", {"study_id": "stu_a"}).startswith(
+            "keel_app_link("
+        )
     with research_served_context(False):
         assert next_call("keel_research_get", {"study_id": "stu_a"}).startswith("keel_app_link(")
     monkeypatch.setenv("KEEL_SERVER_PROFILE", "full")
@@ -443,7 +500,12 @@ CALLS: dict[str, dict] = {
     "keel_research_brief": {},
     "keel_research_note": {"anchor": "stu_a", "kind": "note", "body": "x"},
     "keel_research_cancel": {"run_set_id": "rus_a"},
-    "keel_research_make_signal": {"study_id": "stu_a", "version": 1, "subject": "mix", "name": "Mix"},
+    "keel_research_make_signal": {
+        "study_id": "stu_a",
+        "version": 1,
+        "subject": "mix",
+        "name": "Mix",
+    },
     "keel_research_add": {"study_id": "stu_a", "add": ['Output("str_a@1", output="x")']},
     "keel_research_save": {"plan_id": "pln_a"},
     "keel_research_run_draft": {"study_id": "stu_a", "version": 2},
@@ -474,7 +536,7 @@ def test_every_research_command_answers_paused_while_off(name: str) -> None:
         OUTCOMES[name].handler(dict(CALLS[name]), _ctx(client))
     env = caught.value.to_envelope()
     assert env["code"] == "RESEARCH_PAUSED", name
-    assert env["message"] == "Research is paused."
+    assert env["message"] == "Research isn't available yet."
     assert env["suggested_next_action"] == {"tool": None, "args": {}}
     assert env["retryable"] is False
     assert len(client.calls) == 1  # one request, refused; nothing resent
@@ -502,12 +564,19 @@ def test_research_registers_after_every_other_tool() -> None:
 def test_plan_sends_the_form_and_reads_the_local_file(tmp_path) -> None:
     doc = tmp_path / "s.study"
     doc.write_text("Study(title='x')")
-    plan = {"plan_id": "pln_a", "words": {"work": "3 runs · under a minute"}, "run_allowed": True,
-            "study": {"title": "t", "kind_label": {"name": "Check a strategy"}}, "writes": "a new study",
-            "links": {"app": "https://app.usekeel.io/research/new"}}
+    plan = {
+        "plan_id": "pln_a",
+        "words": {"work": "3 runs · under a minute"},
+        "run_allowed": True,
+        "study": {"title": "t", "kind_label": {"name": "Check a strategy"}},
+        "writes": "a new study",
+        "links": {"app": "https://app.usekeel.io/research/new"},
+    }
     client = FakeClient({("post", "/v1/research/plans"): plan})
     result = OUTCOMES["keel_research_plan"].handler({"source_file": str(doc)}, _ctx(client))
-    assert client.calls == [("post", "/v1/research/plans", {"json": {"source": "Study(title='x')"}, "headers": {}})]
+    assert client.calls == [
+        ("post", "/v1/research/plans", {"json": {"source": "Study(title='x')"}, "headers": {}})
+    ]
     text = result.extra["view"]["markdown"]
     assert 'keel_research_run(plan_id="pln_a")' in text and text.endswith("research/new")
 
@@ -522,9 +591,15 @@ def test_run_sends_one_key_and_resends_once_on_an_uncoded_error() -> None:
         return got
 
     client = FakeClient({("post", "/v1/research/runs"): submit})
-    result = OUTCOMES["keel_research_run"].handler({"plan_id": "pln_a", "wait": False}, _ctx(client))
+    result = OUTCOMES["keel_research_run"].handler(
+        {"plan_id": "pln_a", "wait": False}, _ctx(client)
+    )
     keys = {c[2]["headers"]["Idempotency-Key"] for c in client.calls}
-    assert len(client.calls) == 2 and len(keys) == 1 and next(iter(keys)).startswith("sdk-research-run-")
+    assert (
+        len(client.calls) == 2
+        and len(keys) == 1
+        and next(iter(keys)).startswith("sdk-research-run-")
+    )
     # D-328 D5 (13 §2.1): a run answers as the fixed-height run card.
     assert result.extra["view"]["size"] == "progress" and result.extra["view"]["mode"] == "run"
 
@@ -542,17 +617,27 @@ def test_a_coded_refusal_is_never_resent() -> None:
 def test_a_direct_run_states_max_runs() -> None:
     client = FakeClient()
     with pytest.raises(KeelError):
-        OUTCOMES["keel_research_run"].handler({"template": "check", "subjects": ["x"]}, _ctx(client))
+        OUTCOMES["keel_research_run"].handler(
+            {"template": "check", "subjects": ["x"]}, _ctx(client)
+        )
     assert not client.calls
 
 
 def test_get_reads_one_chart_after_the_study() -> None:
-    page = {"data": [{"cost_multiple": 0, "sharpe": 1.9}], "pagination": {"cursor": "c2", "has_more": True},
-            "facts": {"rows_total": 6}, "study": _study()["study"]}
-    client = FakeClient({
-        ("get", "/v1/research/studies/stu_a/versions/1/data"): page,
-        ("get", "/v1/research/studies/stu_a"): _study(views=[{"index": 3, "title": "Sharpe as costs rise"}]),
-    })
+    page = {
+        "data": [{"cost_multiple": 0, "sharpe": 1.9}],
+        "pagination": {"cursor": "c2", "has_more": True},
+        "facts": {"rows_total": 6},
+        "study": _study()["study"],
+    }
+    client = FakeClient(
+        {
+            ("get", "/v1/research/studies/stu_a/versions/1/data"): page,
+            ("get", "/v1/research/studies/stu_a"): _study(
+                views=[{"index": 3, "title": "Sharpe as costs rise"}]
+            ),
+        }
+    )
     result = OUTCOMES["keel_research_get"].handler({"study_id": "stu_a", "view": 3}, _ctx(client))
     assert [c[1] for c in client.calls] == [
         "/v1/research/studies/stu_a",
@@ -599,8 +684,11 @@ def test_get_reads_a_charts_marker_marks_and_withheld_intervals() -> None:
     )
     lines = text.splitlines()
     assert "Marker: Momentum rotation v3 at 1.95" in lines
-    assert "Marks: Split at 2026-04-17; a line across at 0" in lines
-    assert f"Interval withheld at 30, 365: {reason}" in lines
+    assert (
+        "Marks: Split at Apr 17, 2026; a line across at 0" in lines
+    )  # POLISH: a day in words, never ISO
+    # AUDIT-WORDS M15: "No interval at …", the reason once
+    assert f"No interval at 30, 365: {reason}" in lines
     assert text.count(reason) == 1  # one line per served reason, never per x
 
 
@@ -619,15 +707,25 @@ def test_control_a_page_with_no_view_facts_reads_as_before() -> None:
         .extra["view"]["markdown"]
     )
     assert not any(
-        line.startswith(("Marker", "Marks", "Interval withheld")) for line in text.splitlines()
+        line.startswith(("Marker", "Marks", "No interval")) for line in text.splitlines()
     )
-    assert "| cost_multiple | sharpe |" in text  # non-vacuity: the rows were written
+    assert "| Cost multiple | Sharpe |" in text  # non-vacuity: the rows were written
 
 
 def test_get_with_no_id_lists_the_users_studies() -> None:
-    listing = {"data": [{"study_id": "stu_a", "kind_label": {"short": "Check"}, "title": "t",
-                         "state_words": "Done"}], "pagination": {"has_more": False},
-               "studies_total": 1, "by_state": {"completed": 1}}
+    listing = {
+        "data": [
+            {
+                "study_id": "stu_a",
+                "kind_label": {"short": "Check"},
+                "title": "t",
+                "state_words": "Done",
+            }
+        ],
+        "pagination": {"has_more": False},
+        "studies_total": 1,
+        "by_state": {"completed": 1},
+    }
     client = FakeClient({("get", "/v1/research/studies"): listing})
     result = OUTCOMES["keel_research_get"].handler({}, _ctx(client))
     assert "Studies: 1 shown of 1" in result.extra["view"]["markdown"]
@@ -636,8 +734,12 @@ def test_get_with_no_id_lists_the_users_studies() -> None:
 
 def test_a_note_to_set_aside_goes_through_the_set_aside_route() -> None:
     client = FakeClient({("post", "/v1/research/studies/stu_a/set-aside"): {"said": "Set aside."}})
-    OUTCOMES["keel_research_note"].handler({"anchor": "stu_a", "kind": "set_aside", "body": "dup"}, _ctx(client))
-    assert client.calls[0][1].endswith("/set-aside") and client.calls[0][2]["json"] == {"reason": "dup"}
+    OUTCOMES["keel_research_note"].handler(
+        {"anchor": "stu_a", "kind": "set_aside", "body": "dup"}, _ctx(client)
+    )
+    assert client.calls[0][1].endswith("/set-aside") and client.calls[0][2]["json"] == {
+        "reason": "dup"
+    }
 
 
 def test_keel_signals_search_is_blocks_search_with_role_signal(monkeypatch) -> None:
@@ -661,14 +763,18 @@ def test_keel_signals_search_is_blocks_search_with_role_signal(monkeypatch) -> N
     import dataclasses
 
     outcomes = dict(OUTCOMES)
-    outcomes["keel_blocks_search"] = dataclasses.replace(OUTCOMES["keel_blocks_search"], handler=handler)
+    outcomes["keel_blocks_search"] = dataclasses.replace(
+        OUTCOMES["keel_blocks_search"], handler=handler
+    )
     root = click.Group("keel")
     register_all(root, outcomes)
     assert "keel_signals_search" not in OUTCOMES  # not a registry entry
     runner = CliRunner()
     out = runner.invoke(root, ["signals", "search", "momentum", "--format", "json"])
     assert out.exit_code == 0, out.output
-    out = runner.invoke(root, ["signals", "search", "momentum", "--role", "regime", "--format", "json"])
+    out = runner.invoke(
+        root, ["signals", "search", "momentum", "--role", "regime", "--format", "json"]
+    )
     assert out.exit_code == 0, out.output
     out = runner.invoke(root, ["blocks", "search", "momentum", "--format", "json"])
     assert out.exit_code == 0, out.output
@@ -699,7 +805,10 @@ def test_every_research_read_names_its_card_layout(monkeypatch) -> None:
 
     class Client:
         def get(self, path, *, headers=None, **params):
-            best = max((k for k in answers if k[0] == "get" and path.startswith(k[1])), key=lambda k: len(k[1]))
+            best = max(
+                (k for k in answers if k[0] == "get" and path.startswith(k[1])),
+                key=lambda k: len(k[1]),
+            )
             return json.loads(json.dumps(answers[best]))
 
         def post(self, path, json=None, *, headers=None, **params):
@@ -717,7 +826,9 @@ def test_every_research_read_names_its_card_layout(monkeypatch) -> None:
     assert view("keel_research_get", {"study_id": sid, "view": 1}) == ("chart", "view")
     assert view("keel_research_get", {"subject": 'Strategy("str_a@3")'}) == ("addresses", "receipt")
     assert view("keel_research_get", {"project_id": pid}) == ("project", "receipt")
-    assert view("keel_research_plan", {"template": "check", "subjects": ['Strategy("str_a@3")']}) == ("plan", "receipt")
+    assert view(
+        "keel_research_plan", {"template": "check", "subjects": ['Strategy("str_a@3")']}
+    ) == ("plan", "receipt")
     with pytest.raises(ValueError):
         study_result({}, "x", mode="tile")
 
@@ -736,7 +847,9 @@ def test_r24_a_hosted_agent_finds_keels_library_signals_and_benchmarks(monkeypat
         def get(self, path, *, headers=None, **params):
             calls.append((path, params))
             if path == "/v1/research/library":
-                key = {"signals": "library_signals", "strategies": "library_strategies"}[params["kind"]]
+                key = {"signals": "library_signals", "strategies": "library_strategies"}[
+                    params["kind"]
+                ]
                 return json.loads(json.dumps(SHAPES[key]))
             return json.loads(json.dumps({**SHAPES["list"]}))
 
@@ -749,16 +862,141 @@ def test_r24_a_hosted_agent_finds_keels_library_signals_and_benchmarks(monkeypat
         text = got.extra["view"]["markdown"]
         assert calls[-1] == ("/v1/research/library", {"kind": "signals"})
         assert got.extra["view"]["mode"] == "library" and got.extra["view"]["size"] == "receipt"
-        assert '- 7-day momentum · the top 60 by volume · Output("keel/momentum_7d@1", output="momentum_7d")' in text
+        assert (
+            '- 7-day momentum · the top 60 by volume · Output("keel/momentum_7d@1", output="momentum_7d")'
+            in text
+        )
         assert 'Study one: keel_research_plan(template="signal", subjects=[' in text
-        bench = OUTCOMES["keel_research_get"].handler({"library": "benchmarks"}, ctx).extra["view"]["markdown"]
+        bench = (
+            OUTCOMES["keel_research_get"]
+            .handler({"library": "benchmarks"}, ctx)
+            .extra["view"]["markdown"]
+        )
         assert calls[-1] == ("/v1/research/library", {"kind": "strategies"})
         assert '- BTC buy and hold · BTC alone · Strategy("keel/btc_hold@1")' in bench
-        assert 'Add one to a study: keel_research_plan(study_id=<its id>, add=[\'Strategy("keel/btc_hold@1")\'])' in bench
+        assert (
+            "Add one to a study: keel_research_plan(study_id=<its id>, add=['Strategy(\"keel/btc_hold@1\")'])"
+            in bench
+        )
         listed = OUTCOMES["keel_research_get"].handler({}, ctx)  # control: no library lists studies
         assert calls[-1][0] == "/v1/research/studies" and listed.extra["view"]["mode"] == "list"
         with pytest.raises(KeelError):
             OUTCOMES["keel_research_get"].handler({"library": "signals", "study_id": "stu_a"}, ctx)
+
+
+def test_d415_the_users_own_signals_are_listed_with_their_calls(monkeypatch) -> None:
+    """D-415 D5 (SIGNALS-FIRST): ``keel_research_get(library="mine")`` lists the user's own signals in the library
+    list's shape: keel-api's ``GET /v1/strategies?kind=signal`` (rows served as signals only; a screen in the page is
+    never listed), each with its exact call ``Output("str_…@n", output="…")`` from ``GET /v1/blocks?scope=mine`` at that
+    version, and the plan that studies one; a signal whose output was not read says so, never a guessed call. On the
+    listed profile too. ``keel signals list`` is the same read (a CLI preset, not a registry entry).
+    SEED (reversed by edit): ``_mine`` keying outputs by block id alone (no version) -> the old version's output is
+    named and this reds; control: ``library="signals"`` still reads Keel's library."""
+    monkeypatch.setenv("KEEL_SERVER_PROFILE", "listed")
+    calls: list = []
+    sid = "str_01m7xpdf9w5hkeywp3gyaz93q4"
+
+    class Client:
+        def get(self, path, *, headers=None, **params):
+            calls.append((path, params))
+            if path == "/v1/strategies":
+                return {
+                    "data": [
+                        {
+                            "id": sid,
+                            "name": "Momentum carry skill mix",
+                            "kind": "signal",
+                            "current_sequence": 2,
+                        },
+                        {
+                            "id": "str_unread",
+                            "name": "Funding fade",
+                            "kind": "signal",
+                            "current_sequence": 1,
+                        },
+                        {
+                            "id": "str_screen",
+                            "name": "OI screen",
+                            "kind": "screener",
+                            "current_sequence": 4,
+                        },
+                    ],
+                    "pagination": {"has_more": False},
+                }
+            if path == "/v1/blocks":
+                return {
+                    "items": [
+                        {"ref": f"{sid}@1", "block": sid, "output": "old_mix", "role": "signal"},
+                        {"ref": f"{sid}@2", "block": sid, "output": "eligible", "role": "universe"},
+                        {"ref": f"{sid}@2", "block": sid, "output": "mix", "role": "signal"},
+                    ]
+                }
+            if path == "/v1/research/library":
+                return json.loads(json.dumps(SHAPES["library_signals"]))
+            raise AssertionError(path)
+
+    from keel.tools.outcomes._toolsets import research_served_context
+
+    _bootstrap()
+    ctx = ToolContext(api_client=Client())
+    with research_served_context(True):
+        got = OUTCOMES["keel_research_get"].handler({"library": "mine"}, ctx)
+        text = got.extra["view"]["markdown"]
+        assert calls[0] == (
+            "/v1/strategies",
+            {"kind": "signal", "limit": 100, "sort": "updated_desc"},
+        )
+        assert calls[1] == ("/v1/blocks", {"scope": "mine", "limit": 50})
+        assert got.extra["view"]["mode"] == "library" and got.extra["view"]["size"] == "receipt"
+        assert text.startswith("Your signals: 2 shown of 2"), text
+        assert f'- Momentum carry skill mix · v2 · Output("{sid}@2", output="mix")' in text
+        assert "- Funding fade · v1 · its output could not be read just now" in text
+        assert "OI screen" not in text
+        assert 'Study one: keel_research_plan(template="signal", subjects=[' in text
+        # control: Keel's library is unchanged
+        keel = OUTCOMES["keel_research_get"].handler({"library": "signals"}, ctx)
+        assert calls[-1] == ("/v1/research/library", {"kind": "signals"})
+        assert keel.extra["view"]["markdown"].startswith("Keel's library, signals")
+
+
+def test_d415_keel_signals_list_is_research_get_library_mine() -> None:
+    """D-415 D5: ``keel signals list`` is ``keel research get --library mine``, a CLI preset beside ``keel signals
+    search``; no new registry entry. SEED (reversed): delete the ``("signals", "list")`` row of
+    ``_CLI_PRESET_ALIASES`` -> "No such command" (this reds); control: ``keel signals search`` still answers."""
+    import dataclasses
+
+    import click
+    from click.testing import CliRunner
+    from keel.tools.outcomes import OUTCOMES, _bootstrap
+    from keel.tools.outcomes._base import OutcomeResult
+    from keel.tools.outcomes._cli_adapter import register_all
+    from keel.tools.outcomes._toolsets import research_served_context
+
+    _bootstrap()
+    seen: list[dict] = []
+
+    def handler(args, ctx):
+        seen.append(dict(args))
+        return OutcomeResult(extra={"data": []})
+
+    outcomes = dict(OUTCOMES)
+    outcomes["keel_research_get"] = dataclasses.replace(
+        OUTCOMES["keel_research_get"], handler=handler
+    )
+    outcomes["keel_blocks_search"] = dataclasses.replace(
+        OUTCOMES["keel_blocks_search"], handler=handler
+    )
+    root = click.Group("keel")
+    with research_served_context(True):
+        register_all(root, outcomes)
+    assert "keel_signals_list" not in OUTCOMES
+    runner = CliRunner()
+    out = runner.invoke(root, ["signals", "list", "--format", "json"])
+    assert out.exit_code == 0, out.output
+    out = runner.invoke(root, ["signals", "search", "carry", "--format", "json"])
+    assert out.exit_code == 0, out.output
+    assert seen[0].get("library") == "mine", seen
+    assert seen[1].get("role") == "signal", seen
 
 
 def test_the_widest_data_read_keeps_its_rows_in_the_text_not_the_model_context() -> None:
@@ -770,8 +1008,14 @@ def test_the_widest_data_read_keeps_its_rows_in_the_text_not_the_model_context()
     from keel.tools.outcomes._research_view import data_text
 
     page = json.loads(json.dumps(SHAPES["data_page_map"]))
-    text = data_text(page, title="Lookback × hold", version=1, call_args={"study_id": "stu_m", "view": 0})
-    env = {**page, "links": {"app": "u"}, "view": {"kind": "study", "mode": "chart", "size": "view", "markdown": text}}
+    text = data_text(
+        page, title="Lookback × hold", version=1, call_args={"study_id": "stu_m", "view": 0}
+    )
+    env = {
+        **page,
+        "links": {"app": "u"},
+        "view": {"kind": "study", "mode": "chart", "size": "view", "markdown": text},
+    }
     assert _compact(page["data"]) > 3_000  # not vacuous: a wide page
     structured, card = _channels.partition(env, "study", move_card=True)
     assert _compact(structured) <= 8_000, _compact(structured)
@@ -829,7 +1073,9 @@ def test_a_research_answer_on_a_terminal_is_its_text_with_keel_commands() -> Non
     study, plan = SHAPES["study_done"], SHAPES["plan"]
     answers = {
         "keel_research_get": lambda args, ctx: study_result(study, study_text(study), mode="study"),
-        "keel_research_plan": lambda args, ctx: study_result(plan, plan_text(plan), size="receipt", mode="plan"),
+        "keel_research_plan": lambda args, ctx: study_result(
+            plan, plan_text(plan), size="receipt", mode="plan"
+        ),
     }
     outcomes = dict(OUTCOMES)
     for name, handler in answers.items():
@@ -839,12 +1085,23 @@ def test_a_research_answer_on_a_terminal_is_its_text_with_keel_commands() -> Non
     runner = CliRunner()
     got = runner.invoke(root, ["research", "get", "stu_x", "--format", "human"]).output
     lines = got.rstrip().splitlines()
-    assert lines[0].startswith("Check a strategy · ") and lines[-1].startswith("View in Keel: https://")
-    assert "keel_research_" not in got and "keel research get stu_chkv3000000000000000000000 --view 0" in got
-    assert not any(line.lstrip().startswith(("{", '"', "source:", "steps:")) for line in lines), got[-600:]
-    planned = runner.invoke(root, ["research", "plan", "--template", "check", "--format", "human"]).output
+    assert lines[0].startswith("Check a strategy · ") and lines[-1].startswith(
+        "View in Keel: https://"
+    )
+    assert (
+        "keel_research_" not in got
+        and "keel research get stu_chkv3000000000000000000000 --view 0" in got
+    )
+    assert not any(line.lstrip().startswith(("{", '"', "source:", "steps:")) for line in lines), (
+        got[-600:]
+    )
+    planned = runner.invoke(
+        root, ["research", "plan", "--template", "check", "--format", "human"]
+    ).output
     assert f"keel research run {plan['plan_id']}" in planned and "children" not in planned
-    as_json = runner.invoke(root, ["research", "get", "stu_x", "--format", "json"]).output  # control
+    as_json = runner.invoke(
+        root, ["research", "get", "stu_x", "--format", "json"]
+    ).output  # control
     assert json.loads(as_json)["study"]["study_id"] == study["study"]["study_id"]
 
 
@@ -867,7 +1124,12 @@ def test_view_set_renames_by_set_and_blocks_search_names_its_population(monkeypa
             sent.append((path, params))
             return {
                 "items": [
-                    {"ref": "str_oi@2", "output": "oi_chg7", "name": "OI build-up", "role": "signal"},
+                    {
+                        "ref": "str_oi@2",
+                        "output": "oi_chg7",
+                        "name": "OI build-up",
+                        "role": "signal",
+                    },
                     {"ref": "str_mom@1", "output": "mom", "name": "Momentum", "role": "signal"},
                 ],
                 "total": 12,
@@ -876,12 +1138,21 @@ def test_view_set_renames_by_set_and_blocks_search_names_its_population(monkeypa
     _bootstrap()
     ctx = ToolContext(api_client=Client())
     view_set = OUTCOMES["keel_research_view_set"].handler
-    view_set({"study_id": sid, "expected_revision": 1, "set": {"title": "Momentum, costs at 3x"}}, ctx)
-    assert sent[-1][1]["set"] == {"title": "Momentum, costs at 3x"} and sent[-1][1].get("source") is None
-    view_set({"study_id": sid, "expected_revision": 1, "set": '{"question": null}'}, ctx)  # the CLI's JSON text
+    view_set(
+        {"study_id": sid, "expected_revision": 1, "set": {"title": "Momentum, costs at 3x"}}, ctx
+    )
+    assert (
+        sent[-1][1]["set"] == {"title": "Momentum, costs at 3x"}
+        and sent[-1][1].get("source") is None
+    )
+    view_set(
+        {"study_id": sid, "expected_revision": 1, "set": '{"question": null}'}, ctx
+    )  # the CLI's JSON text
     assert sent[-1][1]["set"] == {"question": None}
     with pytest.raises(KeelError):
-        view_set({"study_id": sid, "expected_revision": 1, "set": {"title": "x"}, "revert_to": 1}, ctx)
+        view_set(
+            {"study_id": sid, "expected_revision": 1, "set": {"title": "x"}, "revert_to": 1}, ctx
+        )
     view_set({"study_id": sid, "expected_revision": 1, "source": "Bars()"}, ctx)  # control
     assert sent[-1][1]["source"] == "Bars()" and sent[-1][1].get("set") is None
     found = OUTCOMES["keel_blocks_search"].handler({"q": "oi", "role": "signal"}, ctx)

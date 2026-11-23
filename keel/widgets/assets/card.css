@@ -44,6 +44,10 @@
   --good: #0a7d51;
   --bad: #c22f2f;
   --tile: rgba(15, 23, 36, 0.04);
+  /* MCP-CARDS: a hairline rule, the host's tertiary border (15 %) where it
+     ships one; never its 40 % primary, never white (the founder's "tables
+     without white lines"). */
+  --rule: rgba(15, 23, 36, 0.12);
   --font: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
@@ -93,9 +97,11 @@
     --good: #3fcf98;
     --bad: #f47a7a;
     --tile: rgba(255, 255, 255, 0.045);
+    --rule: rgba(255, 255, 255, 0.1);
   }
 }
 :root[data-theme="dark"] {
+  color-scheme: dark; /* Q-7890: the host's scheme, never the OS's */
   --fg: #e1e7ef;
   --muted: #8794ab;
   --line: rgba(255, 255, 255, 0.07);
@@ -103,8 +109,10 @@
   --good: #3fcf98;
   --bad: #f47a7a;
   --tile: rgba(255, 255, 255, 0.045);
+  --rule: rgba(255, 255, 255, 0.1);
 }
 :root[data-theme="light"] {
+  color-scheme: light; /* Q-7890 */
   --fg: #0f1724;
   --muted: #5c6a80;
   --line: rgba(15, 23, 36, 0.1);
@@ -112,6 +120,7 @@
   --good: #0a7d51;
   --bad: #c22f2f;
   --tile: rgba(15, 23, 36, 0.04);
+  --rule: rgba(15, 23, 36, 0.12);
 }
 * {
   box-sizing: border-box;
@@ -351,11 +360,14 @@ table.rows {
   margin: 6px 0;
   font-variant-numeric: tabular-nums;
 }
+/* D-420a, "tables never draw white lines": every table rule is the host's
+   hairline (`--rule`, its tertiary border), never `--line` (its 40 %
+   primary border, which reads as a white line on a dark host). */
 table.kv td,
 table.rows td,
 table.rows th {
   padding: 4px 8px;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid var(--rule);
   text-align: left;
   vertical-align: top;
 }
@@ -493,23 +505,60 @@ pre.source {
   word-break: break-word;
 }
 /* Q-1633: the one action a card offers is a real target — 36 px, 44 px
-   on a phone — with a visible focus ring, not an 18 px inline link. */
+   on a phone — with a visible focus ring, not an 18 px inline link.
+
+   D-420d: ONE button pair on every card, both profiles. `.button-link` is
+   the pair's shape (36 px, 44 under 480, radius 8, 14 px medium label) and,
+   alone or with `.button-quiet`, the quiet secondary (Expand, Show more,
+   Test as a strategy): transparent, the host's tertiary border, the host's
+   ink; never a white or host-grey fill. `.button-link.button-primary` is the
+   card's "Open … in Keel ↗": filled with Keel's brand purple and light text.
+   The adapter's link row marks its URL link primary; the listed adapter's
+   row carries no class, so the row's first link that opens a URL is primary
+   too. The fill is the accent's step per theme that holds white text at AA:
+   light #4b4cba (6.9:1 on white text; 6.9:1 against a white ground, 2.3:1
+   against #212121), dark #5e64d8 (4.9:1 under #fff, 4.7:1 under Claude's
+   #faf9f5 ink; 3.3:1 against #212121, 3.1:1 against #262624) — ChatGPT's
+   brand rule asks >= 2:1 against white and against #212121. */
+:root {
+  --btn-fill: #4b4cba;
+  --btn-on: #ffffff;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --btn-fill: #5e64d8;
+  }
+}
+:root[data-theme="dark"] {
+  --btn-fill: #5e64d8;
+}
 .button-link {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   min-height: 36px;
-  padding: 0 12px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--tile);
-  color: var(--accent);
+  padding: 0 14px;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--fg);
   text-decoration: none;
-  font-weight: 500;
+  font: 500 var(--t-base) / var(--t-base-lh) var(--font);
   cursor: pointer;
 }
 .button-link:hover {
-  border-color: var(--accent);
+  background: color-mix(in srgb, var(--fg) 6%, transparent);
+}
+.button-link.button-primary,
+.link-row > .button-link[href^="http"]:first-child:not(.button-quiet) {
+  background: var(--btn-fill);
+  border-color: var(--btn-fill);
+  color: var(--btn-on);
+}
+.button-link.button-primary:hover,
+.link-row > .button-link[href^="http"]:first-child:not(.button-quiet):hover {
+  background: color-mix(in srgb, var(--btn-fill) 86%, #000);
+  border-color: color-mix(in srgb, var(--btn-fill) 86%, #000);
 }
 /* Below 480 px, the adapter's narrow band (NARROW_PX, `width < 480`): at
    exactly 480 a card is wide, so its actions are too (D-332 (5)). */
@@ -651,7 +700,7 @@ table.rows th {
   align-items: baseline;
   gap: 2px 10px;
   padding: 6px 0;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid var(--rule);
   font-variant-numeric: tabular-nums;
   font-size: var(--t-xs);
 }
@@ -1006,7 +1055,7 @@ table.cmp {
 table.cmp td,
 table.cmp th {
   padding: 4px 8px;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid var(--rule);
   text-align: left;
   vertical-align: top;
   font-size: var(--t-xs);
@@ -1084,7 +1133,7 @@ table.cmp td.diff {
 }
 .cmp-blocks .row-head {
   padding: 0 0 4px;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid var(--rule);
 }
 .cmp-blocks .row-head .k {
   color: var(--muted);
@@ -1301,4 +1350,50 @@ body[data-expect="view"] .skeleton .sk-live {
 }
 .rr .rr-sc .new {
   font-weight: 600;
+}
+
+/* ── The face (D-420, D-420a..c): the redesigned chat cards ─────────────
+   The study card (MCP-CARDS) and the screen card (SCREENS-CARD) share one
+   face: structure is the host's (transparent ground, its ink, its muted ink,
+   its tertiary border as `--rule`), Keel brings the accent and the marks.
+   The accent and its text step are RESEARCH.md §5's slot 1, validated on
+   #ffffff, #f5f4f0, #262522 and #212121; the categorical, diverging and
+   sequential palettes are `KeelHost.palette()` (host-adapter.js), per host
+   theme. Type: four sizes, two weights (Claude: "three-level size scale ...
+   and the two weights"): caption 12, body 14, title 16, hero 28. Buttons
+   are unfilled in both themes (the founder's "no white buttons"). */
+:is(body[data-card="study"], body[data-card="screener"]) {
+  --accent: #4b4cba;
+  --accent-ink: #4b4cba;
+  --face-wash: rgba(75, 76, 186, 0.07);
+  --face-off: rgba(31, 30, 29, 0.38);
+  --f-caption: 12px;
+  --f-caption-lh: 16px;
+  --f-body: 14px;
+  --f-body-lh: 20px;
+  --f-title: 16px;
+  --f-title-lh: 22px;
+  --f-hero: 28px;
+  --f-hero-lh: 32px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"])
+    :is(body[data-card="study"], body[data-card="screener"]) {
+    --accent: #6b71e3;
+    --accent-ink: #a2abf0;
+    --face-wash: rgba(107, 113, 227, 0.08);
+    --face-off: rgba(222, 220, 209, 0.42);
+  }
+}
+:root[data-theme="dark"]
+  :is(body[data-card="study"], body[data-card="screener"]) {
+  --accent: #6b71e3;
+  --accent-ink: #a2abf0;
+  --face-wash: rgba(107, 113, 227, 0.08);
+  --face-off: rgba(222, 220, 209, 0.42);
+}
+/* The actions: two, at the bottom: the shared button pair (D-420d, above). */
+:is(body[data-card="study"], body[data-card="screener"])[data-face] .link-row {
+  margin-top: 16px;
+  flex-wrap: wrap;
 }

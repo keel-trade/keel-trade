@@ -1,0 +1,424 @@
+{
+  "hero_url": "https://app.usekeel.io/research/new?plan=pln_00000000000000000000000002",
+  "url_line": "View in Keel: https://app.usekeel.io/research/new?plan=pln_00000000000000000000000002",
+  "edit": {
+    "kind": "new_study",
+    "cls": "new_study",
+    "also_changes": []
+  },
+  "study": {
+    "title": "ADX Trend-Strength Strategy (Crypto)",
+    "kind_label": {
+      "key": "check",
+      "name": "Check a strategy",
+      "short": "Check"
+    },
+    "state": "planned",
+    "linked_to": [],
+    "linked_to_total": 0,
+    "set_aside": false,
+    "archived": false,
+    "can_delete": false
+  },
+  "footing": {
+    "days": {
+      "start": "2025-11-18",
+      "end": "2026-11-18"
+    },
+    "split": "2026-07-20",
+    "coins": {
+      "count": 15,
+      "chosen": "The coins ADX Trend-Strength Strategy (Crypto) trades",
+      "names_sha256": "067826af34ea26fb4a54d0b018aa78719dcd52f523a5703ba8a1bec3b588bc2d"
+    },
+    "costs": {
+      "fee": 0.00045,
+      "slippage": 0.00045
+    },
+    "delay": 0,
+    "leverage": 1.0,
+    "data": "snap_d96e8eccc0bce098",
+    "engine": "sha256:34f1a58a92cc952bb254bfcc0bac2f98ed8ce82f73c41d4204871597b3272487",
+    "engine_words": "This version of the engine",
+    "split_words": "Split on Jul 20, 2026: 244 days before, 121 after"
+  },
+  "stale": [],
+  "links": {
+    "app": "https://app.usekeel.io/research/new?plan=pln_00000000000000000000000002"
+  },
+  "plan_id": "pln_00000000000000000000000002",
+  "expires_at": "2026-11-20T02:55:04Z",
+  "class": "new_study",
+  "writes": "a new study, version 1",
+  "subjects": [
+    {
+      "ref": "Strategy(\"keel/adx_trend_crypto@1\")",
+      "label": "ADX Trend-Strength Strategy (Crypto)",
+      "key": "s1",
+      "name": "ADX Trend-Strength Strategy (Crypto)",
+      "kind": "strategy",
+      "edits": []
+    }
+  ],
+  "source": "Study(\n    title=\"ADX Trend-Strength Strategy (Crypto)\",\n)\n\nSubjects(\n    s1=Strategy(\"keel/adx_trend_crypto@1\"),\n)\n\nRun(\n    days=Days(\"2025-11-18\", \"2026-11-18\"),\n    split=Split(\"2026-07-20\"),\n    coins=Coins([\"BTC\", \"DOGE\", \"ETH\", \"GRAM\", \"HYPE\", \"LINK\", \"LIT\", \"PUMP\", \"SOL\", \"SUI\", \"VVV\", \"XPL\", \"XRP\", \"ZEC\", \"kPEPE\"], chosen=SubjectUniverse(\"s1\")),\n    costs=Costs(fee=0.00045, slippage=0.00045),\n    data=Data(\"snap_d96e8eccc0bce098\"),\n)\n\nSteps(\n    base=Backtest(),\n    costs=CostStress(multiples=[0, 1, 2, 3, 4, 6]),\n    late=DelayStress(days=[1, 2, 3]),\n    top=TopCoins(n=30),\n    without=WithoutBestCoins(n=5),\n    luck=RandomBooks(books=150, seed=20261119),\n    deflated=DeflatedSharpe(seed=20261119, trials=TrialSet(count=0, snapshot=\"vts:fam:keel/adx_trend_crypto:0\")),\n    ahead=ResampledPaths(days=365, paths=1500, seed=20261119),\n    by_coin=ReturnByCoin(),\n    markets=MarketStates(regime=Output(\"keel/btc_trend@1\", output=\"trend\", role=\"regime\"), seed=20261119),\n)\n\nBars(\n    Bar(\"luck.summary\", \"share_below\", \">=\", 0.75),\n    Bar(\"base.split\", \"after_share\", \">=\", 0.3),\n    Bar(\"costs\", \"sharpe\", \">=\", 0.3, at={\"cost_multiple\": 2}),\n    Bar(\"late\", \"sharpe\", \">=\", 0.3, at={\"days_late\": 1}),\n    Bar(\"top\", \"sharpe\", \">=\", 0.3),\n    Bar(\"without\", \"sharpe\", \">=\", 0.3),\n    Bar(\"deflated\", \"deflated_sharpe\", \">=\", 0.5),\n)\n\nViews(\n    Page(default=\"Your checks\", switch=[\"Your checks\", \"Growth of 1\", \"Before and after the split\"]),\n    Checks(\"Your checks\", of=\"bars\"),\n    Lines(\"Growth of 1\", of=\"base\", plot=Raw(\"growth\"), marks=[VLine(SplitDay())]),\n    Lines(\"Before and after the split\", of=\"base\", plot=Rebased(\"growth\", start=SplitDay())),\n    Curve(\"Sharpe as costs rise\", of=\"costs\", x=Axis(\"cost_multiple\"), y=Raw(\"sharpe\"), marks=[HLine(0), HLine(Final(\"base.summary\", measure=\"sharpe\", at={\"window\": \"whole\"})), VLine(Final(\"costs.summary\", measure=\"break_even_multiple\"))]),\n    Bars(\"Sharpe when trading late\", of=\"late\", x=Axis(\"days_late\"), y=Raw(\"sharpe\")),\n    Bars(\"Sharpe on the top coins\", of=\"top\", x=Axis(\"variant\"), y=Raw(\"sharpe\")),\n    Bars(\"Sharpe without the best coins\", of=\"without\", x=Axis(\"variant\"), y=Raw(\"sharpe\")),\n    Distribution(\"150 random books\", of=\"luck\", x=Raw(\"sharpe\"), marker=Final(\"luck.summary\", measure=\"yours\")),\n    Fan(\"A year ahead, resampled\", of=\"ahead\", x=Axis(\"horizon\"), y=Raw(\"growth\")),\n    Bars(\"Where the return came from\", of=\"by_coin\", x=Axis(\"coin\"), y=Raw(\"share_of_pnl\")),\n    Bars(\"Up and down markets\", of=\"markets\", x=Axis(\"group\"), y=Raw(\"ret_year\"), error=[Raw(\"ret_year_lo\"), Raw(\"ret_year_hi\")]),\n)\n",
+  "filled": [
+    {
+      "path": "/run/split",
+      "what": "Split on Jul 20, 2026: 244 days before, 122 after"
+    },
+    {
+      "path": "/steps/base",
+      "what": "Check a strategy: added the default step base (Backtest)."
+    },
+    {
+      "path": "/steps/costs",
+      "what": "Check a strategy: added the default step costs (CostStress)."
+    },
+    {
+      "path": "/steps/late",
+      "what": "Check a strategy: added the default step late (DelayStress)."
+    },
+    {
+      "path": "/steps/top",
+      "what": "Check a strategy: added the default step top (TopCoins)."
+    },
+    {
+      "path": "/steps/without",
+      "what": "Check a strategy: added the default step without (WithoutBestCoins)."
+    },
+    {
+      "path": "/steps/luck",
+      "what": "Check a strategy: added the default step luck (RandomBooks)."
+    },
+    {
+      "path": "/steps/deflated",
+      "what": "Check a strategy: added the default step deflated (DeflatedSharpe)."
+    },
+    {
+      "path": "/steps/ahead",
+      "what": "Check a strategy: added the default step ahead (ResampledPaths)."
+    },
+    {
+      "path": "/steps/by_coin",
+      "what": "Check a strategy: added the default step by_coin (ReturnByCoin)."
+    },
+    {
+      "path": "/steps/markets",
+      "what": "Check a strategy: added the default step markets (MarketStates)."
+    },
+    {
+      "path": "/bars/0",
+      "what": "Check a strategy: added the default bar Bar \"luck.summary\"."
+    },
+    {
+      "path": "/bars/1",
+      "what": "Check a strategy: added the default bar Bar \"base.split\"."
+    },
+    {
+      "path": "/bars/2",
+      "what": "Check a strategy: added the default bar Bar \"costs\"."
+    },
+    {
+      "path": "/bars/3",
+      "what": "Check a strategy: added the default bar Bar \"late\"."
+    },
+    {
+      "path": "/bars/4",
+      "what": "Check a strategy: added the default bar Bar \"top\"."
+    },
+    {
+      "path": "/bars/5",
+      "what": "Check a strategy: added the default bar Bar \"without\"."
+    },
+    {
+      "path": "/bars/6",
+      "what": "Check a strategy: added the default bar Bar \"deflated\"."
+    },
+    {
+      "path": "/page",
+      "what": "Check a strategy: added the default view page."
+    },
+    {
+      "path": "/views/0",
+      "what": "Check a strategy: added the default view Checks \"Your checks\"."
+    },
+    {
+      "path": "/views/1",
+      "what": "Check a strategy: added the default view Lines \"Growth of 1\"."
+    },
+    {
+      "path": "/views/2",
+      "what": "Check a strategy: added the default view Lines \"Before and after the split\"."
+    },
+    {
+      "path": "/views/3",
+      "what": "Check a strategy: added the default view Curve \"Sharpe as costs rise\"."
+    },
+    {
+      "path": "/views/4",
+      "what": "Check a strategy: added the default view Bars \"Sharpe when trading late\"."
+    },
+    {
+      "path": "/views/5",
+      "what": "Check a strategy: added the default view Bars \"Sharpe on the top coins\"."
+    },
+    {
+      "path": "/views/6",
+      "what": "Check a strategy: added the default view Bars \"Sharpe without the best coins\"."
+    },
+    {
+      "path": "/views/7",
+      "what": "Check a strategy: added the default view Distribution \"150 random books\"."
+    },
+    {
+      "path": "/views/8",
+      "what": "Check a strategy: added the default view Fan \"A year ahead, resampled\"."
+    },
+    {
+      "path": "/views/9",
+      "what": "Check a strategy: added the default view Bars \"Where the return came from\"."
+    },
+    {
+      "path": "/views/10",
+      "what": "Check a strategy: added the default view Bars \"Up and down markets\"."
+    },
+    {
+      "path": "/run/coins",
+      "what": "15 coins"
+    },
+    {
+      "path": "/run/data",
+      "what": "the store as of today"
+    },
+    {
+      "path": "/steps/luck/seed",
+      "what": "seed"
+    },
+    {
+      "path": "/steps/deflated/seed",
+      "what": "seed"
+    },
+    {
+      "path": "/steps/deflated/trials",
+      "what": "0 tried"
+    },
+    {
+      "path": "/steps/ahead/seed",
+      "what": "seed"
+    },
+    {
+      "path": "/steps/markets/seed",
+      "what": "seed"
+    }
+  ],
+  "issues": [
+    {
+      "code": "STUDY_PLAN_STUDIES_LIMIT",
+      "path": "/",
+      "message": "This account has run 3 of 3 studies in its 30 days; the count resets on the next period.",
+      "severity": "warning",
+      "suggestion": "Runs that reuse every result are free; the count resets on the next period."
+    }
+  ],
+  "steps": [
+    {
+      "id": "base",
+      "step": "Backtest",
+      "label": "The backtest",
+      "to_run": 2,
+      "reused": 0,
+      "after": 0,
+      "not_valid": 0,
+      "kind": "backtest",
+      "runnable": true
+    },
+    {
+      "id": "costs",
+      "step": "CostStress",
+      "label": "Costs from none to six times",
+      "to_run": 6,
+      "reused": 0,
+      "after": 0,
+      "not_valid": 0,
+      "kind": "sim",
+      "runnable": true,
+      "ranges": "Cost multiples: any value from 0 to 10"
+    },
+    {
+      "id": "late",
+      "step": "DelayStress",
+      "label": "Trading 1 to 3 days late",
+      "to_run": 4,
+      "reused": 0,
+      "after": 0,
+      "not_valid": 0,
+      "kind": "sim",
+      "runnable": true,
+      "ranges": "Days late: any value from 1 to 10"
+    },
+    {
+      "id": "top",
+      "step": "TopCoins",
+      "label": "Only the most traded coins",
+      "to_run": 2,
+      "reused": 0,
+      "after": 0,
+      "not_valid": 0,
+      "kind": "backtest",
+      "runnable": true,
+      "ranges": "Number of coins: any value from 5 to 200"
+    },
+    {
+      "id": "without",
+      "step": "WithoutBestCoins",
+      "label": "Without its best coins",
+      "to_run": 1,
+      "reused": 0,
+      "after": 1,
+      "not_valid": 0,
+      "kind": "backtest",
+      "runnable": true,
+      "ranges": "Number of coins: any value from 1 to 20"
+    },
+    {
+      "id": "luck",
+      "step": "RandomBooks",
+      "label": "Random books of the same size",
+      "to_run": 2,
+      "reused": 0,
+      "after": 0,
+      "not_valid": 0,
+      "kind": "sim",
+      "runnable": true,
+      "ranges": "Number of random books: any value from 20 to 1000"
+    },
+    {
+      "id": "deflated",
+      "step": "DeflatedSharpe",
+      "label": "Sharpe discounted for versions tried",
+      "to_run": 1,
+      "reused": 0,
+      "after": 0,
+      "not_valid": 0,
+      "kind": "analysis",
+      "runnable": true
+    },
+    {
+      "id": "ahead",
+      "step": "ResampledPaths",
+      "label": "A year ahead, resampled",
+      "to_run": 1,
+      "reused": 0,
+      "after": 0,
+      "not_valid": 0,
+      "kind": "analysis",
+      "runnable": true,
+      "ranges": "Days ahead: any value from 30 to 730; Number of paths: any value from 200 to 10000"
+    },
+    {
+      "id": "by_coin",
+      "step": "ReturnByCoin",
+      "label": "Where the return came from",
+      "to_run": 1,
+      "reused": 0,
+      "after": 0,
+      "not_valid": 0,
+      "kind": "analysis",
+      "runnable": true
+    },
+    {
+      "id": "markets",
+      "step": "MarketStates",
+      "label": "Up and down markets",
+      "to_run": 2,
+      "reused": 0,
+      "after": 0,
+      "not_valid": 0,
+      "kind": "pipeline_values",
+      "runnable": true
+    }
+  ],
+  "runs": {
+    "children": 23,
+    "to_run": 22,
+    "reused": 0,
+    "joined": 0,
+    "after": 1,
+    "by_kind": {
+      "analysis": 10,
+      "backtest": 3,
+      "pipeline_values": 1,
+      "sim": 9
+    },
+    "engine_reruns": 0,
+    "not_valid": 0
+  },
+  "addresses_carried": [],
+  "addresses_changed": [],
+  "addresses_moved": [],
+  "estimate": {
+    "seconds_low": 18.42,
+    "seconds_central": 36.84,
+    "seconds_high": 73.67,
+    "evidence_bytes_high": 76496,
+    "wall_low_s": 18.4,
+    "wall_high_s": 73.7,
+    "queue_s": 0.0,
+    "background": true,
+    "uncalibrated": true,
+    "cost_model": "e4-2026-11-16b"
+  },
+  "allowance": {
+    "units": [
+      {
+        "unit": "research_studies",
+        "cost": 1,
+        "used": 3,
+        "limit": 3,
+        "resets_at": "2026-12-18"
+      }
+    ],
+    "within_allowance": false
+  },
+  "run_allowed": false,
+  "limits": [
+    {
+      "unit": "research_studies",
+      "code": "STUDY_PLAN_STUDIES_LIMIT",
+      "moment": "studies_out",
+      "steps": [],
+      "limit": 3,
+      "used": 3,
+      "resets_at": "2026-12-18"
+    }
+  ],
+  "locked": [],
+  "versions_tried": {
+    "family": "fam:keel/adx_trend_crypto",
+    "before": 0,
+    "added": 0,
+    "why": ""
+  },
+  "preview": {
+    "auto": false,
+    "auto_preview_max_runs": 20,
+    "auto_preview_max_seconds": 60.0
+  },
+  "words": {
+    "work": "23 runs · about 1 to 2 min, in the background · versions tried +0",
+    "allowance": "Used 3 of 3 studies; resets Dec 18. Trader and Pro include more. Plans are changed in the Keel web app. Planning, reading, saving, and runs that reuse everything or run nothing, do not count.",
+    "limit": "This study was not run and nothing was charged. You have used 3 of 3 studies; they reset Dec 18. Planning, reading, saving and runs that reuse every result do not count. Trader and Pro include more. Plans are changed in the Keel web app.",
+    "card_line": "Plan · Check · ADX Trend-Strength Strategy (Crypto)",
+    "strip": "needs a run · 23 runs",
+    "filled": "Filled in: Split on Jul 20, 2026: 244 days before, 122 after, Check a strategy: added the default step base (Backtest)., Check a strategy: added the default step costs (CostStress)., Check a strategy: added the default step late (DelayStress)., Check a strategy: added the default step top (TopCoins)., Check a strategy: added the default step without (WithoutBestCoins)., Check a strategy: added the default step luck (RandomBooks)., Check a strategy: added the default step deflated (DeflatedSharpe)., Check a strategy: added the default step ahead (ResampledPaths)., Check a strategy: added the default step by_coin (ReturnByCoin)., Check a strategy: added the default step markets (MarketStates)., Check a strategy: added the default bar Bar \"luck.summary\"., Check a strategy: added the default bar Bar \"base.split\"., Check a strategy: added the default bar Bar \"costs\"., Check a strategy: added the default bar Bar \"late\"., Check a strategy: added the default bar Bar \"top\"., Check a strategy: added the default bar Bar \"without\"., Check a strategy: added the default bar Bar \"deflated\"., Check a strategy: added the default view page., Check a strategy: added the default view Checks \"Your checks\"., Check a strategy: added the default view Lines \"Growth of 1\"., Check a strategy: added the default view Lines \"Before and after the split\"., Check a strategy: added the default view Curve \"Sharpe as costs rise\"., Check a strategy: added the default view Bars \"Sharpe when trading late\"., Check a strategy: added the default view Bars \"Sharpe on the top coins\"., Check a strategy: added the default view Bars \"Sharpe without the best coins\"., Check a strategy: added the default view Distribution \"150 random books\"., Check a strategy: added the default view Fan \"A year ahead, resampled\"., Check a strategy: added the default view Bars \"Where the return came from\"., Check a strategy: added the default view Bars \"Up and down markets\"., 15 coins, the store as of today, seed, seed, 0 tried, seed, seed",
+    "estimate": "Times are estimates until Keel has timed more runs like these."
+  },
+  "view": {
+    "kind": "study",
+    "mode": "plan",
+    "size": "receipt",
+    "at": "2026-11-19T02:55:04.344Z",
+    "seq": 3,
+    "markdown": "card: where the host draws Keel cards, the user sees what follows as a card carrying its name, links and ids, so a reply can call it by name; the ids and links here serve tool calls and hosts without cards.\n\nPlan · Check a strategy · ADX Trend-Strength Strategy (Crypto) · a new study, version 1\n23 runs · about 1 to 2 min, in the background · versions tried +0\nTimes are estimates until Keel has timed more runs like these.\nUsed 3 of 3 studies; resets Dec 18. Trader and Pro include more. Plans are changed in the Keel web app. Planning, reading, saving, and runs that reuse everything or run nothing, do not count.\nDays Nov 18, 2025 to Nov 18, 2026, split Jul 20, 2026 · 15 coins: the coins ADX Trend-Strength Strategy (Crypto) trades · costs 9 bp a fill · data as of Nov 18, 2026\nSteps (10): The backtest 2 · Costs from none to six times 6 · Trading 1 to 3 days late 4 · Only the most traded coins 2 · Without its best coins 1 · Random books of the same size 2 · Sharpe discounted for versions tried 1 · A year ahead, resampled 1 · Where the return came from 1 · Up and down markets 2\nThis account has run 3 of 3 studies in its 30 days; the count resets on the next period.\nThis study was not run and nothing was charged. You have used 3 of 3 studies; they reset Dec 18. Planning, reading, saving and runs that reuse every result do not count. Trader and Pro include more. Plans are changed in the Keel web app.\nView in Keel: https://app.usekeel.io/research/new?plan=pln_00000000000000000000000002"
+  }
+}

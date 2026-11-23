@@ -284,7 +284,7 @@ TOOL_INVOCATION_STRINGS: dict[str, tuple[str, str]] = {
     # D-344 (8): outcome-neutral; a run whose work is all reused completes at once, and a refused one starts nothing.
     "keel_research_run": ("Running study…", "Run returned"),
     "keel_research_get": ("Reading the study…", "Study returned"),
-    "keel_research_view_set": ("Saving the study view…", "Study returned"),
+    "keel_research_view_set": ("Saving the study…", "Study returned"),
 }
 
 #: The cap the hosts' tool row can show before it elides.

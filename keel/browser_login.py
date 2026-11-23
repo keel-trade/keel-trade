@@ -260,9 +260,9 @@ def _wait_for_callback(server: _CallbackServer, timeout_seconds: int) -> None:
     raise AuthError(
         "Login timed out. To skip the browser, run "
         "`keel auth login --key <token>` with a key from "
-        "https://app.usekeel.io/settings?tab=api-keys.",
+        f"{_api_keys_url()}.",
         suggestion="keel auth login --key <token>",
-        docs_url="https://app.usekeel.io/settings?tab=api-keys",
+        docs_url=_api_keys_url(),
     )
 
 
@@ -445,3 +445,10 @@ __all__ = [
     "discover_endpoints",
     "run",
 ]
+
+
+def _api_keys_url() -> str:
+    """The API-keys page on the app this process links (``keel.config.api_keys_url``)."""
+    from keel.config import api_keys_url
+
+    return api_keys_url()

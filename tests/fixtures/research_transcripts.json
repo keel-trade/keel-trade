@@ -71,7 +71,9 @@
           "names_sha256": "038394ed76754d6837a48cc1438cbc6a3b24c9f21f0b7227896ec43e7b0e960c"
         },
         "costs": "none",
+        "costs_words": "No costs",
         "data": "snap_6c1f0e8a2b9d4f37",
+        "data_words": "Data as of Oct 30, 2026",
         "days": {
           "end": "2026-10-30",
           "start": "2026-05-04",
@@ -136,11 +138,13 @@
           "label": "Daily ranks",
           "locked": null,
           "not_valid": 0,
+          "ranges": null,
           "refused": null,
           "reused": 12,
           "runnable": true,
           "step": "Ranks",
-          "to_run": 2
+          "to_run": 2,
+          "words": "2 runs; the rest reused"
         },
         {
           "after": 0,
@@ -149,11 +153,13 @@
           "label": "Same footing",
           "locked": null,
           "not_valid": 0,
+          "ranges": null,
           "refused": null,
           "reused": 0,
           "runnable": true,
           "step": "SameFooting",
-          "to_run": 1
+          "to_run": 1,
+          "words": "1 run"
         },
         {
           "after": 0,
@@ -162,11 +168,13 @@
           "label": "How well it ranks, by days ahead",
           "locked": null,
           "not_valid": 0,
+          "ranges": "Days ahead: any value from 1 to 60",
           "refused": null,
           "reused": 9,
           "runnable": true,
           "step": "RankIC",
-          "to_run": 2
+          "to_run": 2,
+          "words": "2 runs; the rest reused"
         },
         {
           "after": 0,
@@ -175,11 +183,13 @@
           "label": "Ranking skill through time, and by month",
           "locked": null,
           "not_valid": 0,
+          "ranges": "Window (days): any value from 20 to 180; Days ahead: any value from 1 to 60",
           "refused": null,
           "reused": 9,
           "runnable": true,
           "step": "ICOverTime",
-          "to_run": 2
+          "to_run": 2,
+          "words": "2 runs; the rest reused"
         },
         {
           "after": 0,
@@ -188,11 +198,13 @@
           "label": "How alike they are",
           "locked": null,
           "not_valid": 0,
+          "ranges": "Days ahead: any value from 1 to 60",
           "refused": null,
           "reused": 0,
           "runnable": true,
           "step": "Correlations",
-          "to_run": 1
+          "to_run": 1,
+          "words": "1 run"
         },
         {
           "after": 0,
@@ -201,11 +213,13 @@
           "label": "A pair over time",
           "locked": null,
           "not_valid": 0,
+          "ranges": "Window (days): any value from 20 to 365",
           "refused": null,
           "reused": 1,
           "runnable": true,
           "step": "PairOverTime",
-          "to_run": 1
+          "to_run": 1,
+          "words": "1 run; the rest reused"
         },
         {
           "after": 0,
@@ -214,11 +228,13 @@
           "label": "What's left after the others",
           "locked": null,
           "not_valid": 0,
+          "ranges": "Days ahead: any value from 1 to 60",
           "refused": null,
           "reused": 9,
           "runnable": true,
           "step": "WhatsLeft",
-          "to_run": 2
+          "to_run": 2,
+          "words": "2 runs; the rest reused"
         },
         {
           "after": 0,
@@ -227,11 +243,13 @@
           "label": "Mixing the signals",
           "locked": null,
           "not_valid": 0,
+          "ranges": "Days ahead: any value from 1 to 60",
           "refused": null,
           "reused": 0,
           "runnable": true,
           "step": "SignalMix",
-          "to_run": 1
+          "to_run": 1,
+          "words": "1 run"
         }
       ],
       "study": {
@@ -365,7 +383,7 @@
       "view": {
         "at": "1970-01-01T00:00:00.000Z",
         "kind": "study",
-        "markdown": "Adds 28-day momentum, OI screen to Signals, side by side · version 2\nAdds 28-day momentum (Keel's library, v1) to Signals, side by side: 1 run, not counted against you · Counted in Keel's tries; Adds OI screen (yours, v2) to Signals, side by side: 1 run on the same days and coins · Counts as 1 version tried; Not added: top_coins of OI screen is a coin set (a universe output), which is not a study subject.\nTimes are estimates until Keel has timed more runs like these.\nCounts as 1 of your 400 studies this month · 398 left after it\nDays May 4, 2026 to Oct 30, 2026 · 60 coins: top 60 by 30-day volume, picked Oct 31, kept fixed · no costs · data as of Oct 30, 2026\nSteps (8): Daily ranks 2 · Same footing 1 · How well it ranks, by days ahead 2 · Ranking skill through time, and by month 2 · How alike they are 1 · A pair over time 1 · What's left after the others 2 · Mixing the signals 1\nkeel_research_run(plan_id=\"pln_pickcmpsig1\") runs this plan.\nView in Keel: https://app.usekeel.io/research/stu_cmpsig00000000000000000000",
+        "markdown": "Adds 28-day momentum, OI screen to Signals, side by side · version 2\nAdds 28-day momentum (Keel's library, v1) to Signals, side by side: 1 run, not counted against you · Counted in Keel's tries; Adds OI screen (yours, v2) to Signals, side by side: 1 run on the same days and coins · Counts as 1 version tried; Not added: top_coins of OI screen is a coin set (a universe output), which is not a study subject.\nTimes are estimates until Keel has timed more runs like these.\nCounts as 1 of your 400 studies this month · 398 left after it\nDays May 4, 2026 to Oct 30, 2026 · 60 coins: top 60 by 30-day volume, picked Oct 31, kept fixed · no costs · data as of Oct 30, 2026\nSteps (8): Daily ranks: 2 runs · Same footing: 1 run · How well it ranks, by days ahead: 2 runs · Ranking skill through time, and by month: 2 runs · How alike they are: 1 run · A pair over time: 1 run · What's left after the others: 2 runs · Mixing the signals: 1 run\nkeel_research_run(plan_id=\"pln_pickcmpsig1\") runs this plan.\nView in Keel: https://app.usekeel.io/research/stu_cmpsig00000000000000000000",
         "mode": "plan",
         "object": "stu_cmpsig00000000000000000000",
         "seq": 0,
@@ -375,11 +393,14 @@
       "words": {
         "allowance": "Counts as 1 of your 400 studies this month · 398 left after it",
         "also_changes": null,
+        "card_allowance": null,
+        "card_limit": null,
         "card_line": "Plan · Compare · Signals, side by side",
         "confirm": null,
         "engine": null,
         "estimate": "Times are estimates until Keel has timed more runs like these.",
         "filled": null,
+        "left_out": null,
         "limit": null,
         "linked": null,
         "not_valid": null,
@@ -610,7 +631,7 @@
       "view": {
         "at": "1970-01-01T00:00:00.000Z",
         "kind": "study",
-        "markdown": "Research brief: 3 studies (3 planned), 1 project, 1 set aside, 3 notes, 1 family with versions tried, 0 on paper or live\nStudies: 3 shown of 3\n- stu_recordedsecond0000000000 · Check · Second look · Planned · Momentum rotation v3 · set aside\n- stu_recordedthird00000000000 · Check · Costs at 3x · Planned · Momentum rotation v3\n- stu_recordedfirst00000000000 · Check · Momentum rotation v3 · Planned · Momentum rotation v3\nProjects: 1 shown of 1\n- prj_recorded000000000000000 · Momentum: Does momentum survive costs? · 2 studies (stu_recordedfirst00000000000, stu_recordedthird00000000000) · Momentum rotation v3\nSet aside: 1 shown of 1\n- stu_recordedsecond0000000000 · Second look: \"same as the first; costs too high\" (you, Nov 17, 2026)\nPlanned, not run yet: 3 shown of 3 (every one listed under Studies)\nVersions tried: 1 shown of 1 family\n- Momentum rotation: 5 since Nov 17, 2026\nNotes: 3 shown of 3, newest first\n- hypothesis on study stu_recordedfirst00000000000 (your agent, Nov 17, 2026): \"momentum holds at twice the costs momentum holds at twice the costs momentum holds at twice the costs momentum holds at twice the costs momentum holds at twice the costs momentum holds at twice the…\" (the first 197 of 1,359 characters)\n- decision on project prj_recorded000000000000000 (you, Nov 17, 2026): \"keep v3, drop the 28-day lookback\"\n- set aside on study stu_recordedsecond0000000000 (you, Nov 17, 2026): \"same as the first; costs too high\"\nRead a study: keel_research_get(study_id=\"stu_recordedsecond0000000000\")\nRead a project: keel_research_get(project_id=\"prj_recorded000000000000000\")\nView in Keel: https://app.usekeel.io/research",
+        "markdown": "Research brief: 3 studies (3 planned), 1 project, 1 set aside, 3 notes, 1 family with versions tried, 0 on paper or live\nStudies: 3 shown of 3\n- stu_recordedsecond0000000000 · Check · Second look · Planned · Momentum rotation v3 · set aside\n- stu_recordedthird00000000000 · Check · Costs at 3x · Planned · Momentum rotation v3\n- stu_recordedfirst00000000000 · Check · Momentum rotation v3 · Planned · Momentum rotation v3\nProjects: 1 shown of 1\n- prj_recorded000000000000000 · Momentum: Does momentum survive costs? · 2 studies (stu_recordedfirst00000000000, stu_recordedthird00000000000) · Momentum rotation v3\nSet aside: 1 shown of 1\n- stu_recordedsecond0000000000 · Second look: \"same as the first; costs too high\" (you, Nov 17, 2026)\nPlanned, not run yet: 3 shown of 3 (every one listed under Studies)\nVersions tried: 1 shown of 1 family\n- Momentum rotation: 5 since Nov 17, 2026\nNotes: 3 shown of 3, newest first\n- Hypothesis on study stu_recordedfirst00000000000 (your agent, Nov 17, 2026): \"momentum holds at twice the costs momentum holds at twice the costs momentum holds at twice the costs momentum holds at twice the costs momentum holds at twice the costs momentum holds at twice the…\" (the first 197 of 1,359 characters)\n- Decision on project prj_recorded000000000000000 (you, Nov 17, 2026): \"keep v3, drop the 28-day lookback\"\n- Set aside on study stu_recordedsecond0000000000 (you, Nov 17, 2026): \"same as the first; costs too high\"\nRead a study: keel_research_get(study_id=\"stu_recordedsecond0000000000\")\nRead a project: keel_research_get(project_id=\"prj_recorded000000000000000\")\nView in Keel: https://app.usekeel.io/research",
         "mode": "study",
         "seq": 0,
         "size": "view"
@@ -652,7 +673,7 @@
       "view": {
         "at": "1970-01-01T00:00:00.000Z",
         "kind": "study",
-        "markdown": "Stopping. Runs already started will finish.\nStopped at 6 of 10 runs\nResume later: keel_research_plan(study_id=\"stu_chkv3000000000000000000000\", resume=true)\nView in Keel: https://app.usekeel.io/research/stu_chkv3000000000000000000000",
+        "markdown": "Stopping. Runs already started will finish.\nResume later: keel_research_plan(study_id=\"stu_chkv3000000000000000000000\", resume=true)\nView in Keel: https://app.usekeel.io/research/stu_chkv3000000000000000000000",
         "mode": "study",
         "seq": 0,
         "size": "receipt"
@@ -671,14 +692,17 @@
       "share_id": "AchkV3oct19eightOfTen01"
     },
     "envelope": {
+      "allowance_words": "399 of 400 studies left this month · resets Dec 1",
       "cleared": [],
       "filled": [],
+      "filled_words": null,
       "hero_url": "https://app.usekeel.io/research/stu_chkv3copy00000000000000000",
       "links": {
         "app": "https://app.usekeel.io/research/stu_chkv3copy00000000000000000",
         "share": null,
         "use_signal": null
       },
+      "made_from_words": null,
       "share_url": null,
       "study": {
         "about": null,
@@ -952,6 +976,7 @@
         "marks": [
           {
             "at": "2026-04-17",
+            "at_words": "Apr 17, 2026",
             "kind": "vline",
             "label": "split"
           }
@@ -974,13 +999,15 @@
               "at": {
                 "time": "2026-09-19"
               },
-              "value": 1.9822
+              "value": 1.9822,
+              "words": "1.98×"
             },
             "low": {
               "at": {
                 "time": "2025-03-28"
               },
-              "value": 0.9617
+              "value": 0.9617,
+              "words": "0.96×"
             }
           }
         },
@@ -1031,7 +1058,7 @@
       "view": {
         "at": "1970-01-01T00:00:00.000Z",
         "kind": "study",
-        "markdown": "Growth of 1 (version 1)\nRows 1–25 of 585\n| Growth of 1 (growth) | result | Day (time) |\n|---|---|---|\n| 0.98× | Momentum rotation | 2025-03-23 |\n| 0.99× | Momentum rotation | 2025-03-24 |\n| 0.99× | Momentum rotation | 2025-03-25 |\n| 0.99× | Momentum rotation | 2025-03-26 |\n| 0.97× | Momentum rotation | 2025-03-27 |\n| 0.96× | Momentum rotation | 2025-03-28 |\n| 0.97× | Momentum rotation | 2025-03-29 |\n| 0.98× | Momentum rotation | 2025-03-30 |\n| 0.97× | Momentum rotation | 2025-03-31 |\n| 0.97× | Momentum rotation | 2025-04-01 |\n| 0.97× | Momentum rotation | 2025-04-02 |\n| 0.97× | Momentum rotation | 2025-04-03 |\n| 0.97× | Momentum rotation | 2025-04-04 |\n| 0.96× | Momentum rotation | 2025-04-05 |\n| 0.97× | Momentum rotation | 2025-04-06 |\n| 0.96× | Momentum rotation | 2025-04-07 |\n| 0.98× | Momentum rotation | 2025-04-08 |\n| 0.98× | Momentum rotation | 2025-04-09 |\n| 0.99× | Momentum rotation | 2025-04-10 |\n| 0.99× | Momentum rotation | 2025-04-11 |\n| 0.98× | Momentum rotation | 2025-04-12 |\n| 0.98× | Momentum rotation | 2025-04-13 |\n| 0.98× | Momentum rotation | 2025-04-14 |\n| 0.99× | Momentum rotation | 2025-04-15 |\n| 0.99× | Momentum rotation | 2025-04-16 |\nAcross all 585 rows: growth 0.9617 to 1.9822\nMarks: split at 2026-04-17\nMore: keel_research_get(study_id=\"stu_chkv3000000000000000000000\", view=1, cursor=\"c25\")\nView in Keel: https://app.usekeel.io/research/stu_chkv3000000000000000000000",
+        "markdown": "Growth of 1 (version 1)\nRows 1–25 of 585\n| Growth of 1 | Day |\n|---|---|\n| 0.98× | Mar 23, 2025 |\n| 0.99× | Mar 24, 2025 |\n| 0.99× | Mar 25, 2025 |\n| 0.99× | Mar 26, 2025 |\n| 0.97× | Mar 27, 2025 |\n| 0.96× | Mar 28, 2025 |\n| 0.97× | Mar 29, 2025 |\n| 0.98× | Mar 30, 2025 |\n| 0.97× | Mar 31, 2025 |\n| 0.97× | Apr 1, 2025 |\n| 0.97× | Apr 2, 2025 |\n| 0.97× | Apr 3, 2025 |\n| 0.97× | Apr 4, 2025 |\n| 0.96× | Apr 5, 2025 |\n| 0.97× | Apr 6, 2025 |\n| 0.96× | Apr 7, 2025 |\n| 0.98× | Apr 8, 2025 |\n| 0.98× | Apr 9, 2025 |\n| 0.99× | Apr 10, 2025 |\n| 0.99× | Apr 11, 2025 |\n| 0.98× | Apr 12, 2025 |\n| 0.98× | Apr 13, 2025 |\n| 0.98× | Apr 14, 2025 |\n| 0.99× | Apr 15, 2025 |\n| 0.99× | Apr 16, 2025 |\nKeys for where, sort and measures: Growth of 1 = growth, Day = time.\nAcross all 585 rows: Growth of 1 0.96× (Day Mar 28, 2025) to 1.98× (Day Sep 19, 2026)\nMarks: split at Apr 17, 2026\nMore: keel_research_get(study_id=\"stu_chkv3000000000000000000000\", view=1, cursor=\"c25\")\nView in Keel: https://app.usekeel.io/research/stu_chkv3000000000000000000000",
         "mode": "chart",
         "object": "stu_chkv3000000000000000000000",
         "seq": 0,
@@ -1113,7 +1140,7 @@
           "name": "Check a strategy",
           "short": "Check"
         },
-        "lead": "Meets 7 of 9 of your bars",
+        "lead": "Meets 7 of 9 of your bars; not met: Share of Sharpe after the split and 1 more",
         "maker": "you",
         "maker_words": "by you",
         "numbers": [
@@ -1215,7 +1242,7 @@
             "sample_words": "585 days · 100 coins",
             "unit": "probability",
             "value": 0.593,
-            "value_words": "0.59"
+            "value_words": "0.59 chance the edge is real"
           }
         ],
         "schema": "keel.research.card/2",
@@ -1749,7 +1776,7 @@
             },
             "unit": "probability",
             "value": 0.593,
-            "value_words": "0.59",
+            "value_words": "0.59 chance the edge is real",
             "withheld_reason": null
           }
         ]
@@ -1789,6 +1816,8 @@
           "family_name": "Momentum rotation",
           "keel_tried": 0,
           "keel_words": null,
+          "more_since": null,
+          "more_since_words": null,
           "since": "2026-03-04",
           "since_words": "Versions tried counted since Mar 4, 2026",
           "why": ""
@@ -1804,7 +1833,9 @@
           "fee": 0.00045,
           "slippage": 0.00045
         },
+        "costs_words": "9 bp a fill (fee 4.5 bp, slippage 4.5 bp)",
         "data": "snap_6c1f0e8a2b9d4f37",
+        "data_words": "Data as of Oct 29, 2026",
         "days": {
           "end": "2026-10-29",
           "start": "2025-03-23",
@@ -1966,7 +1997,7 @@
             "unit": "probability",
             "unit_words": "chance",
             "value": 0.593,
-            "value_words": "0.59",
+            "value_words": "0.59 chance the edge is real",
             "withheld_reason": null
           }
         ],
@@ -2571,7 +2602,7 @@
       "view": {
         "at": "1970-01-01T00:00:00.000Z",
         "kind": "study",
-        "markdown": "Check a strategy · Momentum rotation v3 · version 1 · Done · Oct 19\n7 of 9 bars met\nDays Mar 23, 2025 to Oct 29, 2026, split Apr 17, 2026 · 100 coins: top 100 by 30-day volume, picked Mar 23, 2025, kept fixed · costs 9 bp a fill · data as of Oct 29, 2026\nMeasured with Backtest v1, CostStress v1, DelayStress v1, TopCoins v1, WithoutBestCoins v1, RandomBooks v1, RepickSettings v1, Neighbours v1, DeflatedSharpe v1, ResampledPaths v1, ReturnByCoin v1, MarketStates v1, CorrelationWithRunning v1.\nYour bars (9; met: 7):\n- Share of 150 random books below yours: 99th, no interval; 150 books; your bar ≥ 75th; met\n- Share of Sharpe after the split: 0.23, no interval; 585 days · 100 coins; your bar ≥ 0.30; not met\n- Nearby settings as a share of yours: 0.15, no interval; 585 days · 100 coins; your bar ≥ 0.40; not met\n- Sharpe at twice the costs: 1.90, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe a day late: 2.09, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe on the top 30 coins: 1.32, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe without its best 5 coins: 1.01, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe re-picking the settings every 30 days: 1.68, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe discounted for versions tried: 0.59, no interval; 585 days · 100 coins; your bar ≥ 0.50; met\nNot measured: Alike v4 (on paper): no bar set.\nRuns: 24 runs, 2 reused, none failed · versions tried for Momentum rotation: 388\nCharts (13): Your checks · Growth of 1 · Before and after the split · Sharpe as costs rise · Sharpe when trading late · Sharpe on the top coins · Sharpe without the best coins · 150 random books · A year ahead, resampled · Re-picking the settings · Where the return came from · Up and down markets · How it moves with what you run — keel_research_get(study_id=\"stu_chkv3000000000000000000000\", view=0) reads the numbers behind any of them.\nView in Keel: https://app.usekeel.io/research/stu_chkv3000000000000000000000",
+        "markdown": "Check a strategy · Momentum rotation v3 · version 1 · Done · Oct 19\n7 of 9 bars met\nDays Mar 23, 2025 to Oct 29, 2026, split Apr 17, 2026 · 100 coins: top 100 by 30-day volume, picked Mar 23, 2025, kept fixed · costs 9 bp a fill · data as of Oct 29, 2026\nIn short:\n- Sharpe (daily) over the window: 1.95, no interval; 585 days · 100 coins\nYour checks (9; 7 met):\n- Share of 150 random books below yours: 99th, no interval; 150 books; your bar ≥ 75th; met\n- Share of Sharpe after the split: 0.23, no interval; 585 days · 100 coins; your bar ≥ 0.30; not met\n- Nearby settings as a share of yours: 0.15, no interval; 585 days · 100 coins; your bar ≥ 0.40; not met\n- Sharpe at twice the costs: 1.90, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe a day late: 2.09, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe on the top 30 coins: 1.32, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe without its best 5 coins: 1.01, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe re-picking the settings every 30 days: 1.68, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe discounted for versions tried: 0.59 chance the edge is real, no interval; 585 days · 100 coins; your bar ≥ 0.50; met\nNot measured: Alike v4 (on paper): no bar set.\nRuns: 24 runs, 2 reused, none failed · versions tried for Momentum rotation: 388\nCharts (13): Your checks · Growth of 1 · Before and after the split · Sharpe as costs rise · Sharpe when trading late · Sharpe on the top coins · Sharpe without the best coins · 150 random books · A year ahead, resampled · Re-picking the settings · Where the return came from · Up and down markets · How it moves with what you run. keel_research_get(study_id=\"stu_chkv3000000000000000000000\", view=0) reads the numbers behind any of them.\nMeasured with the backtest, costs from none to six times, trading 1 to 3 days late, only the most traded coins, without its best coins, random books of the same size, re-picking the settings as you go, nearby settings, Sharpe discounted for versions tried, A year ahead, resampled, where the return came from, up and down markets, alike what you already run.\nView in Keel: https://app.usekeel.io/research/stu_chkv3000000000000000000000",
         "mode": "study",
         "object": "stu_chkv3000000000000000000000",
         "seq": 0,
@@ -3082,7 +3113,9 @@
           "fee": 0.00045,
           "slippage": 0.00045
         },
+        "costs_words": "9 bp a fill (fee 4.5 bp, slippage 4.5 bp)",
         "data": "snap_6c1f0e8a2b9d4f37",
+        "data_words": "Data as of Oct 29, 2026",
         "days": {
           "end": "2026-10-29",
           "start": "2025-03-23",
@@ -3138,11 +3171,13 @@
           "label": "The backtest",
           "locked": null,
           "not_valid": 0,
+          "ranges": null,
           "refused": null,
           "reused": 1,
           "runnable": true,
           "step": "Backtest",
-          "to_run": 1
+          "to_run": 1,
+          "words": null
         }
       ],
       "study": {
@@ -3196,7 +3231,7 @@
       "view": {
         "at": "1970-01-01T00:00:00.000Z",
         "kind": "study",
-        "markdown": "Plan · Check a strategy · Momentum rotation v3 · a new study\n26 runs, 1 reused · under a minute · versions tried +0\nCounts as 1 of your 400 studies this month · 398 left after it\nDays Mar 23, 2025 to Oct 29, 2026, split Apr 17, 2026 · 100 coins: the coins Momentum rotation trades · costs 9 bp a fill · data as of Oct 29, 2026\nSteps (1): The backtest 1\nkeel_research_run(plan_id=\"pln_homecheck\") runs this plan.\nView in Keel: https://app.usekeel.io/research/new?plan=pln_homecheck",
+        "markdown": "Plan · Check a strategy · Momentum rotation v3 · a new study\n26 runs, 1 reused · under a minute · versions tried +0\nCounts as 1 of your 400 studies this month · 398 left after it\nDays Mar 23, 2025 to Oct 29, 2026, split Apr 17, 2026 · 100 coins: the coins Momentum rotation trades · costs 9 bp a fill · data as of Oct 29, 2026\nSteps (1): The backtest: 1 run\nkeel_research_run(plan_id=\"pln_homecheck\") runs this plan.\nView in Keel: https://app.usekeel.io/research/new?plan=pln_homecheck",
         "mode": "plan",
         "seq": 0,
         "size": "receipt"
@@ -3204,11 +3239,14 @@
       "words": {
         "allowance": "Counts as 1 of your 400 studies this month · 398 left after it",
         "also_changes": null,
+        "card_allowance": null,
+        "card_limit": null,
         "card_line": null,
         "confirm": null,
         "engine": null,
         "estimate": null,
         "filled": null,
+        "left_out": null,
         "limit": null,
         "linked": null,
         "not_valid": null,
@@ -3317,7 +3355,7 @@
           "name": "Check a strategy",
           "short": "Check"
         },
-        "lead": "Meets 7 of 9 of your bars",
+        "lead": "Meets 7 of 9 of your bars; not met: Share of Sharpe after the split and 1 more",
         "maker": "you",
         "maker_words": "by you",
         "numbers": [
@@ -3419,7 +3457,7 @@
             "sample_words": "585 days · 100 coins",
             "unit": "probability",
             "value": 0.593,
-            "value_words": "0.59"
+            "value_words": "0.59 chance the edge is real"
           }
         ],
         "schema": "keel.research.card/2",
@@ -3953,7 +3991,7 @@
             },
             "unit": "probability",
             "value": 0.593,
-            "value_words": "0.59",
+            "value_words": "0.59 chance the edge is real",
             "withheld_reason": null
           }
         ]
@@ -3993,6 +4031,8 @@
           "family_name": "Momentum rotation",
           "keel_tried": 0,
           "keel_words": null,
+          "more_since": null,
+          "more_since_words": null,
           "since": "2026-03-04",
           "since_words": "Versions tried counted since Mar 4, 2026",
           "why": ""
@@ -4008,7 +4048,9 @@
           "fee": 0.00045,
           "slippage": 0.00045
         },
+        "costs_words": "9 bp a fill (fee 4.5 bp, slippage 4.5 bp)",
         "data": "snap_6c1f0e8a2b9d4f37",
+        "data_words": "Data as of Oct 29, 2026",
         "days": {
           "end": "2026-10-29",
           "start": "2025-03-23",
@@ -4170,7 +4212,7 @@
             "unit": "probability",
             "unit_words": "chance",
             "value": 0.593,
-            "value_words": "0.59",
+            "value_words": "0.59 chance the edge is real",
             "withheld_reason": null
           }
         ],
@@ -4775,7 +4817,7 @@
       "view": {
         "at": "1970-01-01T00:00:00.000Z",
         "kind": "study",
-        "markdown": "Check a strategy · Momentum rotation v3 · version 1 · Done · Oct 19\n7 of 9 bars met\nDays Mar 23, 2025 to Oct 29, 2026, split Apr 17, 2026 · 100 coins: top 100 by 30-day volume, picked Mar 23, 2025, kept fixed · costs 9 bp a fill · data as of Oct 29, 2026\nMeasured with Backtest v1, CostStress v1, DelayStress v1, TopCoins v1, WithoutBestCoins v1, RandomBooks v1, RepickSettings v1, Neighbours v1, DeflatedSharpe v1, ResampledPaths v1, ReturnByCoin v1, MarketStates v1, CorrelationWithRunning v1.\nYour bars (9; met: 7):\n- Share of 150 random books below yours: 99th, no interval; 150 books; your bar ≥ 75th; met\n- Share of Sharpe after the split: 0.23, no interval; 585 days · 100 coins; your bar ≥ 0.30; not met\n- Nearby settings as a share of yours: 0.15, no interval; 585 days · 100 coins; your bar ≥ 0.40; not met\n- Sharpe at twice the costs: 1.90, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe a day late: 2.09, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe on the top 30 coins: 1.32, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe without its best 5 coins: 1.01, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe re-picking the settings every 30 days: 1.68, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe discounted for versions tried: 0.59, no interval; 585 days · 100 coins; your bar ≥ 0.50; met\nNot measured: Alike v4 (on paper): no bar set.\nRuns: 24 runs, 2 reused, none failed · versions tried for Momentum rotation: 388\nCharts (13): Your checks · Growth of 1 · Before and after the split · Sharpe as costs rise · Sharpe when trading late · Sharpe on the top coins · Sharpe without the best coins · 150 random books · A year ahead, resampled · Re-picking the settings · Where the return came from · Up and down markets · How it moves with what you run — keel_research_get(study_id=\"stu_chkv3000000000000000000000\", view=0) reads the numbers behind any of them.\nView in Keel: https://app.usekeel.io/research/stu_chkv3000000000000000000000",
+        "markdown": "Check a strategy · Momentum rotation v3 · version 1 · Done · Oct 19\n7 of 9 bars met\nDays Mar 23, 2025 to Oct 29, 2026, split Apr 17, 2026 · 100 coins: top 100 by 30-day volume, picked Mar 23, 2025, kept fixed · costs 9 bp a fill · data as of Oct 29, 2026\nIn short:\n- Sharpe (daily) over the window: 1.95, no interval; 585 days · 100 coins\nYour checks (9; 7 met):\n- Share of 150 random books below yours: 99th, no interval; 150 books; your bar ≥ 75th; met\n- Share of Sharpe after the split: 0.23, no interval; 585 days · 100 coins; your bar ≥ 0.30; not met\n- Nearby settings as a share of yours: 0.15, no interval; 585 days · 100 coins; your bar ≥ 0.40; not met\n- Sharpe at twice the costs: 1.90, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe a day late: 2.09, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe on the top 30 coins: 1.32, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe without its best 5 coins: 1.01, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe re-picking the settings every 30 days: 1.68, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe discounted for versions tried: 0.59 chance the edge is real, no interval; 585 days · 100 coins; your bar ≥ 0.50; met\nNot measured: Alike v4 (on paper): no bar set.\nRuns: 24 runs, 2 reused, none failed · versions tried for Momentum rotation: 388\nCharts (13): Your checks · Growth of 1 · Before and after the split · Sharpe as costs rise · Sharpe when trading late · Sharpe on the top coins · Sharpe without the best coins · 150 random books · A year ahead, resampled · Re-picking the settings · Where the return came from · Up and down markets · How it moves with what you run. keel_research_get(study_id=\"stu_chkv3000000000000000000000\", view=0) reads the numbers behind any of them.\nMeasured with the backtest, costs from none to six times, trading 1 to 3 days late, only the most traded coins, without its best coins, random books of the same size, re-picking the settings as you go, nearby settings, Sharpe discounted for versions tried, A year ahead, resampled, where the return came from, up and down markets, alike what you already run.\nView in Keel: https://app.usekeel.io/research/stu_chkv3000000000000000000000",
         "mode": "study",
         "object": "stu_chkv3000000000000000000000",
         "seq": 0,
@@ -5035,7 +5077,7 @@
           "name": "Check a strategy",
           "short": "Check"
         },
-        "lead": "Meets 7 of 9 of your bars",
+        "lead": "Meets 7 of 9 of your bars; not met: Share of Sharpe after the split and 1 more",
         "maker": "you",
         "maker_words": "by you",
         "numbers": [
@@ -5137,7 +5179,7 @@
             "sample_words": "585 days · 100 coins",
             "unit": "probability",
             "value": 0.593,
-            "value_words": "0.59"
+            "value_words": "0.59 chance the edge is real"
           }
         ],
         "schema": "keel.research.card/2",
@@ -5671,7 +5713,7 @@
             },
             "unit": "probability",
             "value": 0.593,
-            "value_words": "0.59",
+            "value_words": "0.59 chance the edge is real",
             "withheld_reason": null
           }
         ]
@@ -5711,6 +5753,8 @@
           "family_name": "Momentum rotation",
           "keel_tried": 0,
           "keel_words": null,
+          "more_since": null,
+          "more_since_words": null,
           "since": "2026-03-04",
           "since_words": "Versions tried counted since Mar 4, 2026",
           "why": ""
@@ -5726,7 +5770,9 @@
           "fee": 0.00045,
           "slippage": 0.00045
         },
+        "costs_words": "9 bp a fill (fee 4.5 bp, slippage 4.5 bp)",
         "data": "snap_6c1f0e8a2b9d4f37",
+        "data_words": "Data as of Oct 29, 2026",
         "days": {
           "end": "2026-10-29",
           "start": "2025-03-23",
@@ -5888,7 +5934,7 @@
             "unit": "probability",
             "unit_words": "chance",
             "value": 0.593,
-            "value_words": "0.59",
+            "value_words": "0.59 chance the edge is real",
             "withheld_reason": null
           }
         ],
@@ -6493,7 +6539,7 @@
       "view": {
         "at": "1970-01-01T00:00:00.000Z",
         "kind": "study",
-        "markdown": "Check a strategy · Momentum rotation v3 · version 1 · Done · Oct 19\n7 of 9 bars met\nDays Mar 23, 2025 to Oct 29, 2026, split Apr 17, 2026 · 100 coins: top 100 by 30-day volume, picked Mar 23, 2025, kept fixed · costs 9 bp a fill · data as of Oct 29, 2026\nMeasured with Backtest v1, CostStress v1, DelayStress v1, TopCoins v1, WithoutBestCoins v1, RandomBooks v1, RepickSettings v1, Neighbours v1, DeflatedSharpe v1, ResampledPaths v1, ReturnByCoin v1, MarketStates v1, CorrelationWithRunning v1.\nYour bars (9; met: 7):\n- Share of 150 random books below yours: 99th, no interval; 150 books; your bar ≥ 75th; met\n- Share of Sharpe after the split: 0.23, no interval; 585 days · 100 coins; your bar ≥ 0.30; not met\n- Nearby settings as a share of yours: 0.15, no interval; 585 days · 100 coins; your bar ≥ 0.40; not met\n- Sharpe at twice the costs: 1.90, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe a day late: 2.09, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe on the top 30 coins: 1.32, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe without its best 5 coins: 1.01, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe re-picking the settings every 30 days: 1.68, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe discounted for versions tried: 0.59, no interval; 585 days · 100 coins; your bar ≥ 0.50; met\nNot measured: Alike v4 (on paper): no bar set.\nRuns: 24 runs, 2 reused, none failed · versions tried for Momentum rotation: 388\nCharts (13): Your checks · Growth of 1 · Before and after the split · Sharpe as costs rise · Sharpe when trading late · Sharpe on the top coins · Sharpe without the best coins · 150 random books · A year ahead, resampled · Re-picking the settings · Where the return came from · Up and down markets · How it moves with what you run — keel_research_get(study_id=\"stu_chkv3000000000000000000000\", view=0) reads the numbers behind any of them.\nView in Keel: https://app.usekeel.io/research/stu_chkv3000000000000000000000",
+        "markdown": "Check a strategy · Momentum rotation v3 · version 1 · Done · Oct 19\n7 of 9 bars met\nDays Mar 23, 2025 to Oct 29, 2026, split Apr 17, 2026 · 100 coins: top 100 by 30-day volume, picked Mar 23, 2025, kept fixed · costs 9 bp a fill · data as of Oct 29, 2026\nIn short:\n- Sharpe (daily) over the window: 1.95, no interval; 585 days · 100 coins\nYour checks (9; 7 met):\n- Share of 150 random books below yours: 99th, no interval; 150 books; your bar ≥ 75th; met\n- Share of Sharpe after the split: 0.23, no interval; 585 days · 100 coins; your bar ≥ 0.30; not met\n- Nearby settings as a share of yours: 0.15, no interval; 585 days · 100 coins; your bar ≥ 0.40; not met\n- Sharpe at twice the costs: 1.90, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe a day late: 2.09, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe on the top 30 coins: 1.32, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe without its best 5 coins: 1.01, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe re-picking the settings every 30 days: 1.68, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe discounted for versions tried: 0.59 chance the edge is real, no interval; 585 days · 100 coins; your bar ≥ 0.50; met\nNot measured: Alike v4 (on paper): no bar set.\nRuns: 24 runs, 2 reused, none failed · versions tried for Momentum rotation: 388\nCharts (13): Your checks · Growth of 1 · Before and after the split · Sharpe as costs rise · Sharpe when trading late · Sharpe on the top coins · Sharpe without the best coins · 150 random books · A year ahead, resampled · Re-picking the settings · Where the return came from · Up and down markets · How it moves with what you run. keel_research_get(study_id=\"stu_chkv3000000000000000000000\", view=0) reads the numbers behind any of them.\nMeasured with the backtest, costs from none to six times, trading 1 to 3 days late, only the most traded coins, without its best coins, random books of the same size, re-picking the settings as you go, nearby settings, Sharpe discounted for versions tried, A year ahead, resampled, where the return came from, up and down markets, alike what you already run.\nView in Keel: https://app.usekeel.io/research/stu_chkv3000000000000000000000",
         "mode": "study",
         "object": "stu_chkv3000000000000000000000",
         "seq": 0,
@@ -6754,7 +6800,7 @@
           "name": "Check a strategy",
           "short": "Check"
         },
-        "lead": "Meets 7 of 9 of your bars",
+        "lead": "Meets 7 of 9 of your bars; not met: Share of Sharpe after the split and 1 more",
         "maker": "you",
         "maker_words": "by you",
         "numbers": [
@@ -6856,7 +6902,7 @@
             "sample_words": "585 days · 100 coins",
             "unit": "probability",
             "value": 0.593,
-            "value_words": "0.59"
+            "value_words": "0.59 chance the edge is real"
           }
         ],
         "schema": "keel.research.card/2",
@@ -7390,7 +7436,7 @@
             },
             "unit": "probability",
             "value": 0.593,
-            "value_words": "0.59",
+            "value_words": "0.59 chance the edge is real",
             "withheld_reason": null
           }
         ]
@@ -7430,6 +7476,8 @@
           "family_name": "Momentum rotation",
           "keel_tried": 0,
           "keel_words": null,
+          "more_since": null,
+          "more_since_words": null,
           "since": "2026-03-04",
           "since_words": "Versions tried counted since Mar 4, 2026",
           "why": ""
@@ -7445,7 +7493,9 @@
           "fee": 0.00045,
           "slippage": 0.00045
         },
+        "costs_words": "9 bp a fill (fee 4.5 bp, slippage 4.5 bp)",
         "data": "snap_6c1f0e8a2b9d4f37",
+        "data_words": "Data as of Oct 29, 2026",
         "days": {
           "end": "2026-10-29",
           "start": "2025-03-23",
@@ -7607,7 +7657,7 @@
             "unit": "probability",
             "unit_words": "chance",
             "value": 0.593,
-            "value_words": "0.59",
+            "value_words": "0.59 chance the edge is real",
             "withheld_reason": null
           }
         ],
@@ -8212,7 +8262,7 @@
       "view": {
         "at": "1970-01-01T00:00:00.000Z",
         "kind": "study",
-        "markdown": "Check a strategy · Momentum rotation v3 · version 1 · Done · Oct 19\n7 of 9 bars met\nDays Mar 23, 2025 to Oct 29, 2026, split Apr 17, 2026 · 100 coins: top 100 by 30-day volume, picked Mar 23, 2025, kept fixed · costs 9 bp a fill · data as of Oct 29, 2026\nMeasured with Backtest v1, CostStress v1, DelayStress v1, TopCoins v1, WithoutBestCoins v1, RandomBooks v1, RepickSettings v1, Neighbours v1, DeflatedSharpe v1, ResampledPaths v1, ReturnByCoin v1, MarketStates v1, CorrelationWithRunning v1.\nYour bars (9; met: 7):\n- Share of 150 random books below yours: 99th, no interval; 150 books; your bar ≥ 75th; met\n- Share of Sharpe after the split: 0.23, no interval; 585 days · 100 coins; your bar ≥ 0.30; not met\n- Nearby settings as a share of yours: 0.15, no interval; 585 days · 100 coins; your bar ≥ 0.40; not met\n- Sharpe at twice the costs: 1.90, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe a day late: 2.09, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe on the top 30 coins: 1.32, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe without its best 5 coins: 1.01, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe re-picking the settings every 30 days: 1.68, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe discounted for versions tried: 0.59, no interval; 585 days · 100 coins; your bar ≥ 0.50; met\nNot measured: Alike v4 (on paper): no bar set.\nRuns: 24 runs, 2 reused, none failed · versions tried for Momentum rotation: 388\nCharts (13): Your checks · Growth of 1 · Before and after the split · Sharpe as costs rise · Sharpe when trading late · Sharpe on the top coins · Sharpe without the best coins · 150 random books · A year ahead, resampled · Re-picking the settings · Where the return came from · Up and down markets · How it moves with what you run — keel_research_get(study_id=\"stu_chkv3000000000000000000000\", view=0) reads the numbers behind any of them.\nView in Keel: https://app.usekeel.io/research/stu_chkv3000000000000000000000",
+        "markdown": "Check a strategy · Momentum rotation v3 · version 1 · Done · Oct 19\n7 of 9 bars met\nDays Mar 23, 2025 to Oct 29, 2026, split Apr 17, 2026 · 100 coins: top 100 by 30-day volume, picked Mar 23, 2025, kept fixed · costs 9 bp a fill · data as of Oct 29, 2026\nIn short:\n- Sharpe (daily) over the window: 1.95, no interval; 585 days · 100 coins\nYour checks (9; 7 met):\n- Share of 150 random books below yours: 99th, no interval; 150 books; your bar ≥ 75th; met\n- Share of Sharpe after the split: 0.23, no interval; 585 days · 100 coins; your bar ≥ 0.30; not met\n- Nearby settings as a share of yours: 0.15, no interval; 585 days · 100 coins; your bar ≥ 0.40; not met\n- Sharpe at twice the costs: 1.90, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe a day late: 2.09, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe on the top 30 coins: 1.32, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe without its best 5 coins: 1.01, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe re-picking the settings every 30 days: 1.68, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe discounted for versions tried: 0.59 chance the edge is real, no interval; 585 days · 100 coins; your bar ≥ 0.50; met\nNot measured: Alike v4 (on paper): no bar set.\nRuns: 24 runs, 2 reused, none failed · versions tried for Momentum rotation: 388\nCharts (13): Your checks · Growth of 1 · Before and after the split · Sharpe as costs rise · Sharpe when trading late · Sharpe on the top coins · Sharpe without the best coins · 150 random books · A year ahead, resampled · Re-picking the settings · Where the return came from · Up and down markets · How it moves with what you run. keel_research_get(study_id=\"stu_chkv3000000000000000000000\", view=0) reads the numbers behind any of them.\nMeasured with the backtest, costs from none to six times, trading 1 to 3 days late, only the most traded coins, without its best coins, random books of the same size, re-picking the settings as you go, nearby settings, Sharpe discounted for versions tried, A year ahead, resampled, where the return came from, up and down markets, alike what you already run.\nView in Keel: https://app.usekeel.io/research/stu_chkv3000000000000000000000",
         "mode": "run",
         "object": "stu_chkv3000000000000000000000",
         "seq": 0,
@@ -8479,7 +8529,7 @@
           "name": "Check a strategy",
           "short": "Check"
         },
-        "lead": "Meets 7 of 9 of your bars",
+        "lead": "Meets 7 of 9 of your bars; not met: Share of Sharpe after the split and 1 more",
         "maker": "you",
         "maker_words": "by you",
         "numbers": [
@@ -8581,7 +8631,7 @@
             "sample_words": "585 days · 100 coins",
             "unit": "probability",
             "value": 0.593,
-            "value_words": "0.59"
+            "value_words": "0.59 chance the edge is real"
           }
         ],
         "schema": "keel.research.card/2",
@@ -9115,7 +9165,7 @@
             },
             "unit": "probability",
             "value": 0.593,
-            "value_words": "0.59",
+            "value_words": "0.59 chance the edge is real",
             "withheld_reason": null
           }
         ]
@@ -9155,6 +9205,8 @@
           "family_name": "Momentum rotation",
           "keel_tried": 0,
           "keel_words": null,
+          "more_since": null,
+          "more_since_words": null,
           "since": "2026-03-04",
           "since_words": "Versions tried counted since Mar 4, 2026",
           "why": ""
@@ -9170,7 +9222,9 @@
           "fee": 0.00045,
           "slippage": 0.00045
         },
+        "costs_words": "9 bp a fill (fee 4.5 bp, slippage 4.5 bp)",
         "data": "snap_6c1f0e8a2b9d4f37",
+        "data_words": "Data as of Oct 29, 2026",
         "days": {
           "end": "2026-10-29",
           "start": "2025-03-23",
@@ -9332,7 +9386,7 @@
             "unit": "probability",
             "unit_words": "chance",
             "value": 0.593,
-            "value_words": "0.59",
+            "value_words": "0.59 chance the edge is real",
             "withheld_reason": null
           }
         ],
@@ -9937,7 +9991,7 @@
       "view": {
         "at": "1970-01-01T00:00:00.000Z",
         "kind": "study",
-        "markdown": "Check a strategy · Momentum rotation v3 · version 1 · Done · Oct 19\n7 of 9 bars met\nDays Mar 23, 2025 to Oct 29, 2026, split Apr 17, 2026 · 100 coins: top 100 by 30-day volume, picked Mar 23, 2025, kept fixed · costs 9 bp a fill · data as of Oct 29, 2026\nMeasured with Backtest v1, CostStress v1, DelayStress v1, TopCoins v1, WithoutBestCoins v1, RandomBooks v1, RepickSettings v1, Neighbours v1, DeflatedSharpe v1, ResampledPaths v1, ReturnByCoin v1, MarketStates v1, CorrelationWithRunning v1.\nYour bars (9; met: 7):\n- Share of 150 random books below yours: 99th, no interval; 150 books; your bar ≥ 75th; met\n- Share of Sharpe after the split: 0.23, no interval; 585 days · 100 coins; your bar ≥ 0.30; not met\n- Nearby settings as a share of yours: 0.15, no interval; 585 days · 100 coins; your bar ≥ 0.40; not met\n- Sharpe at twice the costs: 1.90, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe a day late: 2.09, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe on the top 30 coins: 1.32, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe without its best 5 coins: 1.01, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe re-picking the settings every 30 days: 1.68, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe discounted for versions tried: 0.59, no interval; 585 days · 100 coins; your bar ≥ 0.50; met\nNot measured: Alike v4 (on paper): no bar set.\nRuns: 24 runs, 2 reused, none failed · versions tried for Momentum rotation: 388\nCharts (13): Your checks · Growth of 1 · Before and after the split · Sharpe as costs rise · Sharpe when trading late · Sharpe on the top coins · Sharpe without the best coins · 150 random books · A year ahead, resampled · Re-picking the settings · Where the return came from · Up and down markets · How it moves with what you run — keel_research_get(study_id=\"stu_chkv3000000000000000000000\", view=0) reads the numbers behind any of them.\nView in Keel: https://app.usekeel.io/research/stu_chkv3000000000000000000000",
+        "markdown": "Check a strategy · Momentum rotation v3 · version 1 · Done · Oct 19\n7 of 9 bars met\nDays Mar 23, 2025 to Oct 29, 2026, split Apr 17, 2026 · 100 coins: top 100 by 30-day volume, picked Mar 23, 2025, kept fixed · costs 9 bp a fill · data as of Oct 29, 2026\nIn short:\n- Sharpe (daily) over the window: 1.95, no interval; 585 days · 100 coins\nYour checks (9; 7 met):\n- Share of 150 random books below yours: 99th, no interval; 150 books; your bar ≥ 75th; met\n- Share of Sharpe after the split: 0.23, no interval; 585 days · 100 coins; your bar ≥ 0.30; not met\n- Nearby settings as a share of yours: 0.15, no interval; 585 days · 100 coins; your bar ≥ 0.40; not met\n- Sharpe at twice the costs: 1.90, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe a day late: 2.09, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe on the top 30 coins: 1.32, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe without its best 5 coins: 1.01, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe re-picking the settings every 30 days: 1.68, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe discounted for versions tried: 0.59 chance the edge is real, no interval; 585 days · 100 coins; your bar ≥ 0.50; met\nNot measured: Alike v4 (on paper): no bar set.\nRuns: 24 runs, 2 reused, none failed · versions tried for Momentum rotation: 388\nCharts (13): Your checks · Growth of 1 · Before and after the split · Sharpe as costs rise · Sharpe when trading late · Sharpe on the top coins · Sharpe without the best coins · 150 random books · A year ahead, resampled · Re-picking the settings · Where the return came from · Up and down markets · How it moves with what you run. keel_research_get(study_id=\"stu_chkv3000000000000000000000\", view=0) reads the numbers behind any of them.\nMeasured with the backtest, costs from none to six times, trading 1 to 3 days late, only the most traded coins, without its best coins, random books of the same size, re-picking the settings as you go, nearby settings, Sharpe discounted for versions tried, A year ahead, resampled, where the return came from, up and down markets, alike what you already run.\nView in Keel: https://app.usekeel.io/research/stu_chkv3000000000000000000000",
         "mode": "study",
         "object": "stu_chkv3000000000000000000000",
         "seq": 0,
@@ -10200,7 +10254,7 @@
           "name": "Check a strategy",
           "short": "Check"
         },
-        "lead": "Meets 7 of 9 of your bars",
+        "lead": "Meets 7 of 9 of your bars; not met: Share of Sharpe after the split and 1 more",
         "maker": "you",
         "maker_words": "by you",
         "numbers": [
@@ -10302,7 +10356,7 @@
             "sample_words": "585 days · 100 coins",
             "unit": "probability",
             "value": 0.593,
-            "value_words": "0.59"
+            "value_words": "0.59 chance the edge is real"
           }
         ],
         "schema": "keel.research.card/2",
@@ -10836,7 +10890,7 @@
             },
             "unit": "probability",
             "value": 0.593,
-            "value_words": "0.59",
+            "value_words": "0.59 chance the edge is real",
             "withheld_reason": null
           }
         ]
@@ -10876,6 +10930,8 @@
           "family_name": "Momentum rotation",
           "keel_tried": 0,
           "keel_words": null,
+          "more_since": null,
+          "more_since_words": null,
           "since": "2026-03-04",
           "since_words": "Versions tried counted since Mar 4, 2026",
           "why": ""
@@ -10891,7 +10947,9 @@
           "fee": 0.00045,
           "slippage": 0.00045
         },
+        "costs_words": "9 bp a fill (fee 4.5 bp, slippage 4.5 bp)",
         "data": "snap_6c1f0e8a2b9d4f37",
+        "data_words": "Data as of Oct 29, 2026",
         "days": {
           "end": "2026-10-29",
           "start": "2025-03-23",
@@ -11053,7 +11111,7 @@
             "unit": "probability",
             "unit_words": "chance",
             "value": 0.593,
-            "value_words": "0.59",
+            "value_words": "0.59 chance the edge is real",
             "withheld_reason": null
           }
         ],
@@ -11658,7 +11716,7 @@
       "view": {
         "at": "1970-01-01T00:00:00.000Z",
         "kind": "study",
-        "markdown": "Check a strategy · Momentum rotation v3 · version 1 · Done · Oct 19\n7 of 9 bars met\nDays Mar 23, 2025 to Oct 29, 2026, split Apr 17, 2026 · 100 coins: top 100 by 30-day volume, picked Mar 23, 2025, kept fixed · costs 9 bp a fill · data as of Oct 29, 2026\nMeasured with Backtest v1, CostStress v1, DelayStress v1, TopCoins v1, WithoutBestCoins v1, RandomBooks v1, RepickSettings v1, Neighbours v1, DeflatedSharpe v1, ResampledPaths v1, ReturnByCoin v1, MarketStates v1, CorrelationWithRunning v1.\nYour bars (9; met: 7):\n- Share of 150 random books below yours: 99th, no interval; 150 books; your bar ≥ 75th; met\n- Share of Sharpe after the split: 0.23, no interval; 585 days · 100 coins; your bar ≥ 0.30; not met\n- Nearby settings as a share of yours: 0.15, no interval; 585 days · 100 coins; your bar ≥ 0.40; not met\n- Sharpe at twice the costs: 1.90, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe a day late: 2.09, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe on the top 30 coins: 1.32, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe without its best 5 coins: 1.01, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe re-picking the settings every 30 days: 1.68, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe discounted for versions tried: 0.59, no interval; 585 days · 100 coins; your bar ≥ 0.50; met\nNot measured: Alike v4 (on paper): no bar set.\nRuns: 24 runs, 2 reused, none failed · versions tried for Momentum rotation: 388\nCharts (13): Your checks · Growth of 1 · Before and after the split · Sharpe as costs rise · Sharpe when trading late · Sharpe on the top coins · Sharpe without the best coins · 150 random books · A year ahead, resampled · Re-picking the settings · Where the return came from · Up and down markets · How it moves with what you run — keel_research_get(study_id=\"stu_chkv3000000000000000000000\", view=0) reads the numbers behind any of them.\nView in Keel: https://app.usekeel.io/research/stu_chkv3000000000000000000000",
+        "markdown": "Check a strategy · Momentum rotation v3 · version 1 · Done · Oct 19\n7 of 9 bars met\nDays Mar 23, 2025 to Oct 29, 2026, split Apr 17, 2026 · 100 coins: top 100 by 30-day volume, picked Mar 23, 2025, kept fixed · costs 9 bp a fill · data as of Oct 29, 2026\nIn short:\n- Sharpe (daily) over the window: 1.95, no interval; 585 days · 100 coins\nYour checks (9; 7 met):\n- Share of 150 random books below yours: 99th, no interval; 150 books; your bar ≥ 75th; met\n- Share of Sharpe after the split: 0.23, no interval; 585 days · 100 coins; your bar ≥ 0.30; not met\n- Nearby settings as a share of yours: 0.15, no interval; 585 days · 100 coins; your bar ≥ 0.40; not met\n- Sharpe at twice the costs: 1.90, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe a day late: 2.09, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe on the top 30 coins: 1.32, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe without its best 5 coins: 1.01, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe re-picking the settings every 30 days: 1.68, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe discounted for versions tried: 0.59 chance the edge is real, no interval; 585 days · 100 coins; your bar ≥ 0.50; met\nNot measured: Alike v4 (on paper): no bar set.\nRuns: 24 runs, 2 reused, none failed · versions tried for Momentum rotation: 388\nCharts (13): Your checks · Growth of 1 · Before and after the split · Sharpe as costs rise · Sharpe when trading late · Sharpe on the top coins · Sharpe without the best coins · 150 random books · A year ahead, resampled · Re-picking the settings · Where the return came from · Up and down markets · How it moves with what you run. keel_research_get(study_id=\"stu_chkv3000000000000000000000\", view=0) reads the numbers behind any of them.\nMeasured with the backtest, costs from none to six times, trading 1 to 3 days late, only the most traded coins, without its best coins, random books of the same size, re-picking the settings as you go, nearby settings, Sharpe discounted for versions tried, A year ahead, resampled, where the return came from, up and down markets, alike what you already run.\nView in Keel: https://app.usekeel.io/research/stu_chkv3000000000000000000000",
         "mode": "study",
         "object": "stu_chkv3000000000000000000000",
         "seq": 0,
@@ -11938,7 +11996,7 @@
       "view": {
         "at": "1970-01-01T00:00:00.000Z",
         "kind": "study",
-        "markdown": "Shares of stu_chkv3000000000000000000000: 0\nView in Keel: https://app.usekeel.io/research/stu_chkv3000000000000000000000",
+        "markdown": "Shared links of this study: 0\nView in Keel: https://app.usekeel.io/research/stu_chkv3000000000000000000000",
         "mode": "study",
         "seq": 0,
         "size": "view"
@@ -12185,7 +12243,7 @@
       "view": {
         "at": "1970-01-01T00:00:00.000Z",
         "kind": "study",
-        "markdown": "Steps (43), catalog keel.research.steps/1#43\n- CostStress v1: Runs the strategy with its fees and slippage multiplied, funding unchanged, and serves each arm's result.\nView in Keel: https://app.usekeel.io/research",
+        "markdown": "Steps (43)\n- Costs from none to six times (CostStress): Runs the strategy with its fees and slippage multiplied, funding unchanged, and serves each arm's result.\nView in Keel: https://app.usekeel.io/research",
         "mode": "study",
         "seq": 0,
         "size": "view"
@@ -12226,7 +12284,7 @@
           "name": "Check a strategy",
           "short": "Check"
         },
-        "lead": "Meets 7 of 9 of your bars",
+        "lead": "Meets 7 of 9 of your bars; not met: Share of Sharpe after the split and 1 more",
         "maker": "you",
         "maker_words": "by you",
         "numbers": [
@@ -12328,7 +12386,7 @@
             "sample_words": "585 days · 100 coins",
             "unit": "probability",
             "value": 0.593,
-            "value_words": "0.59"
+            "value_words": "0.59 chance the edge is real"
           }
         ],
         "schema": "keel.research.card/2",
@@ -12862,7 +12920,7 @@
             },
             "unit": "probability",
             "value": 0.593,
-            "value_words": "0.59",
+            "value_words": "0.59 chance the edge is real",
             "withheld_reason": null
           }
         ]
@@ -12902,6 +12960,8 @@
           "family_name": "Momentum rotation",
           "keel_tried": 0,
           "keel_words": null,
+          "more_since": null,
+          "more_since_words": null,
           "since": "2026-03-04",
           "since_words": "Versions tried counted since Mar 4, 2026",
           "why": ""
@@ -12917,7 +12977,9 @@
           "fee": 0.00045,
           "slippage": 0.00045
         },
+        "costs_words": "9 bp a fill (fee 4.5 bp, slippage 4.5 bp)",
         "data": "snap_6c1f0e8a2b9d4f37",
+        "data_words": "Data as of Oct 29, 2026",
         "days": {
           "end": "2026-10-29",
           "start": "2025-03-23",
@@ -13079,7 +13141,7 @@
             "unit": "probability",
             "unit_words": "chance",
             "value": 0.593,
-            "value_words": "0.59",
+            "value_words": "0.59 chance the edge is real",
             "withheld_reason": null
           }
         ],
@@ -13684,7 +13746,7 @@
       "view": {
         "at": "1970-01-01T00:00:00.000Z",
         "kind": "study",
-        "markdown": "Saved revision 2.\nCheck a strategy · Momentum rotation v3 · version 1 · Done · Oct 19\n7 of 9 bars met\nDays Mar 23, 2025 to Oct 29, 2026, split Apr 17, 2026 · 100 coins: top 100 by 30-day volume, picked Mar 23, 2025, kept fixed · costs 9 bp a fill · data as of Oct 29, 2026\nMeasured with Backtest v1, CostStress v1, DelayStress v1, TopCoins v1, WithoutBestCoins v1, RandomBooks v1, RepickSettings v1, Neighbours v1, DeflatedSharpe v1, ResampledPaths v1, ReturnByCoin v1, MarketStates v1, CorrelationWithRunning v1.\nYour bars (9; met: 7):\n- Share of 150 random books below yours: 99th, no interval; 150 books; your bar ≥ 75th; met\n- Share of Sharpe after the split: 0.23, no interval; 585 days · 100 coins; your bar ≥ 0.30; not met\n- Nearby settings as a share of yours: 0.15, no interval; 585 days · 100 coins; your bar ≥ 0.40; not met\n- Sharpe at twice the costs: 1.90, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe a day late: 2.09, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe on the top 30 coins: 1.32, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe without its best 5 coins: 1.01, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe re-picking the settings every 30 days: 1.68, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe discounted for versions tried: 0.59, no interval; 585 days · 100 coins; your bar ≥ 0.50; met\nNot measured: Alike v4 (on paper): no bar set.\nRuns: 24 runs, 2 reused, none failed · versions tried for Momentum rotation: 388\nCharts (13): Your checks · Growth of 1 · Before and after the split · Sharpe as costs rise · Sharpe when trading late · Sharpe on the top coins · Sharpe without the best coins · 150 random books · A year ahead, resampled · Re-picking the settings · Where the return came from · Up and down markets · How it moves with what you run — keel_research_get(study_id=\"stu_chkv3000000000000000000000\", view=0) reads the numbers behind any of them.\nView in Keel: https://app.usekeel.io/research/stu_chkv3000000000000000000000",
+        "markdown": "Saved revision 2.\nCheck a strategy · Momentum rotation v3 · version 1 · Done · Oct 19\n7 of 9 bars met\nDays Mar 23, 2025 to Oct 29, 2026, split Apr 17, 2026 · 100 coins: top 100 by 30-day volume, picked Mar 23, 2025, kept fixed · costs 9 bp a fill · data as of Oct 29, 2026\nIn short:\n- Sharpe (daily) over the window: 1.95, no interval; 585 days · 100 coins\nYour checks (9; 7 met):\n- Share of 150 random books below yours: 99th, no interval; 150 books; your bar ≥ 75th; met\n- Share of Sharpe after the split: 0.23, no interval; 585 days · 100 coins; your bar ≥ 0.30; not met\n- Nearby settings as a share of yours: 0.15, no interval; 585 days · 100 coins; your bar ≥ 0.40; not met\n- Sharpe at twice the costs: 1.90, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe a day late: 2.09, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe on the top 30 coins: 1.32, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe without its best 5 coins: 1.01, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe re-picking the settings every 30 days: 1.68, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe discounted for versions tried: 0.59 chance the edge is real, no interval; 585 days · 100 coins; your bar ≥ 0.50; met\nNot measured: Alike v4 (on paper): no bar set.\nRuns: 24 runs, 2 reused, none failed · versions tried for Momentum rotation: 388\nCharts (13): Your checks · Growth of 1 · Before and after the split · Sharpe as costs rise · Sharpe when trading late · Sharpe on the top coins · Sharpe without the best coins · 150 random books · A year ahead, resampled · Re-picking the settings · Where the return came from · Up and down markets · How it moves with what you run. keel_research_get(study_id=\"stu_chkv3000000000000000000000\", view=0) reads the numbers behind any of them.\nMeasured with the backtest, costs from none to six times, trading 1 to 3 days late, only the most traded coins, without its best coins, random books of the same size, re-picking the settings as you go, nearby settings, Sharpe discounted for versions tried, A year ahead, resampled, where the return came from, up and down markets, alike what you already run.\nView in Keel: https://app.usekeel.io/research/stu_chkv3000000000000000000000",
         "mode": "study",
         "object": "stu_chkv3000000000000000000000",
         "seq": 0,
@@ -13948,7 +14010,7 @@
           "name": "Check a strategy",
           "short": "Check"
         },
-        "lead": "Meets 7 of 9 of your bars",
+        "lead": "Meets 7 of 9 of your bars; not met: Share of Sharpe after the split and 1 more",
         "maker": "you",
         "maker_words": "by you",
         "numbers": [
@@ -14050,7 +14112,7 @@
             "sample_words": "585 days · 100 coins",
             "unit": "probability",
             "value": 0.593,
-            "value_words": "0.59"
+            "value_words": "0.59 chance the edge is real"
           }
         ],
         "schema": "keel.research.card/2",
@@ -14584,7 +14646,7 @@
             },
             "unit": "probability",
             "value": 0.593,
-            "value_words": "0.59",
+            "value_words": "0.59 chance the edge is real",
             "withheld_reason": null
           }
         ]
@@ -14624,6 +14686,8 @@
           "family_name": "Momentum rotation",
           "keel_tried": 0,
           "keel_words": null,
+          "more_since": null,
+          "more_since_words": null,
           "since": "2026-03-04",
           "since_words": "Versions tried counted since Mar 4, 2026",
           "why": ""
@@ -14639,7 +14703,9 @@
           "fee": 0.00045,
           "slippage": 0.00045
         },
+        "costs_words": "9 bp a fill (fee 4.5 bp, slippage 4.5 bp)",
         "data": "snap_6c1f0e8a2b9d4f37",
+        "data_words": "Data as of Oct 29, 2026",
         "days": {
           "end": "2026-10-29",
           "start": "2025-03-23",
@@ -14801,7 +14867,7 @@
             "unit": "probability",
             "unit_words": "chance",
             "value": 0.593,
-            "value_words": "0.59",
+            "value_words": "0.59 chance the edge is real",
             "withheld_reason": null
           }
         ],
@@ -15406,7 +15472,7 @@
       "view": {
         "at": "1970-01-01T00:00:00.000Z",
         "kind": "study",
-        "markdown": "Check a strategy · Momentum rotation v3 · version 1 · Done · Oct 19\n7 of 9 bars met\nDays Mar 23, 2025 to Oct 29, 2026, split Apr 17, 2026 · 100 coins: top 100 by 30-day volume, picked Mar 23, 2025, kept fixed · costs 9 bp a fill · data as of Oct 29, 2026\nMeasured with Backtest v1, CostStress v1, DelayStress v1, TopCoins v1, WithoutBestCoins v1, RandomBooks v1, RepickSettings v1, Neighbours v1, DeflatedSharpe v1, ResampledPaths v1, ReturnByCoin v1, MarketStates v1, CorrelationWithRunning v1.\nYour bars (9; met: 7):\n- Share of 150 random books below yours: 99th, no interval; 150 books; your bar ≥ 75th; met\n- Share of Sharpe after the split: 0.23, no interval; 585 days · 100 coins; your bar ≥ 0.30; not met\n- Nearby settings as a share of yours: 0.15, no interval; 585 days · 100 coins; your bar ≥ 0.40; not met\n- Sharpe at twice the costs: 1.90, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe a day late: 2.09, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe on the top 30 coins: 1.32, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe without its best 5 coins: 1.01, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe re-picking the settings every 30 days: 1.68, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe discounted for versions tried: 0.59, no interval; 585 days · 100 coins; your bar ≥ 0.50; met\nNot measured: Alike v4 (on paper): no bar set.\nRuns: 24 runs, 2 reused, none failed · versions tried for Momentum rotation: 388\nCharts (13): Your checks · Growth of 1 · Before and after the split · Sharpe as costs rise · Sharpe when trading late · Sharpe on the top coins · Sharpe without the best coins · 150 random books · A year ahead, resampled · Re-picking the settings · Where the return came from · Up and down markets · How it moves with what you run — keel_research_get(study_id=\"stu_chkv3000000000000000000000\", view=0) reads the numbers behind any of them.\nView in Keel: https://app.usekeel.io/research/stu_chkv3000000000000000000000",
+        "markdown": "Check a strategy · Momentum rotation v3 · version 1 · Done · Oct 19\n7 of 9 bars met\nDays Mar 23, 2025 to Oct 29, 2026, split Apr 17, 2026 · 100 coins: top 100 by 30-day volume, picked Mar 23, 2025, kept fixed · costs 9 bp a fill · data as of Oct 29, 2026\nIn short:\n- Sharpe (daily) over the window: 1.95, no interval; 585 days · 100 coins\nYour checks (9; 7 met):\n- Share of 150 random books below yours: 99th, no interval; 150 books; your bar ≥ 75th; met\n- Share of Sharpe after the split: 0.23, no interval; 585 days · 100 coins; your bar ≥ 0.30; not met\n- Nearby settings as a share of yours: 0.15, no interval; 585 days · 100 coins; your bar ≥ 0.40; not met\n- Sharpe at twice the costs: 1.90, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe a day late: 2.09, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe on the top 30 coins: 1.32, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe without its best 5 coins: 1.01, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe re-picking the settings every 30 days: 1.68, no interval; 585 days · 100 coins; your bar ≥ 0.30; met\n- Sharpe discounted for versions tried: 0.59 chance the edge is real, no interval; 585 days · 100 coins; your bar ≥ 0.50; met\nNot measured: Alike v4 (on paper): no bar set.\nRuns: 24 runs, 2 reused, none failed · versions tried for Momentum rotation: 388\nCharts (13): Your checks · Growth of 1 · Before and after the split · Sharpe as costs rise · Sharpe when trading late · Sharpe on the top coins · Sharpe without the best coins · 150 random books · A year ahead, resampled · Re-picking the settings · Where the return came from · Up and down markets · How it moves with what you run. keel_research_get(study_id=\"stu_chkv3000000000000000000000\", view=0) reads the numbers behind any of them.\nMeasured with the backtest, costs from none to six times, trading 1 to 3 days late, only the most traded coins, without its best coins, random books of the same size, re-picking the settings as you go, nearby settings, Sharpe discounted for versions tried, A year ahead, resampled, where the return came from, up and down markets, alike what you already run.\nView in Keel: https://app.usekeel.io/research/stu_chkv3000000000000000000000",
         "mode": "study",
         "object": "stu_chkv3000000000000000000000",
         "seq": 0,

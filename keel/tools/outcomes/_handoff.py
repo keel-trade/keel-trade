@@ -63,6 +63,7 @@ from keel.errors import (
     floor_wall_lines,
     limit_more_clause,
     more_plan_names,
+    plan_limit_detail,
     quota_allowance_note,
     quota_headline,
     quota_is_concurrent_cap,
@@ -474,6 +475,9 @@ def maybe_quota_handoff(
         "plan",
         "plan_name",
         "more_plans",
+        # The structured free way forward (spec 02 §L2): which run to stop,
+        # how to free a saved screen, the reset a plan is saved for.
+        "remedy",
     ):
         if parsed.get(key) is not None:
             limit_details[key] = parsed[key]
@@ -555,7 +559,9 @@ def maybe_floor_handoff(
     info = floor_info(detail)
     lines = floor_wall_lines(info)
     limit_details: dict[str, Any] = {"unit": info["unit"], "kind": "floor"}
-    for key in ("floor", "requested", "plan", "plan_name"):
+    # `applies` names the side (plans v3 split the paper floor from the live
+    # one, spec 02 §C4.7); `remedy` lists the admitted clocks (§L2).
+    for key in ("floor", "requested", "applies", "plan", "plan_name", "remedy"):
         if info.get(key) is not None:
             limit_details[key] = info[key]
     names = more_plan_names(info)
@@ -590,7 +596,7 @@ def maybe_floor_handoff(
         suggestion=suggestion,
         require_do_nothing=False,
     )
-    handoff.detail = dict(detail)
+    handoff.detail = plan_limit_detail(detail)
     return handoff
 
 

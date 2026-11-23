@@ -228,7 +228,8 @@ LISTED_RESEARCH_COPY: dict[str, str] = {
     "keel_app_link": (
         "Returns a link to view and manage this strategy in the Keel web app. A strategy id "
         "(`str_...`) links to the strategy editor, a backtest run id (`btr_...`) to the tearsheet, "
-        "a running strategy's id (`dep_...`) to its page, a study id (`stu_...`) to the study, and a "
+        "a running strategy's id (`dep_...`) to its page, a study id (`stu_...`) to the study, a project "
+        "id (`prj_...`) to the project, and a "
         "share id to its public page (a shared study's 23-character id to its snapshot). It returns "
         "the link as `url`; nothing is opened."
     ),

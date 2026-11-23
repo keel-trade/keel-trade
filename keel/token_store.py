@@ -197,7 +197,7 @@ def _session_expired() -> AuthError:
     return AuthError(
         "Your session has expired. Run `keel auth login` to re-authenticate.",
         suggestion="keel auth login",
-        docs_url="https://app.usekeel.io/settings?tab=api-keys",
+        docs_url=_api_keys_url(),
     )
 
 
@@ -251,7 +251,7 @@ def attempt_refresh(config: KeelConfig, *, timeout: float = 10.0) -> KeelConfig:
         raise AuthError(
             "No refresh token available. Run `keel auth login` to authenticate.",
             suggestion="keel auth login",
-            docs_url="https://app.usekeel.io/settings?tab=api-keys",
+            docs_url=_api_keys_url(),
         )
     with stored_login_lock(timeout + _LOCK_WAIT_MARGIN_SECONDS):
         newer = _newer_stored_login(config)
@@ -315,3 +315,10 @@ __all__ = [
     "store_oauth_tokens",
     "stored_login_lock",
 ]
+
+
+def _api_keys_url() -> str:
+    """The API-keys page on the app this process links (``keel.config.api_keys_url``)."""
+    from keel.config import api_keys_url
+
+    return api_keys_url()

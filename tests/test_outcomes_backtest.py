@@ -1420,12 +1420,14 @@ def test_backtest_run_renders_one_sentence_from_the_served_quota_block(ctx):
             "resets_at": "2026-09-22T00:00:00Z",
         }
     ], "the served block rides through projected to its allow-list"
-    assert env["quota_notice"] == "6 of 50 backtests left; resets Tue 22 Sep."
+    assert env["quota_notice"] == "6 of 50 backtests left; resets Sep 22."
 
 
 def test_backtest_run_headline_is_the_most_urgent_unit(ctx):
-    """Two notable units → the sentence names the binding one, and BOTH
-    still ride in `quota` so nothing is dropped."""
+    """Compute is silent (PLANS-REVIEW R7): a compute block an older server
+    stamped `critical` is never a count, so the runs line speaks and only the
+    runs block rides `quota`. A spent compute block rides `quota` (the
+    second arm) while the runs line still speaks."""
     runs = _quota_block(tier="notice", used=25, remaining=25)
     compute = _quota_block(
         unit="backtest_compute_seconds",
@@ -1442,8 +1444,19 @@ def test_backtest_run_headline_is_the_most_urgent_unit(ctx):
             .handler({"strategy_id": "strat_xyz", "wait": False, "skip_readiness": True}, ctx)
             .to_envelope()
         )
-    assert env["quota_notice"].startswith("50 s of 1,500 s backtest compute time left;")
-    assert len(env["quota"]) == 2
+    assert env["quota_notice"] == "25 of 50 backtests left; resets Sep 22."
+    assert [q["unit"] for q in env["quota"]] == ["backtest_runs"]
+    assert "compute" not in env["quota_notice"]
+    spent = {**compute, "used": 1500, "remaining": 0, "tier": "exhausted"}
+    submitted = {"id": "bt_q3", "status": "queued", "quota": [runs, spent]}
+    with patch("keel.client.KeelClient.post", return_value=submitted):
+        env = (
+            OUTCOMES["keel_backtest_run"]
+            .handler({"strategy_id": "strat_xyz", "wait": False, "skip_readiness": True}, ctx)
+            .to_envelope()
+        )
+    assert env["quota_notice"] == "25 of 50 backtests left; resets Sep 22."
+    assert [q["unit"] for q in env["quota"]] == ["backtest_runs", "backtest_compute_seconds"]
 
 
 def test_backtest_run_omits_quota_keys_when_nothing_is_notable(ctx):
@@ -1495,23 +1508,28 @@ def test_backtest_run_critical_notice_names_the_plans_that_include_more(ctx):
         block = _quota_block(tier="critical", used=46, remaining=4, plan=plan, higher_plans=higher)
         env = _submit(ctx, [block])
         more = more_clause("consumable", cat.names(higher))
-        expected = "4 of 50 backtests left; resets Tue 22 Sep." + (f" {more}" if more else "")
+        expected = "4 of 50 backtests left; resets Sep 22." + (f" {more}" if more else "")
         assert env["quota_notice"] == expected, plan
         blob = json.dumps(env)
         assert "higher_plans" not in blob
         assert not re.search(r"\b(?:1,?000|4,?000)\b", blob), "no other plan's number"
         keys = {"unit", "limit", "used", "remaining", "resets_at"}
         assert set(env["quota"][0]) == (keys | {"more_plans"} if higher else keys), plan
-    # Control: the 50% notice stays a bare count, even with names served.
+    # Control: at half used (the 50% notice) it stays a bare count, even with names served and an older
+    # server's "critical" stamp (THE near rule reads the counts, R17).
     notice = _submit(
         ctx,
         [
             _quota_block(
-                tier="notice", plan="free", higher_plans=cat.higher_plans("free", "backtest_runs")
+                tier="critical",
+                used=25,
+                remaining=25,
+                plan="free",
+                higher_plans=cat.higher_plans("free", "backtest_runs"),
             )
         ],
     )
-    assert notice["quota_notice"] == "6 of 50 backtests left; resets Tue 22 Sep."
+    assert notice["quota_notice"] == "25 of 50 backtests left; resets Sep 22."
     from keel.tools.outcomes._handoff import _FORBIDDEN_UPSELL_RE
 
     assert not _FORBIDDEN_UPSELL_RE.search(env["quota_notice"]), "facts, not a pitch"
@@ -1523,7 +1541,7 @@ def test_backtest_run_carries_the_timeframe_floor_heads_up(ctx):
     Control: a submit without it carries no `floor_notice`."""
     faster = cat.faster_plans("free")
     for entry in faster:
-        entry["floor"] = cat.floor_of(entry["plan"])
+        entry["floor"] = cat.floor_of(entry["plan"], entry["version"])
     submitted = {
         "id": "bt_floor",
         "status": "queued",
@@ -1543,7 +1561,7 @@ def test_backtest_run_carries_the_timeframe_floor_heads_up(ctx):
             .to_envelope()
         )
     assert env["floor_notice"] == (
-        "Note: paper and live on Free need 1h or slower; this is 15min. Trader and Pro run faster."
+        "Paper and live on Free run at 1 hour or slower; this backtest is 15min. Trader, Quant and Pro run faster."
     )
     assert '"5min"' not in json.dumps(env) and "serving_floor" not in env
     plain = {"id": "bt_ok", "status": "queued", "strategy_id": "strat_xyz"}
@@ -1590,7 +1608,7 @@ _FIRST_WEEK = {
 #: The clause `_FIRST_WEEK` folds into a backtests line (Q-7601 fix round),
 #: computed from it; the exact words are pinned once in
 #: test_plan_limits_first_week_golden.py.
-_FIRST_WEEK_CLAUSE = f"({_FIRST_WEEK['remaining']} first-week extras until Tue 13 Oct)"
+_FIRST_WEEK_CLAUSE = f"({_FIRST_WEEK['remaining']} first-week extras until Oct 13)"
 
 
 def _submit(ctx, quota: list[dict]) -> dict:
@@ -1610,9 +1628,7 @@ def test_first_week_rides_a_notice_that_renders_without_it(ctx):
         limit=250, used=210, remaining=40, tier="critical", first_week=dict(_FIRST_WEEK)
     )
     env = _submit(ctx, [runs])
-    assert env["quota_notice"] == (
-        f"40 of 250 backtests left {_FIRST_WEEK_CLAUSE}; resets Tue 22 Sep."
-    )
+    assert env["quota_notice"] == (f"40 of 250 backtests left {_FIRST_WEEK_CLAUSE}; resets Sep 22.")
     assert env["quota"][0]["first_week"] == {
         "granted": 200,
         "remaining": 40,
@@ -1643,9 +1659,9 @@ def test_first_week_never_makes_a_response_carry_a_quota_line(ctx):
 
 def test_first_week_below_the_runs_threshold_adds_nothing(ctx):
     """The runs unit is still in the `ok` tier, so keel-api sent only the
-    compute block — which carries its own `first_week` (§1.8). The compute
-    line renders as before, and no first-week sentence rides it: the
-    sentence counts backtests, and the runs block is not in the response."""
+    compute block — which carries its own `first_week` (§1.8). Compute is
+    silent (PLANS-REVIEW R7): no line and no block until it is spent, and no
+    first-week sentence rides anything."""
     compute = _quota_block(
         unit="backtest_compute_seconds",
         label="backtest compute time",
@@ -1656,9 +1672,7 @@ def test_first_week_below_the_runs_threshold_adds_nothing(ctx):
         first_week={"granted": 6000, "remaining": 600, "ends_at": "2026-10-13T15:02:11Z"},
     )
     env = _submit(ctx, [compute])
-    assert env["quota_notice"] == (
-        "600 s of 7,500 s backtest compute time left; resets Tue 22 Sep."
-    )
+    assert "quota_notice" not in env and "quota" not in env, env
     assert "first-week" not in json.dumps(env)
 
 
@@ -1680,7 +1694,7 @@ def test_no_first_week_block_leaves_the_notice_unchanged(ctx):
     """Control arm: the same critical block without `first_week` renders the
     pre-existing line and the pre-existing projection, byte for byte."""
     env = _submit(ctx, [_quota_block(limit=250, used=210, remaining=40, tier="critical")])
-    assert env["quota_notice"] == "40 of 250 backtests left; resets Tue 22 Sep."
+    assert env["quota_notice"] == "40 of 250 backtests left; resets Sep 22."
     assert set(env["quota"][0]) == {"unit", "limit", "used", "remaining", "resets_at"}
 
 
@@ -1709,6 +1723,6 @@ def test_headroom_blocks_carry_first_week_from_the_entitlements_read():
     fields = _quota_envelope_fields(_headroom_blocks(_Client()))
     # A balance carries no label, so the unit table's row names it.
     assert fields["quota_notice"] == (
-        f"40 of 250 backtests left {_FIRST_WEEK_CLAUSE}; resets Tue 22 Sep."
+        f"40 of 250 backtests left {_FIRST_WEEK_CLAUSE}; resets Sep 22."
     )
     assert fields["quota"][0]["first_week"]["remaining"] == 40

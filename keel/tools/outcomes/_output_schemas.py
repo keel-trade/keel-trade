@@ -593,6 +593,12 @@ _STRATEGY_PROPS: dict[str, Any] = {
     "workspace_sync": _OBJ,
     "quota": _ARR,
     "quota_notice": _STR,
+    # Plans v3 (spec 02 §C4.2, §C4.3a): compose's plan findings and a narrowed save.
+    "plan_findings": {"type": ["array", "null"], "items": {"type": "object"}},
+    "plan_findings_notice": {"type": ["string", "null"]},
+    "plan_check_error": {"type": ["string", "null"]},
+    "plan_narrowed": {"type": ["object", "null"]},
+    "plan_narrowed_notice": {"type": ["string", "null"]},
     "library_facts": _STR,
     "reference": _REFERENCE,
     "fork_note": _OBJ,
@@ -765,6 +771,9 @@ _SCREENER = _envelope(
         "revision": {"type": ["integer", "null"]},
         "check": {"type": ["object", "null"]},
         "units": {"type": ["array", "null"], "items": {"type": "object"}},
+        # Plans v3 (spec 02 §C4.3a): what the coin cap kept on a narrowed run, and its one line.
+        "plan_narrowed": {"type": ["object", "null"]},
+        "plan_narrowed_notice": {"type": ["string", "null"]},
     },
     "A screen result selected by the API; view.markdown is also returned as text.",
 )
@@ -873,6 +882,8 @@ _STUDY_PROPS: dict[str, Any] = {
     "views": {"type": ["array", "object"]},
     "notes": {"type": ["array", "object"]},
     "notes_total": _INT,
+    # SV-36: an Entries study's fixed inputs line ("Trades 36 · Stop 5% · …"); null on any other kind
+    "entries_inputs_words": _NULL_STR,
     "saved": _NULL_STR,
     # 06 §4.2, §4.9, §9: the study's Page, the viewer's run rights, the stored
     # form (owner only) and the pinned subjects
@@ -891,8 +902,8 @@ _STUDY_PROPS: dict[str, Any] = {
     "class": {"enum": ["new_study", "new_version", "linked_study", "resume", "retry"]},
     "writes": _STR,
     "linked_reason": _NULL_STR,
-    "source": _NULL_STR,
-    "filled": _ARR,
+    # CARD-RENDER (13 §3.5): a plan's `source` leaves on MCP (D-353) and its `filled` rides the card
+    # (`_channels._PLAN_CARD`), so neither is the model's contract
     "issues": _ARR,
     "runs": _OBJ,
     "addresses_carried": _ARR,
@@ -1055,9 +1066,22 @@ _PLAN_PROPS: dict[str, Any] = {
 
 _PRESENT = {"type": "string", "enum": ["receipt", "view"]}
 
+
 #: A3 #7 / WL-AG-16 (07 §8.5, R-25): one line per listed research parameter. The listed ceilings count tool
 #: descriptions only (test_description_shape, test_listed_screens), so these cost no listed budget; measured
 #: 2026-11-17. `_run`'s plan fields stay listed (removing one breaks a frozen connector, R-25) and say so.
+def _run_setting_words(setting: str) -> str:
+    """AUDIT-3 S3: a Run setting's domain in the planner's served words, from the bundled step catalog's
+    ``run_settings`` (research.steps.catalog; "a whole number of days, any value from 0 to 30"), never a copy."""
+    import json
+    from importlib import resources
+
+    catalog = json.loads(
+        resources.files("keel.data").joinpath("research_step_catalog.json").read_text("utf-8")
+    )
+    return str(catalog["run_settings"][setting])
+
+
 _PLAN_WORDS: dict[str, str] = {
     "template": "The template form: which study to plan. Send it with subjects.",
     "subjects": (
@@ -1069,7 +1093,7 @@ _PLAN_WORDS: dict[str, str] = {
     "split": "A date that divides the days into before and after (YYYY-MM-DD).",
     "coins": "A coin rule, e.g. `TopByVolume(30, days=30)`; left out, the subject's own coins.",
     "costs": 'Fees and slippage a fill as fractions, `{"fee": 0.00045, "slippage": 0.00045}`, or "none".',
-    "delay": "Act this many bars late (0 to 3).",
+    "delay": f"Act this many days late: {_run_setting_words('delay')}.",
     "exposure_multiple": "The exposure multiple the backtest runs at (1 = as the strategy sizes it).",
     "vol_cap": "A volatility cap on the book, as a fraction a year.",
     "axes": (
@@ -1088,7 +1112,7 @@ _PLAN_WORDS: dict[str, str] = {
         "never-run Draft as it is saved."
     ),
     "resume": "With study_id: resume a stopped run of the study.",
-    "retry": "With study_id: retry only the runs that failed on Keel's side (free).",
+    "retry": "With study_id: retry only the runs that didn't finish on our side (free).",
     "cell": 'One map cell\'s full report, `{"grid": step id, "at": {axis: value}}`, with study_id.',
 }
 _RUN_WORDS: dict[str, str] = {
@@ -1176,10 +1200,11 @@ RESEARCH_INPUT_SCHEMAS: dict[str, dict[str, Any]] = {
             "project_id": {"type": "string", "pattern": "^prj_"},
             # R-24 (WL-AG-08): Keel's library, so a hosted agent finds the refs a study names.
             "library": {
-                "enum": ["signals", "benchmarks", "strategies", "market_states"],
+                "enum": ["signals", "benchmarks", "strategies", "market_states", "mine"],
                 "description": (
                     "Lists Keel's library with each item's exact subject call, e.g. "
-                    '`Output("keel/momentum_7d@1", output="momentum_7d")`; send it with nothing else.'
+                    '`Output("keel/momentum_7d@1", output="momentum_7d")`; "mine" lists the user\'s own '
+                    "signals the same way. Send it with nothing else."
                 ),
             },
             "cursor": _STR,

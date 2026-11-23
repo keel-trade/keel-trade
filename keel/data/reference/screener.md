@@ -9,7 +9,9 @@ before variables, factories and `Pipeline`. Store every named output, and
 keep all output clocks aligned with `Globals`. Declare one to three outputs.
 A new screen's default universe is the top 30 perps by volume,
 `Universe(mode="top_volume", top_n=30, market="perp")`; a `top_volume`
-universe resolves on the server when the screen runs. To cover every
+universe resolves on the server when the screen runs. `top_n` goes up to
+the plan's coins per screen (`keel_plan_usage` reports
+`screens.coins_per_screen`). On a plan that screens every coin, to cover every
 active Hyperliquid perp, write `top_n=180`, the width of Keel's own launch
 screens: `top_n` is a cap, so every active perp fits under it, and a much
 larger number only adds coins with no recent data.
@@ -152,6 +154,22 @@ Use the supported actions (test as a strategy, use as filter/universe/signal,
 or pin a list into a sized book) to preview a normal strategy, then save it
 atomically. Auto-refresh is an owner action distinct from Publish; private
 screens can refresh.
+
+## Plan limits on screens
+
+Plans bound the coins one screen covers (`keel_plan_usage` reports
+`screens.coins_per_screen`, saved screens and the refresh). A screen whose
+universe resolves to more is refused before anything runs, is saved or is
+copied (`SCREEN_COINS_OVER_PLAN`), and the compose dry run reports the same
+limit first, in `plan_findings`. Its remedy's `apply`, `narrow_to_plan: true`
+on the same save, run or copy, keeps the highest-volume coins the plan covers:
+a `top_volume` universe keeps its rules with a smaller `top_n`; a named or
+category list becomes a fixed list of its most traded coins, and the result
+names the coins it left out. The limit is per screen: several runs that
+together cover more coins are a way around it, not a version of the screen the
+plan includes. Viewing a screen someone else runs is never limited. A screen
+run uses one backtest from the plan's allowance, which its backtest wall
+states; a saved screen's own refresh uses none.
 
 ## Tools
 

@@ -1,7 +1,67 @@
 {
   "_meta": {
     "keel/card": {
-      "card_data": null,
+      "card_data": {
+        "charts": [],
+        "checks": null,
+        "chips": [],
+        "copy": {
+          "all_charts": "All charts",
+          "charts": "Charts",
+          "failed_cell": "Didn't finish",
+          "full_chart_in_keel": "Open in Keel for the full chart",
+          "highest": "Highest",
+          "hint_pointer": "Hover or tap the chart for values",
+          "hint_touch": "Tap the chart for values",
+          "locked": "not included in this account's plan",
+          "lowest": "Lowest",
+          "met": "met",
+          "more_charts": "",
+          "more_steps": "",
+          "more_views": "",
+          "not_measured": "not measured",
+          "not_met": "not met",
+          "not_run": "Not run yet",
+          "not_valid": "Not a valid setting",
+          "numbers": "The numbers",
+          "open_bar": "Open this bar in Keel",
+          "open_chart": "Open this chart in Keel",
+          "open_setting": "Open this setting in Keel",
+          "points_in_keel": "Open in Keel to read each point",
+          "seg_charts": "Charts",
+          "seg_checks": "Checks",
+          "seg_numbers": "Numbers",
+          "steps": "Steps",
+          "yours": "Yours"
+        },
+        "focus": null,
+        "head_words": null,
+        "hero": null,
+        "key": null,
+        "key_v": null,
+        "links": {
+          "chart": "https://app.usekeel.io/research/stu_000010?v={v}",
+          "select": "https://app.usekeel.io/research/stu_000010?v={v}&sel={sel}",
+          "study": "https://app.usekeel.io/research/stu_000010"
+        },
+        "method_line": "Measured with the backtest, costs from none to six times, trading 1 to 3 days late and 10 more checks.",
+        "more_charts_total": 0,
+        "more_words": null,
+        "notes": {
+          "draft": null,
+          "linked": null,
+          "not_measured": [],
+          "saved": null,
+          "stale": ["Momentum rotation v3 has a newer version, v4."]
+        },
+        "rows": null,
+        "runs": null,
+        "schema": "keel.research.card-data/2",
+        "steps": [],
+        "thumbs": [],
+        "tiles": [],
+        "top": null
+      },
       "card_summary": {
         "thumb": null
       }
@@ -12,7 +72,7 @@
   },
   "content": [
     {
-      "text": "card: where the host draws Keel cards, the user sees what follows as a card carrying its name, links and ids, so a reply can call it by name; the ids and links here serve tool calls and hosts without cards.\n\nCheck a strategy · Momentum rotation v3 · version 1 · Didn't finish\nUsed 0 of 400 studies; resets Dec 1. Planning, reading, saving, and runs that reuse everything or run nothing, do not count.\nDays Mar 23, 2025 to Oct 29, 2026, split Apr 17, 2026 · 100 coins: the coins Momentum rotation trades · costs 9 bp a fill · data as of Oct 29, 2026\nMeasured with Backtest v1, CostStress v1, DelayStress v1, TopCoins v1, WithoutBestCoins v1, RandomBooks v1, RepickSettings v1, Neighbours v1, DeflatedSharpe v1, ResampledPaths v1, ReturnByCoin v1, MarketStates v1, CorrelationWithRunning v1.\nDidn't finish\nRuns: 3 runs, 0 reused, 23 couldn't run on Keel's side · versions tried: unknown\nCharts (13): Your checks · Growth of 1 · Before and after the split · Sharpe as costs rise · Sharpe when trading late · Sharpe on the top coins · Sharpe without the best coins · 150 random books · A year ahead, resampled · Re-picking the settings · Where the return came from · Up and down markets · How it moves with what you run — keel_research_get(study_id=\"stu_000010\", view=0) reads the numbers behind any of them.\nMomentum rotation v3 has a newer version, v4. Plan it in the app: keel_app_link(id=\"stu_000010\")\nView in Keel: https://app.usekeel.io/research/stu_000010",
+      "text": "card: where the host draws Keel cards, the user sees what follows as a card carrying its name, links and ids, so a reply can call it by name; the ids and links here serve tool calls and hosts without cards.\n\nCheck a strategy · Momentum rotation v3 · version 1 · Didn't finish\nDays Mar 23, 2025 to Oct 29, 2026, split Apr 17, 2026 · 100 coins: the coins Momentum rotation trades · costs 9 bp a fill · data as of Oct 29, 2026\nStopped after 30 seconds: the run took too long. Use fewer coins or days, then run it again. 23 runs can be retried in Keel.\nRuns: 3 runs, 0 reused, 23 didn't finish on our side\nCharts (13): Your checks · Growth of 1 · Before and after the split · Sharpe as costs rise · Sharpe when trading late · Sharpe on the top coins · Sharpe without the best coins · 150 random books · A year ahead, resampled · Re-picking the settings · Where the return came from · Up and down markets · How it moves with what you run. keel_research_get(study_id=\"stu_000010\", view=0) reads the numbers behind any of them.\nMeasured with the backtest, costs from none to six times, trading 1 to 3 days late and 10 more checks.\nMomentum rotation v3 has a newer version, v4. Plan it in the app: keel_app_link(id=\"stu_000010\")\nView in Keel: https://app.usekeel.io/research/stu_000010",
       "type": "text"
     }
   ],
@@ -55,7 +115,7 @@
         "units": [
           {
             "limit": 400,
-            "resets_at": "2026-12-18",
+            "resets_at": "2026-12-22",
             "unit": "research_studies",
             "used": 0
           }
@@ -65,9 +125,10 @@
         "executed": 3,
         "failed_content": 0,
         "failed_platform": 23,
+        "not_applicable": 0,
         "planned": 26,
         "reused": 0,
-        "words": "3 runs, 0 reused, 23 couldn't run on Keel's side"
+        "words": "3 runs, 0 reused, 23 didn't finish on our side"
       },
       "versions_tried": {
         "added": 0,
@@ -85,7 +146,9 @@
         "fee": 0.00045,
         "slippage": 0.00045
       },
+      "costs_words": "9 bp a fill (fee 4.5 bp, slippage 4.5 bp)",
       "data": "snap_6c1f0e8a2b9d4f37",
+      "data_words": "Data as of Oct 29, 2026",
       "days": {
         "end": "2026-10-29",
         "start": "2025-03-23"
@@ -108,6 +171,28 @@
     },
     "page": {
       "default": 0,
+      "sections": [
+        {
+          "title": "Costs and timing",
+          "views": [3, 4, 5, 6],
+          "words": "higher costs, trading late and fewer coins"
+        },
+        {
+          "title": "Luck",
+          "views": [7, 8],
+          "words": "random books of the same size and a year of paths resampled from its own trades"
+        },
+        {
+          "title": "Later data and settings",
+          "views": [9, 11],
+          "words": "re-picking the settings as you go and up and down markets"
+        },
+        {
+          "title": "Where it came from",
+          "views": [10, 12],
+          "words": "the coins behind the return and how it moves with what you run"
+        }
+      ],
       "switch": [0, 1, 2]
     },
     "progress": {
@@ -119,7 +204,7 @@
       "done": 3,
       "progress_seq": 0,
       "receipt": "Didn't finish",
-      "stopped": "This run took longer than 30 s and was stopped; it is charged for the time it held. 23 runs didn't finish on our side; they can be retried in Keel",
+      "stopped": "Stopped after 30 seconds: the run took too long. Use fewer coins or days, then run it again. 23 runs can be retried in Keel.",
       "words": "Didn't finish"
     },
     "quota": [],
@@ -174,11 +259,11 @@
     },
     "url_line": "View in Keel: https://app.usekeel.io/research/stu_000010",
     "view": {
-      "at": "2026-11-17T00:00:13.000Z",
+      "at": "2026-11-17T00:00:15.000Z",
       "kind": "study",
       "mode": "run",
       "object": "stu_000010",
-      "seq": 14,
+      "seq": 16,
       "size": "progress",
       "version": 1
     },
@@ -186,8 +271,8 @@
       "total": 13
     },
     "words": {
-      "allowance": "Used 0 of 400 studies; resets Dec 1. Planning, reading, saving, and runs that reuse everything or run nothing, do not count.",
-      "stopped": "This run took longer than 30 s and was stopped; it is charged for the time it held. 23 runs didn't finish on our side; they can be retried in Keel"
+      "method": "Measured with the backtest, costs from none to six times, trading 1 to 3 days late and 10 more checks.",
+      "stopped": "Stopped after 30 seconds: the run took too long. Use fewer coins or days, then run it again. 23 runs can be retried in Keel."
     }
   }
 }

@@ -511,6 +511,13 @@ def screen_topic_withheld(topic: str) -> bool:
 # profile serves none (false: the listing fails closed, and a listed snapshot
 # with nothing bound is the frozen head). The hosted listed server binds true
 # while it registers its tools and per caller from /v1/me for each request.
+#
+# A LOCAL surface (the CLI, a full-profile ``keel mcp serve``) has one caller,
+# so unbound it reads that caller's /v1/me the same way, cached
+# (``_research_local.py``; FINAL-LIST §D): while research.enabled is off it
+# registers no research verb, tool, topic or card, so the one flag hides
+# Research on the local surfaces too. Unbound on the hosted full profile
+# stays true (its main binds per request).
 
 #: The listed research tools (07 A1, the founder's 2026-11-11 listing ruling).
 LISTED_RESEARCH_TOOLS: frozenset[str] = frozenset(
@@ -538,12 +545,26 @@ _RESEARCH_SERVED: ContextVar[bool | None] = ContextVar("keel_research_served", d
 
 def research_served() -> bool:
     """Whether this request serves Research: what the caller's ``/v1/me`` said
-    (bound per request on the hosted server), else true off the listed profile
-    and false on it."""
+    (bound per request on the hosted server); unbound, false on the listed
+    profile, true on the hosted full profile, and on a local surface what
+    this process's own caller's ``/v1/me`` says (``_research_local``)."""
     bound = _RESEARCH_SERVED.get()
     if bound is not None:
         return bound
-    return not is_listed_profile()
+    if is_listed_profile():
+        return False
+    from keel.hosting import is_hosted
+
+    if is_hosted():
+        return True
+    from ._research_local import local_research_served
+
+    return local_research_served()
+
+
+def is_research_tool(name: str) -> bool:
+    """Whether ``name`` is one of Research's tools or CLI verbs (07 §2, §5)."""
+    return name.startswith("keel_research_")
 
 
 def research_served_bound() -> bool | None:
@@ -733,4 +754,6 @@ def is_tool_loaded(
     if is_listed_profile():
         # The listed flag adds exactly LISTED_PAPER_TOOLS (S06 §3.4.2, S10 §3).
         return name in listed_profile_tools()
+    if is_research_tool(name) and not research_served():
+        return False  # research.enabled off for this caller (FINAL-LIST §D)
     return tool_toolset == "always" or tool_toolset in active

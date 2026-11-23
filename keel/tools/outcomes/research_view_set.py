@@ -23,7 +23,7 @@ from ._research_view import study_text
 
 REQUIRED_ACTION = "backtest.research.update"
 DESCRIPTION = (
-    "Use when the user asks to change a study's title, bars or views; not for what it "
+    "Use when the user asks to change a study's title, bars or charts; not for what it "
     "measures (a new version through keel_research_plan). Saves a presentation revision with "
     "the revision it was read at; nothing runs. `set` renames the study or changes its question "
     "alone; `revert_to` restores an earlier revision; `dry_run` checks without saving; "
@@ -82,5 +82,5 @@ TOOL = register_research(
     _handler,
     read=False,
     rate_tier="mutation",
-    title="Edit Study View",
+    title="Edit Study",
 )

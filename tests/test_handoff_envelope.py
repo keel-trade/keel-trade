@@ -596,7 +596,7 @@ def test_spent_grant_wall_states_the_truth_not_the_false_no_grants_sentence():
     env = _wall_envelope(SPENT_GRANT_403)
     _assert_valid_handoff_envelope(env, plan_wall=True)
     points = " ".join(env["talking_points"])
-    assert "Backtests: 50 of 50 used on this plan; resets Tue 22 Sep." in points
+    assert "Backtests: 50 of 50 used on this plan; resets Sep 22." in points
     assert "does not include" not in points and "doesn't include" not in points
     # Not vacuous: the numbers are the SERVED ones and the kind is the
     # spent-grant kind — neither moves if the renderer is wrong.
@@ -612,7 +612,8 @@ def test_no_grant_wall_is_the_only_one_that_says_the_plan_lacks_the_unit():
     env = _wall_envelope(NO_GRANT_403)
     _assert_valid_handoff_envelope(env, plan_wall=True)
     points = " ".join(env["talking_points"])
-    assert "This plan doesn't include backtests." in points
+    # The v3 feature wall (spec 02 §D, R30): a plan that grants none "isn't on" it.
+    assert "Backtests aren't on this plan." in points
     assert " used " not in points
 
 
@@ -746,16 +747,19 @@ PAID_WITH_PATHS_403 = _wall_403("trader", 1000, 1000)
 TOP_PLAN_403 = _wall_403("pro", 4000, 4000)
 COMPUTE_EDGE_403 = _wall_403("free", 1500, 1490, unit="backtest_compute_seconds")
 
-_NOTE = "Composing, validating and reading existing results don't use this allowance."
+_NOTE = (
+    "Screen runs use the same backtests. Your results, paper runs and saved screens keep working, and saved "
+    "screens keep refreshing without using any."
+)
 FREE_WALL = [
-    "Backtests: 50 of 50 used on Free; resets Tue 22 Sep.",
-    "Trader and Pro include more. Plans are changed in the Keel web app.",
+    "Backtests: 50 of 50 used on Free; resets Sep 22.",
     _NOTE,
+    "Trader, Quant and Pro include more. Plans are changed in the Keel web app.",
 ]
 PAID_WALL = [
-    "Backtests: 1,000 of 1,000 used on Trader; resets Tue 22 Sep.",
-    "Pro includes more. Plans are changed in the Keel web app.",
+    "Backtests: 1,000 of 1,000 used on Trader; resets Sep 22.",
     _NOTE,
+    "Quant and Pro include more. Plans are changed in the Keel web app.",
 ]
 
 #: Words that only make sense to the MODEL. None may reach text a person
@@ -825,9 +829,9 @@ def test_free_wall_is_the_exact_d14_copy():
     assert set(view) == {"headline", "reset", "plans", "note"}, view
     assert view == {
         "headline": "Backtests: 50 of 50 used on Free",
-        "reset": "Resets Tue 22 Sep.",
-        "plans": FREE_WALL[1],
-        "note": FREE_WALL[2],
+        "reset": "Resets Sep 22.",
+        "plans": FREE_WALL[2],
+        "note": FREE_WALL[1],
     }
     # ONE authoritative home for the numbers: limit_details. The empty
     # `example` is never pointed at; the caller's own plan and the NAMES of
@@ -860,7 +864,7 @@ def test_trader_wall_names_pro_and_the_top_plan_names_none():
     assert env["message"] == " ".join(PAID_WALL)
     top = _wall_envelope(TOP_PLAN_403)
     assert top["talking_points"] == [
-        "Backtests: 4,000 of 4,000 used on Pro; resets Tue 22 Sep.",
+        "Backtests: 4,000 of 4,000 used on Pro; resets Sep 22.",
         _NOTE,
     ]
     assert set(top["limit_view"]) == {"headline", "reset", "note"}
@@ -897,16 +901,15 @@ def test_older_server_without_higher_plans_gets_no_plan_line():
 def test_compute_edge_wall_does_not_claim_all_used():
     env = _wall_envelope(COMPUTE_EDGE_403)
     points = env["talking_points"]
-    assert points[0] == (
-        "Backtest compute time: 10 s of 1,500 s left on Free, "
-        "not enough to start this; resets Tue 22 Sep."
+    # Compute is silent (PLANS-REVIEW R7): its wall is time words, never a count, also on the reservation edge
+    # (10 s left of 1,500 is short of a submit's reservation).
+    assert points[0] == "Backtest time on Free is used up until Sep 22."
+    assert points[-1] == (
+        "Trader, Quant and Pro include more. Plans are changed in the Keel web app."
     )
-    assert points[1] == "Trader and Pro include more. Plans are changed in the Keel web app."
     joined = " ".join(points)
-    assert "used 1,490" not in joined and "used all" not in joined.lower()
-    assert env["limit_view"]["headline"] == (
-        "Backtest compute time: 10 s of 1,500 s left on Free, not enough to start this"
-    )
+    assert "1,490" not in joined and "1,500" not in joined and " s " not in joined
+    assert env["limit_view"]["headline"] == "Backtest time on Free is used up until Sep 22"
     assert "30,000" not in json.dumps(env) and "120,000" not in json.dumps(env)
 
 
@@ -917,14 +920,25 @@ def test_every_wall_text_field_passes_the_d12_scan(monkeypatch):
     programming error, never a string quietly shipped). Control: the
     unseeded free wall builds (tests above)."""
     import keel.errors as errors
+    import keel.limit_copy as limit_copy
 
+    # The v3 rows' plan line (keel.limit_copy, every wall with a row) and the pre-v3 one (a wall without).
+    monkeypatch.setattr(
+        limit_copy, "wall_more", lambda names, kind="consumable", **kw: "Trader is $49 a month."
+    )
+    with pytest.raises(ValueError, match="forbidden price/link/pitch language"):
+        _wall_envelope(SPENT_WITH_PATHS_403)
+    monkeypatch.undo()
     monkeypatch.setattr(
         errors,
         "quota_plans_line",
         lambda info: "Trader is $49 a month; upgrade now.",
     )
+    # The pre-v3 fallback's plan line: a server that sent no reset instant (the v3 rows need one).
+    no_reset = json.loads(SPENT_WITH_PATHS_403)
+    del no_reset["quota"]["reset_epoch"]
     with pytest.raises(ValueError, match="forbidden price/link/pitch language"):
-        _wall_envelope(SPENT_WITH_PATHS_403)
+        _wall_envelope(json.dumps(no_reset))
 
 
 def test_resume_reruns_exactly_the_blocked_call():

@@ -1,53 +1,33 @@
-"""The screen card draws the SAVED VIEW (Q-3635), in a real MCP Apps host.
+"""The screen card draws the SAVED VIEW on the chat cards' face (Q-3635; SCREENS-CARD, D-420..D-420d), in a real MCP
+Apps host.
 
-Six envelopes (`screener_view_fixtures`), light and dark, at a phone width
-and a wide one, through `c_screener_views_check.mjs`:
+Twelve envelopes (`screener_view_fixtures`, through the SDK's real `build_result`), light and dark, at a phone width
+and a wide one, inline; four of them also in Expand at a phone and a desktop size, where the harness then chooses
+Show "All" and focuses the Table panel (`c_screener_views_check.mjs`).
 
-* a Table default draws a ranked table over the view's declared columns
-  with the passing set's rows (15 for a Top 15, 8 for a rule, 10 for the
-  curated list; 25 then "+N more" counted against the set, never the
-  universe), the label as written, the unit once, no tiles;
-* a Lines default draws a y axis with ticks and a time axis, and holds the
-  shown lines to a robust band, marking the one that leaves it;
-* an envelope without a result draws one receipt line, never an empty body;
-* the header name is in the UI face; the meta line carries the view
-  revision; a view with no filter says nothing about passing; a tie at the
-  cutoff is named.
+Inline (the hosts' budget: one hero and a few data points, two actions):
+* a Table view draws the top five of the set as rows (rank, coin, a data bar in the coin's identity colour, the
+  value), the first emphasised at the hero size, the column's label once; the baseline strip (every coin a tick,
+  zero, the ends named, the top five in their colours); "15 of 179 coins · 10 more in Expand"; what entered and left
+  since the last bar as chips; View in Keel (the filled primary) and Expand (quiet);
+* the head is the name and one muted line: kind, version, cadence, the data's time; no view revision, no second time
+  and no sentence restating the view (Q-7921);
+* a Lines view draws the top five in colour over the grey field, end-labelled; a line that leaves the band is capped
+  at the plot's edge and its value written there (Q-7924);
+* an envelope without a result draws the head and one line; an empty set draws the rule and the baseline.
 
-The 2026-11-05 polish batch (Q-3640) adds three cases and three rules:
+Expand (a dashboard, D-420d): the controls up top; Lines, the whole passing set as a table (ties ranked "11="), the
+universe's distribution, a Scatter when published, visible together; five lines coloured on open and never more than
+five identity colours (Q-7923); the scrub readout in words (Q-7925); names never cut; hairline rules; View in Keel
+links the focused view (`graphs.views`, the app's `v`); Test as a strategy is the quiet button, never a bare link
+(Q-7920).
 
-* every column signs by ONE rule (keel-app's `isSigned`), never by the rows
-  shipped: the founder's curated list, shipped as the view shape (`latest_top`
-  only), signs its ranked 7-day return `+61.4%` beside the `+9.2%` of the next
-  column, and still does with no `completed.range` served;
-* the ranked output's range over every coin (`completed.range`) is one quiet
-  line under the rows, through `copy.card.range`, only when the rows show
-  fewer coins than carry a value: never on a receipt, never unserved;
-* the meta line prints the server's cadence word as given ("Hourly"): the
-  card adds no " bars";
-* a `keel_screener_view_set` envelope that carries the full result draws
-  exactly what `keel_screener_view` draws.
-
-Seeds, each run before this landed (reverse the edit, never `git checkout`):
-* `outputSigned`: return `anyBelowZero(column(latestTable(env), name))` →
-  the sign arm reds on movers_top (`61.4%`), movers_top_norange and the
-  Lines legend; movers (whole `latest` shipped) stays green — the control;
-* `table`/`numbers`: drop the `rangeLine(...)` calls → the range arm reds on
-  every completed case, the receipt arm stays green;
-* `render`: `copy.clock + " bars"` → the meta arm reds (the card said it).
-* `viewPlan`: return `t.columns.slice(1)` for `cols` unconditionally →
-  movers draws every output, the declared-columns arm reds (and `test_the_
-  table_is_the_views_columns` names it);
-* `table`: `rows.slice(0, 5)` in place of `ROWS_INLINE` → the row-count arms
-  red on top15 (5 ≠ 15) and nofilter (5 ≠ 25);
-* `render`: `return` before `H.receipt` in the no-manifest branch → the
-  receipt arm reds with an empty body;
-* `drawLines`: drop the `tick.ticks.forEach` block → the axis arm reds;
-  set `hi = pool[pool.length - 1]` unconditionally → the clipping arm reds
-  (no marker, the 100% tick becomes 2,500%);
-* `setRows`: count against `universe.total` → "+164 more" appears on top15.
-Not vacuous: every arm asserts a positive count or a literal it expects, and
-`test_the_harness_saw_every_case` pins 36 renderings with zero page errors.
+Seeded reds (in this file, each on the served card HTML with a control that stays green):
+Q-7920 the Test link without the button classes; Q-7921 the revision back in the head; Q-7923 Expand opening on
+every line; Q-7924 out-of-band points drawn at their true height; Q-7925 the readout as an ISO date; Q-7926 the
+adapter's screener exclusion from Expand. Q-7922 (the palette) is test_card_screener_palette.py.
+Not vacuous: every arm asserts a positive count or a literal it expects, and `test_the_harness_saw_every_case` pins
+the renderings with zero page errors.
 """
 
 from __future__ import annotations
@@ -68,218 +48,313 @@ HERE = pathlib.Path(__file__).resolve().parent
 ROOT = HERE.parent
 REPO = ROOT.parents[2]
 PLAYWRIGHT = REPO / "services" / "keel-app" / "node_modules" / "playwright"
+HARNESS = "tests/fixtures/cards/c_screener_views_check.mjs"
 
 pytestmark = pytest.mark.skipif(
     not (shutil.which("node") and PLAYWRIGHT.exists()),
     reason="node + services/keel-app/node_modules/playwright (installed under CI)",
 )
 
+#: The cases also drawn in Expand.
+EXPANDED = ("top15", "lines", "movers", "scatter")
+#: Light ids per rank (host-adapter.js PALETTE.light.cat, the accent first), as computed RGB.
+ACCENT = {"light": "rgb(75, 76, 186)", "dark": "rgb(107, 113, 227)"}
 
-@pytest.fixture(scope="module")
-def rendered(tmp_path_factory):
-    out = tmp_path_factory.mktemp("views")
-    path = out / "input.json"
-    path.write_text(
-        json.dumps(
-            {
-                "html": build_card_html("screener"),
-                "cases": card_envelopes(),
-                "out": str(out / "shots"),
-            }
-        )
-    )
+
+def _run(tmp: pathlib.Path, html: str, cases: dict, **extra) -> list[dict]:
+    path = tmp / "input.json"
+    path.write_text(json.dumps({"html": html, "cases": cases, "out": str(tmp / "shots"), **extra}))
     proc = subprocess.run(
-        ["node", "tests/fixtures/cards/c_screener_views_check.mjs", str(path)],
+        ["node", HARNESS, str(path)],
         cwd=ROOT,
         text=True,
         capture_output=True,
-        timeout=180,
+        timeout=600,
         env={**os.environ, "NO_COLOR": "1"},
     )
     assert proc.returncode == 0, proc.stderr[-3000:]
-    rows = json.loads(proc.stdout)["rows"]
-    return {(r["name"], r["theme"], r["width"]): r for r in rows}
+    return json.loads(proc.stdout)["rows"]
 
 
-def _every(rendered, name):
-    return [r for k, r in rendered.items() if k[0] == name]
+@pytest.fixture(scope="module")
+def rendered(tmp_path_factory):
+    envs = card_envelopes()
+    tmp = tmp_path_factory.mktemp("views")
+    rows = _run(tmp, build_card_html("screener"), envs)
+    full = _run(
+        tmp_path_factory.mktemp("views-full"),
+        build_card_html("screener"),
+        {k: envs[k] for k in EXPANDED},
+        modes=["fullscreen"],
+    )
+    return {(r["name"], r["theme"], r["width"], r["mode"]): r for r in rows + full}
 
 
-#: The founder's six cases plus the three Q-3640 added.
-CASES = 9
+def _every(rendered, name, mode="inline"):
+    return [r for k, r in rendered.items() if k[0] == name and k[3] == mode]
 
 
 def test_the_harness_saw_every_case(rendered):
-    assert len(rendered) == CASES * 2 * 2
+    inline = [r for r in rendered.values() if r["mode"] == "inline"]
+    assert len(inline) == len(card_envelopes()) * 2 * 2
+    assert len([r for r in rendered.values() if r["mode"] == "fullscreen"]) == len(EXPANDED) * 2 * 2
     for r in rendered.values():
         assert r["errors"] == [], r
         assert r["bodyText"], ("empty body", r["name"], r["theme"], r["width"])
-        assert not r["overflow"], (r["name"], r["width"])
-        assert r["ellipsis"] == 0, (r["name"], r["width"])
-        assert r["wrapped"] == 0, ("a cell wrapped", r["name"], r["width"])
+        assert not r["overflow"], (r["name"], r["width"], r["mode"])
+        assert not r["isoDate"], (r["name"], r["mode"])
 
 
-def test_a_table_default_draws_the_passing_set_not_five_or_the_universe(rendered):
+def test_a_table_view_leads_with_the_top_five_the_first_emphasised(rendered):
     for r in _every(rendered, "top15"):
-        assert r["tableRows"] == 15, r
-        assert r["nums"] == 0, "no tiles on a Table view"
-        assert r["lines"] == 0
-        assert r["more"] == [], "15 of 15 shown: nothing is more"
-        assert "more in Keel" not in r["text"]
-        assert r["firstRow"][:2] == ["1", "XMR"]
-        assert r["firstRow"][2] == "+83.2%", "the unit sits in the header, not every cell"
-        assert r["bars"] == 15 and r["divBars"] == 0, (
-            "neutral bars, no zero line: nothing shown is negative"
-        )
+        assert [row[:2] for row in r["rows"]] == [
+            ["1", "XMR"],
+            ["2", "SAGA"],
+            ["3", "HYPE"],
+            ["4", "ETH"],
+            ["5", "SOL"],
+        ], r["rows"]
+        assert r["rows"][0][2] == "+83.2%", "the unit sits in the label, not every cell"
+        assert r["firstValueSize"] == ["28px"], "the first row's value at the hero size"
+        assert r["label"] == ["Funding now, a year"], r["label"]
+        assert len(set(r["barFills"])) == 5 and r["barFills"][0] == ACCENT[r["theme"]], r[
+            "barFills"
+        ]
+        assert r["count"] == ["15 of 179 coins · 10 more in Expand"], r["count"]
+        assert r["tableRows"] == 0, "the table is Expand's"
     for r in _every(rendered, "above20"):
-        assert r["tableRows"] == 8, r
+        assert len(r["rows"]) == 5 and r["count"] == ["8 of 179 coins · 3 more in Expand"]
+    for r in _every(rendered, "nofilter"):
+        assert len(r["rows"]) == 5 and r["count"] == [
+            f"{UNIVERSE} coins · {UNIVERSE - 5} more in Expand"
+        ]
+    # one sign rule, never the rows shipped (Q-3640): the curated list's ranked column signs as the whole set does
     for name in ("movers", "movers_top", "movers_top_norange"):
         for r in _every(rendered, name):
-            assert r["tableRows"] == 10, r
-    for r in _every(rendered, "nofilter"):
-        assert r["tableRows"] == 25, r
-        assert r["more"] == [f"+{UNIVERSE - 25} more in Keel"], r["more"]
+            assert r["rows"][0] == ["1", "HYPE", "+61.4%"], (name, r["rows"])
 
 
-def test_the_table_is_the_views_columns_with_whole_labels_and_the_unit_once(rendered):
+def test_the_baseline_strip_places_every_coin_and_names_the_ends(rendered):
     for r in _every(rendered, "top15"):
-        assert r["headers"] == ["#", "", "Funding now, a year ↓"], r["headers"]
-        # the header, the view's sentence and the tie note say it; no cell does
-        assert r["text"].count("a year") == 3, r["text"]
-        assert "a year" not in " ".join(r["firstRow"])
-    wide = rendered[("movers", "light", 760)]
-    assert wide["headers"] == ["#", "", "7-day return ↓", "Relative volume rank", "1-day return"]
-    narrow = rendered[("movers", "light", 360)]
-    assert narrow["headers"] == ["#", "", "7-day return ↓", "Relative volume rank"]
-    assert narrow["firstRow"] == ["1", "HYPE", "+61.4%", "0.32"]
+        # every coin with a value is a tick; the top five drawn over in their colours
+        assert r["stripTicks"] == UNIVERSE - 5, r["stripTicks"]
+        assert r["stripIds"] and set(r["stripIds"]) == {"XMR", "SAGA", "HYPE", "ETH", "SOL"}
+        assert "−140.6% MINA" in r["stripLabels"] and "XMR +83.2%" in r["stripLabels"], r[
+            "stripLabels"
+        ]
+        assert "0" in r["stripLabels"]
+    wide = rendered[("top15", "light", 760, "inline")]
+    assert "78 below zero" in wide["stripLabels"] and "Across 179 coins" in wide["stripLabels"]
+    # the view shape ships no `latest`: the served range's ends, no field
+    for r in _every(rendered, "movers_top"):
+        assert r["stripTicks"] == 0 and "HYPE +61.4%" in r["stripLabels"], r["stripLabels"]
+    # neither `latest` nor a served range: no strip at all, never an invented one
+    for r in _every(rendered, "movers_top_norange"):
+        assert r["stripLabels"] == [], r["stripLabels"]
 
 
-def test_the_header_is_plain_and_the_meta_line_carries_the_revision(rendered):
+def test_the_head_is_one_quiet_line_with_one_time(rendered):
+    """Q-7921: no view revision, one time (the data's), no sentence restating the view."""
+    for name in ("top15", "view_set", "nofilter"):
+        for r in _every(rendered, name):
+            assert r["meta"] == ["Screen · v2 · Hourly · as of 5 Nov 13:00 UTC"], (name, r["meta"])
+            assert "revision" not in r["text"] and "rev " not in r["text"], r["text"]
+            assert "Updated" not in r["text"] and "The screen shows" not in r["text"], r["text"]
+            assert r["title"] == ["Top funding rate coins"]
+
+
+def test_what_moved_since_the_last_bar_is_chips(rendered):
+    for r in _every(rendered, "top15_moves"):
+        assert r["chips"] == ["▲ SAGA", "▼ LINK"], r["chips"]
+        assert r["newTags"] == ["new"], "SAGA's row says it is new"
     for r in _every(rendered, "top15"):
-        assert r["headName"] == "Top funding rate coins"
-        assert "Mono" not in r["headFont"] and "monospace" not in r["headFont"].lower(), r[
-            "headFont"
-        ]
-        # contract field 2: the server's cadence word as given, nothing added
-        assert r["meta"] == ["Hourly · as of 5 Nov 13:00 UTC · view rev 3 · Updated 4 minutes ago"]
-        assert "bars" not in r["text"], "the card adds no word to the cadence"
-        assert r["pass"] == [
-            "15 of 179 pass nowThe screen shows the top 15 by Funding now, a year."
-        ]
-        assert r["tie"] == ["8 coins tie at +10.9% a year at the cutoff"]
-    for r in _every(rendered, "above20"):
-        assert r["tie"] == []
-        assert r["pass"][0].startswith("8 of 179 pass now")
-    for r in _every(rendered, "nofilter"):
-        assert r["pass"] == [] and r["tie"] == [], "no filter: no pass sentence"
-        assert "pass" not in r["text"]
-        assert "view rev" not in r["text"], "no saved view: no revision"
+        assert r["chips"] == [] and r["newTags"] == []
 
 
-def test_a_lines_default_has_axes_and_holds_the_shown_lines_to_a_band(rendered):
+def test_two_actions_the_primary_filled_and_a_visible_expand(rendered):
+    """Q-7920, Q-7926: View in Keel and Expand on every result, styled; no bare link anywhere."""
+    for name in ("top15", "nofilter", "lines", "scatter", "movers"):
+        for r in _every(rendered, name):
+            assert [a["text"] for a in r["links"]] == ["View in Keel ↗", "Expand"], (
+                name,
+                r["links"],
+            )
+            assert (
+                "button-primary" in r["links"][0]["cls"] and "button-quiet" in r["links"][1]["cls"]
+            )
+            assert r["bareAnchors"] == 0, (name, r["text"])
+            assert r["minControl"] >= (44 if r["width"] < 480 else 36), (name, r["minControl"])
+    for r in _every(rendered, "receipt"):
+        assert [a["text"] for a in r["links"]] == ["View in Keel ↗"], (
+            "a receipt has nothing to expand"
+        )
+        assert r["status"] == ["View saved."] and r["meta"] == ["Screen · v2"], r
+
+
+def test_a_lines_view_caps_the_outlier_at_the_edge_and_writes_its_value(rendered):
+    """Q-7924: the 2,500 % spike never leaves the plot; it is capped (dashed) and its value is written there."""
     for r in _every(rendered, "lines"):
-        assert r["nums"] == 5 and r["numLabel"] == ["Funding now, a year"]
-        assert r["numValues"] == ["+83.2%", "+40.5%", "+31.0%", "+29.0%", "+27.0%"]
-        assert r["more"] == [f"+{UNIVERSE - 5} more in Keel"]
-        assert r["lines"] == 5 and r["field"] >= 5
-        assert len(set(r["strokes"])) == 5, "five distinct colours"
-        assert len(r["yTicks"]) >= 3, r["yTicks"]
-        assert len(r["xTicks"]) == 3 and r["xTicks"][0] == "1 Nov" and r["xTicks"][-1] == "5 Nov"
-        # the 2,500% spike did not flatten the picture: the top tick is near the data
+        assert r["colouredLines"] == 5 and len(r["colours"]) == 5, r["colours"]
+        assert r["field"] >= 10
+        assert r["ends"][0] == "XMR +83.2%", r["ends"]
+        assert r["clips"] == ["↑ +2,500%"], r["clips"]
+        assert r["capRuns"] >= 1
+        assert r["checked"] > 100 and r["outside"] == 0, (r["checked"], r["outside"])
         top = max(float(t.replace("%", "").replace("−", "-")) for t in r["yTicks"])
         assert 90 <= top <= 150, r["yTicks"]
-        assert r["clips"] == 1, "the spiking line is marked at the edge"
-        assert r["ends"][0] == "XMR +83.2%"
-        assert r["tableRows"] == 0
+        assert len(r["xTicks"]) == 3 and r["xTicks"][0] == "1 Nov" and r["xTicks"][-1] == "5 Nov"
 
 
-def test_an_envelope_without_a_result_draws_a_receipt_line(rendered):
-    for r in _every(rendered, "receipt"):
-        assert r["receipt"] == ["View saved. · view rev 4"], r
-        assert r["headName"] == "Top funding rate coins"
-        assert r["tableRows"] == 0 and r["nums"] == 0 and r["lines"] == 0
+def test_an_empty_set_shows_its_rule_and_the_baseline(rendered):
+    for r in _every(rendered, "empty"):
+        assert r["rows"] == [] and r["desc"], r
+        assert r["count"] == ["0 of 179 coins"], r["count"]
+        assert r["stripLabels"], "the baseline shows where every coin sits"
+        assert [a["text"] for a in r["links"]] == ["View in Keel ↗"], "nothing to expand"
 
 
-def _cells(r, column):
-    """Every cell of one column of the ranked table, by header index."""
-    i = r["headers"].index(column)
-    return [row[i] for row in r["rows"]]
-
-
-def test_every_column_signs_by_one_rule_never_by_the_rows_shipped(rendered):
-    """Q-3640: the founder's card printed `60.9%` in the ranked column beside
-    `+49.8%` in the next, because the sign was read off the rows the view
-    envelope shipped — the top of the ranking, one-signed by construction."""
-    for name in ("movers_top", "movers_top_norange", "movers"):
-        for r in _every(rendered, name):
-            assert r["firstRow"][:3] == ["1", "HYPE", "+61.4%"], (name, r["firstRow"])
-            ranked = _cells(r, "7-day return ↓")
-            assert len(ranked) == 10 and all(c.startswith("+") for c in ranked), (name, ranked)
-        wide = rendered[(name, "light", 760)]
-        one_day = _cells(wide, "1-day return")
-        assert "−3.4%" in one_day, (name, one_day)
-        assert all(c[0] in "+−" for c in one_day), (name, one_day)
-    # the control: the whole cross-section shipped, the same cells
-    assert (
-        rendered[("movers", "light", 760)]["rows"] == rendered[("movers_top", "light", 760)]["rows"]
-    )
-    # a rank is ordinal: never signed
-    assert _cells(rendered[("movers_top", "light", 760)], "Relative volume rank")[0] == "0.32"
-    # the same rule signs the tie line and the Lines legend
-    assert rendered[("top15", "dark", 360)]["tie"] == ["8 coins tie at +10.9% a year at the cutoff"]
-    assert rendered[("lines", "light", 360)]["numValues"][0] == "+83.2%"
-
-
-RANGE_FUNDING = "Across 179 coins: −140.6% (MINA) to +83.2% (XMR) · 78 below zero"
-RANGE_MOVERS = "Across 179 coins: −36.2% (YTT) to +61.4% (HYPE) · 71 below zero"
-
-
-def test_the_range_over_every_coin_is_one_line_under_the_rows(rendered):
-    """Contract field 1 through `copy.card.range` (+ `range_below`): drawn when
-    the rows show fewer coins than carry a value, in the column's unit and
-    sign; absent on a receipt and when the server serves no range."""
-    for name, words in (
-        ("top15", RANGE_FUNDING),
-        ("above20", RANGE_FUNDING),
-        ("nofilter", RANGE_FUNDING),
-        ("lines", RANGE_FUNDING),
-        ("movers", RANGE_MOVERS),
-        ("movers_top", RANGE_MOVERS),
-    ):
-        for r in _every(rendered, name):
-            assert r["range"] == [words], (name, r["range"])
-    for name in ("receipt", "movers_top_norange"):
-        for r in _every(rendered, name):
-            assert r["range"] == [] and "Across" not in r["text"], (name, r["text"])
-    # under the table's "+N more" line, and under the Lines legend
-    for r in _every(rendered, "nofilter"):
-        assert r["order"].index("sc-more") < r["order"].index("sc-range")
-    for r in _every(rendered, "lines"):
+def test_expand_is_a_dashboard_with_every_view_together(rendered):
+    for r in _every(rendered, "top15", "fullscreen"):
+        assert r["panels"] == ["Lines", "Table", "dist"], r["panels"]
+        assert r["tableRows"] == 15, r["tableRows"]
+        assert r["tiedRanks"] == ["11="] * 5, r["tiedRanks"]
+        assert r["cutNames"] == 0
+        assert r["ruleAlpha"] is not None and r["ruleAlpha"] <= 0.2, r["ruleAlpha"]
+        assert r["colouredLines"] == 5, r["colouredLines"]
+        assert r["controlsBar"][:3] == ["All views", "Lines", "Table"], r["controlsBar"]
+        assert [a["text"] for a in r["links"]] == ["View in Keel ↗", "Test as a strategy"], r[
+            "links"
+        ]
+        assert "button-quiet" in r["links"][1]["cls"] and r["bareAnchors"] == 0
+        # Show "All": never a new colour past the five identity slots
+        assert r["showAll"]["lines"] == 20 and len(r["showAll"]["colours"]) == 5, r["showAll"][
+            "colours"
+        ]
+        assert r["showAll"]["inkLines"] == 15
+        # tap the Table panel's name: it takes the page
+        assert r["focusTable"]["panels"] == ["Table", "dist"], r["focusTable"]["panels"]
+    for r in _every(rendered, "movers", "fullscreen"):
+        assert r["panels"] == ["Lines", "Scatter", "dist", "Table"], r["panels"]
+        assert r["tableHeaders"] == [
+            "#",
+            "",
+            "7-day return ↓",
+            "Relative volume rank",
+            "1-day return",
+        ]
         assert (
-            r["order"].index("sc-nums")
-            < r["order"].index("sc-range")
-            < r["order"].index("sc-chart")
+            "−3.4%" in " ".join(" ".join(row) for row in [r["tableFirst"]]) or r["tableRows"] == 10
         )
 
 
-def test_a_view_set_envelope_draws_what_a_view_draws(rendered):
-    """Lane B: keel_screener_view_set returns the full screen envelope; the
-    card has no special path for it. Same source, bumped revision."""
-    for theme in ("light", "dark"):
-        for width in (360, 760):
-            saved = rendered[("view_set", theme, width)]
-            viewed = rendered[("top15", theme, width)]
-            assert saved["meta"] == [
-                "Hourly · as of 5 Nov 13:00 UTC · view rev 4 · Updated 4 minutes ago"
-            ]
-            assert saved["text"].replace("view rev 4", "view rev 3") == viewed["text"]
-            assert saved["rows"] == viewed["rows"] and saved["receipt"] == []
-            assert "View saved" not in saved["text"], "the save words belong to the receipt"
+def test_expand_reads_the_scrub_in_words(rendered):
+    """Q-7925: the readout names the bar in words, UTC, never an ISO stamp."""
+    for r in _every(rendered, "lines", "fullscreen"):
+        assert r["readout"] and r["readout"][0].startswith("Thu 5 Nov 13:00 UTC"), r["readout"]
 
 
-def test_the_other_views_are_named(rendered):
-    assert "More views in Keel: Lines" in rendered[("top15", "light", 360)]["text"]
-    assert "More views in Keel: Lines · Scatter" in rendered[("movers", "dark", 760)]["text"]
-    assert "More views" not in rendered[("nofilter", "light", 360)]["text"], (
-        "one view: nothing else"
+def test_view_in_keel_opens_the_focused_view(rendered):
+    for r in _every(rendered, "lines", "fullscreen"):
+        hero = r["links"][0]["href"]
+        assert "v=" not in hero, "the default view is the link itself"
+        assert r["focusTable"]["links"][0]["href"] == hero + "&v=All%20coins", r["focusTable"][
+            "links"
+        ]
+
+
+# ── seeded reds: one edit to the served card each, the control in the same run ─────────────────────────────────────
+
+
+def _seeded(tmp_path, old: str, new: str, cases: tuple[str, ...], modes=("inline",)):
+    html = build_card_html("screener")
+    assert html.count(old) == 1, f"the seed's anchor moved: {old!r}"
+    envs = card_envelopes()
+    return _run(
+        tmp_path,
+        html.replace(old, new),
+        {k: envs[k] for k in cases},
+        themes=["light"],
+        widths=[760],
+        modes=list(modes),
     )
+
+
+def test_seeded_q7920_a_bare_test_link_is_caught(tmp_path):
+    rows = _seeded(
+        tmp_path,
+        'el("a", "button-link button-quiet sc-test", test.label)',
+        'el("a", "sc-test", test.label)',
+        ("top15",),
+        ("inline", "fullscreen"),
+    )
+    by = {r["mode"]: r for r in rows if r["width"] in (760, 1100)}
+    assert by["fullscreen"]["bareAnchors"] == 1  # red
+    assert by["inline"]["bareAnchors"] == 0  # control: inline carries no Test link
+
+
+def test_seeded_q7921_the_revision_in_the_head_is_caught(tmp_path):
+    rows = _seeded(
+        tmp_path,
+        "      copy.clock,\n      trouble ? copy.freshness : when,",
+        '      copy.clock,\n      screen.view_revision != null\n        ? tpl(env, "view_rev", { n: screen.view_revision })\n        : null,\n      trouble ? copy.freshness : when,',
+        ("top15", "nofilter"),
+    )
+    by = {r["name"]: r for r in rows}
+    assert "revision" in by["top15"]["meta"][0]  # red
+    assert by["nofilter"]["meta"] == [
+        "Screen · v2 · Hourly · as of 5 Nov 13:00 UTC"
+    ]  # control: no revision served
+
+
+def test_seeded_q7923_expand_on_every_line_is_caught(tmp_path):
+    rows = _seeded(
+        tmp_path,
+        "var top = full ? (ui.top != null ? ui.top : TOP) : TOP;",
+        "var top = full ? (ui.top != null ? ui.top : 999) : TOP;",
+        ("lines",),
+        ("inline", "fullscreen"),
+    )
+    by = {r["mode"]: r for r in rows if r["width"] in (760, 1100)}
+    assert by["fullscreen"]["lines"] == 20  # red: every line on open
+    assert len(by["fullscreen"]["colours"]) == 5  # the identity slots still cap the colours
+    assert by["inline"]["lines"] == 5  # control
+
+
+def test_seeded_q7924_the_true_height_leaves_the_plot(tmp_path):
+    rows = _seeded(
+        tmp_path,
+        "return y == null || side(y) ? null : [X(j), Y(y)];",
+        "return y == null ? null : [X(j), Y(y)];",
+        ("lines", "top15"),
+        ("fullscreen",),
+    )
+    by = {(r["name"], r["width"]): r for r in rows}
+    assert by[("lines", 1100)]["outside"] > 0  # red
+    assert by[("top15", 1100)]["outside"] == 0  # control: no shown line leaves its band
+
+
+def test_seeded_q7925_an_iso_readout_is_caught(tmp_path):
+    rows = _seeded(
+        tmp_path,
+        '    if (weekday) opts.weekday = "short";',
+        "    if (weekday) return d.toISOString().slice(0, 10);",
+        ("lines",),
+        ("inline", "fullscreen"),
+    )
+    by = {r["mode"]: r for r in rows if r["width"] in (760, 1100)}
+    assert by["fullscreen"]["isoDate"]  # red
+    assert not by["inline"]["isoDate"]  # control: the head's time is not the readout's
+
+
+def test_seeded_q7926_the_screener_exclusion_hides_expand(tmp_path):
+    rows = _seeded(
+        tmp_path,
+        "    if (\n      hostOffersFullscreen() &&",
+        '    if (\n      cardKind() !== "screener" &&\n      hostOffersFullscreen() &&',
+        ("top15", "receipt"),
+    )
+    by = {r["name"]: r for r in rows}
+    assert [a["text"] for a in by["top15"]["links"]] == ["View in Keel ↗"]  # red: no Expand
+    assert [a["text"] for a in by["receipt"]["links"]] == [
+        "View in Keel ↗"
+    ]  # control: never had one

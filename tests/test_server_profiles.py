@@ -406,9 +406,16 @@ def test_full_instructions_carry_the_paper_section_once_when_loaded(
     # the full profile carries since screeners L13) gives HEAD's string.
     screens = assemble.section("screens").terse
     assert text.count(screens) == 1
+    # The suite's caller is served Research (conftest), so a local server ends
+    # with the research core's line; the hosted string never carries it.
+    research = assemble.section("research").terse
+    assert text.count(research) == (0 if hosted else 1)
     head = load()["instructions"][key("full-hosted" if hosted else "full-local", False)]
     assert (
-        text.replace("\n\n" + PAPER_ROW, "", 1).replace("\n\n" + screens, "", 1) == head
+        text.replace("\n\n" + PAPER_ROW, "", 1)
+        .replace("\n\n" + screens, "", 1)
+        .replace("\n\n" + research, "", 1)
+        == head
     )
 
 
@@ -421,6 +428,63 @@ def test_full_instructions_omit_the_paper_section_when_not_loaded(paper_sdk_rele
     monkeypatch.setenv("KEEL_TOOLSETS", "read-only,backtest")
     assert paper_deploy_loaded() is False
     assert "keel_paper" not in create_server().instructions
+
+
+@pytest.mark.parametrize("hosted", [False, True])
+def test_full_instructions_carry_the_research_line_only_for_a_served_caller(monkeypatch, hosted):
+    """Research 07 §5.3 (D-387, gate E): a local server whose caller's /v1/me serves Research appends the research
+    core's one line as its last block. The hosted server is built once for every caller, so its built string is the
+    Research-off one, served or not; ``instructions_for(research_served=True)`` is what services/mcp-server swaps in
+    at initialize for a served caller, and it is that string plus the one block.
+
+    Seed (exact reversible edit): in keel/mcp/server.py pass ``research_served=research_served()`` in place of
+    ``research_served=not is_hosted() and research_served()`` ⇒ the hosted arm reds (unbound, research_served() is
+    true on the hosted full profile, so every caller would read the line)."""
+    from keel.mcp.server import create_server, instructions_for
+    from keel.tools.outcomes import _research_local
+
+    from pipeline_engine.reference.system import assemble
+
+    monkeypatch.delenv("KEEL_SERVER_PROFILE", raising=False)
+    monkeypatch.delenv("KEEL_TOOLSETS", raising=False)
+    if hosted:
+        monkeypatch.setenv("KEEL_EXECUTION_MODE", "hosted")
+    else:
+        monkeypatch.delenv("KEEL_EXECUTION_MODE", raising=False)
+    line = assemble.section("research").terse
+    monkeypatch.setattr(_research_local, "local_research_served", lambda: False)
+    off = create_server().instructions
+    monkeypatch.setattr(_research_local, "local_research_served", lambda: True)
+    on = create_server().instructions
+    assert line not in off
+    assert on == (off if hosted else off + "\n\n" + line)
+    assert instructions_for(research_served=False) == off
+    assert instructions_for(research_served=True) == off + "\n\n" + line
+    # Non-vacuity: the line is real and names the tool it routes to; both strings are the full profile's.
+    assert "keel_research_plan" in line and off.count(assemble.section("screens").terse) == 1
+
+
+@pytest.mark.parametrize("screens", [False, True])
+def test_listed_instructions_carry_the_research_line_only_beside_screens(monkeypatch, screens):
+    """The listed profile (the hosted connector): a served caller's instructions gain the research line only where
+    the SCREENS line is (Research is its peer there); a caller not served reads the built string byte for byte."""
+    from keel.mcp.server import create_server, instructions_for
+
+    from pipeline_engine.reference.system import assemble
+
+    monkeypatch.setenv("KEEL_SERVER_PROFILE", "listed")
+    monkeypatch.setenv("KEEL_EXECUTION_MODE", "hosted")
+    if screens:
+        monkeypatch.setenv("KEEL_LISTED_SCREENS_HOSTS", "all")
+    else:
+        monkeypatch.delenv("KEEL_LISTED_SCREENS_HOSTS", raising=False)
+    built = create_server().instructions
+    line = assemble.section("research").terse
+    assert line not in built
+    assert instructions_for(research_served=False) == built
+    assert instructions_for(research_served=True) == (built + "\n\n" + line if screens else built)
+    # Non-vacuity: the screens arm really carries SCREENS, the other really does not.
+    assert ("SCREENS —" in built) is screens
 
 
 def test_listed_instructions_untouched_by_the_paper_section(paper_sdk_released, monkeypatch):
@@ -502,7 +566,9 @@ def test_tools_local_default_counts_the_default_set(paper_sdk_released, monkeypa
     # + the two paper tools; + Research's 24 commands, 8 of them MCP tools (07 §2.2).
     from tests._research_delta import RESEARCH_ADDITIONS, RESEARCH_MCP_ADDITIONS
 
-    assert numbers["tools_local_default"] == HELD_TOOLS_LOCAL_DEFAULT + 2 + len(RESEARCH_MCP_ADDITIONS)
+    assert numbers["tools_local_default"] == HELD_TOOLS_LOCAL_DEFAULT + 2 + len(
+        RESEARCH_MCP_ADDITIONS
+    )
     assert numbers["tools_registry"] == HELD_TOOLS_REGISTRY + 2 + len(RESEARCH_ADDITIONS)
 
 

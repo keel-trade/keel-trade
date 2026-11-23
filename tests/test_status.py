@@ -121,8 +121,13 @@ def test_the_status_view_template(monkeypatch) -> None:
     body = _status(monkeypatch, profile="listed", toolsets=None, entitlements=entitlements)
     lines = body["view"]["markdown"].strip().splitlines()
     assert lines[0] == "**Keel** · signed in as Acme · free plan"
-    # Two units sharing a period and a reset are ONE sentence; `reserved` rides.
-    assert "6 of 50 backtest runs (1 reserved by runs in flight) and 3,000 of 3,600" in lines[1]
+    # Units sharing a period and a reset are ONE sentence; `reserved` rides. Compute is silent (PLANS-REVIEW R7):
+    # never a count on the card.
+    assert (
+        "6 of 50 backtest runs (1 reserved by runs in flight) left this week; "
+        "they reset Mon 28 Sep 00:00 UTC. 2 of 2 live strategies max left." in lines[1]
+    ), lines[1]
+    assert "3,600" not in lines[1] and "compute" not in lines[1]
     assert lines[1].endswith(
         "Quota is per org and shared across the web app, the CLI and other chats."
     )
@@ -305,9 +310,9 @@ def test_the_card_states_both_pots_on_the_30_day_cycle(monkeypatch) -> None:
     )
     line = body["view"]["markdown"].strip().splitlines()[1]
     (runs,) = [e for e in body["entitlements"]["summary"] if e["unit"] == "backtest_runs"]
+    # The v3 rows' first-week words (R16; the bonus ends Nov 6, before the Nov 29 reset); compute is silent.
     assert line.startswith(
-        f"65 of 75 backtest runs ({runs['first_week']['remaining']} first-week extras until "
-        "Fri 6 Nov) and 1,950 of 2,250 backtest compute seconds left this 30-day "
+        "65 of 75 backtest runs (25 plus your first-week 50) left this 30-day "
         "period; they reset Sun 29 Nov 14:00 UTC."
     ), line
     assert runs["first_week"] == {

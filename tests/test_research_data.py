@@ -16,7 +16,6 @@ import json
 from pathlib import Path
 
 import pytest
-
 from keel.errors import KeelError
 from keel.tools.outcomes import OUTCOMES, _bootstrap
 from keel.tools.outcomes._base import ToolContext
@@ -31,6 +30,8 @@ PAIRS = {
     DATA / "reference" / "research.md": LIBS / "reference" / "research.md",
     DATA / "reference" / "research_steps.md": LIBS / "reference" / "research_steps.md",
     DATA / "research_step_catalog.json": LIBS / "steps" / "step_catalog.json",
+    # CHAT-FINAL S2-d: the step pages libs/research renders (render_step_md), which chat-api's get_step also serves
+    DATA / "research_step_pages.json": LIBS / "steps" / "step_pages.json",
     # 07 §5.1, RI-251: the research link routes (open_in_app.research_link)
     DATA / "research_link_routes.json": LIBS / "link_routes.json",
 }
@@ -69,7 +70,9 @@ def test_the_steps_topic_carries_the_grammar(monkeypatch) -> None:
     for heading in ("## Reference forms", "## Addresses", "## Templates", "## Rules"):
         assert heading in body, heading
     assert "`StudyOut(study_id, version=n, output=name)`" in body and "`var[name]`" in body
-    rules = [line for line in body.partition("## Rules")[2].splitlines() if line.startswith("- `STUDY_")]
+    rules = [
+        line for line in body.partition("## Rules")[2].splitlines() if line.startswith("- `STUDY_")
+    ]
     assert len(rules) > 80  # not vacuous: every rule code
 
 
@@ -98,7 +101,10 @@ def test_a_step_topic_names_its_variant(monkeypatch) -> None:
     cost = _help("step:CostStress").extra["body"]
     assert "- Variant: varies `multiples`; edits run_setting `costs` through Run.costs." in cost
     stop = _help("step:StopTargetMap").extra["body"]
-    assert "- Variant (when form runs): varies `stops`, `targets`; edits param `stop_at and target_at`" in stop
+    assert (
+        "- Variant (when form runs): varies `stops`, `targets`; edits param `stop_at and target_at`"
+        in stop
+    )
     assert "- Variant" not in _help("step:Backtest").extra["body"]  # control: null variant, no line
 
 

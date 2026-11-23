@@ -1,259 +1,277 @@
-/* ── The screen card (INV-53; spec 06 §D3.3, §D3.5) ──────────────────
-   `--sc-0…23` is S1's `CAT` (live-design S1 js/util.js), the screener's
-   one categorical palette, assigned by rank and frozen per coin. The DARK
-   sites equal keel-app's `screenMarks.categorical` (tokens.ts, read by
-   chartTheme `signalCategorical`) byte for byte; the LIGHT sites keep the
-   hue order, each colour darkened in HLS lightness only until it clears
-   3:1 (graphical objects) on claude.ai's and ChatGPT's light grounds.
-   tests/test_card_screener_palette.py pins both. The `--sc-field` … ink
-   is S1's chart ink (SS_FIELD, the zero line, the scatter median and
-   grey points, the passing-row wash). */
-:root {
-  --sc-0: #7c75ff;
-  --sc-1: #1da098;
-  --sc-2: #be840e;
-  --sc-3: #3d91f9;
-  --sc-4: #f151a5;
-  --sc-5: #699d13;
-  --sc-6: #0c98d9;
-  --sc-7: #e66a05;
-  --sc-8: #29a374;
-  --sc-9: #a775f5;
-  --sc-10: #db2777;
-  --sc-11: #9333ea;
-  --sc-12: #12a191;
-  --sc-13: #c08304;
-  --sc-14: #df4df9;
-  --sc-15: #16a349;
-  --sc-16: #629e0d;
-  --sc-17: #3b82f6;
-  --sc-18: #c2410c;
-  --sc-19: #0599e0;
-  --sc-20: #d946ef;
-  --sc-21: #669e11;
-  --sc-22: #0891b2;
-  --sc-23: #e04df7;
-  --sc-field: rgba(92, 106, 128, 0.16);
-  --sc-zero: rgba(15, 23, 36, 0.3);
-  --sc-median: rgba(15, 23, 36, 0.28);
-  --sc-out: rgba(92, 106, 128, 0.38);
-  --sc-row: rgba(79, 70, 229, 0.07);
-  --sc-bar: rgba(92, 106, 128, 0.55);
+/* ── The screen card on the chat cards' face (D-420..D-420d; SCREENS-CARD) ──
+   Structure is the host's: transparent ground, its ink and muted ink, its
+   tertiary border as `--rule` (never the 40 % primary: the founder's "tables
+   without white lines"). Keel brings the accent and the identity colours:
+   `--sc-id-0..5`, written by card-screener.js from `KeelHost.palette().ids`
+   (the face's validated palette, the accent first), so a coin's bar, its
+   strip tick and its line are one colour. Every other coin is the grey
+   field. Type is card.css's face scale: caption 12, body 14, title 16,
+   hero 28; figures tabular. */
+body[data-card="screener"] {
+  --sc-field: rgba(31, 30, 29, 0.13);
+  --sc-tick: rgba(31, 30, 29, 0.3);
+  --sc-field-tick: rgba(31, 30, 29, 0.2);
+  --sc-zero: rgba(31, 30, 29, 0.45);
+  --sc-track: rgba(31, 30, 29, 0.06);
+  --sc-ink-line: rgba(31, 30, 29, 0.55);
 }
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --sc-0: #7c75ff;
-    --sc-1: #25d0c5;
-    --sc-2: #f0b133;
-    --sc-3: #60a5fa;
-    --sc-4: #f472b6;
-    --sc-5: #a3e635;
-    --sc-6: #0da2e7;
-    --sc-7: #fb923c;
-    --sc-8: #3fcf98;
-    --sc-9: #b992f7;
-    --sc-10: #db2777;
-    --sc-11: #9333ea;
-    --sc-12: #14b8a6;
-    --sc-13: #ca8a04;
-    --sc-14: #f0abfc;
-    --sc-15: #86efac;
-    --sc-16: #65a30d;
-    --sc-17: #3b82f6;
-    --sc-18: #c2410c;
-    --sc-19: #7dd3fc;
-    --sc-20: #d946ef;
-    --sc-21: #84cc16;
-    --sc-22: #0891b2;
-    --sc-23: #e879f9;
-    --sc-field: rgba(151, 171, 195, 0.13);
-    --sc-zero: rgba(255, 255, 255, 0.25);
-    --sc-median: rgba(225, 231, 239, 0.28);
-    --sc-out: rgba(101, 117, 139, 0.38);
-    --sc-row: rgba(124, 117, 255, 0.08);
-    --sc-bar: rgba(151, 171, 195, 0.6);
+  :root:not([data-theme="light"]) body[data-card="screener"] {
+    --sc-field: rgba(222, 220, 209, 0.13);
+    --sc-tick: rgba(222, 220, 209, 0.3);
+    --sc-field-tick: rgba(222, 220, 209, 0.22);
+    --sc-zero: rgba(222, 220, 209, 0.5);
+    --sc-track: rgba(222, 220, 209, 0.07);
+    --sc-ink-line: rgba(222, 220, 209, 0.6);
   }
 }
-:root[data-theme="dark"] {
-  --sc-0: #7c75ff;
-  --sc-1: #25d0c5;
-  --sc-2: #f0b133;
-  --sc-3: #60a5fa;
-  --sc-4: #f472b6;
-  --sc-5: #a3e635;
-  --sc-6: #0da2e7;
-  --sc-7: #fb923c;
-  --sc-8: #3fcf98;
-  --sc-9: #b992f7;
-  --sc-10: #db2777;
-  --sc-11: #9333ea;
-  --sc-12: #14b8a6;
-  --sc-13: #ca8a04;
-  --sc-14: #f0abfc;
-  --sc-15: #86efac;
-  --sc-16: #65a30d;
-  --sc-17: #3b82f6;
-  --sc-18: #c2410c;
-  --sc-19: #7dd3fc;
-  --sc-20: #d946ef;
-  --sc-21: #84cc16;
-  --sc-22: #0891b2;
-  --sc-23: #e879f9;
-  --sc-field: rgba(151, 171, 195, 0.13);
-  --sc-zero: rgba(255, 255, 255, 0.25);
-  --sc-median: rgba(225, 231, 239, 0.28);
-  --sc-out: rgba(101, 117, 139, 0.38);
-  --sc-row: rgba(124, 117, 255, 0.08);
-  --sc-bar: rgba(151, 171, 195, 0.6);
+:root[data-theme="dark"] body[data-card="screener"] {
+  --sc-field: rgba(222, 220, 209, 0.13);
+  --sc-tick: rgba(222, 220, 209, 0.3);
+  --sc-field-tick: rgba(222, 220, 209, 0.22);
+  --sc-zero: rgba(222, 220, 209, 0.5);
+  --sc-track: rgba(222, 220, 209, 0.07);
+  --sc-ink-line: rgba(222, 220, 209, 0.6);
 }
-:root[data-theme="light"] {
-  --sc-0: #7c75ff;
-  --sc-1: #1da098;
-  --sc-2: #be840e;
-  --sc-3: #3d91f9;
-  --sc-4: #f151a5;
-  --sc-5: #699d13;
-  --sc-6: #0c98d9;
-  --sc-7: #e66a05;
-  --sc-8: #29a374;
-  --sc-9: #a775f5;
-  --sc-10: #db2777;
-  --sc-11: #9333ea;
-  --sc-12: #12a191;
-  --sc-13: #c08304;
-  --sc-14: #df4df9;
-  --sc-15: #16a349;
-  --sc-16: #629e0d;
-  --sc-17: #3b82f6;
-  --sc-18: #c2410c;
-  --sc-19: #0599e0;
-  --sc-20: #d946ef;
-  --sc-21: #669e11;
-  --sc-22: #0891b2;
-  --sc-23: #e04df7;
-  --sc-field: rgba(92, 106, 128, 0.16);
-  --sc-zero: rgba(15, 23, 36, 0.3);
-  --sc-median: rgba(15, 23, 36, 0.28);
-  --sc-out: rgba(92, 106, 128, 0.38);
-  --sc-row: rgba(79, 70, 229, 0.07);
-  --sc-bar: rgba(92, 106, 128, 0.55);
+
+/* the frame: the face's padding, content height */
+body[data-card="screener"][data-face] .keel-card {
+  padding: 14px 16px calc(14px + var(--safe-bottom));
 }
-/* The screen's name reads in the UI face, like the app's screen page;
-   the mono face is for numbers. */
-body[data-card="screener"] .head-name {
-  font-family: var(--font);
+body[data-card="screener"][data-face] .link-row {
+  margin-top: 12px;
 }
-/* cadence · as of · view rev · freshness, under the header */
-.sc-meta {
-  margin: 0 0 6px;
-  font-size: var(--t-xs);
-  line-height: var(--t-xs-lh);
+@media (max-width: 479px) {
+  body[data-card="screener"][data-face] .keel-card {
+    padding: 12px 12px calc(14px + var(--safe-bottom));
+  }
 }
-.sc-pass {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 2px 8px;
-  margin: 0 0 6px;
-}
-.sc-pass .sc-passn {
-  font-size: var(--t-base);
-  line-height: var(--t-base-lh);
-  font-weight: 600;
+body[data-card="screener"] .sc-svg,
+body[data-card="screener"] .sc-strip {
+  display: block;
+  overflow: visible;
+  font: 400 var(--f-caption) / var(--f-caption-lh) var(--font);
   font-variant-numeric: tabular-nums;
 }
-.sc-pass .sc-passd {
-  font-size: var(--t-xs);
-  line-height: var(--t-xs-lh);
+
+/* ── the head: the name, then one muted line ── */
+.sc-head {
+  margin: 0 0 10px;
+  min-width: 0;
 }
-.sc-tie {
-  margin-top: -4px;
-}
-.sc-nums {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin-bottom: 4px;
-}
-.sc-numlab {
+.sc-title {
   margin: 0;
-  font-size: var(--t-micro);
-  line-height: var(--t-micro-lh);
+  font: 600 var(--f-title) / var(--f-title-lh) var(--font);
+  color: var(--fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sc-meta,
+.sc-label,
+.sc-plabel,
+.sc-foot,
+.sc-note,
+.sc-tie,
+.sc-desc,
+.sc-lab {
+  margin: 0;
+  font: 400 var(--f-caption) / var(--f-caption-lh) var(--font);
   color: var(--muted);
 }
-/* the legend: swatch · coin · value, one line each, wrapping */
-.sc-legend {
+.sc-meta {
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sc-label {
+  margin: 0 0 2px;
+}
+
+/* ── the top rows: rank · coin · bar · value; the first emphasised ── */
+.sc-rows {
+  display: grid;
+  grid-template-columns: 14px max-content minmax(48px, 1fr) max-content;
+  column-gap: 12px;
+  row-gap: 2px;
+  align-items: center;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.sc-r {
+  display: contents;
+}
+.sc-rk {
+  font: 400 var(--f-caption) / var(--f-caption-lh) var(--font);
+  color: var(--muted);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.sc-k {
+  font: 600 var(--f-body) / 22px var(--font);
+  color: var(--fg);
+  white-space: nowrap;
+}
+.sc-new {
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 4px;
+  font: 500 var(--f-caption) / var(--f-caption-lh) var(--font);
+  color: var(--accent-ink);
+  background: var(--face-wash);
+  vertical-align: 1px;
+}
+.sc-v {
+  font: 500 var(--f-body) / 22px var(--font);
+  color: var(--fg);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.sc-r.sc-first .sc-k {
+  font-size: var(--f-title);
+  line-height: 38px;
+}
+.sc-r.sc-first .sc-v {
+  font: 600 var(--f-hero) / 38px var(--font);
+  letter-spacing: -0.01em;
+}
+/* the data bar: the coin's identity colour on a faint track; diverging
+   about a centre line when a shown value is negative */
+.sc-bar {
+  position: relative;
+  display: block;
+  height: 6px;
+  min-width: 40px;
+  border-radius: 3px;
+  background: var(--sc-track);
+  overflow: hidden;
+}
+.sc-r.sc-first .sc-bar {
+  height: 10px;
+  border-radius: 5px;
+}
+.sc-bar i {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  display: block;
+  border-radius: inherit;
+  background: var(--sc-ink-line);
+}
+.sc-bar.sc-div::after {
+  content: "";
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  left: 50%;
+  width: 1px;
+  background: var(--sc-zero);
+}
+.sc-tie {
+  margin: 4px 0 0;
+}
+
+/* ── the baseline strip ── */
+.sc-stripw {
+  margin: 10px 0 0;
+}
+.sc-strip .sc-axis-l {
+  stroke: var(--rule);
+}
+.sc-strip .sc-tk {
+  stroke: var(--sc-field-tick);
+  stroke-width: 1;
+}
+.sc-strip .sc-tk-id {
+  stroke-linecap: round;
+}
+.sc-strip .sc-zero,
+.sc-svg .sc-zero {
+  stroke: var(--sc-zero);
+  stroke-dasharray: 2 2;
+}
+.sc-strip .sc-sl {
+  fill: var(--muted);
+  dominant-baseline: auto;
+}
+
+/* ── the count, then what moved since the last bar ── */
+.sc-foot {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 12px;
+  margin: 8px 0 0;
+}
+.sc-count {
+  font-variant-numeric: tabular-nums;
+}
+.sc-moves {
+  display: inline-flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 4px 6px;
 }
-.sc-legend .sc-more {
-  padding-left: 2px;
-}
-.sc-num {
+.sc-chip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  min-height: 30px;
-  padding: 4px 9px 4px 8px;
-  text-align: left;
-  color: var(--fg);
-  background: var(--tile);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  font: inherit;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--rule);
+  font: 500 var(--f-caption) / var(--f-caption-lh) var(--font);
+  color: var(--muted);
   white-space: nowrap;
-  cursor: pointer;
 }
-.sc-num .k {
-  font-size: var(--t-xs);
-  line-height: var(--t-xs-lh);
+.sc-chip.sc-in {
+  color: var(--accent-ink);
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+}
+
+/* ── the receipt, the error, the plan limit: one quiet block ── */
+.sc-status,
+.sc-err {
+  margin: 0;
+  font: 400 var(--f-body) / var(--f-body-lh) var(--font);
+  color: var(--fg);
+}
+.sc-desc {
+  margin: 0 0 4px;
+}
+.sc-limit {
+  margin: 0;
+  font: 400 var(--f-body) / var(--f-body-lh) var(--font);
+  color: var(--fg);
+}
+.sc-limit-h {
   font-weight: 600;
 }
-.sc-num .v {
-  font-family: var(--font-mono);
-  font-size: var(--t-xs);
-  line-height: var(--t-xs-lh);
+.sc-limit .sc-limit-r {
+  font: inherit;
   color: var(--muted);
-  font-variant-numeric: tabular-nums;
 }
-.sc-num.on,
-.sc-it.on {
-  border-color: var(--accent);
-}
-.sc-num.on .v {
-  color: var(--fg);
-}
-.sc-sw {
-  display: inline-block;
-  width: 10px;
-  height: 10px;
-  border-radius: 2px;
-  flex-shrink: 0;
-}
-.sc-sw.out {
-  box-shadow: inset 0 0 0 1px var(--line);
-}
-.sc-more,
-.sc-cap {
-  margin: 0;
-  font-size: var(--t-xs);
-  line-height: var(--t-xs-lh);
-}
-/* the ranked output's range over every coin, under the rows (Q-3640) */
-.sc-range {
-  margin-top: 4px;
-  font-variant-numeric: tabular-nums;
-}
+
+/* ── charts: no well, recessive grid, the host's ink for ticks ── */
 .sc-chart {
   position: relative;
-  padding: 0;
-  overflow: hidden;
-  cursor: pointer;
+  margin: 0;
+  color: var(--sc-ink-line);
 }
-.sc-svg {
-  display: block;
+.sc-svg .sc-grid {
+  stroke: var(--rule);
+}
+.sc-svg .sc-tick,
+.sc-svg .sc-axis,
+.sc-svg .sc-quad {
+  fill: var(--muted);
+  dominant-baseline: middle;
+}
+.sc-svg .sc-xtick {
+  dominant-baseline: auto;
 }
 .sc-svg .sc-field {
   fill: none;
@@ -265,249 +283,287 @@ body[data-card="screener"] .head-name {
   stroke-linejoin: round;
   stroke-linecap: round;
 }
-.sc-svg .dim {
-  opacity: 0.22;
+.sc-svg .sc-line.sc-ink {
+  stroke: var(--sc-ink-line);
+}
+.sc-svg .sc-cap-run {
+  stroke-dasharray: 3 3;
+}
+.sc-svg .sc-dim {
+  opacity: 0.2;
 }
 .sc-svg .sc-hit {
   fill: none;
   stroke: transparent;
-  stroke-width: 10;
+  stroke-width: 12;
   pointer-events: stroke;
+  cursor: pointer;
 }
-.sc-svg .sc-grid {
-  stroke: var(--line);
+.sc-svg .sc-clip,
+.sc-svg .sc-end,
+.sc-svg .sc-dotlab {
+  dominant-baseline: middle;
+  font-weight: 500;
+  cursor: pointer;
 }
-.sc-svg .sc-zero {
-  stroke: var(--sc-zero);
-  stroke-dasharray: 3 3;
+.sc-svg .sc-end.sc-first,
+.sc-svg .sc-dotlab.sc-first {
+  font-weight: 600;
+}
+.sc-svg .sc-end.sc-ink {
+  fill: var(--muted);
 }
 .sc-svg .sc-cursor {
   stroke: var(--muted);
   stroke-dasharray: 4 3;
 }
 .sc-svg .sc-median {
-  stroke: var(--sc-median);
+  stroke: var(--rule);
   stroke-dasharray: 4 4;
 }
-.sc-svg .sc-clip {
-  cursor: help;
+.sc-svg .sc-dot.sc-out {
+  fill: var(--sc-tick);
 }
-.sc-svg .sc-end,
-.sc-svg .sc-tick,
-.sc-svg .sc-axis,
-.sc-svg .sc-dotlab {
-  font-family: var(--font-mono);
-  font-size: var(--t-micro);
-  dominant-baseline: middle;
+
+/* ── Expand: the dashboard (D-420d) ── */
+:root[data-display-mode="fullscreen"] body[data-card="screener"] .keel-card {
+  padding: 16px 20px calc(20px + var(--safe-bottom));
 }
-.sc-svg .sc-end {
-  font-weight: 500;
-  cursor: pointer;
+.sc-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 20px;
+  margin: 0 0 14px;
 }
-.sc-svg .sc-tick,
-.sc-svg .sc-axis {
-  fill: var(--muted);
-}
-.sc-svg .sc-xtick {
-  dominant-baseline: auto;
-}
-.sc-svg .sc-dotlab {
-  fill: var(--fg);
-}
-.sc-svg .sc-dot.out {
-  fill: var(--sc-out);
-}
-.sc-svg .sc-quad {
-  font-family: var(--font);
-  font-size: var(--t-micro);
-  fill: var(--muted);
-  dominant-baseline: middle;
-}
-.sc-row {
+.sc-ctl {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 6px 8px;
 }
-.sc-lab {
-  font-family: var(--font-mono);
-  font-size: var(--t-xs);
-  line-height: var(--t-xs-lh);
-  color: var(--muted);
-}
 .sc-seg {
   display: inline-flex;
   flex-wrap: wrap;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
+  border: 1px solid var(--rule);
+  border-radius: 8px;
   overflow: hidden;
 }
 .sc-seg button {
-  min-height: 36px;
-  padding: 5px 10px;
-  font: inherit;
-  font-size: var(--t-xs);
-  line-height: var(--t-xs-lh);
+  min-height: 32px;
+  padding: 4px 12px;
+  font: 500 var(--f-caption) / var(--f-caption-lh) var(--font);
   color: var(--muted);
   background: transparent;
   border: 0;
+  border-left: 1px solid var(--rule);
   cursor: pointer;
 }
-.sc-seg button.on {
+.sc-seg button:first-child {
+  border-left: 0;
+}
+.sc-seg button.sc-on {
+  color: var(--accent-ink);
+  background: var(--face-wash);
+}
+@media (max-width: 479px) {
+  .sc-seg button {
+    min-height: 44px;
+  }
+}
+.sc-dash {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  grid-auto-flow: row dense;
+  gap: 16px;
+  align-items: start;
+}
+.sc-panel {
+  min-width: 0;
+  padding: 12px 14px 14px;
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+}
+.sc-p-lines,
+.sc-p-dist,
+.sc-p-scatter {
+  grid-column: 1;
+}
+.sc-p-table {
+  grid-column: 2;
+  grid-row: span 2;
+}
+.sc-wide {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+.sc-wide .sc-p-lines {
+  grid-column: 1;
+}
+.sc-wide .sc-p-scatter {
+  grid-column: 2;
+}
+.sc-wide .sc-p-dist,
+.sc-wide .sc-p-table {
+  grid-column: 1 / -1;
+  grid-row: auto;
+}
+.sc-wide:not(:has(.sc-p-scatter)) .sc-p-dist {
+  grid-column: 2;
+}
+.sc-focused {
+  grid-template-columns: minmax(0, 1fr);
+}
+.sc-focused .sc-panel {
+  grid-column: 1;
+  grid-row: auto;
+}
+@media (max-width: 879px) {
+  .sc-dash {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .sc-dash .sc-panel,
+  .sc-wide:not(:has(.sc-p-scatter)) .sc-p-dist {
+    grid-column: 1;
+    grid-row: auto;
+  }
+}
+.sc-ptitle {
+  display: block;
+  margin: 0 0 8px;
+  padding: 0;
+  font: 600 var(--f-body) / var(--f-body-lh) var(--font);
   color: var(--fg);
-  background: var(--tile);
+  background: none;
+  border: 0;
+  text-align: left;
+}
+button.sc-ptitle {
+  cursor: pointer;
+}
+button.sc-ptitle::after {
+  content: " ⤢";
+  color: var(--muted);
+  font-weight: 400;
+}
+button.sc-ptitle[aria-pressed="true"]::after {
+  content: " ⤡";
+}
+.sc-plabel {
+  margin: -4px 0 6px;
+}
+.sc-panel .sc-foot {
+  margin: 0 0 8px;
+}
+.sc-panel .sc-stripw {
+  margin: 0;
+}
+.sc-note {
+  margin: 10px 0 0;
 }
 .sc-slider {
   width: 100%;
+  margin: 8px 0 0;
   accent-color: var(--accent);
 }
 .sc-read {
-  margin: 0;
-  min-height: 30px;
-  font-family: var(--font-mono);
-  font-size: var(--t-xs);
-  line-height: var(--t-xs-lh);
-  overflow-wrap: anywhere;
-}
-.sc-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-}
-.sc-it {
-  display: grid;
-  grid-template-columns: 24px 10px minmax(0, 1fr) auto;
-  gap: 8px;
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  min-height: 36px;
-  padding: 5px 12px;
-  font-family: var(--font-mono);
-  font-size: var(--t-xs);
-  line-height: var(--t-xs-lh);
+  gap: 4px 12px;
+  margin: 4px 0 0;
+  min-height: 20px;
+  font: 400 var(--f-caption) / var(--f-caption-lh) var(--font);
+  font-variant-numeric: tabular-nums;
   color: var(--fg);
-  text-align: left;
-  background: transparent;
-  border: 1px solid transparent;
-  border-bottom-color: var(--line);
-  cursor: pointer;
 }
-.sc-it .rk {
-  color: var(--muted);
-  text-align: right;
+.sc-read-t {
+  font-weight: 600;
 }
-.sc-it .nm {
-  overflow: hidden;
-  text-overflow: ellipsis;
+.sc-read-i {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   white-space: nowrap;
 }
-.sc-it .v {
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
+.sc-sw {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--sc-ink-line);
+  flex-shrink: 0;
 }
-/* ── the ranked table ── */
+
+/* the full table: every row of the set, the name column as wide as its
+   longest name, hairline rules */
 .sc-tw {
   overflow-x: auto;
-  margin-top: 2px;
+}
+.sc-dash:not(.sc-focused) .sc-p-table .sc-tw {
+  max-height: 560px;
+  overflow-y: auto;
 }
 .sc-dt {
   width: 100%;
-  border-collapse: separate;
-  border-spacing: 0;
+  border-collapse: collapse;
   font-variant-numeric: tabular-nums;
 }
 .sc-dt th {
-  padding: 6px 8px;
-  font-size: var(--t-micro);
-  line-height: var(--t-micro-lh);
-  font-weight: 500;
+  padding: 4px 8px 6px;
+  font: 500 var(--f-caption) / var(--f-caption-lh) var(--font);
   color: var(--muted);
   text-align: left;
   white-space: nowrap;
-  border-bottom: 1px solid var(--line);
-  user-select: none;
+  border-bottom: 1px solid var(--rule);
 }
-.sc-dt th.s {
+.sc-dt th.sc-s {
   color: var(--fg);
 }
-.sc-dt th.n,
-.sc-dt td.n {
+.sc-dt th.sc-n,
+.sc-dt td.sc-n {
   text-align: right;
 }
-.sc-dt th.rk,
-.sc-dt td.rk {
-  width: 1.6em;
-  padding-right: 2px;
-  padding-left: 4px;
+.sc-dt th.sc-rkc,
+.sc-dt td.sc-rkc {
+  width: 2.6em;
+  padding-left: 0;
+  padding-right: 4px;
   color: var(--muted);
   text-align: right;
 }
 .sc-dt td {
   padding: 5px 8px;
-  font-family: var(--font-mono);
-  font-size: var(--t-xs);
-  line-height: var(--t-xs-lh);
+  font: 400 var(--f-body) / var(--f-body-lh) var(--font);
   white-space: nowrap;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid var(--rule);
 }
-.sc-dt td.t {
+.sc-dt tr:last-child td {
+  border-bottom: 0;
+}
+.sc-dt td.sc-t {
   width: 1%;
-  font-family: var(--font);
   font-weight: 600;
 }
-.sc-dt td.s {
-  color: var(--fg);
-}
-.sc-dt td.n:not(.s) {
+.sc-dt td.sc-n:not(.sc-s) {
   color: var(--muted);
 }
-.sc-dt tr.sel td {
-  background: var(--sc-row);
+.sc-dt tr.sc-sel td {
+  background: var(--face-wash);
 }
-/* the data bar: S1's 56 × 4, neutral; diverging about a centre line when
-   the column is signed */
 .sc-cell {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 9px;
+  gap: 10px;
 }
-.sc-bar {
-  position: relative;
-  display: inline-block;
-  flex: 1 1 56px;
-  min-width: 40px;
-  max-width: 140px;
-  height: 4px;
-  vertical-align: middle;
-  overflow: hidden;
-  border-radius: 2px;
-  background: var(--line);
+.sc-cell .sc-bar {
+  flex: 1 1 64px;
+  max-width: 160px;
 }
 .sc-cell .sc-val {
-  min-width: 3.5em;
+  min-width: 4em;
   text-align: right;
 }
-.sc-bar i {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  display: block;
-  background: var(--sc-bar);
-}
-.sc-bar.div::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 50%;
-  width: 1px;
-  background: var(--muted);
-}
-:root[data-display-mode="fullscreen"] .sc-bar {
-  max-width: 200px;
-}
-
-/* The fullscreen table's sort control reads as the header it sits in. */
 .sc-dt th .sc-sort {
   all: inherit;
   display: inline;
@@ -517,6 +573,6 @@ body[data-card="screener"] .head-name {
   cursor: pointer;
 }
 .sc-dt th .sc-sort:focus-visible {
-  outline: 2px solid currentColor;
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }

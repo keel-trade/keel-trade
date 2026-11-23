@@ -28,6 +28,55 @@ CREDENTIAL_SOURCE_ENV = "env"
 CREDENTIAL_SOURCE_STORED = "stored"
 CREDENTIAL_SOURCE_HOSTED = "hosted"
 DEFAULT_API_URL = "https://api.usekeel.io"
+#: The web app's origin for the default API (``app_origin_for_api``).
+DEFAULT_APP_URL = "https://app.usekeel.io"
+
+
+def app_origin_for_api(api_url: str | None) -> str:
+    """The web app's origin twin of an API URL: ``api.…`` → ``app.…``, ``staging-api.…`` → ``staging-app.…``
+    (STG-SURFACES #18, DATA: a CLI pointed at staging linked prod). An API host with no app twin, a non-https URL or
+    none at all reads the default app."""
+    from urllib.parse import urlsplit
+
+    if not isinstance(api_url, str) or not api_url:
+        return DEFAULT_APP_URL
+    api = urlsplit(api_url)
+    first, _, rest = (api.hostname or "").partition(".")
+    if not rest or api.scheme != "https":
+        return DEFAULT_APP_URL
+    if first == "api":
+        return f"https://app.{rest}"
+    if first.endswith("-api"):
+        return f"https://{first[: -len('-api')]}-app.{rest}"
+    return DEFAULT_APP_URL
+
+
+def configured_api_url() -> str:
+    """The API this process talks to (:func:`load_config`'s), read without failing: a hosted process with no bound
+    request, or an unreadable config, reads ``KEEL_API_URL`` else the stored login's URL."""
+    try:
+        return load_config().api_url
+    except Exception:  # noqa: BLE001 - no credential bound here: the URL alone is what is asked
+        return stored_login_api_url()
+
+
+def configured_app_origin() -> str:
+    """The web app's origin every link this process prints starts with: ``KEEL_APP_URL`` (a hosted server always
+    sets it), else the configured API's app twin (:func:`app_origin_for_api`)."""
+    explicit = os.environ.get("KEEL_APP_URL")
+    if explicit:
+        return explicit.rstrip("/")
+    return app_origin_for_api(configured_api_url())
+
+
+def api_keys_url() -> str:
+    """Where a person makes an API key, on the app this process links (:func:`configured_app_origin`)."""
+    return f"{configured_app_origin()}/settings?tab=api-keys"
+
+
+def configured_api_is_default() -> bool:
+    """Whether this process talks to Keel's production API (the only one ``status.usekeel.io`` reports on)."""
+    return configured_api_url().rstrip("/") == DEFAULT_API_URL
 
 
 @dataclass

@@ -27,15 +27,19 @@ import pytest
 
 
 ROOT = Path(__file__).resolve().parents[4] / "libs" / "research" / "testing" / "surface_parity"
-pytestmark = pytest.mark.skipif(not ROOT.is_dir(), reason="the parity tree is the monorepo's (SERVE's WL-SV-23)")
+pytestmark = pytest.mark.skipif(
+    not ROOT.is_dir(), reason="the parity tree is the monorepo's (SERVE's WL-SV-23)"
+)
 
 ACTIONS = {"plan", "run", "progress", "result", "refine", "stop", "list", "limits"}
 
 #: The card's strings: what a host draws from the forwarded card_summary / card_data, by fixture.
 CARD = {
-    "plan_ready": {"Plan · Check · Momentum rotation v3"},  # words.card_line: the plan row's own line
+    "plan_ready": {
+        "Plan · Check · Momentum rotation v3"
+    },  # words.card_line: the plan row's own line
     "result_done": {
-        "Meets 1 of 2 of your bars",
+        "Meets 1 of 2 of your bars; not met: Sharpe a day late",  # CARD-RENDER #6: the lead names the miss
         "585 days · 100 coins · 9 bp a fill",  # the card's footing line; the text writes the footing in full
         "Sharpe (daily) over the window",
         "1.95",
@@ -46,7 +50,7 @@ CARD = {
         "585 days · 150 books",
     },
     "list_page": {
-        "Meets 1 of 2 of your bars",  # a row's card lead
+        "Meets 1 of 2 of your bars; not met: Sharpe a day late",  # a row's card lead
         "Your studies · 3 studies · 1 running",  # the list card's head
         "+2 more studies",
     },
@@ -86,7 +90,9 @@ def _cancel_text(fx: dict, monkeypatch) -> str:
             return {"words": fx["words"], "links": LINK, "study_id": STUDY["study_id"]}
 
     _bootstrap()
-    got = OUTCOMES["keel_research_cancel"].handler({"run_set_id": "rus_parity"}, ToolContext(api_client=Client()))
+    got = OUTCOMES["keel_research_cancel"].handler(
+        {"run_set_id": "rus_parity"}, ToolContext(api_client=Client())
+    )
     return got.extra["view"]["markdown"]
 
 
@@ -96,16 +102,29 @@ def _list_text(fx: dict) -> str:
     from keel.tools.outcomes._base import ToolContext
 
     rows = [
-        {**r, "study_id": f"stu_parity{i:017d}", "kind_label": STUDY["kind_label"], "card_summary": {"lead": r.get("lead")}}
+        {
+            **r,
+            "study_id": f"stu_parity{i:017d}",
+            "kind_label": STUDY["kind_label"],
+            "card_summary": {"lead": r.get("lead")},
+        }
         for i, r in enumerate(fx.get("rows") or [])
     ]
 
     class Client:
         def get(self, path, *, headers=None, **params):
-            return {"data": rows, "studies_total": 3, "pagination": {"cursor": None, "has_more": False}}
+            return {
+                "data": rows,
+                "studies_total": 3,
+                "pagination": {"cursor": None, "has_more": False},
+            }
 
     _bootstrap()
-    return OUTCOMES["keel_research_get"].handler({}, ToolContext(api_client=Client())).extra["view"]["markdown"]
+    return (
+        OUTCOMES["keel_research_get"]
+        .handler({}, ToolContext(api_client=Client()))
+        .extra["view"]["markdown"]
+    )
 
 
 def _limit_texts(fx: dict) -> list[str]:
@@ -117,7 +136,9 @@ def _limit_texts(fx: dict) -> list[str]:
     body = {"detail": {"code": "quota_exhausted", "unit": "research_studies", "message": words["limit"],
                        "card_words": words["card_words"]}}  # fmt: skip
     err = translate_http_error(403, json.dumps(body))
-    apply_research_refusal(err, {"study_id": STUDY["study_id"]}, app_url=LINK["app"], tool="keel_research_run")
+    apply_research_refusal(
+        err, {"study_id": STUDY["study_id"]}, app_url=LINK["app"], tool="keel_research_run"
+    )
     envelope = err.to_envelope()
     mcp = view_tool_result(json.dumps(envelope), tool_name="keel_research_run").content[0].text
     return [mcp, cli_refusal_text(envelope) or ""]
@@ -136,7 +157,10 @@ def _texts(name: str, fx: dict, monkeypatch) -> list[str]:
         env = {"study": {**STUDY, "state": state}, "progress": _progress(fx) or None, "headline": fx.get("headline"),
                "card_summary": fx.get("card_summary"), "links": LINK}  # fmt: skip
         if fx.get("words") and action == "progress":
-            env["progress"] = {**(env["progress"] or {}), "receipt": fx.get("receipt") or fx["words"]}
+            env["progress"] = {
+                **(env["progress"] or {}),
+                "receipt": fx.get("receipt") or fx["words"],
+            }
         return [rv.study_text(env)]
     if action == "stop":
         return [_cancel_text(fx, monkeypatch)]
@@ -163,11 +187,29 @@ def test_every_served_string_reaches_the_agent_byte_for_byte(name, monkeypatch) 
     fx = _fixtures()[name]
     card = CARD.get(name, set())
     texts = _texts(name, fx, monkeypatch)
-    forwarded = json.dumps({k: fx.get(k) for k in ("card_summary", "card_data", "words", "rows")}, ensure_ascii=False)
+    forwarded = json.dumps(
+        {k: fx.get(k) for k in ("card_summary", "card_data", "words", "rows")}, ensure_ascii=False
+    )
     for s in _expected()[name]:
         if s in card:
             assert s in forwarded, (name, s)  # the card draws it from what the SDK forwards
             continue
         assert texts, (name, "no SDK text for an action with TEXT strings")
         for text in texts:
+            if _carried_by_receipt(s, fx, text):
+                continue
             assert s in text, f"{name}: {s!r} not in the SDK text:\n{text}"
+
+
+def _carried_by_receipt(s: str, fx: dict, text: str) -> bool:
+    """RUNNING-VIEW (D-411, 045522855d): a running receipt leads with the time words' own "Running 3 min" (the state
+    said once): "Running 3 min · 12 of 24 runs done · about 2 min left · 2 reused". The SDK prints that served receipt
+    (``_progress_said``), so the progress's ``time_words`` reach the agent as the receipt's parts, in the receipt's
+    order, never as their own line (printing both would say Running twice). The same rule as chat-api's arm
+    (test_research_surface_parity.py): only the progress's time words, only when the served receipt is printed whole
+    and carries every one of their parts."""
+    receipt = str(fx.get("receipt") or "")
+    progress = fx.get("progress") or {}
+    if s != progress.get("time_words") or not receipt or receipt not in text:
+        return False
+    return set(s.split(" \u00b7 ")) <= set(receipt.split(" \u00b7 "))

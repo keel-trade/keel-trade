@@ -154,10 +154,10 @@ PLAN_STATUS_BLOCK = {
 
 #: The talking points for the block above (doc 07 §5): the opening line,
 #: then one line per limit.
+#: Compute is silent (PLANS-REVIEW R7): its block rides `quota`, and it has no line until it is spent.
 FREE_POINTS = [
     _opening("free"),
-    "Backtests: 46 of 50 left; resets Tue 29 Sep.",
-    "Backtest compute time: 1,380 s of 1,500 s left; resets Tue 29 Sep.",
+    "Backtests: 4 of 50 used on Free; resets Sep 29.",
 ]
 
 #: The projected per-unit blocks for the block above.
@@ -409,7 +409,7 @@ def test_a_paid_plan_reads_the_same_way(_api_env):
         assert env["plan"] == plan and env["plan_name"] == cat.display_name(plan)
         assert env["talking_points"][:2] == [
             _opening(plan),
-            "Backtests: 996 of 1,000 left; resets Tue 29 Sep.",
+            f"Backtests: 4 of 1,000 used on {cat.display_name(plan)}; resets Sep 29.",
         ], plan
     assert _opening("pro") == "Plan: Pro.", "non-vacuity: the top plan has no clause"
 
@@ -452,9 +452,9 @@ ENDS_AT = "2026-10-13T15:02:11Z"  # Tue 13 Oct 2026
 #: The first-week clause for the blocks below (Q-7601 fix round): their
 #: `remaining` (154) and end date; the exact rendering is pinned once in
 #: test_plan_limits_first_week_golden.py.
-FIRST_WEEK_CLAUSE = "(154 first-week extras until Tue 13 Oct)"
+FIRST_WEEK_CLAUSE = "(154 first-week extras until Oct 13)"
 #: The backtests line with the clause folded in.
-FIRST_WEEK_POINT = f"Backtests: 200 of 250 left {FIRST_WEEK_CLAUSE}; resets Tue 29 Sep."
+FIRST_WEEK_POINT = f"Backtests: 50 of 250 used on Free {FIRST_WEEK_CLAUSE}; resets Sep 29."
 
 
 def _first_week_block() -> dict:
@@ -488,11 +488,7 @@ def test_first_week_sentence_is_always_served_when_present(_api_env, monkeypatch
         env = _call_mcp()
         where = (profile, client_env)
         assert set(env) == RESULT_KEYS, where
-        assert env["talking_points"] == [
-            FREE_POINTS[0],
-            FIRST_WEEK_POINT,
-            "Backtest compute time: 6,000 s of 7,500 s left; resets Tue 29 Sep.",
-        ], where
+        assert env["talking_points"] == [FREE_POINTS[0], FIRST_WEEK_POINT], where
         assert env["quota"][0]["first_week"] == {
             "granted": 200,
             "remaining": 154,
@@ -566,10 +562,11 @@ def test_an_urgent_first_week_sentence_fails_the_call(monkeypatch):
     the tool refuses to serve it — the emit guard fails the call rather than
     letting the text reach a host. Control: the approved sentence passes the
     same two guards in test_policy_scan."""
+    import keel.errors as errors
     import keel.tools.outcomes.plan_status as ps
 
     monkeypatch.setattr(
-        ps,
+        errors,
         "render_first_week_clause",
         lambda _block: FIRST_WEEK_CLAUSE[:-1] + "; use them before they expire)",
     )
@@ -616,11 +613,7 @@ def test_older_api_without_plan_status_degrades_honestly(_api_env):
     assert env["plan"] == "free"  # from org.plan
     assert env["period"] is None, "the balances named no period — none is invented"
     assert [q["remaining"] for q in env["quota"]] == [46, 1380]
-    assert env["talking_points"] == [
-        "Plan: Free.",
-        "Backtests: 46 of 50 left.",
-        "Backtest compute time: 1,380 s of 1,500 s left.",
-    ]
+    assert env["talking_points"] == ["Plan: Free.", "Backtests: 46 of 50 left."]
 
 
 @respx.mock
@@ -667,7 +660,7 @@ def test_manage_links_policy_is_no_link_on_every_surface(monkeypatch):
 def test_descriptions_name_the_limits_without_numbers_or_plan_names():
     """doc 07 §3.8/§6.1: each profile's description names the limit kinds
     its caller can meet, and never a number, a price or a plan name. The
-    listed forms leave out live slots (no live tool is listed)."""
+    listed forms leave out the live strategies (no live tool is listed)."""
     texts = {
         "full": TOOL.description,
         "listed": TOOL.listed_description,
@@ -681,9 +674,15 @@ def test_descriptions_name_the_limits_without_numbers_or_plan_names():
             assert name not in text, (where, name)
         assert "reset instant" in text and "which plans include more" in text, where
         assert "timeframe" in text and "spends no quota" in text, where
-    assert "live slots" in texts["full"]
-    assert "live slots" not in texts["listed"] and "live slots" not in texts["listed+paper"]
-    assert "paper slots" in texts["listed+paper"] and "paper slots" not in texts["listed"]
+    # Counts of things, never "slots" (spec 02 §C3.6, PLANS-REVIEW R53).
+    assert "live strategies running" in texts["full"]
+    assert (
+        "live strategies" not in texts["listed"] and "live strategies" not in texts["listed+paper"]
+    )
+    assert "paper strategies running" in texts["listed+paper"]
+    assert "paper strategies" not in texts["listed"]
+    for where, text in texts.items():
+        assert "slot" not in text.lower(), (where, text)
 
 
 #: The tools whose call spends one backtest (a screen run is counted as one,
@@ -770,27 +769,24 @@ def _v2_block(*, first_week: bool) -> dict:
     block = copy.deepcopy(PLAN_STATUS_BLOCK)
     block["plan_version"] = "v2"
     block["clock_floor"] = "1h"
+    # The catalog's paid ladder, with its prices and limits (D-10: the API carries numbers).
     block["offers"] = [
         {
-            "plan": "trader",
-            "version": "v2",
-            "name": "Trader",
-            "monthly_price_usd": 49,
-            "annual_monthly_price_usd": 39,
+            "plan": plan,
+            "version": version,
+            "name": cat.display_name(plan, version),
+            "monthly_price_usd": 49 + 50 * i,
+            "annual_monthly_price_usd": 39 + 40 * i,
             "bps": 3,
-            "clock_floor": "15min",
-            "limits": {"backtest_runs": {"limit": 1000, "period": "30d"}},
-        },
-        {
-            "plan": "pro",
-            "version": "v2",
-            "name": "Pro",
-            "monthly_price_usd": 199,
-            "annual_monthly_price_usd": 159,
-            "bps": 1,
-            "clock_floor": "5min",
-            "limits": {"backtest_runs": {"limit": 4000, "period": "30d"}},
-        },
+            "clock_floor": cat.floor_of(plan, version),
+            "limits": {
+                "backtest_runs": {
+                    "limit": int(cat._value(plan, version, "backtest_runs")),
+                    "period": "30d",
+                }
+            },
+        }
+        for i, (plan, version) in enumerate(cat.paid_rows())
     ]
     runs, compute = block["quotas"][0], block["quotas"][1]
     runs.update(limit=25, used=4, remaining=21, period="30d", resets_at=RESETS_30D_AT)
@@ -835,8 +831,7 @@ def test_the_30_day_cycle_reads_this_30_day_period(_api_env, monkeypatch):
         assert env["period"] == "30d", where
         assert env["talking_points"] == [
             FREE_POINTS[0],
-            "Backtests: 21 of 25 left; resets Sun 29 Nov.",
-            "Backtest compute time: 630 s of 750 s left; resets Sun 29 Nov.",
+            "Backtests: 4 of 25 used on Free; resets Nov 29.",
         ], where
         blob = json.dumps(env)
         for leaked in ("offers", "clock_floor", "plan_version", "49", "199", "1h", "15min"):
@@ -857,11 +852,10 @@ def test_both_pots_on_the_30_day_cycle(_api_env, monkeypatch):
         _set_surface(monkeypatch, profile, client_env)
         env = _call_mcp()
         where = (profile, client_env)
-        fw = env["quota"][0]["first_week"]
-        assert env["talking_points"][1:3] == [
-            f"Backtests: 65 of 75 left ({fw['remaining']} first-week extras until Fri 6 Nov); "
-            "resets Sun 29 Nov.",
-            "Backtest compute time: 1,950 s of 2,250 s left; resets Sun 29 Nov.",
+        # The v3 rows' first-week sentence (R16): the bonus ends (Nov 6) before the reset (Nov 29), so only the
+        # period's own 25 come back.
+        assert env["talking_points"][1:] == [
+            "Backtests: 10 of 75 used on Free (25 plus your first-week 50); resets to 25 on Nov 29.",
         ], where
         assert env["quota"][0]["first_week"] == {
             "granted": 50,
@@ -888,7 +882,7 @@ def test_an_older_server_without_the_plan_pot_keeps_the_first_week_sentence(_api
     respx.get(f"{API}/v1/me").mock(return_value=Response(200, json=_me_response(block)))
     env = _call_mcp()
     assert env["talking_points"][1] == (
-        "Backtests: 65 of 75 left (40 first-week extras until Fri 6 Nov); resets Sun 29 Nov."
+        "Backtests: 10 of 75 used on Free (25 plus your first-week 50); resets to 25 on Nov 29."
     )
     assert set(env["quota"][0]["first_week"]) == {"granted", "remaining", "ends_at"}
 
@@ -916,7 +910,7 @@ def _me_every_kind(plan: str = "free") -> dict:
     me = _me_response()
     floor_higher = cat.faster_plans(plan)
     for entry in floor_higher:
-        entry["floor"] = cat.floor_of(entry["plan"])
+        entry["floor"] = cat.floor_of(entry["plan"], entry["version"])
     me["serving_floor"] = {"floor": cat.floor_of(plan), "higher_plans": floor_higher}
     for unit, used in (
         ("paper_strategies_max", 1),
@@ -951,13 +945,13 @@ def test_every_limit_kind_has_its_line_and_block(_api_env, monkeypatch):
     env = _call_mcp()
     assert set(env) == RESULT_KEYS | {"paper", "screens", "serving_floor"}, sorted(env)
     points = env["talking_points"]
-    assert points[:3] == FREE_POINTS
-    assert points[3:] == [
-        "Paper strategies: 1 of 1 running.",
-        "Auto-refreshing screens: 1 of 4 in use.",
-        "Public screens: 2 of 4 in use.",
+    assert points[:2] == FREE_POINTS
+    assert points[2:] == [
+        "Paper strategies: 1 of 1 running on Free.",
+        "Auto-refreshing screens: 1 of 4 on Free.",
+        "Public screens: 2 of 4 on Free.",
         "Private auto-refreshing screens: not on Free.",
-        "Paper and live timeframe: 1h or slower.",
+        "Paper and live on Free run at 1 hour or slower.",
     ]
     assert env["serving_floor"] == {
         "floor": "1h",
@@ -970,11 +964,11 @@ def test_every_limit_kind_has_its_line_and_block(_api_env, monkeypatch):
         "remaining": 0,
         "more_plans": cat.names(cat.higher_plans("free", "paper_strategies_max")),
     }
-    assert [b["unit"] for b in env["screens"]] == [
-        "screeners_live_max",
-        "screeners_published_max",
-        "screeners_private_max",
-    ]
+    assert {k: b["unit"] for k, b in env["screens"].items()} == {
+        "live": "screeners_live_max",
+        "published": "screeners_published_max",
+        "private": "screeners_private_max",
+    }
     blob = json.dumps(env)
     assert "higher_plans" not in blob and "15min" not in blob and "5min" not in blob
 
@@ -990,7 +984,7 @@ def test_the_listed_profile_shows_only_what_it_serves(_api_env, monkeypatch):
     respx.get(f"{API}/v1/me").mock(return_value=Response(200, json=_me_every_kind()))
     env = _call_mcp()
     assert set(env) == RESULT_KEYS | {"serving_floor"}, sorted(env)
-    assert env["talking_points"][-1] == "Paper and live timeframe: 1h or slower."
+    assert env["talking_points"][-1] == "Paper and live on Free run at 1 hour or slower."
     assert not any("Paper strategies" in p or "screens" in p for p in env["talking_points"])
 
 
@@ -1001,7 +995,7 @@ def test_live_slots_show_where_the_live_tools_are_loaded(_api_env, monkeypatch):
     respx.get(f"{API}/v1/me").mock(return_value=Response(200, json=_me_response()))
     env = _call_mcp()
     assert env["live"] == {"unit": "live_strategies_max", "used": 1, "limit": 1, "remaining": 0}
-    assert "Live strategies: 1 of 1 running." in env["talking_points"]
+    assert "Live strategies: 1 of 1 running on Free." in env["talking_points"]
     monkeypatch.setenv("KEEL_TOOLSETS", "read-only,backtest")
     assert "live" not in _call_mcp()
 
@@ -1036,6 +1030,6 @@ def test_ri589_the_studies_block_has_its_line_and_names_the_plans_that_include_m
     (studies,) = [q for q in env["quota"] if q["unit"] == "research_studies"]
     assert (studies["limit"], studies["used"], studies["remaining"]) == (3, 1, 2)
     assert studies["more_plans"] == cat.names(cat.higher_plans("free", "research_studies"))
-    assert "Studies: 2 of 3 left; resets Tue 29 Sep." in env["talking_points"]
+    assert "Studies: 1 of 3 used on Free; resets Sep 29." in env["talking_points"]
     respx.get(f"{API}/v1/me").mock(return_value=Response(200, json=_me_response()))
     assert _call_mcp()["talking_points"] == FREE_POINTS  # control: no studies block, no line

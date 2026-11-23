@@ -135,11 +135,11 @@
                 "bins": null,
                 "cells": null,
                 "ring_words": null,
-                "sel": "lookback:10|lookback:5|lookback:20",
+                "sel": "lookback:5|lookback:10|lookback:20",
                 "sel_rows": null,
                 "withheld": null,
-                "x": "10|5|20",
-                "y": ["not measured|−0.14|−0.51"]
+                "x": "5|10|20",
+                "y": ["−0.14|not measured|−0.51"]
               },
               "series": [
                 {
@@ -148,22 +148,22 @@
                   "lo": null,
                   "name": null,
                   "ref": false,
-                  "y": "..uoAA"
+                  "y": "uo..AA"
                 }
               ],
               "title": "The selected setting and its neighbours",
               "x": {
-                "label": "lookback",
+                "label": "Lookback",
                 "n": 3,
                 "pos": null,
                 "ticks": [
                   {
                     "at": 682,
-                    "w": "10"
+                    "w": "5"
                   },
                   {
                     "at": 2048,
-                    "w": "5"
+                    "w": "10"
                   },
                   {
                     "at": 3412,
@@ -205,6 +205,7 @@
         "checks": null,
         "chips": [],
         "copy": {
+          "all_charts": "All charts",
           "charts": "Charts",
           "failed_cell": "Didn't finish",
           "full_chart_in_keel": "Open in Keel for the full chart",
@@ -215,6 +216,8 @@
           "lowest": "Lowest",
           "met": "met",
           "more_charts": "",
+          "more_steps": "",
+          "more_views": "+1 more chart",
           "not_measured": "not measured",
           "not_met": "not met",
           "not_run": "Not run yet",
@@ -224,11 +227,20 @@
           "open_chart": "Open this chart in Keel",
           "open_setting": "Open this setting in Keel",
           "points_in_keel": "Open in Keel to read each point",
+          "seg_charts": "Charts",
+          "seg_checks": "Checks",
+          "seg_numbers": "Numbers",
           "steps": "Steps",
           "yours": "Yours"
         },
         "focus": null,
         "head_words": null,
+        "hero": {
+          "label": "Rank nearby",
+          "state": null,
+          "title": "Rank among nearby settings · 1 of 3 · Mar 23, 2025 to Oct 28, 2026",
+          "value": "1 of 3"
+        },
         "key": {
           "enc": "b64x2",
           "family": "Curve",
@@ -260,7 +272,7 @@
           ],
           "title": "Lookback",
           "x": {
-            "label": "lookback",
+            "label": "Lookback",
             "n": 3,
             "pos": "AAVV__",
             "ticks": [
@@ -308,7 +320,7 @@
           "select": "https://app.usekeel.io/research/stu_000006?v={v}&sel={sel}",
           "study": "https://app.usekeel.io/research/stu_000006"
         },
-        "method_line": "Measured with Neighbours v1, SplitCompare v1",
+        "method_line": "Measured with nearby settings and before and after the split.",
         "more_charts_total": 0,
         "more_words": null,
         "notes": {
@@ -319,8 +331,11 @@
           "stale": ["Momentum rotation v3 has a newer version, v4."]
         },
         "rows": null,
+        "runs": null,
         "schema": "keel.research.card-data/2",
         "steps": [],
+        "thumbs": [2, 3],
+        "tiles": [],
         "top": null
       },
       "card_summary": {
@@ -345,7 +360,7 @@
   },
   "content": [
     {
-      "text": "card: where the host draws Keel cards, the user sees what follows as a card carrying its name, links and ids, so a reply can call it by name; the ids and links here serve tool calls and hosts without cards.\n\nMap a strategy's settings · T · version 1 · Done · Oct 29\nUsed 0 of 400 studies; resets Dec 1. Planning, reading, saving, and runs that reuse everything or run nothing, do not count.\nDays Mar 23, 2025 to Oct 29, 2026, split Apr 17, 2026 · 6 coins: chosen by hand · costs 9 bp a fill · data as of Oct 29, 2026\nMeasured with SettingsGrid v2, SplitCompare v1, Neighbours v1.\nIn short:\n- Nearby settings as a share of yours: not measured, interval withheld: Withheld: your setting's Sharpe is not positive, so a share of it has no meaning.; sample not stated\n- Rank among nearby settings: 1, no interval; sample not stated\n- Rank agreement before and after the split: not measured, interval withheld: No interval: the values share their data.; sample not stated\nRuns: 0 runs, 0 reused, none failed · versions tried: unknown\nCharts (4): Lookback · Before vs after the split · Every setting · The selected setting and its neighbours — keel_research_get(study_id=\"stu_000006\", view=0) reads the numbers behind any of them.\nMomentum rotation v3 has a newer version, v4. Plan it: keel_research_plan(study_id=\"stu_000006\", source=\"Study(\\n    title=\\\"T\\\",\\n)\\n\\nSubjects(\\n    v3=Strategy(\\\"str_momrotpro00000000000000000@4\\\"),\\n)\\n\\nRun(\\n    days=Days(\\\"2025-03-23\\\", \\\"2026-10-29\\\"),\\n    split=Split(\\\"2026-04-17\\\"),\\n    coins=Coins([\\\"BTC\\\", \\\"ETH\\\", \\\"SOL\\\", \\\"HYPE\\\", \\\"XRP\\\", \\\"DOGE\\\"], chosen=ByHand()),\\n    costs=Costs(fee=0.00045, slippage=0.00045),\\n    data=Data(\\\"snap_6c1f0e8a2b9d4f37\\\"),\\n)\\n\\nSteps(\\n    map=SettingsGrid(axes=[SettingAxis(\\\"step[2].period\\\", [5, 10, 20], name=\\\"lookback\\\")]),\\n    split=SplitCompare(grid=\\\"map\\\"),\\n    nearby=Neighbours(grid=\\\"map\\\"),\\n)\\n\\nViews(\\n    Page(default=\\\"Lookback\\\", switch=[\\\"Lookback\\\", \\\"Before vs after the split\\\", \\\"Every setting\\\"]),\\n    Curve(\\\"Lookback\\\", of=\\\"map\\\", x=Axis(\\\"lookback\\\"), y=Raw(Control(\\\"measure\\\", \\\"sharpe\\\", options=[\\\"sharpe\\\", \\\"cagr\\\", \\\"max_drawdown\\\"])), marks=[Ring(Yours())]),\\n    Scatter(\\\"Before vs after the split\\\", of=\\\"split\\\", x=Raw(\\\"sharpe_before\\\"), y=Raw(\\\"sharpe_after\\\")),\\n    Distribution(\\\"Every setting\\\", of=\\\"map\\\", x=Raw(\\\"sharpe\\\")),\\n    Bars(\\\"The selected setting and its neighbours\\\", of=\\\"nearby\\\", x=Axis(\\\"lookback\\\"), y=Raw(\\\"sharpe\\\")),\\n)\\n\", base={\"version\": 1, \"revision\": 1, \"evidence_hash\": \"08393f8546af57ecf0cfaca649ada9d481cffc26cfa210adeb1a35b7567b77c3\"})\nView in Keel: https://app.usekeel.io/research/stu_000006",
+      "text": "card: where the host draws Keel cards, the user sees what follows as a card carrying its name, links and ids, so a reply can call it by name; the ids and links here serve tool calls and hosts without cards.\n\nMap a strategy's settings · Lookback map of Momentum rotation v3 · version 1 · Done · Oct 29\nDays Mar 23, 2025 to Oct 29, 2026, split Apr 17, 2026 · 6 coins: chosen by hand · costs 9 bp a fill · data as of Oct 29, 2026\nIn short:\n- Nearby settings as a share of yours: not measured, no interval (your setting's Sharpe is not positive, so a share of it has no meaning); Mar 23, 2025 to Oct 28, 2026\n- Rank among nearby settings: 1 of 3, no interval; Mar 23, 2025 to Oct 28, 2026\n- Rank agreement before and after the split: not measured, no interval (No range shown: these numbers use the same days); Mar 23, 2025 to Oct 28, 2026\nRuns: 0 runs, 0 reused, none failed\nCharts (4): Lookback · Before vs after the split · Every setting · The selected setting and its neighbours. keel_research_get(study_id=\"stu_000006\", view=0) reads the numbers behind any of them.\nMeasured with nearby settings and before and after the split.\nMomentum rotation v3 has a newer version, v4. Plan it: keel_research_plan(study_id=\"stu_000006\", source=\"Study(\\n    title=\\\"Lookback map of Momentum rotation v3\\\",\\n)\\n\\nSubjects(\\n    v3=Strategy(\\\"str_momrotpro00000000000000000@4\\\"),\\n)\\n\\nRun(\\n    days=Days(\\\"2025-03-23\\\", \\\"2026-10-29\\\"),\\n    split=Split(\\\"2026-04-17\\\"),\\n    coins=Coins([\\\"BTC\\\", \\\"ETH\\\", \\\"SOL\\\", \\\"HYPE\\\", \\\"XRP\\\", \\\"DOGE\\\"], chosen=ByHand()),\\n    costs=Costs(fee=0.00045, slippage=0.00045),\\n    data=Data(\\\"snap_6c1f0e8a2b9d4f37\\\"),\\n)\\n\\nSteps(\\n    map=SettingsGrid(axes=[SettingAxis(\\\"step[2].period\\\", [5, 10, 20], name=\\\"lookback\\\")]),\\n    split=SplitCompare(grid=\\\"map\\\"),\\n    nearby=Neighbours(grid=\\\"map\\\"),\\n)\\n\\nViews(\\n    Page(default=\\\"Lookback\\\", switch=[\\\"Lookback\\\", \\\"Before vs after the split\\\", \\\"Every setting\\\"]),\\n    Curve(\\\"Lookback\\\", of=\\\"map\\\", x=Axis(\\\"lookback\\\"), y=Raw(Control(\\\"measure\\\", \\\"sharpe\\\", options=[\\\"sharpe\\\", \\\"cagr\\\", \\\"max_drawdown\\\"])), marks=[Ring(Yours())]),\\n    Scatter(\\\"Before vs after the split\\\", of=\\\"split\\\", x=Raw(\\\"sharpe_before\\\"), y=Raw(\\\"sharpe_after\\\")),\\n    Distribution(\\\"Every setting\\\", of=\\\"map\\\", x=Raw(\\\"sharpe\\\")),\\n    Bars(\\\"The selected setting and its neighbours\\\", of=\\\"nearby\\\", x=Axis(\\\"lookback\\\"), y=Raw(\\\"sharpe\\\")),\\n)\\n\", base={\"version\": 1, \"revision\": 1, \"evidence_hash\": \"08393f8546af57ecf0cfaca649ada9d481cffc26cfa210adeb1a35b7567b77c3\"})\nView in Keel: https://app.usekeel.io/research/stu_000006",
       "type": "text"
     }
   ],
@@ -372,7 +387,7 @@
         "name": "Map a strategy's settings",
         "short": "Settings map"
       },
-      "lead": "Rank among nearby settings 1",
+      "lead": "Rank among nearby settings: 1 of 3",
       "maker": "you",
       "maker_words": "by you",
       "numbers": [
@@ -382,8 +397,9 @@
           "ref": "nearby.summary",
           "sample": {
             "first_day": "2025-03-23",
-            "last_day": "2026-10-29"
+            "last_day": "2026-10-28"
           },
+          "sample_words": "Mar 23, 2025 to Oct 28, 2026",
           "unit": "ratio",
           "value_words": "not measured"
         },
@@ -393,11 +409,12 @@
           "ref": "nearby.summary",
           "sample": {
             "first_day": "2025-03-23",
-            "last_day": "2026-10-29"
+            "last_day": "2026-10-28"
           },
+          "sample_words": "Mar 23, 2025 to Oct 28, 2026",
           "unit": "count",
           "value": 1.0,
-          "value_words": "1"
+          "value_words": "1 of 3"
         },
         {
           "label": "Rank agreement before and after the split",
@@ -405,8 +422,9 @@
           "ref": "split.summary",
           "sample": {
             "first_day": "2025-03-23",
-            "last_day": "2026-10-29"
+            "last_day": "2026-10-28"
           },
+          "sample_words": "Mar 23, 2025 to Oct 28, 2026",
           "unit": "score",
           "value_words": "not measured"
         }
@@ -414,7 +432,7 @@
       "schema": "keel.research.card/2",
       "state": "completed",
       "state_words": "Done · Oct 29",
-      "title": "T",
+      "title": "Lookback map of Momentum rotation v3",
       "top5": {
         "kind": "checks",
         "rows": [],
@@ -428,7 +446,7 @@
         "units": [
           {
             "limit": 400,
-            "resets_at": "2026-12-18",
+            "resets_at": "2026-12-22",
             "unit": "research_studies",
             "used": 0
           }
@@ -438,6 +456,7 @@
         "executed": 0,
         "failed_content": 0,
         "failed_platform": 0,
+        "not_applicable": 0,
         "planned": 0,
         "reused": 0,
         "words": "0 runs, 0 reused, none failed"
@@ -458,7 +477,9 @@
         "fee": 0.00045,
         "slippage": 0.00045
       },
+      "costs_words": "9 bp a fill (fee 4.5 bp, slippage 4.5 bp)",
       "data": "snap_6c1f0e8a2b9d4f37",
+      "data_words": "Data as of Oct 29, 2026",
       "days": {
         "end": "2026-10-29",
         "start": "2025-03-23"
@@ -481,6 +502,13 @@
     },
     "page": {
       "default": 0,
+      "sections": [
+        {
+          "title": "The selected setting",
+          "views": [3],
+          "words": "click any cell, dot or row to change it"
+        }
+      ],
       "switch": [0, 1, 2]
     },
     "stale": [
@@ -518,13 +546,13 @@
       },
       "linked_to": [],
       "linked_to_total": 0,
-      "presentation_hash": "06b53c6b14406c55f5cacd4aee52b516d94fb150bde4d34a007879059a1ba18c",
+      "presentation_hash": "de17d129a0cb00472e07ee5d101594451ebe9a1cd7402543bffb6edb031f3846",
       "revision": 1,
       "run_set_id": "rus_000006",
       "set_aside": false,
       "state": "completed",
       "study_id": "stu_000006",
-      "title": "T",
+      "title": "Lookback map of Momentum rotation v3",
       "version": 1
     },
     "subjects": {
@@ -532,11 +560,11 @@
     },
     "url_line": "View in Keel: https://app.usekeel.io/research/stu_000006",
     "view": {
-      "at": "2026-11-17T00:00:09.000Z",
+      "at": "2026-11-17T00:00:10.000Z",
       "kind": "study",
       "mode": "study",
       "object": "stu_000006",
-      "seq": 10,
+      "seq": 11,
       "size": "view",
       "version": 1
     },
@@ -544,7 +572,7 @@
       "total": 4
     },
     "words": {
-      "allowance": "Used 0 of 400 studies; resets Dec 1. Planning, reading, saving, and runs that reuse everything or run nothing, do not count."
+      "method": "Measured with nearby settings and before and after the split."
     }
   }
 }

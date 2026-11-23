@@ -15,9 +15,10 @@ and every member measured is non-empty somewhere. Seeded reds (in-test, on copie
 reds the key bound; checks padded to 41 rows of real row words reds the checks bound; a structuredContent carrying
 the thumb back and 100 check rows reds the 8,000 bound. Controls: the fixtures as built.
 
-Not yet here: 13 §7.2's largest legal study read (100 bars, 50 subjects, 24 views, the gallery fill and its
-fill-off seed over 40,000 B) needs keel-api's ``card_data`` builder (WL-SV-21) to build; the fixtures follow it the
-day it serves (``card_fixtures`` keeps a served card_data).
+13 §7.2's largest legal study read (100 bars, 50 results, 24 views at their largest shapes, the gallery fill and
+its fill-off seed over 40,000 B) is built where its builder lives, ``libs/research/card_data_largest_test.py``
+(CARD-FINAL): it fits every bound, and a card past 40,000 B is degraded (``card_summary.fit_card_data``), never a
+failed read.
 """
 
 from __future__ import annotations

@@ -209,7 +209,7 @@ def _share_study(target_id: str, args: dict, ctx: ToolContext) -> OutcomeResult:
     if _toolsets.is_listed_profile():
         raise KeelError(
             "On this connector a study is shared from its page in the Keel web app, where you "
-            "pick the views it shows. Nothing was published.",
+            "pick the charts it shows. Nothing was published.",
             error_code="unsupported_target",
             exit_code=2,
             suggestion=f"Open the study with `keel_app_link` (target_id='{target_id}') and share it there.",
@@ -247,17 +247,42 @@ def _share_study(target_id: str, args: dict, ctx: ToolContext) -> OutcomeResult:
             suggestion="Run `keel_connection_check`; check API version compatibility.",
         )
     share_url = result.get("url") or app_url_for("share", share_id, ctx)
+    study_id = result.get("study_id", target_id)
     return OutcomeResult(
         share_url=share_url,
         extra={
             "share_id": share_id,
             "share_type": "study",
-            "study_id": result.get("study_id", target_id),
+            "study_id": study_id,
             "version": result.get("version"),
             "views": result.get("views"),
             "show_author": result.get("show_author"),
+            # STG-SURFACES #16: the receipt as a person reads it; `keel share create` printed the envelope field by
+            # field (`views: [ 0, 1, 2 ]`). The fields stay as they were (`--format json`, structuredContent).
+            "view": {"kind": "study", "markdown": study_share_receipt(result, study_id, share_url)},
         },
     )
+
+
+def study_share_receipt(result: dict, study_id: str, share_url: str) -> str:
+    """A study share's receipt: what the snapshot is of, how many charts it shows, whether it names you, and the
+    link (last, as every research answer ends)."""
+    views = result.get("views")
+    n = len(views) if isinstance(views, list) else None
+    version = result.get("version")
+    # AUDIT-WORDS M35: the study by its title, never its id
+    title = next(
+        (
+            str(result[k])
+            for k in ("study_title", "title")
+            if isinstance(result.get(k), str) and result[k]
+        ),
+        "the study",
+    )
+    of = f"{title}, version {version}" if isinstance(version, int) else title
+    shows = f", showing {n} chart{'' if n == 1 else 's'}" if n is not None else ""
+    name = "with your name" if result.get("show_author") else "without your name"
+    return f"Shared a snapshot of {of}{shows}, {name}.\nShare link: {share_url}"
 
 
 def _handler(args: dict, ctx: ToolContext) -> OutcomeResult:
@@ -483,7 +508,7 @@ SHARE_INPUT_SCHEMA: dict[str, Any] = {
         "views": {
             "type": "array",
             "items": {"type": "integer", "minimum": 0},
-            "description": "For a study (stu_*): the view indexes the snapshot shows. Default: every view.",
+            "description": "For a study (stu_*): the indexes of the charts the snapshot shows. Default: every chart.",
         },
         "show_author": {
             "type": "boolean",

@@ -1,0 +1,264 @@
+{
+  "hero_url": "https://app.usekeel.io/research/stu_00000000000000000000000005",
+  "url_line": "View in Keel: https://app.usekeel.io/research/stu_00000000000000000000000005",
+  "edit": {
+    "kind": "step",
+    "cls": "new_version",
+    "also_changes": []
+  },
+  "study": {
+    "study_id": "stu_00000000000000000000000005",
+    "version": 2,
+    "title": "MA Crossover (Golden Cross) Strategy",
+    "kind_label": {
+      "key": "check",
+      "name": "Check a strategy",
+      "short": "Check"
+    },
+    "state": "planned",
+    "linked_to": [],
+    "linked_to_total": 0,
+    "set_aside": false,
+    "archived": false,
+    "can_delete": false
+  },
+  "footing": {
+    "days": {
+      "start": "2025-11-17",
+      "end": "2026-11-17"
+    },
+    "split": "2026-07-19",
+    "coins": {
+      "count": 8,
+      "chosen": "The coins MA Crossover (Golden Cross) Strategy trades",
+      "names_sha256": "110a9e9d13abf65b60a9f86a9a29c7e14904430513f79a8ca22a276f725953fa"
+    },
+    "costs": {
+      "fee": 0.00045,
+      "slippage": 0.00045
+    },
+    "delay": 0,
+    "leverage": 1.0,
+    "data": "snap_d96e8eccc0bce098",
+    "engine": "sha256:34f1a58a92cc952bb254bfcc0bac2f98ed8ce82f73c41d4204871597b3272487",
+    "engine_words": "This version of the engine",
+    "split_words": "Split on Jul 19, 2026: 244 days before, 121 after"
+  },
+  "stale": [],
+  "links": {
+    "app": "https://app.usekeel.io/research/stu_00000000000000000000000005"
+  },
+  "plan_id": "pln_00000000000000000000000006",
+  "expires_at": "2026-11-20T02:53:47Z",
+  "class": "new_version",
+  "writes": "version 2",
+  "subjects": [
+    {
+      "ref": "Strategy(\"keel/ma_crossover_crypto@1\")",
+      "label": "MA Crossover (Golden Cross) Strategy",
+      "key": "s1",
+      "name": "MA Crossover (Golden Cross) Strategy",
+      "kind": "strategy",
+      "edits": []
+    }
+  ],
+  "source": "Study(\n    title=\"MA Crossover (Golden Cross) Strategy\",\n)\n\nSubjects(\n    s1=Strategy(\"keel/ma_crossover_crypto@1\"),\n)\n\nRun(\n    days=Days(\"2025-11-17\", \"2026-11-17\"),\n    split=Split(\"2026-07-19\"),\n    coins=Coins([\"BTC\", \"ETH\", \"SOL\", \"BNB\", \"XRP\", \"DOGE\", \"HYPE\", \"SUI\"], chosen=SubjectUniverse(\"s1\")),\n    costs=Costs(fee=0.00045, slippage=0.00045),\n    data=Data(\"snap_d96e8eccc0bce098\"),\n)\n\nSteps(\n    base=Backtest(),\n    costs=CostStress(multiples=[0, 1, 2, 3, 4, 6, 8]),\n    late=DelayStress(days=[1, 2, 3]),\n    top=TopCoins(n=30),\n    without=WithoutBestCoins(n=5),\n    luck=RandomBooks(books=150, seed=20261118),\n    deflated=DeflatedSharpe(seed=20261118, trials=TrialSet(count=0, snapshot=\"vts:fam:keel/ma_crossover_crypto:0\")),\n    ahead=ResampledPaths(days=365, paths=1500, seed=20261118),\n    by_coin=ReturnByCoin(),\n    markets=MarketStates(regime=Output(\"keel/btc_trend@1\", output=\"trend\", role=\"regime\"), seed=20261118),\n)\n\nBars(\n    Bar(\"luck.summary\", \"share_below\", \">=\", 0.75),\n    Bar(\"base.split\", \"after_share\", \">=\", 0.3),\n    Bar(\"costs\", \"sharpe\", \">=\", 0.3, at={\"cost_multiple\": 2}),\n    Bar(\"late\", \"sharpe\", \">=\", 0.3, at={\"days_late\": 1}),\n    Bar(\"top\", \"sharpe\", \">=\", 0.3),\n    Bar(\"without\", \"sharpe\", \">=\", 0.3),\n    Bar(\"deflated\", \"deflated_sharpe\", \">=\", 0.5),\n)\n\nViews(\n    Page(default=\"Your checks\", switch=[\"Your checks\", \"Growth of 1\", \"Before and after the split\"]),\n    Checks(\"Your checks\", of=\"bars\"),\n    Lines(\"Growth of 1\", of=\"base\", plot=Raw(\"growth\"), marks=[VLine(SplitDay())]),\n    Lines(\"Before and after the split\", of=\"base\", plot=Rebased(\"growth\", start=SplitDay())),\n    Curve(\"Sharpe as costs rise\", of=\"costs\", x=Axis(\"cost_multiple\"), y=Raw(\"sharpe\"), marks=[HLine(0), HLine(Final(\"base.summary\", measure=\"sharpe\", at={\"window\": \"whole\"})), VLine(Final(\"costs.summary\", measure=\"break_even_multiple\"))]),\n    Bars(\"Sharpe when trading late\", of=\"late\", x=Axis(\"days_late\"), y=Raw(\"sharpe\")),\n    Bars(\"Sharpe on the top coins\", of=\"top\", x=Axis(\"variant\"), y=Raw(\"sharpe\")),\n    Bars(\"Sharpe without the best coins\", of=\"without\", x=Axis(\"variant\"), y=Raw(\"sharpe\")),\n    Distribution(\"150 random books\", of=\"luck\", x=Raw(\"sharpe\"), marker=Final(\"luck.summary\", measure=\"yours\")),\n    Fan(\"A year ahead, resampled\", of=\"ahead\", x=Axis(\"horizon\"), y=Raw(\"growth\")),\n    Bars(\"Where the return came from\", of=\"by_coin\", x=Axis(\"coin\"), y=Raw(\"share_of_pnl\")),\n    Bars(\"Up and down markets\", of=\"markets\", x=Axis(\"group\"), y=Raw(\"ret_year\"), error=[Raw(\"ret_year_lo\"), Raw(\"ret_year_hi\")]),\n)\n",
+  "filled": [],
+  "issues": [],
+  "steps": [
+    {
+      "id": "base",
+      "step": "Backtest",
+      "label": "The backtest",
+      "to_run": 0,
+      "reused": 2,
+      "after": 0,
+      "not_valid": 0,
+      "kind": "backtest",
+      "runnable": true
+    },
+    {
+      "id": "costs",
+      "step": "CostStress",
+      "label": "Costs from none to six times",
+      "to_run": 2,
+      "reused": 5,
+      "after": 0,
+      "not_valid": 0,
+      "kind": "sim",
+      "runnable": true,
+      "ranges": "Cost multiples: any value from 0 to 10"
+    },
+    {
+      "id": "late",
+      "step": "DelayStress",
+      "label": "Trading 1 to 3 days late",
+      "to_run": 0,
+      "reused": 4,
+      "after": 0,
+      "not_valid": 0,
+      "kind": "sim",
+      "runnable": true,
+      "ranges": "Days late: any value from 1 to 10"
+    },
+    {
+      "id": "top",
+      "step": "TopCoins",
+      "label": "Only the most traded coins",
+      "to_run": 0,
+      "reused": 2,
+      "after": 0,
+      "not_valid": 0,
+      "kind": "backtest",
+      "runnable": true,
+      "ranges": "Number of coins: any value from 5 to 200"
+    },
+    {
+      "id": "without",
+      "step": "WithoutBestCoins",
+      "label": "Without its best coins",
+      "to_run": 0,
+      "reused": 2,
+      "after": 0,
+      "not_valid": 0,
+      "kind": "backtest",
+      "runnable": true,
+      "ranges": "Number of coins: any value from 1 to 20"
+    },
+    {
+      "id": "luck",
+      "step": "RandomBooks",
+      "label": "Random books of the same size",
+      "to_run": 0,
+      "reused": 1,
+      "after": 0,
+      "not_valid": 0,
+      "kind": "sim",
+      "runnable": true,
+      "refused": {
+        "code": "STUDY_STEP_NOT_APPLICABLE",
+        "words": "Random books need at least twice as many active coins as the book holds: it holds as many as 8 at once, so it needs 16, and only 8 are active."
+      },
+      "ranges": "Number of random books: any value from 20 to 1000"
+    },
+    {
+      "id": "deflated",
+      "step": "DeflatedSharpe",
+      "label": "Sharpe discounted for versions tried",
+      "to_run": 0,
+      "reused": 1,
+      "after": 0,
+      "not_valid": 0,
+      "kind": "analysis",
+      "runnable": true
+    },
+    {
+      "id": "ahead",
+      "step": "ResampledPaths",
+      "label": "A year ahead, resampled",
+      "to_run": 0,
+      "reused": 1,
+      "after": 0,
+      "not_valid": 0,
+      "kind": "analysis",
+      "runnable": true,
+      "ranges": "Days ahead: any value from 30 to 730; Number of paths: any value from 200 to 10000"
+    },
+    {
+      "id": "by_coin",
+      "step": "ReturnByCoin",
+      "label": "Where the return came from",
+      "to_run": 0,
+      "reused": 1,
+      "after": 0,
+      "not_valid": 0,
+      "kind": "analysis",
+      "runnable": true
+    },
+    {
+      "id": "markets",
+      "step": "MarketStates",
+      "label": "Up and down markets",
+      "to_run": 0,
+      "reused": 2,
+      "after": 0,
+      "not_valid": 0,
+      "kind": "pipeline_values",
+      "runnable": true
+    }
+  ],
+  "runs": {
+    "children": 24,
+    "to_run": 2,
+    "reused": 21,
+    "joined": 0,
+    "after": 0,
+    "by_kind": {
+      "analysis": 10,
+      "backtest": 3,
+      "pipeline_values": 1,
+      "sim": 10
+    },
+    "engine_reruns": 0,
+    "not_valid": 0
+  },
+  "addresses_carried": [],
+  "addresses_changed": [],
+  "addresses_moved": [],
+  "estimate": {
+    "seconds_low": 1.15,
+    "seconds_central": 2.3,
+    "seconds_high": 4.6,
+    "evidence_bytes_high": 5888,
+    "wall_low_s": 1.1,
+    "wall_high_s": 4.6,
+    "queue_s": 0.0,
+    "background": false,
+    "uncalibrated": true,
+    "cost_model": "e4-2026-11-16b"
+  },
+  "allowance": {
+    "units": [
+      {
+        "unit": "research_studies",
+        "cost": 1,
+        "used": 3,
+        "limit": 40,
+        "resets_at": "2026-12-18"
+      }
+    ],
+    "within_allowance": true
+  },
+  "run_allowed": true,
+  "limits": [],
+  "locked": [],
+  "versions_tried": {
+    "family": "fam:keel/ma_crossover_crypto",
+    "before": 25,
+    "added": 0,
+    "since": "2026-11-19",
+    "why": ""
+  },
+  "preview": {
+    "auto": false,
+    "auto_preview_max_runs": 20,
+    "auto_preview_max_seconds": 60.0
+  },
+  "words": {
+    "work": "2 runs, 21 reused · under a minute · versions tried +0",
+    "allowance": "Used 3 of 40 studies; resets Dec 18. Pro includes more. Plans are changed in the Keel web app. Planning, reading, saving, and runs that reuse everything or run nothing, do not count.",
+    "card_line": "Plan · Check · MA Crossover (Golden Cross) Strategy",
+    "strip": "needs a run · 2 runs",
+    "estimate": "Times are estimates until Keel has timed more runs like these."
+  },
+  "view": {
+    "kind": "study",
+    "mode": "plan",
+    "size": "receipt",
+    "object": "stu_00000000000000000000000005",
+    "at": "2026-11-19T02:53:47.953Z",
+    "seq": 15,
+    "version": 2,
+    "markdown": "card: where the host draws Keel cards, the user sees what follows as a card carrying its name, links and ids, so a reply can call it by name; the ids and links here serve tool calls and hosts without cards.\n\nPlan · Check a strategy · MA Crossover (Golden Cross) Strategy · version 2\n2 runs, 21 reused · under a minute · versions tried +0\nTimes are estimates until Keel has timed more runs like these.\nUsed 3 of 40 studies; resets Dec 18. Pro includes more. Plans are changed in the Keel web app. Planning, reading, saving, and runs that reuse everything or run nothing, do not count.\nDays Nov 17, 2025 to Nov 17, 2026, split Jul 19, 2026 · 8 coins: the coins MA Crossover (Golden Cross) Strategy trades · costs 9 bp a fill · data as of Nov 17, 2026\nSteps (10): The backtest reused · Costs from none to six times 2 · Trading 1 to 3 days late reused · Only the most traded coins reused · Without its best coins reused · Random books of the same size reused · Sharpe discounted for versions tried reused · A year ahead, resampled reused · Where the return came from reused · Up and down markets reused\nkeel_research_run(plan_id=\"pln_00000000000000000000000006\") runs this plan.\nView in Keel: https://app.usekeel.io/research/stu_00000000000000000000000005"
+  }
+}

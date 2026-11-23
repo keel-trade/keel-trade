@@ -25,7 +25,11 @@
     "study-ent_hi",
     "study-map_one_axis",
     "study-map_v3",
-    "study-sig_lowvol"
+    "study-planned",
+    "study-running",
+    "study-share",
+    "study-sig_lowvol",
+    "study-stopped"
   ],
   "skipped": {}
 }

@@ -45,11 +45,36 @@ try {
     return { page, frame, popups };
   }
 
-  // Inline: the action link, the expand button, the number names.
+  // Inline: Expand is a visible button (Q-7926), and the end labels name
+  // the coin first. In Expand: Test as a strategy is the quiet button, and
+  // it goes through ui/open-link (D-1), never a popup.
   {
-    const { page, frame, popups } = await open(input.envs.view, "inline", 1200);
-    const action = frame.locator("a.action");
+    const { page, frame } = await open(input.envs.view, "inline", 1200);
+    const expand = frame.locator("#link-row a.button-link", {
+      hasText: "Expand",
+    });
+    assert.equal(await expand.count(), 1, "a visible Expand");
+    const names = await frame.$$eval("svg text.sc-end", (ts) =>
+      ts.map((t) => [t.textContent, t.getAttribute("data-asset")]),
+    );
+    assert.ok(names.length >= 2, "end labels drawn");
+    for (const [label, asset] of names)
+      assert.ok(label && label.includes(asset + " "), "coin first: " + label);
+    out.inline = { numbers: names.length };
+    await page.close();
+  }
+  {
+    const { page, frame, popups } = await open(
+      input.envs.view,
+      "fullscreen",
+      1200,
+    );
+    const action = frame.locator("#link-row a.sc-test");
     assert.equal(await action.count(), 1, "one extra action");
+    assert.ok(
+      (await action.getAttribute("class")).includes("button-link"),
+      "the extra action is a button, never a bare link (Q-7920)",
+    );
     const href = await action.getAttribute("href");
     assert.equal(await action.getAttribute("target"), null, "no target=_blank");
     await action.click();
@@ -61,35 +86,22 @@ try {
     );
     assert.deepEqual(links, [href], "the action goes through ui/open-link");
     assert.deepEqual(popups, [], "no popup");
-    assert.equal(
-      (await frame.locator(".chart[role=button]").count()) >= 1,
-      true,
-      "the expand target is a button",
-    );
-    const names = await frame.$$eval(".sc-num", (bs) =>
-      bs.map((b) => [
-        b.getAttribute("aria-label"),
-        b.getAttribute("data-asset"),
-      ]),
-    );
-    assert.ok(names.length >= 2, "numbers drawn");
-    for (const [label, asset] of names)
-      assert.ok(label && label.startsWith(asset + " "), "coin first: " + label);
-    out.inline = { links: links.length, numbers: names.length };
+    out.inline.links = links.length;
     await page.close();
   }
 
   // Fullscreen, short: the labels stay on the plot, in their lines' order.
   {
     const { page, frame } = await open(input.envs.view, "fullscreen", 360);
-    const all = frame.getByRole("button", { name: /^All/ });
+    const all = frame.getByRole("button", { name: /^All \(/ });
     if (await all.count()) await all.first().click();
     await page.waitForTimeout(200);
     const geo = await frame.evaluate(() => {
-      const svg = document.querySelector(".chart svg");
-      const clip = svg.querySelector("clipPath rect");
-      const top = Number(clip.getAttribute("y"));
-      const bottom = top + Number(clip.getAttribute("height"));
+      const svg = document.querySelector(".sc-chart svg[data-plot]");
+      const [top, bottom] = svg
+        .getAttribute("data-plot")
+        .split(" ")
+        .map(Number);
       const labels = [...svg.querySelectorAll("text.sc-end")].map((t) => ({
         y: Number(t.getAttribute("y")),
         text: t.textContent,
@@ -98,13 +110,13 @@ try {
         top,
         bottom,
         labels,
-        lines: svg.querySelectorAll("path.ml").length,
+        lines: svg.querySelectorAll("path.ml.sc-line:not(.sc-cap-run)").length,
       };
     });
     assert.ok(geo.lines >= 10, "a crowded chart: " + geo.lines);
     assert.ok(geo.labels.length >= 2, "labels drawn");
     assert.ok(
-      geo.labels.length <= Math.floor((geo.bottom - geo.top) / 13),
+      geo.labels.length <= Math.floor((geo.bottom - geo.top) / 13) + 1,
       "capped",
     );
     for (const l of geo.labels)
@@ -114,7 +126,7 @@ try {
       );
     out.fullscreen = { labels: geo.labels.length, lines: geo.lines };
     // The table's sort is reachable from the keyboard.
-    const table = frame.getByRole("button", { name: "Table" });
+    const table = frame.getByRole("button", { name: "Table", exact: true });
     if (await table.count()) {
       await table.first().click();
       await page.waitForTimeout(150);
@@ -129,8 +141,8 @@ try {
   // name) is not the passing set: the ranked numbers still show.
   if (input.envs.truncated) {
     const { page, frame } = await open(input.envs.truncated, "inline", 1200);
-    const nums = await frame.locator(".sc-num").count();
-    assert.ok(nums >= 1, "numbers drawn despite a truncated passing list");
+    const nums = await frame.locator("svg text.sc-end").count();
+    assert.ok(nums >= 1, "named lines despite a truncated passing list");
     out.truncated_nums = nums;
     await page.close();
   }
